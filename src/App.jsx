@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { IdeaForm } from './components/IdeaForm';
+import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
 import { PipelineProgress } from './components/PipelineProgress';
 import { UserProfileInterview } from './components/UserProfileInterview';
 
@@ -56,6 +57,9 @@ export function App() {
             ) : (
               <IdeaForm onSubmit={setIdea} />
             )}
+          </div>
+          <div className="mt-8">
+            <IdeaCandidateWorkspace profileReady={profileComplete} />
           </div>
         </section>
 
