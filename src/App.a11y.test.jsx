@@ -51,4 +51,21 @@ describe('App keyboard and accessibility quality', () => {
     expect(container.innerHTML).toContain('focus-visible:outline-2');
     await unmount();
   });
+
+  it('constrains the mobile shell and profile dialog instead of expanding the page width', async () => {
+    const { container, unmount } = await mount();
+    await act(async () => Promise.resolve());
+
+    const dialog = container.querySelector('[role="dialog"]');
+    const panel = dialog.querySelector('section');
+    const header = container.querySelector('header > div');
+    const navigation = container.querySelector('nav');
+
+    expect(dialog.className).toContain('grid-cols-[minmax(0,1fr)]');
+    expect(panel.className).toContain('min-w-0');
+    expect(panel.className).toContain('max-w-full');
+    expect(header.className).toContain('min-w-0');
+    expect(navigation.className).toContain('min-w-0');
+    await unmount();
+  });
 });
