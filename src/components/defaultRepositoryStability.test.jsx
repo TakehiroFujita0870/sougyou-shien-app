@@ -18,27 +18,40 @@ async function mount(element) {
   document.body.append(container);
   const root = createRoot(container);
   await act(async () => root.render(element));
-  return () => act(() => { root.unmount(); container.remove(); });
+  return {
+    rerender: (next) => act(async () => root.render(next)),
+    unmount: () => act(() => { root.unmount(); container.remove(); }),
+  };
+}
+
+function callsFor(getItem, key) {
+  return getItem.mock.calls.filter(([requestedKey]) => requestedKey === key);
 }
 
 describe('default browser repositories', () => {
   it('loads the profile once after a normal mount', async () => {
     const getItem = vi.spyOn(localStorage, 'getItem');
 
-    const unmount = await mount(<UserProfileInterview onClose={vi.fn()} onComplete={vi.fn()} />);
+    const view = await mount(<UserProfileInterview onClose={vi.fn()} onComplete={vi.fn()} />);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(getItem).toHaveBeenCalledTimes(1);
-    await unmount();
+    expect(callsFor(getItem, 'kadode:user-profile')).toHaveLength(1);
+    await view.rerender(<UserProfileInterview onClose={vi.fn()} onComplete={vi.fn()} />);
+    expect(callsFor(getItem, 'kadode:user-profile')).toHaveLength(1);
+    await view.unmount();
   });
 
-  it('loads idea candidates once after a normal mount', async () => {
+  it('loads each idea repository once and does not reload them on render', async () => {
     const getItem = vi.spyOn(localStorage, 'getItem');
 
-    const unmount = await mount(<IdeaCandidateWorkspace />);
+    const view = await mount(<IdeaCandidateWorkspace />);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(getItem).toHaveBeenCalledTimes(1);
-    await unmount();
+    expect(callsFor(getItem, 'kadode:idea-candidates')).toHaveLength(1);
+    expect(callsFor(getItem, 'kadode:idea-conversation')).toHaveLength(1);
+    await view.rerender(<IdeaCandidateWorkspace />);
+    expect(callsFor(getItem, 'kadode:idea-candidates')).toHaveLength(1);
+    expect(callsFor(getItem, 'kadode:idea-conversation')).toHaveLength(1);
+    await view.unmount();
   });
 });
