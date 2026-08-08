@@ -1,0 +1,7 @@
+node_modules/
+dist/
+storybook-static/
+.venv/
+.env
+__pycache__/
+*.py[cod]
