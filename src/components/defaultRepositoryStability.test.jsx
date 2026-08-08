@@ -1,12 +1,17 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IdeaCandidateWorkspace } from './IdeaCandidateWorkspace';
 import { UserProfileInterview } from './UserProfileInterview';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeEach(() => {
+  const values = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), clear: () => values.clear() } });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,9 +54,11 @@ describe('default browser repositories', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(callsFor(getItem, 'kadode:idea-candidates')).toHaveLength(1);
     expect(callsFor(getItem, 'kadode:idea-conversation')).toHaveLength(1);
+    expect(callsFor(getItem, 'kadode:idea-input-draft')).toHaveLength(1);
     await view.rerender(<IdeaCandidateWorkspace />);
     expect(callsFor(getItem, 'kadode:idea-candidates')).toHaveLength(1);
     expect(callsFor(getItem, 'kadode:idea-conversation')).toHaveLength(1);
+    expect(callsFor(getItem, 'kadode:idea-input-draft')).toHaveLength(1);
     await view.unmount();
   });
 });
