@@ -53,6 +53,7 @@ describe('App keyboard and accessibility quality', () => {
       '設定',
     ]);
     expect(navigation.textContent).not.toContain('AI広報');
+    expect(navigation.textContent).not.toContain('始める前に、');
     expect(container.innerHTML).toContain('min-h-11');
     expect(container.querySelector('main').className).toContain('kadode-shell');
     expect(container.querySelector('button').className).toContain('kadode-nav-button');

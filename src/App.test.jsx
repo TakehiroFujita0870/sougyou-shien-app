@@ -28,6 +28,15 @@ describe('MVP workspace shell', () => {
     expect(html).not.toContain('条件を満たすまで次へ進みません');
   });
 
+  it('uses the supportive AI voice instead of starting from failure', () => {
+    const html = renderToStaticMarkup(<App />);
+
+    expect(html).toContain('あなたの経験から、事業の芽を育てよう。');
+    expect(html).toContain('強みと現実的な懸念を一緒に整理し');
+    expect(html).not.toContain('始める前に、');
+    expect(html).not.toContain('ダメな理由を見つけよう');
+  });
+
   it('does not expose AI public-relations functionality in the product workspace', () => {
     const html = renderToStaticMarkup(<App />);
 
