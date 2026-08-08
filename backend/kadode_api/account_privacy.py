@@ -1,6 +1,7 @@
 """Deterministic local/fake contracts for owner-scoped account export and deletion."""
 
 from copy import deepcopy
+import json
 
 
 ARTIFACT_TYPES = (
@@ -74,10 +75,17 @@ class InMemoryAccountPrivacyRepository:
     @staticmethod
     def _markdown(data: dict[str, object]) -> str:
         profile = data["profile"] or {}
-        lines = ["# Kadode data export", "", "## Profile", f"- {profile.get('display_name', '')}"]
-        for section in ("ideas", "documents", "research", "decisions"):
+        lines = ["# Kadode data export", "", "## Profile", f"- id: {profile.get('id', '')}", f"- display_name: {_markdown_value(profile.get('display_name', ''))}"]
+        for section, fields in (
+            ("ideas", ("title",)),
+            ("documents", ("title", "metadata")),
+            ("research", ("query",)),
+            ("decisions", ("decision",)),
+        ):
             lines.extend(["", f"## {section.title()}"])
-            lines.extend(f"- {item['id']}" for item in data[section])
+            for item in data[section]:
+                lines.append(f"- id: {item['id']}")
+                lines.extend(f"  - {field}: {_markdown_value(item.get(field, ''))}" for field in fields)
         return "\n".join(lines)
 
     @staticmethod
@@ -92,3 +100,8 @@ class InMemoryAccountPrivacyRepository:
             for artifact_type in ("original", "extracted_text", "embedding", "search_index"):
                 items.extend({"artifact_type": artifact_type, "id": identifier} for identifier in document["artifacts"][artifact_type])
         return items
+
+
+def _markdown_value(value: object) -> str:
+    """Keep supplied content literal in Markdown while preserving it for import."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True).replace("`", "\\u0060")
