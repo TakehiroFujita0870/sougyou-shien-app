@@ -4,7 +4,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: 現UIを合格基準にせず、全画面からAI壁打ちを開始し、会話中に事業の芽をpreviewし、本人承認で保存し、添付資料をspace共通libraryから別ページ・別projectで再利用し、F5後も復元できる主要UXをE2E契約にする。
+要望: 現UIを合格基準にせず、space全体を俯瞰するportfolio stewardのメインAIから壁打ちを開始し、project単位の会話中に事業の芽をpreviewし、本人判断で保存し、添付資料をspace共通libraryから別ページ・別projectで再利用し、F5後も復元できる主要UXをE2E契約にする。
 
 ゴール: PC/390px、keyboard、screen reader、低速hydrationを含む失敗テストと受入基準を、認証・IdeaForm・既存UI実装から独立して固定する。
 
@@ -12,13 +12,13 @@
 
 ## ユーザーストーリーと受け入れ条件
 
-### US-UX-1 全画面AI壁打ち
+### US-UX-1 portfolio stewardとproject会話
 
-As a 利用者, I want どのページからもAI壁打ちを開始したい, so that ページ移動で文脈を失わない。
+As a 利用者, I want space全体を俯瞰するportfolio stewardからどのページでも壁打ちを開始し、個別会話はproject単位で扱いたい, so that spaceの前提とprojectの作業文脈を混同しない。
 
 Given: PCまたは390pxで任意のworkspace pageを開いている
 When: AI壁打ちの入口をkeyboardまたはscreen readerで探す
-Then: 現在ページの主要操作として同じAI入口へ到達できる。
+Then: 現在ページの主要操作として同じportfolio steward入口へ到達でき、project会話の対象projectが明示される。
 
 ### US-UX-2 会話中の芽previewと本人承認
 
@@ -26,7 +26,11 @@ As a 利用者, I want 会話中に事業の芽をpreviewし、内容を承認�
 
 Given: AI壁打ちに発言がある
 When: 事業の芽previewを開き、本人が保存を承認する
-Then: preview、根拠、承認操作が分離され、承認後だけ候補が保存される。
+Then: preview、根拠、判断操作が分離され、ユーザーは「プロジェクトに採用して深掘り」「理由付き却下」「保留」から選べ、採用後だけ候補が保存される。判断は強制されない。
+
+Given: 候補を理由付きで却下または保留している
+When: 前提が変わらない状態でportfolio stewardが次の候補を提示する
+Then: 却下理由に反する同一候補は再提示せず、前提変化がある場合だけ変化と理由付きで再提示する。
 
 ### US-UX-3 space共通library再利用
 
@@ -34,7 +38,7 @@ As a 利用者, I want 添付資料をspace共通libraryから別ページ・別
 
 Given: 本人がspace libraryへ資料を添付している
 When: 別ページまたは別projectで資料候補を開く
-Then: 本人が許可した資料だけが参照候補に表示され、第三者資料は表示されない。
+Then: 同一user space内では横断知識がデフォルト常時有効で、本人が所有する資料だけが参照候補に表示され、第三者資料は表示されない。
 
 ### US-UX-4 F5復元と低速hydration
 
@@ -58,7 +62,7 @@ As a プロダクト担当者, I want 現UIの欠陥を失敗テストとして�
 
 Given: 現mainの巨大hero、手入力IdeaForm、Kadode workspace/local fake大警告を確認する
 When: 失敗テストを実行する
-Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実装完了まで受入未達になる。
+Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実装完了まで受入未達になる。観測eventはPII、本文、owner ID、実時刻、ハッシュを含まない。
 
 ## スコープ外
 
@@ -66,6 +70,7 @@ Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実
 - 外部AI、外部ストレージ、Supabase、network送信、実個人情報。
 - 失敗テストをskipして合格扱いにすること。
 - `docs/inherited/` の変更。
+- PDF/DOCX export、公式ひな型adapter、Free/Standard/Proのweighted credits比率と具体credit値。このPRでは契約を追加しない。
 
 ## 欠陥台帳とIssue下書き
 
@@ -91,6 +96,10 @@ Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実
 | --- | --- | --- | --- |
 | ADR-UX-1: 失敗テストの形式 | Vitestの`it.todo`で未達契約を常に可視化し、実装PRで同じIDを実行可能なgreen testへ昇格する。 | 現UIに合わせた実装依存assertionは欠陥を合格扱いにするため却下。 | 採用 |
 | ADR-UX-2: 実装境界 | シナリオ、失敗ID、受入基準だけをこのPRへ置き、認証・IdeaForm・library実装は別Issueへ分離する。 | 大規模なUI変更を同時に行う案は#89と競合し、レビュー範囲500行を超えるため却下。 | 採用 |
+| ADR-UX-3: AIの責務境界 | メインAIをspace全体のportfolio steward、個別会話をproject単位として契約する。 | 全projectを単一会話へ混在させる案は、projectの判断境界を失うため却下。 | 採用 |
+| ADR-UX-4: 候補判断 | 採用、理由付き却下、保留を明示し、却下理由で再提案を抑制する。前提変化時だけ理由付き再提示を許す。 | 判断を必須化する案はユーザーの保留権を奪うため却下。 | 採用 |
+| ADR-UX-5: space横断知識 | 同一user spaceの所有知識はデフォルト常時有効とし、第三者資料を除外する境界だけをE2Eで検証する。 | projectごとのopt-inを必須化する案は確定判断に反するため却下。 | 採用 |
+| ADR-UX-6: KPI観測境界 | 成功KPIの目標値は決めず、将来測定可能なPII-free event境界だけを契約する。 | 本文やPIIを収集する分析実装は未承認の外部送信を招くため却下。 | 採用 |
 
 ## 保守性ゲート
 
