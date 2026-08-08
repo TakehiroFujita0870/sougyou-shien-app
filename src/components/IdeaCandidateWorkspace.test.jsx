@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { IdeaCandidateWorkspace, approveCandidate, candidateFromConversation, findDuplicate, nextConversationQuestion, saveCandidate } from './IdeaCandidateWorkspace';
+import { IdeaCandidateWorkspace, approveCandidate, candidateFromConversation, createLocalIdeaUxObserver, findDuplicate, localAssistSuggestion, nextConversationQuestion, saveCandidate } from './IdeaCandidateWorkspace';
 const candidate = { title: '工場ノート', summary: '設備保全を記録', pain: '履歴が探せない' };
 describe('idea candidate repository boundary', () => {
   it('saves a candidate and detects duplicates', async () => { const repository = { save: async (items) => items }; const result = await saveCandidate(repository, [], candidate); expect(result.items).toHaveLength(1); expect(findDuplicate(result.items, candidate)).toBeTruthy(); });
@@ -13,6 +13,23 @@ describe('idea candidate repository boundary', () => {
   });
   it('derives a preview from only local conversation messages', () => {
     expect(candidateFromConversation([{ role: 'user', content: '工場の担当者向けの記録アプリ' }]).title).toContain('工場');
+  });
+  it('creates a deterministic local assist suggestion without replacing the original', () => {
+    const original = '工場の保全担当者向け';
+    expect(localAssistSuggestion(original)).toBe(localAssistSuggestion(original));
+    expect(original).toBe('工場の保全担当者向け');
+  });
+  it('records only deterministic metadata for hesitation events', () => {
+    const observer = createLocalIdeaUxObserver();
+    observer.record('idea_message', 'empty_submit');
+    observer.record('idea_message', 'help_opened');
+    expect(observer.events()).toEqual([
+      { key: 'idea_message', type: 'empty_submit', sequence: 1 },
+      { key: 'idea_message', type: 'help_opened', sequence: 2 },
+    ]);
+    expect(JSON.stringify(observer.events())).not.toMatch(/本文|顧客|銀行|customer|bank/);
+    expect(() => observer.record('idea_message', '顧客本文')).toThrow('Unsupported');
+    expect(() => observer.record('customer_name', 'help_opened')).toThrow('Unsupported');
   });
 });
 
@@ -26,6 +43,88 @@ describe('idea conversation controls', () => {
     await act(async () => {});
     expect(container.textContent).toContain('保存前プレビュー');
     expect(container.innerHTML).toContain('min-h-11');
+    await act(() => root.unmount()); container.remove();
+  });
+  it('keeps the original until the user adopts, edits, or discards a local assist preview', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    const observer = createLocalIdeaUxObserver();
+    const inputRepository = { load: async () => '工場の保全担当者向け', save: async (value) => value };
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={{ load: async () => [], save: async (messages) => messages }} inputRepository={inputRepository} observer={observer} />));
+    await act(async () => {});
+    const input = container.querySelector('#idea-message');
+    expect(input.value).toBe('工場の保全担当者向け');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    await act(async () => container.querySelector('[data-testid="assist-request"]').click());
+    expect(input.value).toBe('工場の保全担当者向け');
+    expect(container.textContent).toContain('補完案のプレビュー');
+    await act(async () => container.querySelector('[data-testid="assist-discard"]').click());
+    expect(input.value).toBe('工場の保全担当者向け');
+    await act(async () => container.querySelector('[data-testid="assist-request"]').click());
+    const assist = container.querySelector('[aria-label="補完案を編集"]');
+    const setTextareaValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setTextareaValue.call(assist, '本人が編集した補完案'); assist.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => container.querySelector('[data-testid="assist-adopt"]').click());
+    expect(input.value).toBe('本人が編集した補完案');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(observer.events().map((event) => event.type)).toContain('conversation_resumed');
+    expect(observer.events().map((event) => event.type)).toContain('assist_requested');
+    await act(() => root.unmount()); container.remove();
+  });
+  it('records resume for stored conversation without exposing its content', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    const observer = createLocalIdeaUxObserver();
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={{ load: async () => [{ role: 'user', content: '銀行向けの顧客本文' }], save: async (messages) => messages }} inputRepository={{ load: async () => '', save: async (value) => value }} observer={observer} />));
+    await act(async () => {});
+    expect(observer.events()).toEqual([{ key: 'idea_message', type: 'conversation_resumed', sequence: 1 }]);
+    expect(JSON.stringify(observer.events())).not.toMatch(/銀行|顧客/);
+    await act(() => root.unmount()); container.remove();
+  });
+  it('keeps a saved conversation committed when clearing the local draft fails', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    let storedConversation = [];
+    const conversationRepository = { load: async () => storedConversation, save: async (messages) => { storedConversation = messages; return messages; } };
+    const inputRepository = { load: async () => '工場の担当者向けです', save: async () => { throw new Error('offline'); } };
+    const workspace = () => <IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={conversationRepository} inputRepository={inputRepository} />;
+    await act(async () => root.render(workspace()));
+    await act(async () => {});
+    await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(storedConversation.filter((message) => message.role === 'user')).toHaveLength(1);
+    expect(container.querySelector('#idea-message').value).toBe('');
+    expect(container.textContent).toContain('発言は保存しましたが、端末内の下書きを消去できませんでした');
+    expect(container.textContent).toContain('工場の担当者向けです');
+    await act(() => root.unmount());
+    const remountedRoot = createRoot(container);
+    await act(async () => remountedRoot.render(workspace()));
+    await act(async () => {});
+    expect(container.querySelector('#idea-message').value).toBe('');
+    expect(storedConversation.filter((message) => message.role === 'user')).toHaveLength(1);
+    await act(() => remountedRoot.unmount()); container.remove();
+  });
+  it('sends with Enter and keeps Shift+Enter available for keyboard input', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    const saved = [];
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={{ load: async () => [], save: async (messages) => { saved.push(messages); return messages; } }} inputRepository={{ load: async () => '顧客の困りごと', save: async (value) => value }} />));
+    await act(async () => {});
+    const input = container.querySelector('#idea-message');
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true })));
+    expect(saved).toHaveLength(0);
+    expect(input.value).toBe('顧客の困りごと');
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+    expect(saved).toHaveLength(1);
+    expect(input.value).toBe('');
+    await act(() => root.unmount()); container.remove();
+  });
+  it('records empty submits, repeated edits, and explicit help without recording input content', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    const observer = createLocalIdeaUxObserver();
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={{ load: async () => [], save: async (messages) => messages }} inputRepository={{ load: async () => '', save: async (value) => value }} observer={observer} />));
+    await act(async () => {});
+    await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    const input = container.querySelector('#idea-message');
+    for (const value of ['a', 'ab', 'abc']) await act(async () => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => container.querySelector('[data-testid="idea-help"]').click());
+    expect(observer.events().map((event) => event.type)).toEqual(expect.arrayContaining(['empty_submit', 'repeated_edit', 'help_opened']));
+    expect(JSON.stringify(observer.events())).not.toContain('abc');
     await act(() => root.unmount()); container.remove();
   });
 });

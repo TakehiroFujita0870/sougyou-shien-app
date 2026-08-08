@@ -9,3 +9,5 @@ export const Empty = { args: { repository: repository(), conversationRepository 
 export const ConversationReady = { args: { repository: repository(), conversationRepository: conversationRepository([{ role: 'user', content: '工場の保全担当者が履歴を探せず困っています' }, { role: 'assistant', content: 'その困りごとを、どんな方法で解決する案ですか？' }]) } };
 export const Duplicate = { args: { repository: repository([item]), conversationRepository: conversationRepository([{ role: 'user', content: '工場ノート' }]) } };
 export const SaveError = { args: { repository: repository([], true), conversationRepository } };
+export const LongText = { args: { repository: repository(), conversationRepository: conversationRepository(), inputRepository: { load: async () => '工場の保全担当者が、複数の設備と紙の記録を見比べながら故障履歴を探す時間を減らしたいと考えています。'.repeat(8), save: async (value) => value } } };
+export const Offline = { args: { repository: repository(), conversationRepository: repository([], true), inputRepository: { load: async () => '', save: async () => { throw new Error('offline'); } } } };
