@@ -1,0 +1,6 @@
+# Repository-wide text policy: store and check out text with LF line endings.
+* text=auto eol=lf
+
+# Windows command scripts require CRLF for cmd.exe compatibility.
+*.bat text eol=crlf
+*.cmd text eol=crlf
