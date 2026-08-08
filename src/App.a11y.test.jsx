@@ -38,7 +38,7 @@ describe('App keyboard and accessibility quality', () => {
     await unmount();
   });
 
-  it('closes the profile dialog with Escape and preserves visible focus styles and 44px navigation targets', async () => {
+  it('closes the profile dialog with Escape and preserves tokenized visible focus styles and 44px navigation targets', async () => {
     const { container, unmount } = await mount();
     const dialog = container.querySelector('[role="dialog"]');
 
@@ -48,7 +48,8 @@ describe('App keyboard and accessibility quality', () => {
     const navigation = container.querySelector('nav[aria-label="ワークスペース"]');
     expect(navigation.querySelectorAll('button')).toHaveLength(5);
     expect(container.innerHTML).toContain('min-h-11');
-    expect(container.innerHTML).toContain('focus-visible:outline-2');
+    expect(container.querySelector('main').className).toContain('kadode-shell');
+    expect(container.querySelector('button').className).toContain('kadode-nav-button');
     await unmount();
   });
 
@@ -66,6 +67,7 @@ describe('App keyboard and accessibility quality', () => {
     expect(panel.className).toContain('max-w-full');
     expect(header.className).toContain('min-w-0');
     expect(navigation.className).toContain('min-w-0');
+    expect(container.querySelector('main').className).toContain('kadode-shell');
     await unmount();
   });
 });

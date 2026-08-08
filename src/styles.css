@@ -3,16 +3,123 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light;
+  --color-canvas: #f8f5ed;
+  --color-surface: #fffdf8;
+  --color-surface-raised: #ffffff;
+  --color-text: #18382f;
+  --color-text-muted: #4a5a50;
+  --color-border: #baa896;
+  --color-border-subtle: #e6ccb5;
+  --color-action: #235844;
+  --color-action-hover: #183f30;
+  --color-action-text: #ffffff;
+  --color-accent: #8c5b16;
+  --color-accent-soft: #fce8bd;
+  --color-sakura-petal: #f4e0d9;
+  --color-sakura-blush: #e38b75;
+  --color-sakura-ink: #73453d;
+  --color-warning: #8c3c2d;
+  --color-warning-surface: #fff1e9;
+  --color-focus: #73453d;
+  --motion-feedback: 160ms;
+  --motion-easing: ease-out;
 }
 
 body {
   margin: 0;
   min-width: 320px;
-  background: #fafaf9;
+  background: var(--color-canvas);
+  color: var(--color-text);
 }
 
 button,
 input,
 textarea {
   font: inherit;
+}
+
+.kadode-shell {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: var(--color-canvas);
+  color: var(--color-text);
+}
+
+.kadode-header,
+.kadode-navigation {
+  border-color: var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+}
+
+.kadode-notice {
+  border-color: var(--color-border);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+.kadode-nav-button,
+.kadode-profile-button,
+.kadode-card-button {
+  transition: background-color var(--motion-feedback) var(--motion-easing), color var(--motion-feedback) var(--motion-easing), box-shadow var(--motion-feedback) var(--motion-easing);
+}
+
+.kadode-nav-button { color: var(--color-text); }
+.kadode-nav-button:hover { background: var(--color-accent-soft); }
+.kadode-nav-button[aria-current='page'] { background: var(--color-action); box-shadow: inset 0 -3px 0 var(--color-sakura-blush); color: var(--color-action-text); }
+.kadode-profile-button { background: var(--color-action); color: var(--color-action-text); }
+.kadode-profile-button:hover { background: var(--color-action-hover); }
+.kadode-nav-button:disabled,
+.kadode-profile-button:disabled,
+.kadode-card-button:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+.kadode-card { border-color: var(--color-border); background: var(--color-surface-raised); }
+.kadode-card-kicker { color: var(--color-sakura-ink); }
+.kadode-card-detail { background: var(--color-sakura-petal); }
+.kadode-card-button { border-color: var(--color-action); color: var(--color-action); }
+.kadode-card-button:hover { background: var(--color-accent-soft); }
+.kadode-dialog-backdrop { background: color-mix(in srgb, var(--color-text) 32%, transparent); }
+.kadode-error { border-color: var(--color-warning); background: var(--color-warning-surface); color: var(--color-warning); }
+.kadode-dialog-panel { background: var(--color-surface-raised); color: var(--color-text); }
+.kadode-dialog-kicker { color: var(--color-sakura-ink); }
+.kadode-dialog-progress { color: var(--color-action); }
+.kadode-dialog-complete { background: var(--color-sakura-petal); }
+.kadode-dialog-submit { background: var(--color-action); color: var(--color-action-text); }
+.kadode-dialog-submit:hover { background: var(--color-action-hover); }
+
+.kadode-shell :is(button, input, textarea, select):focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.kadode-high-contrast {
+  --color-canvas: Canvas;
+  --color-surface: Canvas;
+  --color-surface-raised: Canvas;
+  --color-text: CanvasText;
+  --color-text-muted: CanvasText;
+  --color-border: CanvasText;
+  --color-border-subtle: CanvasText;
+  --color-action: CanvasText;
+  --color-action-hover: CanvasText;
+  --color-action-text: Canvas;
+  --color-accent-soft: Canvas;
+  --color-sakura-petal: Canvas;
+  --color-focus: Highlight;
+}
+
+@media (forced-colors: active) {
+  .kadode-shell { forced-color-adjust: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
