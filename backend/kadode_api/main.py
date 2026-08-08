@@ -12,6 +12,15 @@ from .decision_memory import (
 )
 from .account_privacy import InMemoryAccountPrivacyRepository
 from .market_report import InMemoryMarketReportRepository, MarketReportRequest, MarketReportResponse
+from .project_knowledge import (
+    InMemoryProjectKnowledgeRepository,
+    KnowledgeCandidatesResponse,
+    KnowledgeGrantInput,
+    KnowledgeGrantResponse,
+    KnowledgeReferenceResponse,
+    ProjectKnowledgeInput,
+    ProjectKnowledgeResponse,
+)
 from .research_orchestrator import FakeSource, ResearchOrchestrator, Source
 from .runtime import RuntimeAdapter, RuntimeFault, create_runtime
 
@@ -41,11 +50,13 @@ def create_app(
     runtime: RuntimeAdapter | None = None,
     market_report_repository: InMemoryMarketReportRepository | None = None,
     account_privacy_repository: InMemoryAccountPrivacyRepository | None = None,
+    project_knowledge_repository: InMemoryProjectKnowledgeRepository | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Kadode API", version="0.1.0")
     decision_repository = repository or InMemoryDecisionRepository()
     report_repository = market_report_repository or InMemoryMarketReportRepository()
     privacy_repository = account_privacy_repository or InMemoryAccountPrivacyRepository.seeded()
+    knowledge_repository = project_knowledge_repository or InMemoryProjectKnowledgeRepository()
     runtime_adapter = runtime or create_runtime()
 
     def runtime_owner(x_local_owner_id: str | None = Header(default=None, alias="X-Local-Owner-Id")) -> str:
@@ -146,6 +157,54 @@ def create_app(
         if report is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "market_report_not_found"})
         return report
+
+    @app.post("/v1/project-knowledge", response_model=ProjectKnowledgeResponse, status_code=status.HTTP_201_CREATED)
+    def create_project_knowledge(
+        request: ProjectKnowledgeInput, owner_id: Annotated[str, Depends(local_owner_context)]
+    ) -> ProjectKnowledgeResponse:
+        return knowledge_repository.create(owner_id, request)
+
+    @app.post("/v1/project-knowledge/grants", response_model=KnowledgeGrantResponse, status_code=status.HTTP_201_CREATED)
+    def grant_project_knowledge(
+        request: KnowledgeGrantInput, owner_id: Annotated[str, Depends(local_owner_context)]
+    ) -> KnowledgeGrantResponse:
+        grant = knowledge_repository.grant(owner_id, request)
+        if grant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "project_knowledge_not_found"})
+        return grant
+
+    @app.post("/v1/project-knowledge/grants/{grant_id}/revoke", response_model=KnowledgeGrantResponse)
+    def revoke_project_knowledge_grant(grant_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> KnowledgeGrantResponse:
+        from uuid import UUID
+        try:
+            grant = knowledge_repository.revoke(owner_id, UUID(grant_id))
+        except ValueError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "knowledge_grant_not_found"}) from error
+        if grant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "knowledge_grant_not_found"})
+        return grant
+
+    @app.delete("/v1/project-knowledge/{knowledge_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_project_knowledge(knowledge_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> None:
+        from uuid import UUID
+        try:
+            deleted = knowledge_repository.delete(owner_id, UUID(knowledge_id))
+        except ValueError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "project_knowledge_not_found"}) from error
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "project_knowledge_not_found"})
+
+    @app.get("/v1/project-knowledge/candidates", response_model=KnowledgeCandidatesResponse)
+    def project_knowledge_candidates(target_project_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> KnowledgeCandidatesResponse:
+        return knowledge_repository.candidates(owner_id, target_project_id)
+
+    @app.get("/v1/project-knowledge/references/{knowledge_id}", response_model=KnowledgeReferenceResponse)
+    def project_knowledge_reference(knowledge_id: str, target_project_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> KnowledgeReferenceResponse:
+        from uuid import UUID
+        try:
+            return knowledge_repository.reference_status(owner_id, UUID(knowledge_id), target_project_id)
+        except ValueError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "project_knowledge_not_found"}) from error
 
     return app
 
