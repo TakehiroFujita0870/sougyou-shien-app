@@ -14,3 +14,7 @@ export const Desktop = {};
 export const Mobile = {
   parameters: { viewport: { defaultViewport: 'mobile1' } },
 };
+
+export const HighContrast = {
+  render: () => <div className="kadode-high-contrast"><App /></div>,
+};
