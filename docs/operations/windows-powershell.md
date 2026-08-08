@@ -16,6 +16,19 @@ Windows版Codexで、パス、文字コード、外部CLI、ファイル操作�
 - `npm`、`uv`、`gh`、`git`は単純なコマンドを優先する。条件分岐や業務ロジックが必要なら、シェルの複雑な一行ではなくNode.jsまたはPythonのスクリプトに移す。
 - `HOME`、`home`、`CODEX_HOME`は作業変数名に使わない。環境変数の意味を上書きしない。
 
+### セッション開始時のUTF-8初期化
+
+PowerShellを使うセッションでは、最初に入出力エンコーディングをUTF-8（BOMなし）にそろえる。これは画面表示とASCIIのみの制御データを安定させるための初期化であり、日本語本文をネイティブCLIへ直接パイプしてよいという意味ではない。
+
+```powershell
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = $utf8NoBom
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
+```
+
+初期化後も、非ASCII本文の送信は「CLI引数と長い本文」の安全経路だけを使う。文字列をPowerShellのパイプラインに渡す経路は、`$OutputEncoding`の設定値や子プロセス実装に左右されるため、本文送信の安全策にしない。
+
 ### 安全な検索・読取
 
 ```powershell
@@ -82,12 +95,18 @@ node -e "const{spawnSync}=require('node:child_process');const input=Buffer.from(
 
 `$newBody | gh issue edit --body-file -`や`$body | gh pr create --body-file -`は、本文が日本語など非ASCIIを含む場合の送信手段として禁止する。パイプラインへ渡す値は、シークレットを含めない。本文を再利用する場合も、`$bodyLines -join [Environment]::NewLine`のように一つの文字列へ明示的に結合する。
 
-## Remote本文のread-back検査
+## Remote本文のread-back検査と停止条件
 
-IssueまたはPR本文を更新した直後に、APIから本文をread-backする。連続する`???`、置換文字U+FFFD、日本語文字数、必須見出しを検査し、いずれかが不正なら更新を完了扱いにしない。次のNode.js例はASCIIのみであり、`gh api`の結果をUTF-8 `Buffer`として検査する。
+IssueまたはPR本文を更新した直後に、APIから本文をread-backする。連続する`???`、置換文字U+FFFD、日本語文字数、必須見出しに加え、送信元UTF-8ファイルとの完全一致を検査する。これにより、文字化けだけでなく本文末尾や指示の欠損も検出する。いずれかが不正なら更新を完了扱いにせず、以後のIssue/PR更新、コミット、pushを停止する。
 
 ```powershell
 node -e "const{spawnSync}=require('node:child_process');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/sougyou-shien-app/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const body=JSON.parse(r.stdout.toString('utf8')).body??'';const ja=(body.match(/[\u3040-\u30ff\u3400-\u9fff]/g)||[]).length;const required=['## 目的','## 受入条件'];if(/\?{3,}|\uFFFD/.test(body)||ja===0||required.some(x=>!body.includes(x)))throw Error('Issue本文のread-back検査に失敗');"
+```
+
+送信元のUTF-8ファイルを`body.md`として保存した場合は、次の完全一致検査を続けて実行する。Node.jsのプログラム本体はASCIIだけであり、本文はファイルからUTF-8で読む。改行コードの差だけは正規化する。
+
+```powershell
+node -e "const{readFileSync}=require('node:fs');const{spawnSync}=require('node:child_process');const expected=readFileSync('body.md','utf8').replace(/\r\n/g,'\n');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/sougyou-shien-app/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const actual=(JSON.parse(r.stdout.toString('utf8')).body??'').replace(/\r\n/g,'\n');if(actual!==expected)throw Error('Issue本文が送信元と一致しない');"
 ```
 
 PRではAPIパスを`repos/TakehiroFujita0870/sougyou-shien-app/pulls/<PR番号>`へ替え、PRで必要な見出しと`Closes #33`を`required`へ加える。本文の更新に成功したというCLIの終了コードだけを、文字化けしていない根拠にしない。
