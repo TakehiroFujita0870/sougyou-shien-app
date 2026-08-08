@@ -10,6 +10,7 @@ from .decision_memory import (
     DecisionSearchResponse,
     InMemoryDecisionRepository,
 )
+from .account_privacy import InMemoryAccountPrivacyRepository
 from .market_report import InMemoryMarketReportRepository, MarketReportRequest, MarketReportResponse
 from .research_orchestrator import FakeSource, ResearchOrchestrator, Source
 from .runtime import RuntimeAdapter, RuntimeFault, create_runtime
@@ -39,10 +40,12 @@ def create_app(
     repository: InMemoryDecisionRepository | None = None,
     runtime: RuntimeAdapter | None = None,
     market_report_repository: InMemoryMarketReportRepository | None = None,
+    account_privacy_repository: InMemoryAccountPrivacyRepository | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Kadode API", version="0.1.0")
     decision_repository = repository or InMemoryDecisionRepository()
     report_repository = market_report_repository or InMemoryMarketReportRepository()
+    privacy_repository = account_privacy_repository or InMemoryAccountPrivacyRepository.seeded()
     runtime_adapter = runtime or create_runtime()
 
     def runtime_owner(x_local_owner_id: str | None = Header(default=None, alias="X-Local-Owner-Id")) -> str:
@@ -64,6 +67,14 @@ def create_app(
     @app.get("/v1/runtime/status")
     def runtime_status() -> dict[str, object]:
         return {"profile": runtime_adapter.profile, "services": runtime_adapter.service_status()}
+
+    @app.get("/v1/account/export")
+    def export_account(owner_id: Annotated[str, Depends(local_owner_context)]) -> dict[str, object]:
+        return privacy_repository.export(owner_id)
+
+    @app.post("/v1/account/deletion", status_code=status.HTTP_202_ACCEPTED)
+    def delete_account(owner_id: Annotated[str, Depends(local_owner_context)]) -> dict[str, object]:
+        return privacy_repository.delete(owner_id)
 
     @app.get("/v1/runtime/objects/{object_id}")
     def get_runtime_object(object_id: str, owner_id: Annotated[str, Depends(runtime_owner)]) -> dict[str, str]:
