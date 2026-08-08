@@ -1,0 +1,127 @@
+# Windows / PowerShell の安全なエージェント運用
+
+最終検証日: 2026-08-09
+
+## 目的と適用範囲
+
+Windows版Codexで、パス、文字コード、外部CLI、ファイル操作、GitHub CLIを安全に扱うための実行規約である。PowerShellを標準シェルとし、Git Bashはbash構文でしか検査できない限定用途にだけ使う。OS設定、`PATH`、認証情報、依存関係、アプリコード、CIランナーはこの手順で変更しない。
+
+リポジトリ全体の変更規律は[AGENTS.md](../../AGENTS.md)、AIモデルとAPIの運用は[モデルライフサイクル](model-lifecycle.md)を参照する。継承資料の`docs/inherited/`は参照専用である。
+
+## 基本ルール
+
+- コマンドはPowerShellで実行し、`workdir`にはOneDrive配下、日本語、空白を含む可能性がある絶対パスを指定する。
+- ファイル名検索には`rg --files`、本文検索には`rg -n`を使う。PowerShellでパスを渡すときはワイルドカード解釈を避けるため`-LiteralPath`を使う。
+- UTF-8の文書を読むときは`Get-Content -Raw -Encoding UTF8 -LiteralPath`を使う。既存ファイルの編集は`apply_patch`で行い、`echo`、`cat`、`>`、`>>`、here-stringによる書込みは使わない。
+- `npm`、`uv`、`gh`、`git`は単純なコマンドを優先する。条件分岐や業務ロジックが必要なら、シェルの複雑な一行ではなくNode.jsまたはPythonのスクリプトに移す。
+- `HOME`、`home`、`CODEX_HOME`は作業変数名に使わない。環境変数の意味を上書きしない。
+
+### 安全な検索・読取
+
+```powershell
+rg --files -g 'AGENTS.md' -g 'docs/**'
+rg -n 'TODO|FIXME' -g '*.ts'
+Get-Content -Raw -Encoding UTF8 -LiteralPath 'C:\Users\user\OneDrive - 会社\開発\創業 支援\AGENTS.md'
+```
+
+`Get-Content path\*.md`のようにワイルドカードに依存した参照や、既定文字コードに委ねたUTF-8文書の読取は禁止する。
+
+## 編集と破壊操作
+
+変更は`apply_patch`を使う。次は編集手段として禁止する。
+
+```powershell
+echo 'text' > docs\guide.md
+cat <<'EOF' > docs\guide.md
+...
+EOF
+```
+
+削除や移動はPowerShellの中だけで完結させ、`cmd.exe`、Git Bash、PowerShellをまたがない。再帰操作の前に対象を絶対パスへ解決し、意図した作業ツリー内であることを確認する。
+
+```powershell
+$targetPath = (Resolve-Path -LiteralPath '.\tmp\generated').Path
+if ($targetPath -notlike 'C:\Users\user\OneDrive - 会社\開発\創業 支援\tmp\*') {
+  throw "対象外のパスです: $targetPath"
+}
+Remove-Item -LiteralPath $targetPath -Recurse -Force
+```
+
+未解決の環境変数、グロブ、ドライブ直下、ホームディレクトリ、リポジトリ全体を再帰削除・移動の対象にしない。削除や移動の前後に対象パスを記録し、Gitで追跡されるファイルは`git status --short`で確認する。
+
+## CLI引数と長い本文
+
+PowerShellでは複数行のコマンド出力が`string[]`になる。これを外部CLIの単一引数として渡すと、各行が別引数に展開され、Issue/PR本文が壊れることがある。
+
+```powershell
+# 危険: 各行が別の引数になり得る
+$bodyLines = @('## 目的', '', '- 変更内容')
+gh pr create --body $bodyLines
+
+# 安全: 一つの文字列に結合する
+$body = $bodyLines -join [Environment]::NewLine
+gh pr create --body $body
+```
+
+長いIssue/PR本文、Markdown、引用符を含む本文は、引数に押し込まず標準入力と`--body-file -`を使う。
+
+```powershell
+$body = @'
+## 目的
+
+PowerShell運用文書を追加します。
+
+## 検査結果
+- git diff --check: pass
+
+Closes #33
+'@
+
+$body | gh pr create --title 'docs: add PowerShell safety runbook' --body-file -
+```
+
+パイプラインへ渡す値は、シークレットを含めない。本文を再利用する場合も、`$bodyLines -join [Environment]::NewLine`のように一つの文字列へ明示的に結合する。
+
+## GitHub CLIとPATHの診断
+
+Git Bashで`gh`が動いても、CodexまたはPowerShellのプロセスが同じ`PATH`と認証状態とは限らない。`PATH`や認証情報を変更せず、実行対象のPowerShellプロセスで診断する。
+
+```powershell
+Get-Command gh -All
+gh --version
+gh auth status
+Get-Command git -All
+git --version
+```
+
+`gh`が見つからない、または認証に失敗する場合は、出力から実行ファイルの有無と対象プロセスの状態だけを報告する。別シェルの成功を根拠にせず、`PATH`の変更、資格情報の再設定、互換コピーの作成はしない。認証トークン、Cookie、設定内容はIssue、PR、ログへ記録しない。
+
+## ローカル検査とUbuntu CI
+
+ローカルではPowerShellから、変更範囲に応じて次を実行する。
+
+```powershell
+npm run test
+npm run build
+npm run build-storybook
+uv run pytest
+git diff --check
+```
+
+Ubuntu CIはbash、Linuxパス、ケースセンシティブなファイルシステムで実行される。PowerShellで成功しても、次を別途確認する。
+
+- スクリプトがbash構文、Linuxのパス区切り、実行権限、ファイル名の大文字・小文字に依存していないこと。
+- CI固有の環境変数、シークレット、ランナー設定をローカルから変更しないこと。
+- CI結果を確認し、失敗時はログを根拠に修正または未検査としてPRへ記載すること。
+
+CI通過後はリポジトリの承認ルールに従って自動マージしてよい。固定的なStageゲートを復活させず、変更範囲に応じた検査と既存CIを使う。
+
+## PR作成前の確認
+
+```powershell
+git status --short
+git diff --check
+git diff -- AGENTS.md docs/operations/windows-powershell.md
+```
+
+PR本文には目的、受入条件との対応、実行した検査、影響の有無を記載し、Issueを完了するPRでは`Closes #33`を含める。mainへ直接pushせず、1 Issueを1 PRで扱う。
