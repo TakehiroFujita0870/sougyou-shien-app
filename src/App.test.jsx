@@ -52,7 +52,6 @@ describe('MVP workspace shell', () => {
     expect(WORKSPACE_NAV.map(({ id }) => id)).not.toContain('public-relations');
     expect(html).not.toContain('AI広報');
   });
-
   it('exposes the vertical workspace shell information architecture', () => {
     const html = renderToStaticMarkup(<App />);
     expect(html).toContain('ワークスペースサイドバー');
