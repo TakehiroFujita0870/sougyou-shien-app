@@ -13,7 +13,7 @@ describe('LocalGoogleSignIn', () => {
   it('has no external link, form action, or redirect surface', () => {
     const html = renderToStaticMarkup(<LocalGoogleSignIn />);
 
-    expect(html).toContain('Googleで続ける（local mock）');
+    expect(html).toContain('確認中');
     expect(html).not.toContain('href=');
     expect(html).not.toContain('<form');
     expect(html).not.toContain('action=');
@@ -39,7 +39,7 @@ describe('LocalGoogleSignIn', () => {
     await act(async () => container.querySelector('button').click());
     await act(async () => root.render(<LocalGoogleSignIn authAdapter={createLocalGoogleAuthAdapter()} />));
 
-    expect(container.textContent).toContain('local mock でサインイン中');
+    expect(container.textContent).toContain('ローカル Google テスト利用者');
     expect(adapter.currentPrincipal()).not.toBeNull();
     await act(() => root.unmount());
     container.remove();
