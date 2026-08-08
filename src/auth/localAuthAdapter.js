@@ -1,19 +1,77 @@
 export const LOCAL_GOOGLE_PRINCIPAL = Object.freeze({
-  id: 'local-google-user', provider: 'google-local-mock', displayName: 'ローカル Google テスト利用者',
+  id: 'local-google-user',
+  provider: 'google-local-mock',
+  displayName: 'ローカル Google テスト利用者',
 });
 
-export function createLocalGoogleAuthAdapter({ profile = 'local', principal = LOCAL_GOOGLE_PRINCIPAL } = {}) {
+const STORAGE_VERSION = 1;
+
+function safeStorage(storage) {
+  return storage ?? null;
+}
+
+export function createLocalGoogleAuthAdapter({
+  profile = 'local',
+  principal = LOCAL_GOOGLE_PRINCIPAL,
+  storage = globalThis.localStorage,
+  storageKey = 'kadode:local-auth',
+} = {}) {
   let current = null;
-  return {
-    profile,
-    currentPrincipal: () => current,
-    signIn: async () => {
-      if (profile !== 'local' && profile !== 'test') throw new Error('外部認証は設定されていません。');
+  let status = 'hydrating';
+  const store = safeStorage(storage);
+
+  function currentPrincipal() {
+    return current;
+  }
+
+  function currentStatus() {
+    return status;
+  }
+
+  async function hydrate() {
+    if (!store) {
+      status = 'ready';
+      return null;
+    }
+    try {
+      const raw = store.getItem(storageKey);
+      if (!raw) {
+        status = 'ready';
+        return null;
+      }
+      const saved = JSON.parse(raw);
+      if (saved?.version !== STORAGE_VERSION || saved?.principal?.id !== principal.id) {
+        store.removeItem(storageKey);
+        status = 'error';
+        return null;
+      }
       current = principal;
+      status = 'ready';
       return current;
-    },
-    signOut: async () => { current = null; },
-  };
+    } catch {
+      try { store.removeItem(storageKey); } catch { /* fail-safe cleanup */ }
+      status = 'error';
+      return null;
+    }
+  }
+
+  async function signIn() {
+    if (profile !== 'local' && profile !== 'test') {
+      throw new Error('外部認証は設定されていません。');
+    }
+    current = principal;
+    try { store?.setItem(storageKey, JSON.stringify({ version: STORAGE_VERSION, principal })); } catch { status = 'error'; }
+    status = 'ready';
+    return current;
+  }
+
+  async function signOut() {
+    current = null;
+    try { store?.removeItem(storageKey); } catch { status = 'error'; }
+    status = 'ready';
+  }
+
+  return { profile, currentPrincipal, currentStatus, hydrate, signIn, signOut };
 }
 
 export function createOwnerScopedLocalState() {

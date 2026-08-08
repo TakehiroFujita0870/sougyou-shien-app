@@ -16,3 +16,7 @@ export const SignedIn = {
   }],
   render: (_, { loaded }) => <LocalGoogleSignIn authAdapter={loaded.authAdapter} />,
 };
+
+export const MobileSignedOut = {
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+};
