@@ -10,7 +10,7 @@ describe('MVP workspace shell', () => {
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain('local / fake モード');
     WORKSPACE_NAV.forEach(({ label }) => expect(html).toContain(label));
-    expect(html).toContain('Googleで続ける（local mock）');
+    expect(html).toContain('確認中');
   });
 
   it('renders native keyboard-operable navigation with visible focus and current location', () => {
