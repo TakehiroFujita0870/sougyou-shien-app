@@ -7,3 +7,7 @@ export default {
 };
 
 export const Default = {};
+
+export const Mobile = {
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+};
