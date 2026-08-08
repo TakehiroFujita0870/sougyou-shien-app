@@ -2,7 +2,7 @@
 最終検証日: 2026-08-09
 
 ## 要望 / ゴール / 成功指標
-1つの資料原本をuser spaceへ一度だけ保存し、会話・project・調査・ideaからreference metadataで再利用するlocal/fake契約を作る。owner外の原本・派生物・参照が検索結果に出ないことを契約テストで確認する。
+1つの資料原本をuser spaceへ一度だけ保存し、会話・project・調査・ideaからreference metadataで再利用するlocal/fake契約を作る。同一user space内の有効な横断知識はデフォルト常時有効とし、owner外の原本・派生物・参照が検索結果に出ないことを契約テストで確認する。
 
 ## ユーザーストーリーと受け入れ条件
 ### US-1 原本を一度だけ保存する
@@ -15,7 +15,7 @@ Then: 1つのoriginal_idと既存originalを返し、派生物は1組だけ保�
 As a 利用者, I want conversation/project/research/ideaから資料を参照したい, so that文脈だけを再利用できる。
 Given: ownerが有効なoriginalを持つ
 When: source kind、source id、locatorを指定してreferenceを作る
-Then: originalを複製せずmetadataだけが保存され、owner外の参照は拒否される。
+Then: originalを複製せずmetadataだけが保存され、同一ownerの参照は個別grantなしで有効になり、owner外の参照は拒否される。
 
 ### US-3 削除を伝播する
 As a 利用者, I want原本削除で派生物と参照も無効化したい, so that削除済み本文が検索へ戻らない。
@@ -38,6 +38,7 @@ Then: original、派生物、reference、横断検索結果が不可視になり
 | ADR-SPACE-01 | 原本・派生物・referenceを分離する。原本1件を複数文脈から安全に参照できる | 文脈ごとに原本を複製する案は重複・削除漏れを生むため却下 | local repositoryで一意hashと削除伝播を検証する |
 | ADR-SPACE-02 | ownerをrepository引数から確定し、requestのowner値を受け取らない | request owner_idを信頼する案は他owner参照を許すため却下 | 全read/write/searchでowner一致を要求する |
 | ADR-SPACE-03 | 既存の`file_ingestion`の抽出・削除語彙とresearch schemaのowner境界を参照し、依存追加なしの小さなfake repositoryを置く | 新規ORM・UI基盤・永続化adapterはbundle、security、license、更新責任を増やし、既存契約と重複するため却下 | 2箇所以上で同じspace操作が必要になった時、Supabase adapterへ移行してfakeを削除する |
+| ADR-SPACE-04 | 同一user spaceの横断知識は常時有効とし、reference metadataで出典・文脈を追跡する | projectごとの既定grant確認は同意摩擦と重複設定を増やすため却下。owner隔離と削除伝播は維持する | portfolio stewardとproject単位会話が同じspace境界を参照できる |
 
 ## 変更履歴
 | 日時 | 変更 | 理由 | 影響タスク |

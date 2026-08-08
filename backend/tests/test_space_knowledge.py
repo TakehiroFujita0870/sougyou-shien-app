@@ -22,6 +22,7 @@ def test_references_cover_all_contexts_without_copying_original() -> None:
         reference = repo.add_reference("owner-a", stored.original_id, ReferenceInput(kind, f"{kind}-1", "page=2"))
         assert reference.original_id == stored.original_id
     assert repo.reference_count("owner-a", stored.original_id) == 4
+    # Same-space references are active by default; no per-project grant exists in this contract.
     assert repo.search("owner-a", "根拠")
 
 
