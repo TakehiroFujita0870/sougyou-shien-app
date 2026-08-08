@@ -7,7 +7,7 @@ import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { ResearchWorkspace } from './components/ResearchWorkspace';
-import { UserProfileInterview } from './components/UserProfileInterview';
+import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { AI_COPY_CATALOG } from './copy/aiVoice';
 
 export const WORKSPACE_NAV = [
@@ -55,14 +55,43 @@ function IdeaWorkspace({ idea, onReset, onSubmit, profileReady }) {
   );
 }
 
-export function App() {
+function ProfileLoadFailure({ onRetry }) {
+  return (
+    <section className="kadode-dialog-panel w-full min-w-0 max-w-full overflow-hidden rounded-3xl p-6 shadow-xl sm:max-w-2xl" aria-labelledby="profile-load-error-heading">
+      <p className="kadode-dialog-kicker font-bold">あなたの情報</p>
+      <h2 id="profile-load-error-heading" className="mt-2 text-2xl font-bold">読み込めませんでした</h2>
+      <p className="mt-4 leading-7">保存済みの情報を守るため、入力フォームは表示していません。接続を確認して再試行してください。</p>
+      <button type="button" onClick={onRetry} className="kadode-dialog-submit mt-5 rounded-full px-5 py-3 font-bold">再試行</button>
+    </section>
+  );
+}
+
+export function App({ profileRepository }) {
   const [idea, setIdea] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState('ideas');
-  const [profileOpen, setProfileOpen] = useState(true);
-  const [profileComplete, setProfileComplete] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileHydration, setProfileHydration] = useState({ phase: 'loading', profile: null });
+  const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
   const repositoryRef = useRef(null);
   if (!repositoryRef.current) repositoryRef.current = createLocalPlanRepository();
+  const profileRepositoryRef = useRef(null);
+  if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
+  const profileComplete = profileHydration.phase === 'ready' && profileHydration.profile?.status === 'completed';
+
+  useEffect(() => {
+    let mounted = true;
+    profileRepositoryRef.current.load()
+      .then((profile) => {
+        if (!mounted) return;
+        setProfileHydration({ phase: 'ready', profile });
+        setProfileOpen(profile?.status !== 'completed');
+      })
+      .catch(() => {
+        if (mounted) setProfileHydration({ phase: 'error', profile: null });
+      });
+    return () => { mounted = false; };
+  }, [profileLoadAttempt]);
 
   useEffect(() => {
     const shortcut = (event) => {
@@ -93,6 +122,17 @@ export function App() {
     setSubscription((current) => ({ ...current, reasoningMode }));
   }
 
+  function retryProfileLoad() {
+    setProfileHydration({ phase: 'loading', profile: null });
+    setProfileOpen(false);
+    setProfileLoadAttempt((attempt) => attempt + 1);
+  }
+
+  function completeProfile(profile) {
+    setProfileHydration({ phase: 'ready', profile });
+    setProfileOpen(false);
+  }
+
   function workspaceContent() {
     if (activeWorkspace === 'research') return <ResearchWorkspace />;
     if (activeWorkspace === 'files') return <FileLibrary />;
@@ -105,8 +145,8 @@ export function App() {
       <header className="kadode-header border-b"><div className="mx-auto flex min-w-0 max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8"><strong className="shrink-0 text-2xl tracking-tight">Kadode</strong><span className="min-w-0 break-words text-right text-sm font-medium text-[color:var(--color-text-muted)]">アイデアを、構造で育てる。</span></div></header>
       <Navigation activeWorkspace={activeWorkspace} onSelect={setActiveWorkspace} />
       <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8 sm:py-10"><p className="kadode-notice mb-6 rounded-2xl border px-4 py-3 text-sm leading-6"><strong>local / fake モード</strong> — このMVPでは外部サービスへ接続・送信しません。</p>{workspaceContent()}</div>
-      <button type="button" onClick={() => setProfileOpen(true)} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>
-      {profileOpen && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報"><UserProfileInterview onClose={() => setProfileOpen(false)} onComplete={() => setProfileComplete(true)} /></div>}
+      {profileHydration.phase === 'ready' && <button type="button" onClick={() => setProfileOpen(true)} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>}
+      {(profileHydration.phase === 'loading' || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.profile} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
   );
 }

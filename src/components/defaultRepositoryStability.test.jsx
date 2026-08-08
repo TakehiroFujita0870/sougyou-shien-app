@@ -3,8 +3,8 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { App } from '../App';
 import { IdeaCandidateWorkspace } from './IdeaCandidateWorkspace';
-import { UserProfileInterview } from './UserProfileInterview';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -37,11 +37,11 @@ describe('default browser repositories', () => {
   it('loads the profile once after a normal mount', async () => {
     const getItem = vi.spyOn(localStorage, 'getItem');
 
-    const view = await mount(<UserProfileInterview onClose={vi.fn()} onComplete={vi.fn()} />);
+    const view = await mount(<App />);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(callsFor(getItem, 'kadode:user-profile')).toHaveLength(1);
-    await view.rerender(<UserProfileInterview onClose={vi.fn()} onComplete={vi.fn()} />);
+    await view.rerender(<App />);
     expect(callsFor(getItem, 'kadode:user-profile')).toHaveLength(1);
     await view.unmount();
   });
