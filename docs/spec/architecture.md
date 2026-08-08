@@ -1,8 +1,8 @@
-# Kadode アーキテクチャ決定 v0.1
+# Kadode アーキテクチャ決定 v0.2
 
 ## 境界
 
-React + Viteをクライアント、Supabase Auth/Postgresを所有データ、Vercel Functionsを認証済みのAI実行境界にします。LLMは文章生成・反証候補に限り、ゲート・遷移・権限・エクスポートは決定的なコードで行います。
+React + Viteをクライアント、Supabase Auth/Postgresを所有データ、Vercel Functionsを認証済みのAI実行境界にします。LLMは対話、アイデア仮説カード、根拠付き調査レポートの生成に使い、権限、課金上限、データ削除は決定的なコードで行います。
 
 ```mermaid
 flowchart LR
@@ -10,22 +10,23 @@ flowchart LR
   UI --> AUTH[Supabase Auth]
   UI --> DB[(Postgres/RLS)]
   UI --> API[Vercel Function]
-  API --> LLM[LLM: 起案/反証]
-  API --> GATE[決定的ゲート]
-  GATE --> DB
+  API --> LLM[LLM: 対話/調査]
+  API --> SEARCH[Web/特許/個人検索]
+  SEARCH --> DB
+  LLM --> DB
   DB --> EXP[Markdown+JSON Export]
 ```
 
 ## 最小テーブル
 
 - `ideas`: owner_id, pain_statement, status
-- `stage_runs`: idea_id, stage, actor_role, execution_id, status, artifact
-- `death_causes`: idea_id, surface_cause, root_cause, source_url
 - `decision_records`: idea_id, category, reason, decided_at
 - `consents`: user_id, anonymized_statistics_opt_in, withdrawn_at
 - `deletion_requests`: user_id, requested_at, completed_at
 
 全テーブルはowner_idのRLSを必須とし、サービスロールはVercel Functionだけが使います。
+
+横断調査、アップロード資料のハイブリッド検索、意思決定記憶の詳細は[横断調査・個人ナレッジ・意思決定記憶 計画](research-memory-plan.md)を正本とします。
 
 ## 品質・運用
 
