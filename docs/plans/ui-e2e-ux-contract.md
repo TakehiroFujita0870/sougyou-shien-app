@@ -8,7 +8,7 @@
 
 ゴール: PC/390px、keyboard、screen reader、低速hydrationを含む失敗テストと受入基準を、認証・IdeaForm・既存UI実装から独立して固定する。
 
-成功指標: 6シナリオの失敗IDがテスト名としてCIへ表示され、実装PRが各IDをgreenにするまで合格扱いにならない。
+成功指標: 6シナリオの失敗IDが実行済みテスト名と失敗出力としてCIへ表示され、実装PRが各IDをgreenにするまで合格扱いにならない。
 
 ## ユーザーストーリーと受け入れ条件
 
@@ -62,7 +62,7 @@ As a プロダクト担当者, I want 現UIの欠陥を失敗テストとして�
 
 Given: 現mainの巨大hero、手入力IdeaForm、Kadode workspace/local fake大警告を確認する
 When: 失敗テストを実行する
-Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実装完了まで受入未達になる。観測eventはPII、本文、owner ID、実時刻、ハッシュを含まない。
+Then: それぞれの欠陥IDが実行済みのfailing contractとして表示され、実装完了まで受入未達になる。観測eventはPII、本文、owner ID、実時刻、ハッシュを含まない。
 
 ## スコープ外
 
@@ -86,7 +86,7 @@ Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実
 
 | ID | 成果物 | 完了判定（検査:） | 不確実性 |
 | --- | --- | --- | --- |
-| T-UX-1 | 主要UX E2E失敗テスト | 検査: `npm run test -- src/ui-ux-contract.e2e.test.jsx` でFAIL-UX IDを確認 | 既知 |
+| T-UX-1 | 主要UX E2E失敗テスト | 検査: `npm run test -- --run src/ui-ux-contract.e2e.test.jsx` で6件の実行済みFAIL-UX IDを確認 | 既知 |
 | T-UX-2 | PC/390px・keyboard・screen reader契約 | 検査: 同テストのviewport、focus、ARIAシナリオを確認 | 既知 |
 | T-UX-3 | 低速hydration/network/PII境界 | 検査: 同テストのhydration遅延、fetch 0件、fixture監査を確認 | 類推可能 |
 
@@ -94,7 +94,7 @@ Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実
 
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 | --- | --- | --- | --- |
-| ADR-UX-1: 失敗テストの形式 | Vitestの`it.todo`で未達契約を常に可視化し、実装PRで同じIDを実行可能なgreen testへ昇格する。 | 現UIに合わせた実装依存assertionは欠陥を合格扱いにするため却下。 | 採用 |
+| ADR-UX-1: 失敗テストの形式 | 既存Vitest/happy-domで現在のAppをmountし、操作後の不足した意味的UIまたは禁止されたUIをassertする実行可能なred contractにする。実装PRは同じIDをgreenにする。 | `it.todo`は実行も失敗もしないため却下。新runnerは依存と保守責任を増やすため却下。 | 採用 |
 | ADR-UX-2: 実装境界 | シナリオ、失敗ID、受入基準だけをこのPRへ置き、認証・IdeaForm・library実装は別Issueへ分離する。 | 大規模なUI変更を同時に行う案は#89と競合し、レビュー範囲500行を超えるため却下。 | 採用 |
 | ADR-UX-3: AIの責務境界 | メインAIをspace全体のportfolio steward、個別会話をproject単位として契約する。 | 全projectを単一会話へ混在させる案は、projectの判断境界を失うため却下。 | 採用 |
 | ADR-UX-4: 候補判断 | 採用、理由付き却下、保留を明示し、却下理由で再提案を抑制する。前提変化時だけ理由付き再提示を許す。 | 判断を必須化する案はユーザーの保留権を奪うため却下。 | 採用 |
@@ -106,14 +106,15 @@ Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実
 | 評価順 | 検討結果 | 判断 |
 | --- | --- | --- |
 | 1. 既存repo内コンポーネント/adapter | 既存App、WorkspaceShell、IdeaCandidateWorkspace、FileLibraryを契約の対象として参照し、新repositoryや新adapterは追加しない。 | 採用 |
-| 2. Web/React/Tailwind標準 | Vitestの`it.todo`、Reactの既存テスト境界、既存Tailwind/CSSを使用する。新しいstyled UI基盤や独自dialog/menuは作らない。 | 採用 |
+| 2. Web/React/Tailwind標準 | VitestとReactの既存テスト境界、既存Tailwind/CSSを使用する。新しいstyled UI基盤や独自dialog/menuは作らない。 | 採用 |
 | 3. 実績ある保守ライブラリ | 新規依存は不要。Playwright等はbrowser取得・更新責任・bundle/security/license確認を伴うため、別の依存追加PRへ分離する。 | 今回は不採用 |
 | 4. 独自実装 | 独自の実行runnerは作らず、失敗契約の宣言だけを追加する。将来runnerを追加する場合は、既存Vitestで表現できない再現条件、保守責任、移行・削除条件を別ADRへ記録する。 | 今回は最小境界 |
 
-独自境界の削除条件は、実装PRで同じFAIL-UX IDが既存のCI runnerでgreenになった時点で`it.todo`契約を実行テストへ置換し、重複契約を削除することとする。
+独自境界の削除条件は、実装PRで同じFAIL-UX IDが既存のCI runnerでgreenになった時点で、契約テストをプロダクトの恒久回帰テストへ移し、重複した一時的な契約補助を削除することとする。
 
 ## 変更履歴
 
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | 現UIを合格基準にしないE2E UX契約を固定 | T-UX-1〜3 |
+| 2026-08-09 | `it.todo`をmount後に失敗する実行契約へ変更 | todoがgreen扱いとなり受入未達を検出できなかったため | T-UX-1〜3 |
