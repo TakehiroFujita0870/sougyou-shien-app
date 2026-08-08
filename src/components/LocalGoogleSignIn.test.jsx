@@ -1,0 +1,2 @@
+import { renderToStaticMarkup } from 'react-dom/server'; import { describe, expect, it } from 'vitest'; import { LocalGoogleSignIn } from './LocalGoogleSignIn';
+describe('LocalGoogleSignIn', () => { it('has no OAuth link or owner input', () => { const html = renderToStaticMarkup(<LocalGoogleSignIn />); expect(html).toContain('Googleで続ける（local mock）'); expect(html).not.toContain('href='); expect(html).not.toContain('name="owner'); }); });
