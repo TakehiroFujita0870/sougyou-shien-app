@@ -10,6 +10,7 @@ from .decision_memory import (
     DecisionSearchResponse,
     InMemoryDecisionRepository,
 )
+from .market_report import InMemoryMarketReportRepository, MarketReportRequest, MarketReportResponse
 from .research_orchestrator import FakeSource, ResearchOrchestrator, Source
 from .runtime import RuntimeAdapter, RuntimeFault, create_runtime
 
@@ -34,9 +35,14 @@ def local_owner_context(local_owner_id: Annotated[str | None, Header(alias="X-Lo
     return local_owner_id.strip()
 
 
-def create_app(repository: InMemoryDecisionRepository | None = None, runtime: RuntimeAdapter | None = None) -> FastAPI:
+def create_app(
+    repository: InMemoryDecisionRepository | None = None,
+    runtime: RuntimeAdapter | None = None,
+    market_report_repository: InMemoryMarketReportRepository | None = None,
+) -> FastAPI:
     app = FastAPI(title="Kadode API", version="0.1.0")
     decision_repository = repository or InMemoryDecisionRepository()
+    report_repository = market_report_repository or InMemoryMarketReportRepository()
     runtime_adapter = runtime or create_runtime()
 
     def runtime_owner(x_local_owner_id: str | None = Header(default=None, alias="X-Local-Owner-Id")) -> str:
@@ -109,6 +115,26 @@ def create_app(repository: InMemoryDecisionRepository | None = None, runtime: Ru
         query: Annotated[str, Query(min_length=1, max_length=2000)],
     ) -> DecisionSearchResponse:
         return DecisionSearchResponse(decisions=decision_repository.search(owner_id, idea_id, query))
+
+    @app.post("/v1/market-reports", response_model=MarketReportResponse, status_code=status.HTTP_201_CREATED)
+    def create_market_report(
+        request: MarketReportRequest, owner_id: Annotated[str, Depends(local_owner_context)]
+    ) -> MarketReportResponse:
+        return report_repository.create(owner_id, request)
+
+    @app.get("/v1/market-reports/{report_id}", response_model=MarketReportResponse)
+    def get_market_report(report_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> MarketReportResponse:
+        report = report_repository.get(owner_id, report_id)
+        if report is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "market_report_not_found"})
+        return report
+
+    @app.post("/v1/market-reports/{report_id}/card-update/approve", response_model=MarketReportResponse)
+    def approve_card_update(report_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> MarketReportResponse:
+        report = report_repository.approve(owner_id, report_id)
+        if report is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "market_report_not_found"})
+        return report
 
     return app
 
