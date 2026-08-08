@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { AiPublicRelationsDraftWorkflow } from './components/AiPublicRelationsDraftWorkflow';
 import { FileLibrary } from './components/FileLibrary';
@@ -26,7 +26,7 @@ function Navigation({ activeWorkspace, onSelect }) {
             type="button"
             onClick={() => onSelect(item.id)}
             aria-current={activeWorkspace === item.id ? 'page' : undefined}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${activeWorkspace === item.id ? 'bg-emerald-800 text-white' : 'text-emerald-950 hover:bg-emerald-50'}`}
+            className={`min-h-11 shrink-0 rounded-full px-4 py-2 text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 ${activeWorkspace === item.id ? 'bg-emerald-800 text-white' : 'text-emerald-950 hover:bg-emerald-50'}`}
           >
             {item.label}
           </button>
@@ -59,6 +59,19 @@ export function App() {
   const [profileComplete, setProfileComplete] = useState(false);
   const [model, setModel] = useState('gpt-5.6-terra');
   const [reasoning, setReasoning] = useState('medium');
+
+  useEffect(() => {
+    const shortcut = (event) => {
+      if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target?.isContentEditable) return;
+      const workspace = WORKSPACE_NAV[Number(event.key) - 1];
+      if (!workspace) return;
+      event.preventDefault();
+      setActiveWorkspace(workspace.id);
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, []);
 
   function workspaceContent() {
     if (activeWorkspace === 'research') return <ResearchWorkspace />;
