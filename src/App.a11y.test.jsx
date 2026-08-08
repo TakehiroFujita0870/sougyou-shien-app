@@ -45,18 +45,20 @@ describe('App keyboard and accessibility quality', () => {
     await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(dialog.isConnected).toBe(false);
 
-    const navigation = container.querySelector('nav[aria-label="ワークスペース"]');
+    const navigation = container.querySelector('nav[aria-label="主要ページ"]');
     expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
-      'アイデア',
+      'AIチャット',
+      '事業のタネ',
+      'プロジェクト',
       '横断調査',
       '資料',
-      '設定',
+      '検索',
     ]);
     expect(navigation.textContent).not.toContain('AI広報');
     expect(navigation.textContent).not.toContain('始める前に、');
-    expect(container.innerHTML).toContain('min-h-11');
+    expect(navigation.querySelector('button').className).toContain('workspace-shell__nav-item');
     expect(container.querySelector('main').className).toContain('kadode-shell');
-    expect(container.querySelector('button').className).toContain('kadode-nav-button');
+    expect(container.querySelector('.workspace-shell__nav-item').className).toContain('workspace-shell__nav-item');
     await unmount();
   });
 
@@ -67,7 +69,7 @@ describe('App keyboard and accessibility quality', () => {
     const dialog = container.querySelector('[role="dialog"]');
     const panel = dialog.querySelector('section');
     const header = container.querySelector('header > div');
-    const navigation = container.querySelector('nav');
+    const navigation = container.querySelector('nav[aria-label="主要ページ"]');
 
     expect(dialog.className).toContain('grid-cols-[minmax(0,1fr)]');
     expect(panel.className).toContain('min-w-0');

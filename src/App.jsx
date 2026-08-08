@@ -8,34 +8,10 @@ import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { ResearchWorkspace } from './components/ResearchWorkspace';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
+import { WorkspaceShell } from './components/WorkspaceShell';
 import { AI_COPY_CATALOG } from './copy/aiVoice';
 
-export const WORKSPACE_NAV = [
-  { id: 'ideas', label: 'アイデア' },
-  { id: 'research', label: '横断調査' },
-  { id: 'files', label: '資料' },
-  { id: 'settings', label: '設定' },
-];
-
-function Navigation({ activeWorkspace, onSelect }) {
-  return (
-    <nav aria-label="ワークスペース" className="kadode-navigation min-w-0 max-w-full overflow-hidden border-b">
-      <div className="mx-auto flex min-w-0 max-w-6xl gap-2 overflow-x-auto px-5 py-3 sm:px-8">
-        {WORKSPACE_NAV.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onSelect(item.id)}
-            aria-current={activeWorkspace === item.id ? 'page' : undefined}
-            className="kadode-nav-button min-h-11 shrink-0 rounded-full px-4 py-2 text-sm font-bold"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-    </nav>
-  );
-}
+export const WORKSPACE_NAV = [{ id: 'ideas', label: '事業のタネ' }, { id: 'research', label: '横断調査' }, { id: 'files', label: '資料' }, { id: 'settings', label: '設定' }];
 
 function IdeaWorkspace({ idea, onReset, onSubmit, profileReady }) {
   const copy = AI_COPY_CATALOG.welcome;
@@ -134,6 +110,9 @@ export function App({ profileRepository }) {
   }
 
   function workspaceContent() {
+    if (activeWorkspace === 'chat') return <section><h1 className="page-title">AIチャット</h1><p>プロフィールと現在の事業のタネを文脈にして対話できます。</p></section>;
+    if (activeWorkspace === 'projects') return <section><h1 className="page-title">プロジェクト</h1><p>事業のタネに紐づく作業をまとめます。</p></section>;
+    if (activeWorkspace === 'search') return <section><h1 className="page-title">検索</h1><p>ワークスペース内の情報を検索します。</p></section>;
     if (activeWorkspace === 'research') return <ResearchWorkspace />;
     if (activeWorkspace === 'files') return <FileLibrary />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
@@ -142,9 +121,10 @@ export function App({ profileRepository }) {
 
   return (
     <main className="kadode-shell">
-      <header className="kadode-header border-b"><div className="mx-auto flex min-w-0 max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8"><strong className="shrink-0 text-2xl tracking-tight">Kadode</strong><span className="min-w-0 break-words text-right text-sm font-medium text-[color:var(--color-text-muted)]">アイデアを、構造で育てる。</span></div></header>
-      <Navigation activeWorkspace={activeWorkspace} onSelect={setActiveWorkspace} />
-      <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8 sm:py-10"><p className="kadode-notice mb-6 rounded-2xl border px-4 py-3 text-sm leading-6"><strong>local / fake モード</strong> — このMVPでは外部サービスへ接続・送信しません。</p>{workspaceContent()}</div>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan}>
+        <header className="kadode-header border-b"><div className="flex min-w-0 items-center justify-between gap-4 px-5 py-5"><strong className="shrink-0 text-2xl tracking-tight">Kadode</strong><span className="min-w-0 break-words text-right text-sm font-medium text-[color:var(--color-text-muted)]">アイデアを、構造で育てる。</span></div></header>
+        <div className="px-5 py-6 sm:py-10"><p className="kadode-notice mb-6 rounded-2xl border px-4 py-3 text-sm leading-6"><strong>local / fake モード</strong> — このMVPでは外部サービスへ接続・送信しません。</p>{workspaceContent()}</div>
+      </WorkspaceShell>
       {profileHydration.phase === 'ready' && <button type="button" onClick={() => setProfileOpen(true)} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>}
       {(profileHydration.phase === 'loading' || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.profile} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>

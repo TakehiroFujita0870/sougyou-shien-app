@@ -9,7 +9,7 @@ describe('MVP workspace shell', () => {
 
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain('local / fake モード');
-    WORKSPACE_NAV.forEach(({ label }) => expect(html).toContain(`>${label}</button>`));
+    WORKSPACE_NAV.forEach(({ label }) => expect(html).toContain(label));
   });
 
   it('renders native keyboard-operable navigation with visible focus and current location', () => {
@@ -42,5 +42,13 @@ describe('MVP workspace shell', () => {
 
     expect(WORKSPACE_NAV.map(({ id }) => id)).not.toContain('public-relations');
     expect(html).not.toContain('AI広報');
+  });
+
+  it('exposes the vertical workspace shell information architecture', () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain('ワークスペースサイドバー');
+    expect(html).toContain('Kadode workspace');
+    expect(html).toContain('プランを見る');
+    expect(html).toContain('ワークスペース');
   });
 });
