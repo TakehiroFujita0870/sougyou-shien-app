@@ -39,9 +39,9 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', chi
 
   return (
     <div className={`workspace-shell${collapsed ? ' workspace-shell--collapsed' : ''}`}>
-      <button type="button" className="workspace-shell__mobile-trigger" aria-label="サイドバーを開く" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}><span aria-hidden="true" className="workspace-shell__menu-mark" />メニュー</button>
+      <button type="button" className="workspace-shell__mobile-trigger" aria-label="サイドバーを開く" aria-controls="workspace-sidebar" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}><span aria-hidden="true" className="workspace-shell__menu-mark" />メニュー</button>
       {drawerOpen && <button type="button" className="workspace-shell__scrim" aria-label="サイドバーを閉じる" onClick={() => setDrawerOpen(false)} />}
-      <aside className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
+      <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" />{!collapsed && <span>Kadode workspace</span>}</div>
         <button type="button" className="workspace-shell__collapse" aria-label={collapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'} onClick={() => setCollapsed((value) => !value)}><span aria-hidden="true" className="workspace-shell__collapse-mark" />{!collapsed ? '折りたたむ' : '展開'}</button>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
