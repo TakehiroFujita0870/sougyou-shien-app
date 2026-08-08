@@ -46,7 +46,13 @@ describe('App keyboard and accessibility quality', () => {
     expect(dialog.isConnected).toBe(false);
 
     const navigation = container.querySelector('nav[aria-label="ワークスペース"]');
-    expect(navigation.querySelectorAll('button')).toHaveLength(5);
+    expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'アイデア',
+      '横断調査',
+      '資料',
+      '設定',
+    ]);
+    expect(navigation.textContent).not.toContain('AI広報');
     expect(container.innerHTML).toContain('min-h-11');
     expect(container.querySelector('main').className).toContain('kadode-shell');
     expect(container.querySelector('button').className).toContain('kadode-nav-button');
