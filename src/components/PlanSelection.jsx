@@ -61,11 +61,12 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
       </fieldset>
 
       <aside aria-labelledby="pro-plan-heading" aria-describedby="pro-plan-availability" className="relative mt-4 overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 p-4">
-        <div aria-hidden="true" className="absolute inset-0 grid place-items-center bg-stone-950/70 p-4 text-center text-lg font-bold text-white">準備中</div>
+        <span className="absolute right-3 top-3 rounded-full bg-stone-700 px-3 py-1 text-xs font-bold text-white">準備中</span>
         <p id="pro-plan-heading" className="text-sm font-bold text-stone-800">{PRO_PLAN_DETAILS.name}</p>
         <p className="mt-2 text-lg font-bold text-stone-950">{PRO_PLAN_DETAILS.price}</p>
         <p className="mt-3 text-sm leading-6 text-stone-700">{PRO_PLAN_DETAILS.summary}</p>
         <p id="pro-plan-availability" className="mt-2 text-sm font-bold text-stone-800">現在は選択、申込み、決済できません。</p>
+        <button type="button" disabled aria-describedby="pro-plan-availability" className="mt-4 min-h-11 cursor-not-allowed rounded-full border border-stone-400 px-4 py-2 text-sm font-bold text-stone-600">準備中・現在利用不可</button>
       </aside>
 
       {isConfirming && isChangePending && (
