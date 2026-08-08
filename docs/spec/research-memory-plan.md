@@ -193,6 +193,10 @@ MVPの「個人のベクトル空間」は、共有Postgres内の論理テナン
 | `research_evidence` | owner_id, run_id, source_type, locator, excerpt, fetched_at, hash | 主張から原典へ追跡 |
 | `decision_records` | owner_id, idea_id, status, decision, rationale, valid_from, supersedes_id | 過去判断を上書きせず継承関係を保持 |
 | `decision_observations` | owner_id, decision_id, observation, disposition, evidence_id | 指摘、採否、根拠を分離 |
+| `project_knowledge` | owner_id, source_project_id, source_type, source_id, anonymized_content, deleted_at | 本人のみ。顧客ヒアリング由来は匿名化済み派生物だけを保存 |
+| `knowledge_grants` | owner_id, knowledge_id, source_project_id, target_project_id, granted_at, revoked_at | knowledge単位の明示許可。送信元・送信先とも本人所有に限定 |
+
+project横断検索は、有効な`knowledge_grants`と削除されていない`project_knowledge`の両方を満たす記録だけを返す。許可取消または元データ削除後は候補、検索、exportから除外し、既存レポートの参照は利用不能と表示する。顧客ヒアリングの原記録に対するgrantと、別ownerが所有する送信元・送信先projectへのgrantはRLSと認証済み関数で拒否する。5観点側のUXとE2Eは[事業のタネを5観点で具体化する計画](business-seed-plan.md)を正本とする。
 
 ### ハイブリッド検索
 
@@ -252,7 +256,7 @@ MVPの「個人のベクトル空間」は、共有Postgres内の論理テナン
 | SP-01 | Web検索候補の品質・引用・料金・データ保持比較 | 検査: 固定10問で再現率、引用到達率、1調査原価を記録し2営業日で終了 | 未知・先行スパイク |
 | SP-02 | Web検索による候補発見と特許庁APIによる確認の品質・上限試験 | 検査: 固定5テーマで候補発見率、公開番号、出願人、日付、引用文献、API呼出数を記録し2営業日で終了 | 未知・先行スパイク |
 | SP-03 | 対応候補4形式の文字抽出・断片化・プロンプト注入耐性の試験 | 検査: 合成資料20件で抽出成功率、ページ対応、拒否理由を記録し2営業日で終了 | 未知・先行スパイク |
-| T-01 | owner_id付き検索スキーマとRLS設計PR | 検査: A作成後にBのSELECT、偽装INSERT、UPDATE、DELETEと未認証操作を拒否し、全文・ベクトル検索も0件 | 類推可能 |
+| T-01 | owner_id付き検索スキーマ、`project_knowledge`・`knowledge_grants`とRLS設計PR | 検査: A作成後にBのSELECT、偽装INSERT、UPDATE、DELETE、横断grantと未認証操作を拒否し、全文・ベクトル・横断knowledge検索も0件 | 類推可能 |
 | T-02 | ファイル取込状態モデルと削除契約PR | 検査: API契約テストで成功、失敗、再試行、削除を確認 | SP-03後に類推可能 |
 | T-03 | `ResearchSource`と`Evidence`のAPI契約PR | 検査: 偽Web・偽特許・偽内部検索で同じEvidence形式になる | SP-01、SP-02後に類推可能 |
 | T-04 | ハイブリッド検索PR | 検査: 特許番号完全一致と意味類似の評価セットが基準値を満たす | T-01後に類推可能 |
