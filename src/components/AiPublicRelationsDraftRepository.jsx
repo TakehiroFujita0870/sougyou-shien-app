@@ -5,6 +5,9 @@ export const AI_PR_DRAFT_STATUSES = {
   REJECTED: 'rejected',
 };
 
+// #31 の実接続adapterもこの契約を満たし、同じ契約テストを通す。
+export const AI_PR_DRAFT_REPOSITORY_METHODS = ['create', 'list', 'requestRevision', 'approve', 'reject'];
+
 const SENSITIVE_CONTENT_PATTERN = /(?:[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:\+81|0)\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}|api[_-]?key\s*[=:]|access[_-]?token\s*[=:]|authorization\s*[=:]|password\s*[=:]|secret\s*[=:]|-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----)/i;
 const SENSITIVE_CONTENT_MESSAGE = '個人情報または秘密情報が含まれている可能性があります。削除または置換してください。';
 

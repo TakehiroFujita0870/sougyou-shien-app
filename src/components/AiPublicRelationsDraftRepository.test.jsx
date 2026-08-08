@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createAiPublicRelationsDraftRepository, validateDraftContent } from './AiPublicRelationsDraftRepository';
+import {
+  AI_PR_DRAFT_REPOSITORY_METHODS,
+  createAiPublicRelationsDraftRepository,
+  validateDraftContent,
+} from './AiPublicRelationsDraftRepository';
 
 describe('validateDraftContent', () => {
   it('rejects personal information and secrets before a draft is saved', () => {
@@ -18,6 +22,12 @@ describe('validateDraftContent', () => {
 });
 
 describe('createAiPublicRelationsDraftRepository', () => {
+  it('exposes the contract that the #31 external adapter must also satisfy', () => {
+    const repository = createAiPublicRelationsDraftRepository();
+
+    expect(Object.keys(repository).sort()).toEqual([...AI_PR_DRAFT_REPOSITORY_METHODS].sort());
+  });
+
   it('saves draft, revision request, approval and rejection states locally', () => {
     const repository = createAiPublicRelationsDraftRepository();
     const draft = repository.create({ content: '現場の知見を次の検証に活かします。' });
