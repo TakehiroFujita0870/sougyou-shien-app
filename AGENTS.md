@@ -29,6 +29,15 @@
 - APIの破壊的変更は互換方針を計画で承認されるまで実施しない。
 - README、セットアップ手順、仕様、計画に影響する変更は同じPRで更新する。
 
+## 部門間のイベント駆動連携
+
+- 定期ポーリングを部門間連携の正本にしない。PR作成、PR更新、レビュー差し戻し、CI完了、マージ、ブロックの発生元が、発生直後に担当タスクへメッセージを送って次工程を起動する。
+- 作業開始時に [`docs/operations/department-handoffs.md`](docs/operations/department-handoffs.md) を読み、自部門の送信責任と応答責任を確認する。会話履歴だけを引き継ぎ情報にしない。
+- 実装部門はPR作成またはhead SHA更新後、統合・リリース管理部へ `PR_READY` を送る。統合部は `REVIEW_CHANGES_REQUESTED`、`MERGED`、`BLOCKED` のいずれかを担当部へ返す。
+- メッセージにはリポジトリ、Issue、PR、head SHA、変更目的、検査結果、CEO決裁境界の有無を含める。秘密情報、認証情報、個人情報を含めない。
+- 送信先タスクが停止中でも、メッセージ送信によって新しいturnを起動する。送信不能時はPRコメントへ同じ非機密情報を記録し、管理タスクへ `BLOCKED` を送る。
+- 統合部は通知されたhead SHAだけをレビューする。新しいSHAがpushされた場合、以前の承認を無効とし、新しい `PR_READY` を要求する。
+
 ## Windows / PowerShell の実行規約
 
 - Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。
