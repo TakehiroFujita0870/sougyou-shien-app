@@ -15,11 +15,11 @@
 
 ```mermaid
 flowchart TD
-  A["1. 実装"] --> B["2. testing-and-ci: テスト追加・実行"]
-  B --> C["3. review-and-debug: セルフレビュー・デバッグ"]
+  A["1. 実装"] --> B["2. テスト追加・実行"]
+  B --> C["3. セルフレビュー・デバッグ"]
   C --> D{"指摘・バグあり?"}
   D -- はい --> E["修正"] --> B
-  D -- いいえ --> F{"Skill 2〜4 の Exit Criteria を全て満たす?"}
+  D -- いいえ --> F{"planning・implementationのExit Criteriaを満たす?"}
   F -- はい --> G["PR提出"]
   F -- いいえ --> E
   E --> H{"同一タスクで3周した?"}
@@ -36,9 +36,9 @@ flowchart TD
 3. 通常は、失敗するテストを先に追加し、最小の実装で通す。探索的プロトタイプだけはテストを後回しにできるが、本実装前にテストを追加する。
 4. エラーを回復可能と回復不能に分類する。利用者には次の行動が分かるメッセージだけを返し、原因・相関ID・スタック情報は内部ログへ分離する。秘密情報、認証情報、個人情報をログへ出さない。
 5. API は名詞中心で一貫したエンドポイント名を使い、エラーレスポンスの形式を統一する。既存利用者を壊す変更は、互換レイヤー・バージョン・段階的移行のいずれかを計画に記録してから行う。
-6. [testing-and-ci](../testing-and-ci/SKILL.md) を読み、最低限の検査を実行してテストを追加する。
-7. [review-and-debug](../review-and-debug/SKILL.md) を読み、差分を1行ずつセルフレビューする。指摘またはバグがあれば修正し、手順6へ戻る。
-8. Skill 2〜4 の Exit Criteria をすべて満たしたときだけPRを提出する。
+6. ルート `AGENTS.md` の検査コマンドを実行してテストを追加する。`testing-and-ci` スキル追加後は、そのスキルも読む。
+7. `git diff` を1行ずつセルフレビューする。指摘またはバグがあれば修正し、手順6へ戻る。`review-and-debug` スキル追加後は、そのスキルも読む。
+8. この文書と planning の Exit Criteria を満たしたときだけPRを提出する。
 
 ## Exit Criteria
 
@@ -46,7 +46,7 @@ flowchart TD
 - ◎ 本実装には失敗するテストを先に用意した証跡がある。検査: テスト追加コミットまたはPRのテスト説明を確認する。プロトタイプ例外は理由と本実装前のテスト追加を記録する。
 - ◎ 例外・失敗経路が利用者メッセージと内部ログに分離されている。検査: `rg -n -i "password|secret|token|authorization" <変更ファイル>` で値のログ出力がないことを確認する。
 - ◎ API変更は一貫したエラー形式と後方互換方針を持つ。検査: 既存のAPI契約テストと変更後の契約を比較する。
-- ◎ testing-and-ci と review-and-debug の Exit Criteria を満たす。検査: 各スキルのPR前検査結果をPR説明に添付する。
+- ◎ ルート `AGENTS.md` が指定する変更範囲の検査を通す。検査: 実行したコマンドと結果をPR説明に添付する。
 - ◎ 同一タスクで3周した場合、planning への差し戻し記録がある。検査: 計画文書の変更履歴に矛盾箇所と理由があることを確認する。
 
 ## アンチパターン
@@ -79,4 +79,4 @@ flowchart TD
 
 ## 次に読むスキル
 
-[testing-and-ci](../testing-and-ci/SKILL.md) と [review-and-debug](../review-and-debug/SKILL.md)。3周後は [planning](../planning/SKILL.md) に戻る。
+現時点では、ルート `AGENTS.md` の検査・レビュー手順に従う。`testing-and-ci` と `review-and-debug` が追加された後は両方を読む。3周後は [planning](../planning/SKILL.md) に戻る。
