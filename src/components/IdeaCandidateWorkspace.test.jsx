@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { IdeaCandidateWorkspace, approveCandidate, candidateFromConversation, createLocalIdeaUxObserver, findDuplicate, localAssistSuggestion, nextConversationQuestion, saveCandidate } from './IdeaCandidateWorkspace';
+import { IdeaCandidateWorkspace, approveCandidate, candidateFromConversation, createLocalIdeaUxObserver, findDuplicate, legacyConversationFromIdeaForm, localAssistSuggestion, nextConversationQuestion, saveCandidate } from './IdeaCandidateWorkspace';
 const candidate = { title: '工場ノート', summary: '設備保全を記録', pain: '履歴が探せない' };
 describe('idea candidate repository boundary', () => {
   it('saves a candidate and detects duplicates', async () => { const repository = { save: async (items) => items }; const result = await saveCandidate(repository, [], candidate); expect(result.items).toHaveLength(1); expect(findDuplicate(result.items, candidate)).toBeTruthy(); });
@@ -13,6 +13,11 @@ describe('idea candidate repository boundary', () => {
   });
   it('derives a preview from only local conversation messages', () => {
     expect(candidateFromConversation([{ role: 'user', content: '工場の担当者向けの記録アプリ' }]).title).toContain('工場');
+  });
+  it('migrates an existing three-field local draft into one conversation message', () => {
+    expect(legacyConversationFromIdeaForm({ title: '工場ノート', ideaSummary: '保全記録をまとめる', painStatement: '履歴を探せない' })).toEqual([
+      { role: 'user', content: '工場ノート\n保全記録をまとめる\n履歴を探せない' },
+    ]);
   });
   it('creates a deterministic local assist suggestion without replacing the original', () => {
     const original = '工場の保全担当者向け';
@@ -99,6 +104,29 @@ describe('idea conversation controls', () => {
     expect(container.querySelector('#idea-message').value).toBe('');
     expect(storedConversation.filter((message) => message.role === 'user')).toHaveLength(1);
     await act(() => remountedRoot.unmount()); container.remove();
+  });
+  it('keeps a new unsaved input when slow hydration finishes after typing', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    let resolveConversation;
+    const pendingConversation = new Promise((resolve) => { resolveConversation = resolve; });
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={{ load: () => pendingConversation, save: async (messages) => messages }} inputRepository={{ load: async () => '以前の下書き', save: async (value) => value }} />));
+    const input = container.querySelector('#idea-message');
+    const setTextareaValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setTextareaValue.call(input, '今の未送信入力'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => resolveConversation([]));
+    expect(input.value).toBe('今の未送信入力');
+    await act(() => root.unmount()); container.remove();
+  });
+  it('restores an old form draft as a conversation preview after reload', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    let savedConversation = [];
+    const conversationRepository = { load: async () => savedConversation, save: async (messages) => { savedConversation = messages; return messages; } };
+    const workspace = () => <IdeaCandidateWorkspace repository={{ load: async () => [], save: async (items) => items }} conversationRepository={conversationRepository} inputRepository={{ load: async () => '', save: async (value) => value }} legacyDraftRepository={{ load: async () => ({ title: '工場ノート', ideaSummary: '保全記録', painStatement: '履歴を探せない' }) }} />;
+    await act(async () => root.render(workspace()));
+    await act(async () => Promise.resolve());
+    expect(container.textContent).toContain('保存前プレビュー');
+    expect(savedConversation[0].content).toContain('工場ノート');
+    await act(() => root.unmount()); container.remove();
   });
   it('sends with Enter and keeps Shift+Enter available for keyboard input', async () => {
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);

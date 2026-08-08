@@ -8,11 +8,13 @@ import { App } from './App';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const profileRepository = { load: async () => null, save: async (profile) => profile };
+
 async function mount() {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(<App />));
+  await act(async () => root.render(<App profileRepository={profileRepository} />));
   return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
 }
 
