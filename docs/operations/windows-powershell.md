@@ -18,6 +18,22 @@ Windows版Codexで、パス、文字コード、外部CLI、ファイル操作�
 
 ### セッション開始時のUTF-8初期化
 
+リポジトリのpreflightをdot-sourceする。これはConsoleと現在のプロセスだけを変更し、profile、レジストリ、PATH、認証情報、ファイルへ書き込まない。Windows PowerShell 5.1でも利用できる。
+
+```powershell
+. .\scripts\powershell\Initialize-Utf8Preflight.ps1
+if (-not (Test-Utf8Preflight)) { throw 'UTF-8 preflight failed' }
+Test-Utf8ReadBack -LiteralPath .\scripts\powershell\fixtures\日本語パス.txt
+```
+
+別プロセスの安全確認は、未初期化なら非ゼロで停止する。
+
+```powershell
+powershell.exe -NoProfile -File .\scripts\powershell\Initialize-Utf8Preflight.ps1 -Check
+```
+
+この診断に合格しても日本語本文の直接パイプは禁止する。本文はUTF-8ファイルまたはNode.jsのUTF-8 Bufferで送信し、read-back完全一致を確認する。
+
 PowerShellを使うセッションでは、最初に入出力エンコーディングをUTF-8（BOMなし）にそろえる。これは画面表示とASCIIのみの制御データを安定させるための初期化であり、日本語本文をネイティブCLIへ直接パイプしてよいという意味ではない。
 
 ```powershell
