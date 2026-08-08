@@ -10,3 +10,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build-storybook
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --all-groups
+      - run: uv run pytest
