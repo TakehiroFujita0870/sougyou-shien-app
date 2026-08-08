@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createLocalGoogleAuthAdapter } from '../auth/localAuthAdapter';
 import { LocalGoogleSignIn } from './LocalGoogleSignIn';
@@ -19,6 +19,14 @@ describe('LocalGoogleSignIn', () => {
     expect(html).not.toContain('action=');
     expect(html).not.toContain('redirect');
     expect(html).not.toContain('window.location');
+  });
+
+  it('does not flash signed-out UI before hydration completes', async () => {
+    const pending = new Promise(() => {});
+    const adapter = { currentPrincipal: () => null, currentStatus: () => 'hydrating', hydrate: () => pending, signIn: vi.fn(), signOut: vi.fn() };
+    const html = renderToStaticMarkup(<LocalGoogleSignIn authAdapter={adapter} />);
+    expect(html).toContain('確認中');
+    expect(html).not.toContain('Googleで続ける');
   });
 
   it('retains the same supplied adapter after rerender', async () => {

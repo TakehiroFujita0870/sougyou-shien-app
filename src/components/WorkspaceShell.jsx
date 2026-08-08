@@ -20,7 +20,7 @@ function NavItems({ activePage, onSelect }) {
   ));
 }
 
-export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', children, initialCollapsed = false, initialDrawerOpen = false }) {
+export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', accountContent, children, initialCollapsed = false, initialDrawerOpen = false }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
 
@@ -47,7 +47,7 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', chi
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
         <footer className="workspace-shell__account">
           <div className="workspace-shell__avatar" aria-hidden="true">K</div>
-          {!collapsed && <div className="workspace-shell__account-copy"><strong>あなたの情報</strong><span>{PLAN_LABELS[currentPlan] ?? currentPlan}</span><button type="button" onClick={() => choosePage('settings')}>設定</button><button type="button" onClick={() => choosePage('settings')}>プランを見る</button></div>}
+          {!collapsed && <div className="workspace-shell__account-copy"><strong>あなたの情報</strong><span>{PLAN_LABELS[currentPlan] ?? currentPlan}</span>{accountContent}<button type="button" onClick={() => choosePage('settings')}>設定</button><button type="button" onClick={() => choosePage('settings')}>プランを見る</button></div>}
         </footer>
       </aside>
       <section className="workspace-shell__main">
