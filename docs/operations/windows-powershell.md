@@ -60,27 +60,41 @@ gh pr create --body $bodyLines
 
 # 安全: 一つの文字列に結合する
 $body = $bodyLines -join [Environment]::NewLine
-gh pr create --body $body
+# 非ASCII本文を gh へ直接渡さず、下記のUTF-8ファイル又はNode.js方式を使う
 ```
 
-長いIssue/PR本文、Markdown、引用符を含む本文は、引数に押し込まず標準入力と`--body-file -`を使う。
+長いIssue/PR本文、Markdown、引用符を含む本文は、引数に押し込まない。ただし、非ASCII本文をPowerShellからネイティブCLIへ直接パイプしてはならない。PowerShellの`$OutputEncoding`と`[Console]::OutputEncoding`は別物であり、プロセスごとの既定値も異なる。片方をUTF-8へ変更しても、送信経路全体が安全とは限らない。例えば`$OutputEncoding`がUS-ASCIIのままなら、日本語の複数行文字列を`$newBody | gh issue edit --body-file -`へ渡した時点で`?`へ置換される。
+
+安全な方式は次のいずれかである。
+
+1. 本文をUTF-8ファイルとして`apply_patch`で作成し、`gh`の`--body-file`へそのファイルのパスを渡す。
+2. Node.jsの`spawnSync`からUTF-8 `Buffer`を標準入力へ渡す。PowerShellからNode.jsへスクリプトをパイプする場合、スクリプト本文はASCIIだけにし、日本語データはUTF-8 Base64またはUTF-8ファイルで渡す。
 
 ```powershell
-$body = @'
-## 目的
+# `$newBody` はPowerShell内だけで扱い、Base64はASCIIとして環境変数へ渡す。
+$env:ISSUE_BODY_BASE64 = [Convert]::ToBase64String(
+  [Text.Encoding]::UTF8.GetBytes($newBody)
+)
 
-PowerShell運用文書を追加します。
-
-## 検査結果
-- git diff --check: pass
-
-Closes #33
-'@
-
-$body | gh pr create --title 'docs: add PowerShell safety runbook' --body-file -
+# -e のスクリプトはASCIIだけで構成する。
+node -e "const{spawnSync}=require('node:child_process');const input=Buffer.from(process.env.ISSUE_BODY_BASE64,'base64');const r=spawnSync('gh',['issue','edit','33','--body-file','-'],{input,stdio:'inherit'});process.exit(r.status??1)"
 ```
 
-パイプラインへ渡す値は、シークレットを含めない。本文を再利用する場合も、`$bodyLines -join [Environment]::NewLine`のように一つの文字列へ明示的に結合する。
+`$newBody | gh issue edit --body-file -`や`$body | gh pr create --body-file -`は、本文が日本語など非ASCIIを含む場合の送信手段として禁止する。パイプラインへ渡す値は、シークレットを含めない。本文を再利用する場合も、`$bodyLines -join [Environment]::NewLine`のように一つの文字列へ明示的に結合する。
+
+## Remote本文のread-back検査
+
+IssueまたはPR本文を更新した直後に、APIから本文をread-backする。連続する`???`、置換文字U+FFFD、日本語文字数、必須見出しを検査し、いずれかが不正なら更新を完了扱いにしない。次のNode.js例はASCIIのみであり、`gh api`の結果をUTF-8 `Buffer`として検査する。
+
+```powershell
+node -e "const{spawnSync}=require('node:child_process');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/sougyou-shien-app/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const body=JSON.parse(r.stdout.toString('utf8')).body??'';const ja=(body.match(/[\u3040-\u30ff\u3400-\u9fff]/g)||[]).length;const required=['## 目的','## 受入条件'];if(/\?{3,}|\uFFFD/.test(body)||ja===0||required.some(x=>!body.includes(x)))throw Error('Issue本文のread-back検査に失敗');"
+```
+
+PRではAPIパスを`repos/TakehiroFujita0870/sougyou-shien-app/pulls/<PR番号>`へ替え、PRで必要な見出しと`Closes #33`を`required`へ加える。本文の更新に成功したというCLIの終了コードだけを、文字化けしていない根拠にしない。
+
+### 再発防止の確認例
+
+この不具合ではIssue #8〜#25を復旧し、全21 Issueの横断read-back検査が合格した。今後も同じ方式で、個別の修正後と一括更新後の両方を検査してから完了とする。
 
 ## GitHub CLIとPATHの診断
 

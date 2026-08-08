@@ -34,6 +34,7 @@
 - Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。
 - 検索は `rg`、パスを受け取る PowerShell コマンドは `-LiteralPath`、UTF-8 文書の読取は `-Encoding UTF8` を使う。編集は `apply_patch` だけで行い、`echo`、`cat`、リダイレクトによる編集をしない。
 - Issue/PR 本文は標準入力と `--body-file -` で渡す。複数行出力を外部 CLI の引数に直接渡さず、必要なら一つの文字列へ結合する。
+- 非ASCIIのIssue/PR本文をPowerShellからネイティブCLIへ直接パイプしない。`apply_patch`で作成したUTF-8ファイルを`--body-file`で読ませるか、Node.jsからUTF-8 `Buffer`を`spawnSync`の`input`へ渡す。更新直後はAPI read-back検査を行う。
 - 削除・移動はシェルをまたがず、再帰操作の前に絶対パスを検証する。作業変数に `HOME`、`home`、`CODEX_HOME` を使わない。
 
 ## 検査
