@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { AiPublicRelationsDraftWorkflow } from './components/AiPublicRelationsDraftWorkflow';
 import { FileLibrary } from './components/FileLibrary';
 import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
 import { IdeaForm } from './components/IdeaForm';
@@ -15,7 +14,6 @@ export const WORKSPACE_NAV = [
   { id: 'research', label: '横断調査' },
   { id: 'files', label: '資料' },
   { id: 'settings', label: '設定' },
-  { id: 'public-relations', label: 'AI広報' },
 ];
 
 function Navigation({ activeWorkspace, onSelect }) {
@@ -96,7 +94,6 @@ export function App() {
     if (activeWorkspace === 'research') return <ResearchWorkspace />;
     if (activeWorkspace === 'files') return <FileLibrary />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
-    if (activeWorkspace === 'public-relations') return <AiPublicRelationsDraftWorkflow />;
     return <IdeaWorkspace idea={idea} onReset={() => setIdea(null)} onSubmit={setIdea} profileReady={profileComplete} />;
   }
 

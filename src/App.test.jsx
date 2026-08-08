@@ -27,4 +27,11 @@ describe('MVP workspace shell', () => {
     expect(html).not.toContain('STAGE 0');
     expect(html).not.toContain('条件を満たすまで次へ進みません');
   });
+
+  it('does not expose AI public-relations functionality in the product workspace', () => {
+    const html = renderToStaticMarkup(<App />);
+
+    expect(WORKSPACE_NAV.map(({ id }) => id)).not.toContain('public-relations');
+    expect(html).not.toContain('AI広報');
+  });
 });
