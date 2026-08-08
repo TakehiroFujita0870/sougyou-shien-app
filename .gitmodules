@@ -1,0 +1,6 @@
+[submodule "docs/inherited/ai-company-os"]
+	path = docs/inherited/ai-company-os
+	url = https://github.com/TakehiroFujita0870/ai-company-os.git
+[submodule "docs/inherited/mba-practice-app"]
+	path = docs/inherited/mba-practice-app
+	url = https://github.com/TakehiroFujita0870/mba-practice-app.git
