@@ -8,6 +8,7 @@ import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { ResearchWorkspace } from './components/ResearchWorkspace';
 import { UserProfileInterview } from './components/UserProfileInterview';
+import { AI_COPY_CATALOG } from './copy/aiVoice';
 
 export const WORKSPACE_NAV = [
   { id: 'ideas', label: 'アイデア' },
@@ -37,12 +38,14 @@ function Navigation({ activeWorkspace, onSelect }) {
 }
 
 function IdeaWorkspace({ idea, onReset, onSubmit, profileReady }) {
+  const copy = AI_COPY_CATALOG.welcome;
+
   return (
     <div className="max-w-4xl">
       <section aria-labelledby="idea-heading">
         <p className="text-sm font-bold text-emerald-700">最初の一案</p>
-        <h1 id="idea-heading" className="mt-3 text-4xl font-bold tracking-tight sm:text-6xl">始める前に、<br />ダメな理由を見つけよう。</h1>
-        <p className="mt-5 max-w-2xl text-base leading-7 text-stone-700 sm:text-lg">誰のどんな痛みを解く案かを記録し、迎合しない反証と一次検証へ進めます。</p>
+        <h1 id="idea-heading" className="mt-3 text-4xl font-bold tracking-tight sm:text-6xl">{copy.heading}</h1>
+        <p className="mt-5 max-w-2xl text-base leading-7 text-stone-700 sm:text-lg">{copy.body}</p>
         <div className="mt-8">
           {idea ? <article className="kadode-card rounded-3xl border p-6 shadow-sm"><p className="kadode-card-kicker text-xs font-bold tracking-[0.16em]">仮説カード・下書き</p><h2 className="mt-2 text-2xl font-bold">{idea.title}</h2><p className="mt-3 leading-7 text-[color:var(--color-text-muted)]">{idea.ideaSummary}</p><dl className="kadode-card-detail mt-5 rounded-2xl p-4"><dt className="text-xs font-bold text-[color:var(--color-text-muted)]">誰の、何のペインか</dt><dd className="mt-1 leading-6">{idea.painStatement}</dd></dl><p className="mt-4 text-sm text-[color:var(--color-text-muted)]">現在はブラウザ内の下書きです。外部サービスには送信していません。</p><button type="button" onClick={onReset} className="kadode-card-button mt-5 rounded-full border px-5 py-2.5 text-sm font-bold">入力し直す</button></article> : <IdeaForm onSubmit={onSubmit} />}
         </div>
