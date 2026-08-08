@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.account_privacy import InMemoryAccountPrivacyRepository
+from kadode_api.account_privacy import ARTIFACT_TYPES, InMemoryAccountPrivacyRepository
 from kadode_api.main import create_app
 
 
@@ -25,6 +25,12 @@ def test_export_returns_only_the_owners_profile_ideas_documents_research_and_dec
     assert "owner-b" not in str(exported)
     assert "# Kadode data export" in exported["markdown"]
     assert "owner-a profile" in exported["markdown"]
+    assert "owner-a idea" in exported["markdown"]
+    assert "owner-a document" in exported["markdown"]
+    assert "version" in exported["markdown"]
+    assert "owner-a query" in exported["markdown"]
+    assert "owner-a decision" in exported["markdown"]
+    assert "owner-b" not in exported["markdown"]
 
 
 def test_deletion_manifest_excludes_every_owned_document_artifact_and_returns_a_completed_audit() -> None:
@@ -34,7 +40,7 @@ def test_deletion_manifest_excludes_every_owned_document_artifact_and_returns_a_
     assert response.status_code == 202
     deleted = response.json()
     targets = {item["artifact_type"] for item in deleted["manifest"]["items"]}
-    assert {"original", "extracted_text", "embedding", "search_index"} <= targets
+    assert targets == set(ARTIFACT_TYPES)
     assert {item["state"] for item in deleted["audit"]["items"]} == {"excluded"}
 
     after = api.get("/v1/account/export", headers=headers("owner-a"))
