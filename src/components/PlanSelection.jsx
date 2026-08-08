@@ -13,6 +13,12 @@ const PLAN_DETAILS = {
   },
 };
 
+const PRO_PLAN_DETAILS = {
+  name: 'Pro',
+  price: '月額2,980円',
+  summary: '自動深掘りとメールレポートは、利用量・原価データの蓄積後に別仕様で判断します。',
+};
+
 export function PlanSelection({ currentPlan, onApplyPlan }) {
   const [proposedPlan, setProposedPlan] = useState(currentPlan);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -53,6 +59,14 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
           </label>
         ))}
       </fieldset>
+
+      <aside aria-labelledby="pro-plan-heading" aria-describedby="pro-plan-availability" className="relative mt-4 overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 p-4">
+        <div aria-hidden="true" className="absolute inset-0 grid place-items-center bg-stone-950/70 p-4 text-center text-lg font-bold text-white">準備中</div>
+        <p id="pro-plan-heading" className="text-sm font-bold text-stone-800">{PRO_PLAN_DETAILS.name}</p>
+        <p className="mt-2 text-lg font-bold text-stone-950">{PRO_PLAN_DETAILS.price}</p>
+        <p className="mt-3 text-sm leading-6 text-stone-700">{PRO_PLAN_DETAILS.summary}</p>
+        <p id="pro-plan-availability" className="mt-2 text-sm font-bold text-stone-800">現在は選択、申込み、決済できません。</p>
+      </aside>
 
       {isConfirming && isChangePending && (
         <section aria-live="polite" aria-labelledby="plan-confirmation-heading" className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">

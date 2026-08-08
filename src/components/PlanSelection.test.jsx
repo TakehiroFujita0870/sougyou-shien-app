@@ -42,7 +42,7 @@ describe('plan selection acceptance', () => {
     await unmount();
   });
 
-  it('compares Free and Standard, keeps Pro unavailable, and requires confirmation before applying a proposed change', async () => {
+  it('compares Free and Standard, shows a read-only Pro coming-soon card, and requires confirmation before applying a proposed change', async () => {
     const { container, unmount } = await mount(<App />);
 
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
@@ -50,7 +50,13 @@ describe('plan selection acceptance', () => {
     expect(container.textContent).toContain('Thinkingなし');
     expect(container.textContent).toContain('月額980円');
     expect(container.textContent).toContain('複数モデル');
-    expect(container.textContent).not.toContain('Pro');
+    const proCard = container.querySelector('[aria-labelledby="pro-plan-heading"]');
+    expect(proCard.textContent).toContain('Pro');
+    expect(proCard.textContent).toContain('2,980');
+    expect(proCard.textContent).toContain('準備中');
+    expect(proCard.textContent).toContain('現在は選択、申込み、決済できません。');
+    expect(proCard.getAttribute('aria-describedby')).toBe('pro-plan-availability');
+    expect(proCard.querySelectorAll('button, input, select, textarea, a')).toHaveLength(0);
     expect(container.textContent).toContain('外部課金には接続していません');
 
     const standard = container.querySelector('input[value="standard"]');
