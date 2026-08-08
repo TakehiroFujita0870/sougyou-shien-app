@@ -36,7 +36,7 @@ Then: original、派生物、reference、横断検索結果が不可視になり
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 |---|---|---|---|
 | ADR-SPACE-01 | 原本・派生物・referenceを分離する。原本1件を複数文脈から安全に参照できる | 文脈ごとに原本を複製する案は重複・削除漏れを生むため却下 | local repositoryで一意hashと削除伝播を検証する |
-| ADR-SPACE-02 | ownerをrepository引数から確定し、requestのowner値を受け取らない | request owner_idを信頼する案は他owner参照を許すため却下 | 全read/write/searchでowner一致を要求する |
+| ADR-SPACE-02 | ownerをrepository生成時の固定principalとして確定し、操作メソッドはowner値を受け取らない | request owner_idを信頼する案は他owner参照を許すため却下 | 全read/write/search/deleteが固定owner境界で動き、呼び出し側のID改変余地をなくす |
 | ADR-SPACE-03 | 既存の`file_ingestion`の抽出・削除語彙とresearch schemaのowner境界を参照し、依存追加なしの小さなfake repositoryを置く | 新規ORM・UI基盤・永続化adapterはbundle、security、license、更新責任を増やし、既存契約と重複するため却下 | 2箇所以上で同じspace操作が必要になった時、Supabase adapterへ移行してfakeを削除する |
 | ADR-SPACE-04 | 同一user spaceの横断知識は常時有効とし、reference metadataで出典・文脈を追跡する | projectごとの既定grant確認は同意摩擦と重複設定を増やすため却下。owner隔離と削除伝播は維持する | portfolio stewardとproject単位会話が同じspace境界を参照できる |
 
