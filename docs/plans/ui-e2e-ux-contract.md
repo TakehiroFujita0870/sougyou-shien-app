@@ -92,6 +92,17 @@ Then: それぞれの欠陥IDがtodo/failing contractとして表示され、実
 | ADR-UX-1: 失敗テストの形式 | Vitestの`it.todo`で未達契約を常に可視化し、実装PRで同じIDを実行可能なgreen testへ昇格する。 | 現UIに合わせた実装依存assertionは欠陥を合格扱いにするため却下。 | 採用 |
 | ADR-UX-2: 実装境界 | シナリオ、失敗ID、受入基準だけをこのPRへ置き、認証・IdeaForm・library実装は別Issueへ分離する。 | 大規模なUI変更を同時に行う案は#89と競合し、レビュー範囲500行を超えるため却下。 | 採用 |
 
+## 保守性ゲート
+
+| 評価順 | 検討結果 | 判断 |
+| --- | --- | --- |
+| 1. 既存repo内コンポーネント/adapter | 既存App、WorkspaceShell、IdeaCandidateWorkspace、FileLibraryを契約の対象として参照し、新repositoryや新adapterは追加しない。 | 採用 |
+| 2. Web/React/Tailwind標準 | Vitestの`it.todo`、Reactの既存テスト境界、既存Tailwind/CSSを使用する。新しいstyled UI基盤や独自dialog/menuは作らない。 | 採用 |
+| 3. 実績ある保守ライブラリ | 新規依存は不要。Playwright等はbrowser取得・更新責任・bundle/security/license確認を伴うため、別の依存追加PRへ分離する。 | 今回は不採用 |
+| 4. 独自実装 | 独自の実行runnerは作らず、失敗契約の宣言だけを追加する。将来runnerを追加する場合は、既存Vitestで表現できない再現条件、保守責任、移行・削除条件を別ADRへ記録する。 | 今回は最小境界 |
+
+独自境界の削除条件は、実装PRで同じFAIL-UX IDが既存のCI runnerでgreenになった時点で`it.todo`契約を実行テストへ置換し、重複契約を削除することとする。
+
 ## 変更履歴
 
 | 日時 | 変更 | 理由 | 影響タスク |
