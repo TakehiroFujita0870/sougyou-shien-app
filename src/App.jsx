@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { AiPublicRelationsDraftWorkflow } from './components/AiPublicRelationsDraftWorkflow';
 import { FileLibrary } from './components/FileLibrary';
 import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
 import { IdeaForm } from './components/IdeaForm';
 import { ModelSelector } from './components/ModelSelector';
+import { PlanSelection } from './components/PlanSelection';
+import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { ResearchWorkspace } from './components/ResearchWorkspace';
 import { UserProfileInterview } from './components/UserProfileInterview';
 
@@ -57,8 +59,9 @@ export function App() {
   const [activeWorkspace, setActiveWorkspace] = useState('ideas');
   const [profileOpen, setProfileOpen] = useState(true);
   const [profileComplete, setProfileComplete] = useState(false);
-  const [model, setModel] = useState('gpt-5.6-terra');
-  const [reasoning, setReasoning] = useState('medium');
+  const repositoryRef = useRef(null);
+  if (!repositoryRef.current) repositoryRef.current = createLocalPlanRepository();
+  const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
 
   useEffect(() => {
     const shortcut = (event) => {
@@ -73,10 +76,26 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
 
+  useEffect(() => {
+    if (activeWorkspace === 'settings') document.getElementById('model')?.focus();
+  }, [activeWorkspace, subscription.plan]);
+
+  function updatePlan(plan) {
+    setSubscription(repositoryRef.current.applyPlan(plan, subscription));
+  }
+
+  function updateModel(modelKey) {
+    setSubscription((current) => ({ ...current, modelKey, reasoningMode: null }));
+  }
+
+  function updateReasoning(reasoningMode) {
+    setSubscription((current) => ({ ...current, reasoningMode }));
+  }
+
   function workspaceContent() {
     if (activeWorkspace === 'research') return <ResearchWorkspace />;
     if (activeWorkspace === 'files') return <FileLibrary />;
-    if (activeWorkspace === 'settings') return <ModelSelector plan="standard" selectedModelKey={model} selectedReasoningMode={reasoning} onModelChange={setModel} onReasoningModeChange={setReasoning} />;
+    if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
     if (activeWorkspace === 'public-relations') return <AiPublicRelationsDraftWorkflow />;
     return <IdeaWorkspace idea={idea} onReset={() => setIdea(null)} onSubmit={setIdea} profileReady={profileComplete} />;
   }

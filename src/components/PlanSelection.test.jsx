@@ -1,0 +1,88 @@
+// @vitest-environment happy-dom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import axe from 'axe-core';
+import { describe, expect, it } from 'vitest';
+
+import { App } from '../App';
+import { createLocalPlanRepository } from './planSubscriptionRepository';
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+async function mount(component) {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render(component));
+  return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
+}
+
+function click(element) {
+  return act(() => element.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+}
+
+describe('local/fake plan subscription repository', () => {
+  it('starts deterministically and normalizes an invalid Standard choice when returning to Free', () => {
+    const repository = createLocalPlanRepository();
+
+    expect(repository.getSubscription()).toMatchObject({ plan: 'free', modelKey: 'claude-haiku-4-5', reasoningMode: null });
+
+    repository.applyPlan('standard', { modelKey: 'gpt-5.6-terra', reasoningMode: 'high' });
+    expect(repository.applyPlan('free')).toMatchObject({ plan: 'free', modelKey: 'claude-haiku-4-5', reasoningMode: null });
+  });
+});
+
+describe('plan selection acceptance', () => {
+  it('has no axe violations in the settings plan chooser', async () => {
+    const { container, unmount } = await mount(<App />);
+
+    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
+    const results = await axe.run(container);
+    expect(results.violations).toEqual([]);
+    await unmount();
+  });
+
+  it('compares Free and Standard, keeps Pro unavailable, and requires confirmation before applying a proposed change', async () => {
+    const { container, unmount } = await mount(<App />);
+
+    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
+    expect(container.textContent).toContain('軽量モデル');
+    expect(container.textContent).toContain('Thinkingなし');
+    expect(container.textContent).toContain('月額980円');
+    expect(container.textContent).toContain('複数モデル');
+    expect(container.textContent).not.toContain('Pro');
+    expect(container.textContent).toContain('外部課金には接続していません');
+
+    const standard = container.querySelector('input[value="standard"]');
+    await click(standard);
+    expect(container.textContent).toContain('変更内容を確認');
+    expect(container.textContent).toContain('現在のプラン: Free');
+
+    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
+    expect(container.textContent).toContain('現在のプラン: Standard');
+    expect(container.querySelector('#model').value).toBe('gpt-5.6-terra');
+    await unmount();
+  });
+
+  it('supports keyboard confirmation and removes an invalid model and reasoning choice after returning to Free', async () => {
+    const { container, unmount } = await mount(<App />);
+    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
+
+    const standard = container.querySelector('input[value="standard"]');
+    standard.focus();
+    expect(document.activeElement).toBe(standard);
+    await act(() => standard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
+
+    const model = container.querySelector('#model');
+    await act(() => { model.value = 'gpt-5.6-terra'; model.dispatchEvent(new Event('change', { bubbles: true })); });
+    const free = container.querySelector('input[value="free"]');
+    await click(free);
+    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
+
+    expect(container.querySelector('#model').value).toBe('claude-haiku-4-5');
+    expect(container.querySelector('#reasoning-effort')).toBeNull();
+    expect(document.activeElement).toBe(container.querySelector('#model'));
+    await unmount();
+  });
+});
