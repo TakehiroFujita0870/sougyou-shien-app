@@ -4,14 +4,14 @@
 
 ## 現在地
 
-- `main`には継承監査とSDD要件定義が入っています。
-- PR #2（`codex/kadode-core-bootstrap`）にはReact/Vite/Tailwind、Storybook a11y、FastAPI、uv、pytest、PR CIがあります。`npm run build`、`npm run build-storybook`、`uv run pytest`はローカル通過済みです。
-- 実アプリ機能は未実装です。画面は方向性を示す静的な最小UIです。
+- PR #2のReact/Vite/Tailwind、Storybook a11y、FastAPI、uv、pytest、PR CIは`main`へマージ済みです。
+- PR #3のowner-based RLS、PR #5のアイデア入力・進捗UI、PR #6の`AGENTS.md`とモデル更新方針は`main`へマージ済みです。
+- 初回リリースはFreeとStandardです。Proの自動調査とメール配信は利用量・原価データの蓄積後に再計画します。
 
 ## 技術判断
 
 - Frontend: React + Vite + Tailwind CSS。UIはStorybookを必須とします。
-- Backend: Python + FastAPI。依存は`uv`だけで管理します。決定的なゲート、遷移、権限、エクスポートをPythonに置き、LLMは起案・反証文の生成に限定します。
+- Backend: Python + FastAPI。依存は`uv`だけで管理します。権限、課金上限、削除を決定的なコードに置き、LLMは対話、仮説カード、調査レポートを生成します。
 - Data: Supabase Auth/Postgres/RLSを予定。実プロジェクトURL・鍵は未設定であり、`.env`へ保存しません。
 - Hosting: Vercelを予定。ただしデプロイ・外部公開は未承認です。
 
@@ -24,18 +24,19 @@
 
 ## 次の実装順序
 
-1. PR #2をCI通過後に自動マージする。
-2. Supabase migration: `ideas`、`stage_runs`、`death_causes`、`decision_records`、`consents`、`deletion_requests`とowner-based RLS。
-3. アイデア登録画面、パイプライン進捗、Storybookの主要画面Storyを実装する。
-4. Pythonの決定的Stageゲート（Stage 1の死因3件、Stage 2の品質要件、Stage 4理由必須）をテスト駆動で実装する。
-5. LLM実行境界、graveyard検索、エクスポート、削除・同意へ進む。
+1. 初回対話で「あなたの情報」を作成・更新できるUXを計画する。
+2. 対話からアイデアストックと編集可能なアイデア仮説カードを作る。
+3. 横断調査の3スパイクを行い、Web検索、特許検索、ファイル解析の方式を決める。
+4. owner-based RLSを維持して、個人資料と意思決定記録のハイブリッド検索を追加する。
+5. 「市場の見込み」「競合との違い」「攻めどころの特定」と引用付きレポートへ進む。
 
 ## 仕様の核
 
 - [PRD](spec/PRD.md)
 - [アーキテクチャ](spec/architecture.md)
-- [反証エンジン仕様](spec/falsification-engine.md)
+- [仮説検証・調査支援仕様](spec/falsification-engine.md)
 - [実装バックログ](spec/backlog.md)
+- [横断調査・個人ナレッジ・意思決定記憶 計画](spec/research-memory-plan.md)
 
 ## 注意事項
 

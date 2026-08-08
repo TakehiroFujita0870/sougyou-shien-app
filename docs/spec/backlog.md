@@ -1,10 +1,13 @@
-# 実装バックログ（承認待ち）
+# 実装バックログ
 
-1. Vite/React/Supabase/Vercel/Storybookの空の骨格とPR CI。
-2. アイデア入力・Stage進捗・Storybook主要6画面の静的UI。
-3. Supabaseスキーマ/RLSと認証。
-4. 決定的ゲートとStage遷移。
-5. LLMの反証実行境界（外部キー設定後）。
-6. graveyard、エクスポート、削除、同意。
+1. 完了: Vite/React/Supabase/Vercel/Storybookの骨格とPR CI。
+2. 完了: owner-based RLSの初期スキーマ。
+3. 完了: アイデア入力と進捗UI。
+4. 初回対話による「あなたの情報」の作成・更新。
+5. 対話からのアイデアストックと編集可能な仮説カード。
+6. Web・特許・個人資料・意思決定の横断調査スパイク。
+7. 個人資料の取込、ハイブリッド検索、削除。
+8. 過去判断との差分表示と引用付き調査レポート。
+9. Free/Standardの利用上限とモデル選択。
 
-各項目は別PRで、テストとStorybookを伴います。
+詳細な分解と受け入れ条件は[横断調査・個人ナレッジ・意思決定記憶 計画](research-memory-plan.md)を参照します。各項目は別PRで、テストとStorybookを伴います。Proの自動調査とメール配信は初回リリースに含めません。
