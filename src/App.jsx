@@ -2,9 +2,12 @@ import { useState } from 'react';
 
 import { IdeaForm } from './components/IdeaForm';
 import { PipelineProgress } from './components/PipelineProgress';
+import { UserProfileInterview } from './components/UserProfileInterview';
 
 export function App() {
   const [idea, setIdea] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(true);
+  const [profileComplete, setProfileComplete] = useState(false);
 
   return (
     <main className="min-h-screen bg-stone-50 text-emerald-950">
@@ -60,6 +63,14 @@ export function App() {
           <PipelineProgress currentStage={idea ? 0 : null} />
         </aside>
       </div>
+      <button type="button" onClick={() => setProfileOpen(true)} className="fixed bottom-5 right-5 rounded-full bg-emerald-800 px-5 py-3 font-bold text-white shadow-lg">
+        あなたの情報を{profileComplete ? '更新' : '入力'}
+      </button>
+      {profileOpen && (
+        <div className="fixed inset-0 z-10 grid place-items-end bg-emerald-950/30 p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">
+          <UserProfileInterview onClose={() => setProfileOpen(false)} onComplete={() => setProfileComplete(true)} />
+        </div>
+      )}
     </main>
   );
 }
