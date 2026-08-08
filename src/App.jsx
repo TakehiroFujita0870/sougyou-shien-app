@@ -20,8 +20,8 @@ export const WORKSPACE_NAV = [
 
 function Navigation({ activeWorkspace, onSelect }) {
   return (
-    <nav aria-label="ワークスペース" className="border-b border-stone-200 bg-white/90">
-      <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-5 py-3 sm:px-8">
+    <nav aria-label="ワークスペース" className="min-w-0 max-w-full overflow-hidden border-b border-stone-200 bg-white/90">
+      <div className="mx-auto flex min-w-0 max-w-6xl gap-2 overflow-x-auto px-5 py-3 sm:px-8">
         {WORKSPACE_NAV.map((item) => (
           <button
             key={item.id}
@@ -101,12 +101,12 @@ export function App() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 text-emerald-950">
-      <header className="border-b border-stone-200 bg-white/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8"><strong className="text-2xl tracking-tight">Kadode</strong><span className="text-right text-sm font-medium text-emerald-800">アイデアを、構造で育てる。</span></div></header>
+    <main className="min-h-screen overflow-x-hidden bg-stone-50 text-emerald-950">
+      <header className="border-b border-stone-200 bg-white/90"><div className="mx-auto flex min-w-0 max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8"><strong className="shrink-0 text-2xl tracking-tight">Kadode</strong><span className="min-w-0 break-words text-right text-sm font-medium text-emerald-800">アイデアを、構造で育てる。</span></div></header>
       <Navigation activeWorkspace={activeWorkspace} onSelect={setActiveWorkspace} />
       <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8 sm:py-10"><p className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-950"><strong>local / fake モード</strong> — このMVPでは外部サービスへ接続・送信しません。</p>{workspaceContent()}</div>
       <button type="button" onClick={() => setProfileOpen(true)} className="fixed bottom-5 right-5 rounded-full bg-emerald-800 px-5 py-3 font-bold text-white shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800">あなたの情報を{profileComplete ? '更新' : '入力'}</button>
-      {profileOpen && <div className="fixed inset-0 z-10 grid place-items-end bg-emerald-950/30 p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報"><UserProfileInterview onClose={() => setProfileOpen(false)} onComplete={() => setProfileComplete(true)} /></div>}
+      {profileOpen && <div className="fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden bg-emerald-950/30 p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報"><UserProfileInterview onClose={() => setProfileOpen(false)} onComplete={() => setProfileComplete(true)} /></div>}
     </main>
   );
 }
