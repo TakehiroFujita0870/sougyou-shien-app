@@ -19,4 +19,12 @@ describe('MVP workspace shell', () => {
     expect(html).toContain('focus-visible:outline-2');
     expect(html).toContain('type="button"');
   });
+
+  it('does not force fixed stages or gates in the normal app workspace', () => {
+    const html = renderToStaticMarkup(<App />);
+
+    expect(html).not.toContain('STAGE GATE');
+    expect(html).not.toContain('STAGE 0');
+    expect(html).not.toContain('条件を満たすまで次へ進みません');
+  });
 });
