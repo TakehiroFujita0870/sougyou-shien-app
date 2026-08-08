@@ -1,3 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createLocalGoogleAuthAdapter, createOwnerScopedLocalState } from './localAuthAdapter';
-describe('local Google auth adapter', () => { it('uses a fixture principal and fails closed outside local profiles', async () => { await expect(createLocalGoogleAuthAdapter().signIn()).resolves.toMatchObject({ id: 'local-google-user' }); await expect(createLocalGoogleAuthAdapter({ profile: 'production' }).signIn()).rejects.toThrow('設定'); }); it('isolates state by adapter-provided principal', () => { const state = createOwnerScopedLocalState(); state.write({ id: 'a' }, 'A'); expect(state.read({ id: 'b' })).toBeNull(); }); });
+
+describe('local Google auth adapter', () => {
+  it('uses a fixture principal and fails closed outside local profiles', async () => {
+    await expect(createLocalGoogleAuthAdapter().signIn()).resolves.toMatchObject({ id: 'local-google-user' });
+    await expect(createLocalGoogleAuthAdapter({ profile: 'production' }).signIn()).rejects.toThrow('設定');
+  });
+
+  it('isolates state by adapter-provided principal', () => {
+    const state = createOwnerScopedLocalState();
+    state.write({ id: 'a' }, 'A');
+    expect(state.read({ id: 'b' })).toBeNull();
+  });
+});
