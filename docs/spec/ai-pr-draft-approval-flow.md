@@ -32,7 +32,13 @@ Then: fake repository にそれぞれ `approved`、`revision_requested`、`rejec
 
 - X API、投稿ボタン、予約投稿、自動投稿、外部公開、分析API
 - Supabase migration、`src/App.jsx`、既存パイプラインの変更
-- 永続DB、認証、実在ユーザーの個人情報の取扱い
+- 本Issue内でのSupabase等への実接続、認証情報設定、実在ユーザーの個人情報の取扱い
+
+## リリース接続契約
+
+local/fake repository は外部認証待ちでも開発を継続するための実装であり、初回リリースでは恒久的な代替ではない。初回リリース前に release-gate #31 で、Supabase等の承認済み認証必須サービスへ実接続し、同じ契約テストを通す。
+
+実接続adapterは `create`、`list`、`requestRevision`、`approve`、`reject` の5操作、4状態、機微情報拒否の契約を維持する。接続停止時は local/fake repository へ戻せることも #31 の受入条件とする。本IssueのX投稿・外部公開禁止は、#31 の実接続後も維持する。
 
 ## タスク
 
@@ -41,12 +47,13 @@ Then: fake repository にそれぞれ `approved`、`revision_requested`、`rejec
 | T-22-1 | 状態と機微情報検証を持つ fake repository を追加 | 4状態の保存と危険な入力の拒否をテスト | なし |
 | T-22-2 | 独立した下書き・承認UIを追加 | 保存・判断・エラー表示をテスト | T-22-1 |
 | T-22-3 | Story とセルフレビューを追加 | 各状態の Story と全検査成功 | T-22-2 |
+| T-22-4 | #31へ接続するrepository契約を固定 | 5操作の契約テストとrelease-gate記載 | T-22-1 |
 
 ## ADR
 
 | 選択 | 理由と結果 | 却下した選択肢と理由 | 検証 |
 | --- | --- | --- | --- |
-| ADR-22-1: ブラウザ内 fake repository | 本IssueはUIとドメイン状態に限定し、外部送信なしで保存・遷移を検証できる。リロード後の永続化はしない。 | Supabase永続化は migration と App 変更を要し、追加制約に反する。 | repositoryの状態遷移テスト |
+| ADR-22-1: 差し替え可能な local/fake repository | 本IssueはUIとドメイン状態に限定し、外部送信なしで保存・遷移を検証する。初回リリースの実接続は #31 で同じ契約を満たすadapterへ差し替える。 | このPRでのSupabase実接続は migration と App 変更を要し、追加制約に反する。実接続自体は恒久的に除外せず #31 の必須ゲートとする。 | repositoryの状態遷移・契約テスト |
 | ADR-22-2: 入力時に機微情報を拒否 | メール、電話、一般的な資格情報パターンを保存前に拒否し、投稿案への混入を減らす。完全なDLPではない。 | 公開直前のみの検査は下書き保存時点の受入条件を満たさない。 | 検知パターンのテスト |
 
 ## 変更履歴
@@ -54,3 +61,4 @@ Then: fake repository にそれぞれ `approved`、`revision_requested`、`rejec
 | 日付 | 変更 | 理由 | 検証タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | Issue #22 の範囲と受入条件を実装可能な仕様に固定 | T-22-1〜T-22-3 |
+| 2026-08-09 | 初回リリース接続を #31 へ接続 | 外部認証待ちでもlocal/fakeで開発し、実接続はrelease-gateで契約検証する | T-22-4 |
