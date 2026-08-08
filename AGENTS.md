@@ -29,6 +29,15 @@
 - APIの破壊的変更は互換方針を計画で承認されるまで実施しない。
 - README、セットアップ手順、仕様、計画に影響する変更は同じPRで更新する。
 
+## Windows / PowerShell の実行規約
+
+- Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。
+- 検索は `rg`、パスを受け取る PowerShell コマンドは `-LiteralPath`、UTF-8 文書の読取は `-Encoding UTF8` を使う。編集は `apply_patch` だけで行い、`echo`、`cat`、リダイレクトによる編集をしない。
+- 非ASCIIのIssue/PR本文をPowerShellからネイティブCLIへ直接パイプしない。`apply_patch`で作成したBOMなしUTF-8ファイルを`--body-file <ファイル>`で読ませるか、Node.js/PythonからUTF-8 `Buffer`を`spawn`の`input`へ渡す。`$OutputEncoding`だけを安全策としない。
+- 外部本文の更新前と更新直後のAPI read-backで、3文字以上連続する疑問符、U+FFFD、日本語文字数、必須見出しを検査する。異常時は更新を止め、復元して報告する。
+- 新規開発は可能な限りWSL内のcloneを使い、`/mnt/c`配下に`node_modules`や`.venv`を作らない。
+- 削除・移動はシェルをまたがず、再帰操作の前に絶対パスを検証する。作業変数に `HOME`、`home`、`CODEX_HOME` を使わない。
+
 ## 検査
 
 変更範囲に応じて、PR前に以下を実行し、結果をPR説明に記載する。
