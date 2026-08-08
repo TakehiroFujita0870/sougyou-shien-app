@@ -2,9 +2,10 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import axe from 'axe-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
+import { PlanSelection } from './PlanSelection';
 import { createLocalPlanRepository } from './planSubscriptionRepository';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,7 +43,7 @@ describe('plan selection acceptance', () => {
     await unmount();
   });
 
-  it('compares Free and Standard, keeps Pro unavailable, and requires confirmation before applying a proposed change', async () => {
+  it('compares Free and Standard, shows readable Pro content, and requires confirmation before applying a proposed change', async () => {
     const { container, unmount } = await mount(<App />);
 
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
@@ -50,7 +51,16 @@ describe('plan selection acceptance', () => {
     expect(container.textContent).toContain('Thinkingなし');
     expect(container.textContent).toContain('月額980円');
     expect(container.textContent).toContain('複数モデル');
-    expect(container.textContent).not.toContain('Pro');
+    const proCard = container.querySelector('[aria-labelledby="pro-plan-heading"]');
+    expect(proCard.textContent).toContain('Pro');
+    expect(proCard.textContent).toContain('2,980');
+    expect(proCard.textContent).toContain('準備中');
+    expect(proCard.textContent).toContain('現在は選択、申込み、決済できません。');
+    expect(proCard.getAttribute('aria-describedby')).toBe('pro-plan-availability');
+    const proButton = proCard.querySelector('button');
+    expect(proCard.querySelectorAll('button')).toHaveLength(1);
+    expect(proButton.disabled).toBe(true);
+    expect(proButton.getAttribute('aria-describedby')).toBe('pro-plan-availability');
     expect(container.textContent).toContain('外部課金には接続していません');
 
     const standard = container.querySelector('input[value="standard"]');
@@ -61,6 +71,18 @@ describe('plan selection acceptance', () => {
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
     expect(container.textContent).toContain('現在のプラン: Standard');
     expect(container.querySelector('#model').value).toBe('gpt-5.6-terra');
+    await unmount();
+  });
+
+  it('does not apply a plan or emit a request when the disabled Pro control is activated', async () => {
+    const onApplyPlan = vi.fn();
+    const { container, unmount } = await mount(<PlanSelection currentPlan="free" onApplyPlan={onApplyPlan} />);
+    const proButton = container.querySelector('button[disabled]');
+
+    await click(proButton);
+
+    expect(proButton.disabled).toBe(true);
+    expect(onApplyPlan).not.toHaveBeenCalled();
     await unmount();
   });
 
