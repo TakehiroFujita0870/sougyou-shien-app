@@ -125,3 +125,65 @@ test('keeps the Home composer and account visible with ten long turns', async ({
   await expect(account).toBeInViewport()
   await page.screenshot({ path: 'test-results/sidebar-portfolio-1440x900.png', fullPage: false })
 })
+
+test('restores an archived Home snapshot with the keyboard and keeps its active snapshot after F5', async ({ page }) => {
+  await page.goto('/')
+  const message = 'F5後も戻せるHome会話'
+  await page.locator('#home-supervisor-message').fill(message)
+  await page.locator('#home-supervisor-message').press('Enter')
+  const history = page.getByRole('button', { name: message, exact: true })
+  await expect(history).toBeVisible()
+  await page.getByRole('button', { name: `${message}をアーカイブ` }).click()
+  const restart = page.getByRole('button', { name: `${message}を再開` })
+  await expect(restart).toBeVisible()
+  await page.screenshot({ path: 'test-results/sidebar-archive-home-1440.png', fullPage: false })
+
+  await restart.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('[aria-label="会話履歴"]')).toContainText(message)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+    activeHomeId: expect.any(String),
+    home: [expect.objectContaining({ title: message, archived: false })],
+  })
+  await page.screenshot({ path: 'test-results/sidebar-restored-home-1440.png', fullPage: false })
+
+  await page.reload()
+  await expect(page.locator('[aria-label="会話履歴"]')).toContainText(message)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+    activeHomeId: expect.any(String),
+    home: [expect.objectContaining({ title: message, archived: false })],
+  })
+})
+
+test('restores an archived Project snapshot by click and keeps the Project state after F5', async ({ page }) => {
+  const project = {
+    id: 'e2e-restored-project', ownerId: 'local-owner', spaceId: 'local-space', title: 'F5後も戻せるProject',
+    fact: '顧客の作業時間が毎週失われている', inference: '受注管理の自動化が有効', reason: 'ヒアリングで確認済み', status: 'adopted',
+  }
+  await page.addInitScript((snapshot) => {
+    sessionStorage.setItem('kadode:selected-surface', 'project')
+    localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [snapshot] }))
+    localStorage.setItem('kadode:sidebar-portfolio:local-owner:local-space', JSON.stringify({
+      activeHomeId: '', home: [], knowledge: [], project: [{ id: snapshot.id, title: snapshot.title, snapshot, archived: false, updatedAt: 1 }],
+    }))
+  }, project)
+  await page.goto('/')
+  await expect(page.locator('#project-surface-heading')).toHaveText(project.title)
+  await page.getByRole('button', { name: `${project.title}をアーカイブ` }).click()
+  const restart = page.getByRole('button', { name: `${project.title}を再開` })
+  await expect(restart).toBeVisible()
+  await page.screenshot({ path: 'test-results/sidebar-archive-project-1440.png', fullPage: false })
+
+  await restart.click()
+  await expect(page.locator('#project-surface-heading')).toHaveText(project.title)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+    project: [expect.objectContaining({ id: project.id, archived: false, snapshot: expect.objectContaining({ title: project.title }) })],
+  })
+  await page.screenshot({ path: 'test-results/sidebar-restored-project-1440.png', fullPage: false })
+
+  await page.reload()
+  await expect(page.locator('#project-surface-heading')).toHaveText(project.title)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+    project: [expect.objectContaining({ id: project.id, archived: false, snapshot: expect.objectContaining({ title: project.title }) })],
+  })
+})
