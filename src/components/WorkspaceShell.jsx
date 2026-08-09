@@ -26,6 +26,8 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const [allOpen, setAllOpen] = useState(null);
   const [archivePending, setArchivePending] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const accountTriggerRef = useRef(null);
 
   useEffect(() => {
@@ -107,10 +109,10 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
                 <DropdownMenuItem onSelect={onOpenProfile} onClick={onOpenProfile}>プロフィールを編集</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>プランと利用状況</DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
-                <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>設定</DropdownMenuItem>
-                <DropdownMenuItem>ヘルプ・ショートカット</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setSettingsOpen(true)} onClick={() => setSettingsOpen(true)}>設定</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShortcutsOpen(true)} onClick={() => setShortcutsOpen(true)}>ヘルプ・ショートカット</DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
-                <DropdownMenuItem>ログアウト</DropdownMenuItem>
+                <DropdownMenuItem disabled>ログアウト（認証連携前）</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -126,6 +128,12 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
             {(portfolio[allOpen] ?? []).filter((entry) => !entry.archived).map((entry) => <div key={entry.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-muted)]"><Button type="button" variant="ghost" className="min-w-0 flex-1 justify-start truncate" onClick={() => { void openPortfolioItem(allOpen, entry); setAllOpen(null); }}>{entry.title}</Button>{(allOpen === 'home' || allOpen === 'project') && <Button type="button" variant="ghost" disabled={Boolean(archivePending)} className="shrink-0 text-xs" onClick={() => { void archiveItem(allOpen, entry.id); }}>{archivePending === `${allOpen}:${entry.id}` ? '処理中…' : 'アーカイブ'}</Button>}</div>)}
           </div>
         </DialogContent>
+      </Dialog>
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent><DialogTitle>設定</DialogTitle><p className="mt-3 text-sm leading-6 text-[var(--color-text-muted)]">通知と認証連携は準備中です。プランと利用状況はアカウントメニューから開けます。</p></DialogContent>
+      </Dialog>
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent><DialogTitle>ヘルプ・ショートカット</DialogTitle><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-semibold">Alt + Shift + 1</dt><dd>ホームを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 2</dt><dd>プロジェクトを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 3</dt><dd>ナレッジを開く</dd></div><div><dt className="font-semibold">Escape</dt><dd>メニューまたはダイアログを閉じる</dd></div></dl></DialogContent>
       </Dialog>
     </div>
   );
