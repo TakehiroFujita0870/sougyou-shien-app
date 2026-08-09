@@ -1,0 +1,18 @@
+{
+  "provenance": { "datasetId": "kadode-admin-demo-v1", "status": "synthetic_demo", "notice": "これは管理者デモ専用の合成データであり、実在の人物・企業・取引を表しません。" },
+  "asset": {
+    "id": "demo-document-001",
+    "ownerId": "demo-owner",
+    "spaceId": "demo-space",
+    "name": "合成事業メモ",
+    "version": 1,
+    "state": "searchable",
+    "extractedTextState": "ready",
+    "indexState": "ready",
+    "projectId": "demo-project-001",
+    "kind": "document_metadata",
+    "references": [{ "kind": "source", "sourceId": "demo-source-market", "locator": "fixture:document/1" }]
+  },
+  "project": { "id": "demo-project-001", "name": "現場改善ミニ診断（合成デモ）", "summary": "製造現場の改善候補を短時間で整理する" },
+  "decision": { "id": "decision-001", "background": "本業と家計の制約を守るため", "projectSummary": "可逆な週末検証から開始する事業仮説", "judgement": "週末検証を採用", "reason": "2週連続で検証時間または予算上限を超えたら停止" }
+}
