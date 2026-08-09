@@ -144,6 +144,17 @@ chronological order as the visual transcript.
 
 ### Visual and motion accessibility
 
+**Given** a 390px-wide viewport, **when** the chat surface, scope controls,
+transcript, and composer are rendered, **then** the page has no horizontal
+scrolling, every focus outline remains fully visible, and the composer submit
+action is visible and reachable without clipping, overlap, or a horizontal
+gesture.
+
+**Given** a desktop viewport of 1024px or wider, **when** the chat page is
+rendered with a populated transcript, **then** persistent workspace navigation,
+a single primary chat column, the composer, and polite live feedback are all
+simultaneously present in a stable reading order.
+
 **Given** a user enables forced colors or high contrast, **when** they view the
 chat surface, **then** controls, text, borders, selected state, and focus
 remain perceivable without relying on sakura or emerald color.
@@ -176,5 +187,11 @@ It does not grant an implementation change by itself.
   pointer, focus loss, or a focus trap?
 - Are labels, pressed/disabled/error states, live feedback, and transcript
   speaker names exposed programmatically?
-- Does the viewport work at 320px, in forced colors, and with reduced motion?
+- At 390px, is there no horizontal scrolling, clipped focus indicator, or
+  hidden/overlapped composer action?
+- At desktop width (1024px or wider), are persistent navigation, one primary
+  chat column, the composer, and polite live feedback all present in reading
+  order?
+- Does the viewport work at the 320px minimum, in forced colors, and with
+  reduced motion?
 - Has the owner verified UTF-8 text and `git diff --check` before review?
