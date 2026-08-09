@@ -109,19 +109,8 @@ export function App({ profileRepository }) {
     return () => window.removeEventListener('keydown', closeProfile);
   }, []);
 
-  useEffect(() => {
-  }, [activeWorkspace, subscription.plan]);
-
   function updatePlan(plan) {
     setSubscription(repositoryRef.current.applyPlan(plan, subscription));
-  }
-
-  function updateModel(modelKey) {
-    setSubscription((current) => ({ ...current, modelKey, reasoningMode: null }));
-  }
-
-  function updateReasoning(reasoningMode) {
-    setSubscription((current) => ({ ...current, reasoningMode }));
   }
 
   function retryProfileLoad() {

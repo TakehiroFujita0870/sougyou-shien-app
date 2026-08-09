@@ -49,6 +49,13 @@ describe('WorkspaceShell', () => {
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
     expect(container.textContent).toContain('あなたの情報');
     expect(container.textContent).toContain('Free');
+    const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+    act(() => accountTrigger.click());
+    expect(container.querySelector('[role="menu"]')).toBeTruthy();
+    expect(container.textContent).toContain('プランと利用状況');
+    act(() => accountTrigger.click());
+    expect(container.querySelector('[role="menu"]')).toBeNull();
     cleanup();
   });
 
