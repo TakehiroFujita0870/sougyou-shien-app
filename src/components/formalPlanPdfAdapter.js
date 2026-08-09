@@ -40,9 +40,9 @@ function documentItems(project) {
       { text: `未確定: ${section.unknown || '未確定'}`, size: 10, gap: 9 },
     );
   }
-  items.push({ text: '意思決定の履歴', size: 14, gap: 7 });
+  items.push({ text: '意思決定の履歴', size: 14, gap: 7, keepCount: 2 });
   for (const decision of project.decisions ?? []) {
-    items.push({ text: `${decision.kind || '判断'}: ${decision.title || '未確定'}`, size: 10 }, { text: `理由: ${decision.reason || '未確定'}`, size: 10, gap: 9 });
+    items.push({ text: `${decision.kind || '判断'}: ${decision.title || '未確定'}`, size: 10, keepCount: 1 }, { text: `理由: ${decision.reason || '未確定'}`, size: 10, gap: 9 });
   }
   items.push({ text: '注記: 未確定の項目は確認後に更新してください。本資料はローカルの下書きであり、財務・融資・税務・法務上の助言または提出書類ではありません。', size: 9, color: rgb(0.35, 0.35, 0.35) });
   return items;
@@ -54,8 +54,15 @@ export async function createFormalPlanPdf(project) {
   const font = await pdf.embedFont(fontBytes(), { subset: false });
   let page = pdf.addPage(A4);
   let y = A4[1] - MARGIN;
-  for (const item of documentItems(project)) {
-    const leading = item.size + 7;
+  const items = documentItems(project);
+  const itemHeight = (item) => wrap(item.text, item.size >= 14 ? 22 : 34).length * (item.size + 5) + (item.gap ?? 3);
+  for (const [index, item] of items.entries()) {
+    const leading = item.size + 5;
+    const groupHeight = items.slice(index, index + 1 + (item.keepCount ?? 0)).reduce((height, groupedItem) => height + itemHeight(groupedItem), 0);
+    if (y - groupHeight < MARGIN) {
+      page = pdf.addPage(A4);
+      y = A4[1] - MARGIN;
+    }
     for (const text of wrap(item.text, item.size >= 14 ? 22 : 34)) {
       if (y - leading < MARGIN) {
         page = pdf.addPage(A4);

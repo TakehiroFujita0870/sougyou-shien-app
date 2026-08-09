@@ -1,8 +1,8 @@
 # Noto Sans CJK JP font asset
 
 `NotoSansJP-Regular.ttf` is a static Regular (400) instance built from the
-upstream Noto Sans JP variable TTF. Kadode embeds a subset into locally
-generated PDF files so Japanese glyphs remain portable across PDF readers.
+upstream Noto Sans JP variable TTF. Kadode embeds the complete static font into
+locally generated PDF files so Japanese glyphs remain portable across PDF readers.
 
 - upstream: https://github.com/notofonts/noto-cjk
 - license: SIL Open Font License, Version 1.1; full text: `OFL-1.1.txt`
