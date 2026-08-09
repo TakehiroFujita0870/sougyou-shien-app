@@ -19,6 +19,19 @@ const writeFailureConversationRepository = {
     return value;
   },
 };
+let rejectFirstMetadataDelete = true;
+const removableMetadata = { id: 'local-file:write-failure.pdf', name: 'write-failure.pdf', state: 'metadata_only', mediaType: 'pdf', sizeBytes: 1024, lastModified: 1 };
+const writeFailureMetadataRepository = {
+  async load() {},
+  list() { return rejectFirstMetadataDelete ? [removableMetadata] : []; },
+  async delete() {
+    if (rejectFirstMetadataDelete) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      rejectFirstMetadataDelete = false;
+      throw new Error('Injected Knowledge delete failure');
+    }
+  },
+};
 
 export default { title: 'Kadode/KnowledgeSurface', component: KnowledgeSurface, parameters: { layout: 'centered', a11y: { test: 'error' } } };
 export const Desktop = { args: { fixture } };
@@ -26,5 +39,6 @@ export const Mobile = { args: { fixture }, parameters: { viewport: { defaultView
 export const Empty = { args: { fixture: null } };
 export const LocalMetadata = { args: { fixture, repository: localMetadataRepository } };
 export const WriteFailureRecovery = { render: () => <KnowledgeSurface fixture={fixture} conversationRepository={writeFailureConversationRepository} /> };
+export const WriteFailureRemoval = { render: () => <KnowledgeSurface fixture={fixture} repository={writeFailureMetadataRepository} /> };
 export const Loading = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'processing' } } } };
 export const Error = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'failed' } } } };
