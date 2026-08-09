@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Mic, SendHorizontal } from 'lucide-react';
 
 import { createLocalContextSnapshot } from '../context/contextSnapshot';
+import { AiComposer } from './AiComposer';
 import { createHomeConversationRepository, EMPTY_HOME_CONVERSATION_STATE } from './homeConversationRepository';
 import { Button } from './ui/Button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 const initialSnapshot = createLocalContextSnapshot({ ownerId: 'local-owner', surface: { name: 'Home', route: '/home' } });
 const emptyState = EMPTY_HOME_CONVERSATION_STATE;
@@ -100,7 +100,6 @@ export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProje
       try { await persisted; onProjectAdopt?.(next.proposals.find((proposal) => proposal.id === id)); } catch { /* visible persistence error is set by the queue */ }
     }
   }
-  const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
   const isEmpty = messages.length === 0 && state.proposals.length === 0;
   return <section aria-labelledby="home-supervisor-heading" data-home-state={isEmpty ? 'empty' : 'populated'} className={`mx-auto flex h-[calc(100dvh-4rem)] min-h-0 w-full max-w-[900px] flex-col overflow-hidden ${isEmpty ? 'justify-center pb-[10vh]' : ''}`}>
     <div className={`shrink-0 px-1 ${isEmpty ? 'mx-auto w-full max-w-[840px] text-center' : 'pt-2'}`}><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Home</p><h1 id="home-supervisor-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">アイディエーションからプロジェクト管理まで、あらゆる相談役</p></div>
@@ -108,14 +107,7 @@ export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProje
       {messages.map((message, index) => <li key={`${message.role}-${index}`} className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'ml-auto bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-text)]'}`}><strong className="block text-xs opacity-70">{message.role === 'user' ? 'あなた' : 'Kadode'}</strong><p>{message.content}</p></li>)}
       {state.proposals.map((proposal) => <li key={proposal.id} className="border-l-2 border-[var(--color-border)] py-1 pl-4"><p className="text-sm"><strong>推論:</strong> {proposal.inference}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]"><strong>事実:</strong> {proposal.fact} · <strong>操作:</strong> {proposal.action}</p>{proposal.status === 'adopted' ? <p role="status" className="mt-2 text-sm font-bold text-emerald-800">Projectへ採用済み</p> : proposal.status === 'held' ? <p role="status" className="mt-2 text-sm font-bold">保留中</p> : proposal.status === 'rejected' ? <p role="status" className="mt-2 text-sm text-red-800">却下: {proposal.rejectionReason}</p> : <><label className="mt-3 block text-sm" htmlFor={`reject-${proposal.id}`}>却下理由（却下時は必須）</label><textarea id={`reject-${proposal.id}`} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} rows={2} className="mt-1 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm" /><div className="mt-3 flex flex-wrap gap-2"><Button type="button" onClick={() => void decide(proposal.id, 'adopted')} className="min-h-9 px-3">プロジェクトに採用</Button><Button type="button" variant="secondary" onClick={() => void decide(proposal.id, 'held')} className="min-h-9 px-3">保留</Button><Button type="button" variant="ghost" onClick={() => void decide(proposal.id, 'rejected')} className="min-h-9 px-3 text-red-800">理由付きで却下</Button></div></>}</li>)}
     </ol>
-    <form data-home-composer="true" onSubmit={send} className={`shrink-0 ${isEmpty ? 'mx-auto mt-6 w-full max-w-[840px]' : 'mt-auto bg-[var(--color-background)] pt-3'}`}>
-      <div className="kadode-composer">
-        <label htmlFor="home-supervisor-message" className="sr-only">Kadode AIへのメッセージ</label>
-        <textarea id="home-supervisor-message" value={input} onChange={(event) => updateInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={5} maxLength={1000} className="kadode-composer__textarea min-h-36 resize-none" placeholder="誰の、どんな困りごとを解決したいか、思いつくことを何でも教えてください。" />
-        <div className="mt-2 flex flex-wrap gap-2" aria-label="会話のきっかけ">{promptPresets.map((preset) => <Button key={preset} type="button" variant="secondary" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={() => updateInput(preset)}>{preset}</Button>)}</div>
-        <div className="kadode-composer__actions mt-2"><Button type="button" variant="ghost" className="min-h-9 min-w-9 px-2" aria-label="音声入力（準備中）" title="音声入力（準備中）" disabled><Mic size={17} aria-hidden="true" /></Button><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" className="min-h-9 px-2 text-xs" aria-label={`モデル: ${modelLabel}`}>{modelLabel}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" aria-label="AIモデルを選択"><DropdownMenuLabel>AIモデル</DropdownMenuLabel>{models.map((model) => <DropdownMenuItem key={model.logicalKey} onSelect={() => onModelChange?.(model.logicalKey)}>{model.displayName}{model.logicalKey === modelKey ? ' ✓' : ''}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu><Button type="submit" aria-label="発言を送信" className="min-h-9 min-w-9 px-2"><SendHorizontal size={17} aria-hidden="true" /><span className="sr-only">発言を送信</span></Button></div>
-      </div>
-    </form>
+    <AiComposer id="home-supervisor-message" label="Kadode AIへのメッセージ" value={input} onValueChange={updateInput} onSubmit={() => void send()} rows={5} maxLength={1000} outerClassName={`shrink-0 ${isEmpty ? 'mx-auto mt-6 w-full max-w-[840px]' : 'mt-auto bg-[var(--color-background)] pt-3'}`} formData={{ 'data-home-composer': 'true' }} textareaClassName="min-h-36 resize-none" actionsClassName="mt-2" placeholder="誰の、どんな困りごとを解決したいか、思いつくことを何でも教えてください。" modelKey={modelKey} models={models} onModelChange={onModelChange} modelMenuAriaLabel="AIモデルを選択" showSelectedModel sendAriaLabel="発言を送信" sendIcon={<><SendHorizontal size={17} aria-hidden="true" /><span className="sr-only">発言を送信</span></>} leadingActions={<Button type="button" variant="ghost" className="min-h-9 min-w-9 px-2" aria-label="音声入力（準備中）" title="音声入力（準備中）" disabled><Mic size={17} aria-hidden="true" /></Button>}><div className="mt-2 flex flex-wrap gap-2" aria-label="会話のきっかけ">{promptPresets.map((preset) => <Button key={preset} type="button" variant="secondary" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={() => updateInput(preset)}>{preset}</Button>)}</div></AiComposer>
     {error && <p role="alert" className="pt-2 text-sm text-red-700">{error}</p>}
   </section>;
 }
