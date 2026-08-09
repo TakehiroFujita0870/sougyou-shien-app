@@ -15,6 +15,7 @@ describe('Kadode three-surface workspace shell', () => {
     expect(html).toContain('id="home-supervisor-message"');
     expect(html).toContain('Kadode AI');
     expect(html).not.toContain('STAGE GATE');
+    expect(html).not.toContain('現場で見つかった改善の芽を、低リスク');
   });
 
   it('keeps the Home composer accessible and independent of external services', () => {
