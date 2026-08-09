@@ -30,14 +30,15 @@ describe('LocalGoogleSignIn', () => {
   });
 
   it('retains the same supplied adapter after rerender', async () => {
-    const adapter = createLocalGoogleAuthAdapter();
+    const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
+    const adapter = createLocalGoogleAuthAdapter({ storage });
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
 
     await act(async () => root.render(<LocalGoogleSignIn authAdapter={adapter} />));
     await act(async () => container.querySelector('button').click());
-    await act(async () => root.render(<LocalGoogleSignIn authAdapter={createLocalGoogleAuthAdapter()} />));
+    await act(async () => root.render(<LocalGoogleSignIn authAdapter={createLocalGoogleAuthAdapter({ storage })} />));
 
     expect(container.textContent).toContain('ローカル Google テスト利用者');
     expect(adapter.currentPrincipal()).not.toBeNull();
