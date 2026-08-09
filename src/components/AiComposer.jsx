@@ -32,7 +32,7 @@ export function AiComposer({
   showSelectedModel = false,
   sendAriaLabel = '送信',
   sendIcon = <ArrowUp className="size-4" aria-hidden="true" />,
-  disableSendWhenEmpty = false,
+  disableSendWhenEmpty = true,
   leadingActions = null,
   groupTrailingActions = false,
   children = null,
