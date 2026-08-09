@@ -4,7 +4,7 @@ export const LOCAL_GOOGLE_PRINCIPAL = Object.freeze({
   displayName: 'ローカル Google テスト利用者',
 });
 
-const STORAGE_VERSION = 1;
+export const LOCAL_AUTH_STORAGE_VERSION = 1;
 
 function safeStorage(storage) {
   return storage ?? null;
@@ -40,9 +40,14 @@ export function createLocalGoogleAuthAdapter({
         return null;
       }
       const saved = JSON.parse(raw);
-      if (saved?.version !== STORAGE_VERSION || saved?.principal?.id !== principal.id) {
-        store.removeItem(storageKey);
-        status = 'error';
+      if (
+        saved?.version !== LOCAL_AUTH_STORAGE_VERSION
+        || saved?.principal?.id !== principal.id
+        || saved?.principal?.provider !== principal.provider
+      ) {
+        try { store.removeItem(storageKey); } catch { /* fail-safe cleanup */ }
+        current = null;
+        status = 'ready';
         return null;
       }
       current = principal;
@@ -50,7 +55,8 @@ export function createLocalGoogleAuthAdapter({
       return current;
     } catch {
       try { store.removeItem(storageKey); } catch { /* fail-safe cleanup */ }
-      status = 'error';
+      current = null;
+      status = 'ready';
       return null;
     }
   }
@@ -60,7 +66,8 @@ export function createLocalGoogleAuthAdapter({
       throw new Error('外部認証は設定されていません。');
     }
     try {
-      store?.setItem(storageKey, JSON.stringify({ version: STORAGE_VERSION, principal }));
+      if (!store) throw new Error('storage unavailable');
+      store.setItem(storageKey, JSON.stringify({ version: LOCAL_AUTH_STORAGE_VERSION, principal }));
     } catch {
       current = null;
       status = 'error';

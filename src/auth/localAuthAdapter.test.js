@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createLocalGoogleAuthAdapter, createOwnerScopedLocalState } from './localAuthAdapter';
+import { createLocalGoogleAuthAdapter, createOwnerScopedLocalState, LOCAL_AUTH_STORAGE_VERSION } from './localAuthAdapter';
 
 function storageFixture(initial = null) {
   let value = initial;
@@ -17,10 +17,26 @@ describe('local Google auth adapter', () => {
     await expect(second.hydrate()).resolves.toMatchObject({ id: 'local-google-user' });
   });
 
-  it('fails safe and reports an explicit error for corrupt storage', async () => {
+  it('fails safe and returns ready signed-out for corrupt storage', async () => {
     const adapter = createLocalGoogleAuthAdapter({ storage: storageFixture('{broken') });
     await expect(adapter.hydrate()).resolves.toBeNull();
-    expect(adapter.currentStatus()).toBe('error');
+    expect(adapter.currentStatus()).toBe('ready');
+    expect(adapter.currentPrincipal()).toBeNull();
+  });
+
+  it.each([
+    ['obsolete version', JSON.stringify({ version: LOCAL_AUTH_STORAGE_VERSION - 1, principal: { id: 'local-google-user', provider: 'google-local-mock' } })],
+    ['wrong provider', JSON.stringify({ version: LOCAL_AUTH_STORAGE_VERSION, principal: { id: 'local-google-user', provider: 'external-google' } })],
+  ])('fails safe for %s', async (_label, value) => {
+    const adapter = createLocalGoogleAuthAdapter({ storage: storageFixture(value) });
+    await expect(adapter.hydrate()).resolves.toBeNull();
+    expect(adapter.currentStatus()).toBe('ready');
+    expect(adapter.currentPrincipal()).toBeNull();
+  });
+
+  it('fails closed when local storage is unavailable', async () => {
+    const adapter = createLocalGoogleAuthAdapter({ storage: null });
+    await expect(adapter.signIn()).rejects.toThrow();
     expect(adapter.currentPrincipal()).toBeNull();
   });
 
