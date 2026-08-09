@@ -6,20 +6,23 @@ import { Card } from './ui/Card';
 const PLAN_DETAILS = {
   free: {
     name: 'Free',
-    summary: 'まず一案を育て、検討の手触りを確かめるプランです。',
-    benefits: ['アイデア整理', '小さな調査枠', 'プロジェクトの基本機能'],
+    price: '月額0円',
+    summary: '事業の芽を整理し、最初の検討を進めるためのプランです。',
+    benefits: ['アイデア整理', '月間の会話・調査枠: 小', 'プロジェクトの基本機能'],
   },
   standard: {
     name: 'Standard',
-    summary: '比較と検証を深め、事業の形に近づけるプランです。',
-    benefits: ['月額980円', '大きな調査枠', '事業検討の拡張機能'],
+    price: '月額980円',
+    summary: '比較と検証を深め、事業の形に近づけるためのプランです。',
+    benefits: ['市場・競合の検討', '月間の会話・調査枠: Freeの3倍', '事業検討の拡張機能'],
   },
 };
 
 const PRO_PLAN_DETAILS = {
   name: 'Pro',
   price: '月額2,980円',
-  summary: '自動深掘りとメールレポートは、利用量・原価データの蓄積後に別仕様で判断します。',
+  summary: '複数の検討工程をつなぐプランとして準備しています。',
+  allowance: '月間の会話・調査枠: Standardの5倍（予定）',
 };
 
 export function PlanSelection({ currentPlan, onApplyPlan }) {
@@ -55,6 +58,7 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
         {Object.entries(PLAN_DETAILS).map(([plan, planDetail]) => (
           <label key={plan} className={`block cursor-pointer rounded-2xl border p-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald-800 ${proposedPlan === plan ? 'border-emerald-700 bg-emerald-50' : 'border-stone-200'}`}>
             <span className="flex items-center gap-3"><input type="radio" name="plan" value={plan} checked={proposedPlan === plan} onChange={() => choosePlan(plan)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') choosePlan(plan); }} className="size-5 accent-emerald-800" /><strong>{planDetail.name}</strong></span>
+            <span className="mt-3 block text-base font-bold text-stone-950">{planDetail.price}</span>
             <span className="mt-3 block text-sm leading-6 text-stone-700">{planDetail.summary}</span>
             <ul className="mt-3 space-y-1 text-sm text-stone-700">{planDetail.benefits.map((benefit) => <li key={benefit}>{benefit}</li>)}</ul>
           </label>
@@ -64,6 +68,7 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
           <p id="pro-plan-heading" className="text-sm font-bold text-stone-800">{PRO_PLAN_DETAILS.name}</p>
           <p className="mt-2 text-lg font-bold text-stone-950">{PRO_PLAN_DETAILS.price}</p>
           <p className="mt-3 text-sm leading-6 text-stone-700">{PRO_PLAN_DETAILS.summary}</p>
+          <p className="mt-3 text-sm leading-6 text-stone-700">{PRO_PLAN_DETAILS.allowance}</p>
           <p id="pro-plan-availability" className="mt-2 text-sm font-bold text-stone-800">提供開始に向けて準備中です。</p>
           <Button type="button" disabled aria-describedby="pro-plan-availability" variant="secondary" className="mt-4 rounded-full">準備中・現在利用不可</Button>
         </aside>

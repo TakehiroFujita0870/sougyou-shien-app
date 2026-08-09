@@ -71,15 +71,21 @@ describe('WorkspaceShell', () => {
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
     expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
-    expect(container.textContent).toContain('アカウント');
+    expect(container.textContent).toContain('タケヒロ');
     expect(container.textContent).toContain('Free');
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
+    expect(accountTrigger.textContent).toContain('⌄');
     expect(document.querySelector('[role="menu"]')).toBeNull();
     openAccount(container);
     expect(document.querySelector('[role="menu"]')).toBeTruthy();
+    expect(document.body.textContent).toContain('あなたの情報');
     expect(document.body.textContent).toContain('プランと利用状況');
-    openAccount(container);
+    expect(document.body.textContent).toContain('設定');
+    expect(document.body.textContent).toContain('ヘルプ・ショートカット');
+    expect(document.body.textContent).toContain('ログアウト');
+    act(() => document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(accountTrigger);
     cleanup();
   });
 

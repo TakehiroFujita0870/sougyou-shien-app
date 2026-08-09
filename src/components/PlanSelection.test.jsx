@@ -91,13 +91,15 @@ describe('plan selection acceptance', () => {
     await openAccount(container);
     await click(menuItem('設定'));
     expect(container.textContent).toContain('アイデア整理');
-    expect(container.textContent).toContain('小さな調査枠');
+    expect(container.textContent).toContain('月間の会話・調査枠: 小');
+    expect(container.textContent).toContain('月額0円');
     expect(container.textContent).toContain('月額980円');
-    expect(container.textContent).toContain('事業検討の拡張機能');
+    expect(container.textContent).toContain('月間の会話・調査枠: Freeの3倍');
     const proCard = container.querySelector('[aria-labelledby="pro-plan-heading"]');
     expect(proCard.textContent).toContain('Pro');
     expect(proCard.textContent).toContain('2,980');
     expect(proCard.textContent).toContain('準備中');
+    expect(proCard.textContent).toContain('月間の会話・調査枠: Standardの5倍（予定）');
     expect(proCard.textContent).toContain('提供開始に向けて準備中です。');
     expect(proCard.getAttribute('aria-describedby')).toBe('pro-plan-availability');
     const comparisonGrid = container.querySelector('fieldset');
@@ -110,6 +112,7 @@ describe('plan selection acceptance', () => {
     expect(proButton.getAttribute('aria-describedby')).toBe('pro-plan-availability');
     expect(container.textContent).not.toContain('local / fake');
     expect(container.textContent).not.toContain('AIモデルを選ぶ');
+    expect(container.textContent).not.toMatch(/Thinking Effort|外部課金|local\s*\/\s*fake/i);
 
     const standard = container.querySelector('input[value="standard"]');
     await click(standard);
