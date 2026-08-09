@@ -41,7 +41,8 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
   }
   async function openPortfolioItem(type, entry) {
     try { await onOpenPortfolioItem?.(type, entry); } catch { return; }
-    choosePage(type);
+    if (!onOpenPortfolioItem) choosePage(type);
+    else setDrawerOpen(false);
     if (type === 'knowledge') requestAnimationFrame(() => {
       const main = document.querySelector('.workspace-shell__main');
       main?.scrollTo?.({ top: 0, behavior: 'auto' });
