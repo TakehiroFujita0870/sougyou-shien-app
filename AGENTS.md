@@ -34,6 +34,7 @@
 - 定期ポーリングを部門間連携の正本にしない。PR作成、PR更新、レビュー差し戻し、CI完了、マージ、ブロックの発生元が、発生直後に担当タスクへメッセージを送って次工程を起動する。
 - 作業開始時に [`docs/operations/department-handoffs.md`](docs/operations/department-handoffs.md) を読み、自部門の送信責任と応答責任を確認する。会話履歴だけを引き継ぎ情報にしない。
 - 実装部門はPR作成またはhead SHA更新後、統合・リリース管理部へ `PR_READY` を送る。統合部は `REVIEW_CHANGES_REQUESTED`、`MERGED`、`BLOCKED` のいずれかを担当部へ返す。
+- 統合部が運用文書PRを作成した場合は、自部門へ `PR_READY` や `MERGED` を送らない。統合部は独立した部門長をreviewerとして指定し、`REVIEW_REQUEST`を送る。reviewerの`REVIEW_APPROVED`または`REVIEW_CHANGES_REQUESTED`を受けてから、統合部がmergeする。自己通知、自己レビュー、自己マージの循環は禁止する。
 - メッセージにはリポジトリ、Issue、PR、head SHA、変更目的、検査結果、CEO決裁境界の有無を含める。秘密情報、認証情報、個人情報を含めない。
 - 送信先タスクが停止中でも、メッセージ送信によって新しいturnを起動する。送信不能時はPRコメントへ同じ非機密情報を記録し、管理タスクへ `BLOCKED` を送る。
 - 統合部は通知されたhead SHAだけをレビューする。新しいSHAがpushされた場合、以前の承認を無効とし、新しい `PR_READY` を要求する。
@@ -67,6 +68,7 @@
 ### 役割別モデルプロファイル
 
 - CEO室と統合・リリース管理部は `gpt-5.6-terra / medium` を使う。会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-luna / low` を使う。
+- 各実装部の部長は指定の`gpt-5.6-luna / low`で自ら実装する。部門間の通常作業でsubagentをspawnしない。subagentを使う場合だけ、そのsubagentへTerra制約を適用する。
 - 指定モデルが利用不能な場合だけ、担当部は `BLOCKED`（`reason: model_unavailable`）を統合部へ送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断で `gpt-5.6-terra` その他のプロファイルへ切り替えてはならない。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 

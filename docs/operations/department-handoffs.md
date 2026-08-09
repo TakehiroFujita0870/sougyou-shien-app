@@ -28,6 +28,15 @@
 
 `App.jsx` とshared styleの同時変更は禁止する。両方が必要な場合、統合部は担当部、ファイル所有権、依存順、時分割を `ASSIGNMENT` に明記する。
 
+### 部門task owner registryと移管
+
+| 部門 | 現owner task | WIP | 移管状態 |
+| --- | --- | --- | --- |
+| 品質・プロダクト運用部 | `019fe475-2b12-72c2-91c6-007e5a5ef0ba` | T-IA-01 implementation 1 | `019fe36f-6bba-7653-8499-325c528e30fa`は移行記録のみ。新規ASSIGNMENTを送らない。 |
+| 基盤・認証部 | `019fe475-2b1d-7621-86e5-84b4a434f569` | #89 implementation 1 | `019fe36f-5228-7f71-9519-3a09b73922ee`は移行記録のみ。新規ASSIGNMENTを送らない。 |
+
+新owner taskはLuna/low部長本人の実装環境である。移管後の同一Issueは新owner taskを含むidempotency keyで送信し、旧taskのBLOCKEDを新taskへ引き継がない。
+
 各実装部のWIP上限は、レビュー待ち1PRと実装中1件までとする。統合部はレビューキューを優先して空にする。
 
 ### ASSIGNMENT payload
@@ -50,6 +59,25 @@ next_action: receiver's observable action
 
 同じ `issue + owner_task` は冪等キーとし、受信側は重複着手しない。
 
+### 統合部運用PRの独立レビュー
+
+統合・リリース管理部が所有する運用文書PRは通常の実装PRではない。作成者は自部門taskへ`PR_READY`、`MERGED`、またはreview判定を送らない。作成後に統合部が別部門の部長を独立reviewerとして指定し、次のpayloadで`REVIEW_REQUEST`を送る。reviewerは全文diff、通知SHA、CI、UTF-8 PR本文read-back、正本との整合を確認し、`REVIEW_APPROVED`または`REVIEW_CHANGES_REQUESTED`を統合部へ返す。統合部はapprovedされた通知SHAだけをmergeする。
+
+```text
+event: REVIEW_REQUEST
+repository: owner/name
+pr: #number + URL
+head_sha: full SHA
+purpose: one sentence
+reviewer_task: independent department lead task
+checks: scope and completed checks
+acceptance_criteria: observable review gates
+change_prohibitions: excluded scope
+next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
+```
+
+統合部運用PRの自己通知・自己レビュー・自己マージ循環は拒否する。直前の「自部門PR_READY」「自部門turnで通知SHA確認」規則はこの独立review方式に置換する。
+
 ## 役割別モデルプロファイル
 
 | 役割 | model / thinking |
@@ -63,6 +91,8 @@ next_action: receiver's observable action
 | 事業設計・調査部 | `gpt-5.6-luna / low` |
 
 指定モデルが利用不能な場合だけ、担当部は統合部へ `BLOCKED`（`reason: model_unavailable`）を送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断でTerraその他のプロファイルへ切り替えてはならない。統合部とCEO室も表の指定プロファイルを守る。
+
+会話体験、UIデザイン、品質、基盤認証、事業設計の各部長は`gpt-5.6-luna / low`で自ら実装する。部門間の通常作業ではsubagentをspawnしない。subagentを明示的に使う場合だけTerra制約を適用する。Luna/lowが利用できる部長実装を`model_unavailable`として止めてはならない。
 
 `ASSIGNMENT` と `DEPENDENCY_READY` は `model` と `thinking` を必須項目とする。送信側はpayloadの同じoverrideで受信部の新turnを起動する。
 
@@ -166,7 +196,7 @@ CEO返信前に統合部が実行できるのは、既承認計画に明記さ�
 全イベントは次の非機密payloadを持つ。
 
 ```text
-event: PR_READY | REVIEW_CHANGES_REQUESTED | PR_UPDATED | CI_FAILED | MERGED | BLOCKED
+event: PR_READY | REVIEW_REQUEST | REVIEW_APPROVED | REVIEW_CHANGES_REQUESTED | PR_UPDATED | CI_FAILED | MERGED | BLOCKED
 repository: owner/name
 issue: #number
 pr: #number + URL
