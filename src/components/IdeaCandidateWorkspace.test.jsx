@@ -12,6 +12,12 @@ describe('idea candidate repository boundary', () => {
     expect((await decideCandidate(repository, [item], item, 'reject', '対象顧客が不明')).items[0]).toMatchObject({ status: 'rejected', rejectionReason: '対象顧客が不明' });
     expect((await decideCandidate(repository, [item], item, 'reject')).error).toContain('理由');
   });
+  it('never writes project or knowledge records before adoption', async () => {
+    const writes = []; const repository = { save: async (items) => { writes.push(items); return items; } }; const item = { ...candidate, id: '1' };
+    await decideCandidate(repository, [item], item, 'hold'); await decideCandidate(repository, [item], item, 'reject', '対象外');
+    expect(writes.flat()).not.toEqual(expect.arrayContaining([expect.objectContaining({ projectId: expect.anything() }), expect.objectContaining({ knowledgeId: expect.anything() })]));
+    await decideCandidate(repository, [item], item, 'adopt'); expect(writes.at(-1)[0].promotedTo).toBe('project');
+  });
   it('saves a candidate and detects duplicates', async () => { const repository = { save: async (items) => items }; const result = await saveCandidate(repository, [], candidate); expect(result.items).toHaveLength(1); expect(findDuplicate(result.items, candidate)).toBeTruthy(); });
   it('updates only after approval', async () => { const repository = { save: async (items) => items }; const result = await approveCandidate(repository, [{ ...candidate, id: '1' }], { ...candidate, id: '1', title: '更新案' }); expect(result.items[0].title).toBe('更新案'); });
   it('returns a recoverable save failure', async () => { const result = await saveCandidate({ save: async () => { throw new Error('offline'); } }, [], candidate); expect(result.error).toContain('保存'); });
@@ -49,6 +55,35 @@ describe('idea candidate repository boundary', () => {
 // @vitest-environment happy-dom
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 describe('idea conversation controls', () => {
+  it('drives adopt, hold, and reason-required reject through the candidate card UI without fetch', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    const stored = [{ ...candidate, id: 'candidate-1' }]; const saves = []; const repository = { load: async () => stored, save: async (items) => { saves.push(items); stored.splice(0, stored.length, ...items); return items; } };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={repository} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />)); await act(async () => {});
+    const candidateButton = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('工場ノート')); expect(candidateButton).toBeTruthy(); await act(async () => candidateButton.click());
+    expect(container.textContent).toContain('仮説カード');
+    const controls = [...container.querySelectorAll('button')]; const hold = controls.find((button) => button.textContent === '保留'); const adopt = controls.find((button) => button.textContent === 'プロジェクトに採用'); const reject = controls.find((button) => button.textContent === '理由付きで却下');
+    expect(hold && adopt && reject).toBeTruthy();
+    await act(async () => reject.click()); expect(container.textContent).toContain('却下理由を入力してください');
+    const reason = container.querySelector('#reject-reason'); await act(async () => { reason.value = '対象顧客が不明'; reason.dispatchEvent(new Event('input', { bubbles: true })); }); await act(async () => reject.click()); expect(stored[0]).toMatchObject({ status: 'rejected', rejectionReason: '対象顧客が不明' });
+    await act(async () => hold.click()); expect(stored[0]).toMatchObject({ status: 'held' }); expect(stored[0].promotedTo).toBeUndefined();
+    await act(async () => adopt.click()); expect(stored[0]).toMatchObject({ status: 'adopted', promotedTo: 'project' }); expect(fetchSpy).not.toHaveBeenCalled();
+    await act(() => root.unmount()); container.remove(); fetchSpy.mockRestore();
+  });
+  it('restores all candidate decision states and rejection reason after remount', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); const stored = [{ ...candidate, id: 'a', status: 'adopted', promotedTo: 'project' }, { ...candidate, id: 'h', title: '保留案', status: 'held' }, { ...candidate, id: 'r', title: '却下案', status: 'rejected', rejectionReason: '重複している' }]; const repository = { load: async () => stored, save: async (items) => items };
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={repository} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />)); await act(async () => {});
+    expect(container.textContent).toContain('状態: 採用'); expect(container.textContent).toContain('状態: 保留'); expect(container.textContent).toContain('状態: 却下');
+    await act(async () => container.querySelectorAll('button')[3].click()); expect(container.querySelector('#reject-reason').value).toBe('重複している'); await act(() => root.unmount()); container.remove();
+  });
+  it('exposes labeled, focusable decision controls for keyboard and screen readers', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); const repository = { load: async () => [{ ...candidate, id: '1' }], save: async (items) => items };
+    await act(async () => root.render(<IdeaCandidateWorkspace repository={repository} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />)); await act(async () => {});
+    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent.includes('工場ノート')).click());
+    expect(container.querySelector('label[for="reject-reason"]')).toBeTruthy(); expect(container.querySelector('#reject-reason').getAttribute('aria-label')).toBeNull(); expect(container.querySelector('#reject-reason').tabIndex).toBeGreaterThanOrEqual(0);
+    for (const text of ['プロジェクトに採用', '保留', '理由付きで却下']) { const button = [...container.querySelectorAll('button')].find((node) => node.textContent === text); expect(button).toBeTruthy(); expect(button.tabIndex).toBeGreaterThanOrEqual(0); }
+    await act(() => root.unmount()); container.remove();
+  });
   it('renders a preview only after a user message and keeps 44px controls', async () => {
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
     const conversations = { load: async () => [{ role: 'user', content: '工場の担当者向けです' }], save: async (messages) => messages };
