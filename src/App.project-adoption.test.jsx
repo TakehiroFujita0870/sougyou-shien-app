@@ -34,9 +34,9 @@ function deferred() {
   return { promise, resolve };
 }
 
-async function mount({ projectRepository, portfolioRepository, ensureHome = true, homeInitial }) {
+async function mount({ projectRepository, portfolioRepository, ensureHome = true, homeInitial, homeRepository }) {
   let homeState = homeInitial ?? { messages: [], proposals: [], input: '' };
-  const homeConversationRepository = {
+  const homeConversationRepository = homeRepository ?? {
     load: async () => homeState,
     save: async (value) => { homeState = value; return value; },
   };
@@ -217,6 +217,20 @@ describe('adopted project hydration', () => {
 
     await act(async () => pendingLoad.resolve(null));
     expect(view.container.querySelector('#project-surface-heading').textContent).toBe('遅延読込より新しい採用プロジェクト');
+    await view.unmount();
+  });
+
+  it('keeps archived Home state and reports the truth when staged restore or compensation fails', async () => {
+    const snapshot = { messages: [{ role: 'user', content: 'archive' }], proposals: [], input: '' };
+    const portfolio = { home: [{ id: 'home:archived', title: 'archive', archived: true, snapshot, updatedAt: 1 }], project: [], knowledge: [], activeHomeId: 'home:archived' };
+    const portfolioRepository = { load: async () => portfolio, ensure: async () => portfolio, restore: async () => { throw new Error('restore failed'); } };
+    const save = vi.fn(async () => { throw new Error('stage failed'); });
+    const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage: createStorage() }), portfolioRepository, ensureHome: false, homeRepository: { load: async () => ({ messages: [{ role: 'user', content: 'current' }], proposals: [], input: '' }), save } });
+    const reopen = view.container.querySelector('[aria-label="archiveを再開"]');
+    await act(async () => { reopen.click(); await Promise.resolve(); });
+    expect(portfolio.home[0].archived).toBe(true);
+    expect(view.container.querySelector('[role="alert"]').textContent).toContain('アーカイブは保持');
+    expect(save).toHaveBeenCalledWith(snapshot);
     await view.unmount();
   });
 });
