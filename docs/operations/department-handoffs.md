@@ -72,10 +72,8 @@ CEO室は全社ポートフォリオ管理・要件決定を所有する。CEO�
 
 ### ORG_HEALTH
 
-統合部は次の状態変化の直後に限り、CEO室へ `ORG_HEALTH` を送る。定期ポーリングは追加しない。payloadの正規化した内容をstate fingerprintとし、同じfingerprintは二重送信しない。
+統合部は次の非merge起因の状態変化の直後に限り、CEO室へ独立`ORG_HEALTH`を送る。PR mergeとmain smoke成功時の状態はCEO室向け`MERGED.org_health`に内包し、独立イベントを送らない。定期ポーリングは追加しない。payloadの正規化した内容をstate fingerprintとし、同じfingerprintは二重送信しない。
 
-- PR mergeとmain smoke成功。
-- merge後にnext_dependenciesが空で、idle部門と未割当ready Issueが同時にある。
 - 部門のWIPが0または上限超になった。
 - P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界が発生した。
 
@@ -83,7 +81,7 @@ CEO室は全社ポートフォリオ管理・要件決定を所有する。CEO�
 event: ORG_HEALTH
 repository: owner/name
 state_fingerprint: deterministic digest of the fields below
-trigger: merge_smoke | merged_idle_unassigned | wip_zero_or_over_limit | p0_blocked | file_ownership_conflict | dependency_unassigned | ceo_boundary
+trigger: wip_zero_or_over_limit | p0_blocked | file_ownership_conflict | dependency_unassigned | ceo_boundary
 main_sha: full SHA
 merge_source: PR and merge SHA or none
 departments: active/idle and WIP by department
@@ -98,7 +96,7 @@ next_24h_risks: likely stop points or none
 next_action: CEO portfolio decision or acknowledge
 ```
 
-idle部門とready/unassigned workが同じ`ORG_HEALTH`にある場合、CEO室は同じ因果連鎖で`PORTFOLIO_DIRECTIVE`を返す。統合部は同一turnで`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、delivery成功と受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。
+idle部門とready/unassigned work、P0 block、所有権競合、またはCEO境界が同じ`ORG_HEALTH`または`MERGED.org_health`にある場合、CEO室は同じ因果連鎖で1通の`PORTFOLIO_DIRECTIVE`を返す。統合部は同一turnで`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、delivery成功と受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。該当がなければCEO室は応答しない。
 
 通常のCI詳細やP1/P2詳細は `ORG_HEALTH` に含めない。
 
@@ -134,7 +132,34 @@ PR時点でCEO室へ `BLOCKED` または `DECISION_REQUIRED` を送れる例外�
 
 CI失敗と通常のP1/P2は担当部と統合部だけで解決し、CEO室へ送らない。
 
-CEO室向け `MERGED` payloadには、PR、目的、ユーザー影響、検査結果、ロールバック方法、次の依存作業を含める。詳細diffはPRリンクのみで参照させ、payloadへ転載しない。
+CEO室向け `MERGED` payloadには、PR、目的、ユーザー影響、検査結果、ロールバック方法、次の依存作業、次の`org_health`を含める。詳細diffはPRリンクのみで参照させ、payloadへ転載しない。
+
+```text
+org_health:
+  main_sha: full SHA
+  merge_source: PR and merge SHA
+  released_capacity: work unlocked by merge or none
+  departments: active/idle and WIP by department
+  review_queue: open review PRs and owner
+  ready_unassigned_work: ready Issue numbers or none
+  dependency_blocks: source -> target or none
+  ownership_conflicts: files/scopes or none
+  model_availability: profile availability by affected department
+  next_allocation_candidates: ready work and owner
+  dependency_delivery: target, idempotency key, and delivery result or none
+```
+
+同じmerge SHAの`MERGED`は冪等とする。merge起因の状態について、同じstate fingerprintを独立`ORG_HEALTH`でも送信してはならない。
+
+CEO室は`MERGED.org_health`を受信したturnで、同じmerge SHAに対して`PORTFOLIO_DIRECTIVE`を必ず1通返す。actionは次の3種だけとする。返信なしを承認扱いにしてはならない。
+
+- `GO_ON`: 提案済みのdependency handoffと既定配分を要件変更なしに実行する。
+- `CHANGE`: 優先順位、Issue、WIP、担当、停止を明示して上書きする。
+- `BLOCK`: CEO決裁または要件回答待ちとして停止対象を限定する。
+
+`GO_ON`は承認待ちを増やさない軽量な継続指示である。統合部はGO_ONまたはCHANGEを受け次第、`ASSIGNMENT`または`DEPENDENCY_READY`を実行してreceiver activeまたは`BLOCKED(model_unavailable)`を確認する。通常の進捗とCI詳細はCEO室へ送らない。
+
+CEO返信前に統合部が実行できるのは、既承認計画に明記された`DEPENDENCY_READY`、merge smoke、review queue継続だけである。新規Issue選択、idle部門への新規ASSIGNMENT、優先順位変更、WIP再配分は`PORTFOLIO_DIRECTIVE`を受けてから実行する。CEO決裁境界、要件未決、所有権衝突、P0 BLOCKEDは`REQUIREMENT_REQUEST`または`BLOCKED`を送る。
 
 ## イベント契約
 
@@ -228,16 +253,16 @@ flowchart LR
 - 受信者: 実装部門と管理タスク
 - 受信者の行動: 依存PRの開始、Issue状態とプレビューURLの確認を行う
 
-`next_dependencies` が空でない場合、統合部はCEO室への `MERGED` 報告と同時に、次担当部を直接起動する `DEPENDENCY_READY` を送る。送信成功の確認までmerge後handoffは未完了とする。
+`next_dependencies` が空でない場合、統合部はCEO室への`MERGED`送信前に、次担当部を直接起動する`DEPENDENCY_READY`を送り、delivery成功を`MERGED.org_health.dependency_delivery`へ記録する。送信成功の確認までmerge後handoffは未完了とする。
 
 merge後handoffは次の順序をすべて満たすまで未完了とする。
 
-1. main smoke成功後に担当部とCEO室へ`MERGED`を送る。
-2. `next_dependencies`があれば`DEPENDENCY_READY`を送りdelivery成功を確認する。
-3. `ORG_HEALTH`を再計算してCEO室へ送る。
-4. CEO室が返した`PORTFOLIO_DIRECTIVE`を`ASSIGNMENT`へ翻訳し、受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。
+1. main smoke成功後に、`next_dependencies`があれば`DEPENDENCY_READY`を送りdelivery成功を確認する。
+2. 担当部へ`MERGED`を送り、CEO室へは全社状態、dependency delivery、next allocation candidatesを内包する`MERGED`を1通だけ送る。
+3. CEO室が同じmerge SHAに対して必ず返す`PORTFOLIO_DIRECTIVE action=GO_ON|CHANGE|BLOCK`を受信する。
+4. GO_ONまたはCHANGEを`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、deliveryと受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。BLOCKは停止対象だけを記録する。
 
-回帰ケース: PR #112の計画merge後に初期assignmentが同一turnで配信されなかった。以後、merge後handoffのreview checklistは`MERGED`、dependency delivery、`ORG_HEALTH`、directive、assignment delivery、receiver stateをすべて検査する。
+回帰ケース: PR #112の計画merge後に初期assignmentが同一turnで配信されなかった。以後、merge後handoffのreview checklistはdependency delivery、`MERGED.org_health`、CEO室の`PORTFOLIO_DIRECTIVE action=GO_ON|CHANGE|BLOCK`、assignment delivery、receiver stateをすべて検査する。PR #115直後に送られた`MERGED`と独立`ORG_HEALTH`は3通だった旧形式として、この二重送信を再発させない。CEO返信なしを承認扱いにして新規配分したdefault allocation案は、CEO室のポートフォリオ決定権を損なうため却下する。
 
 次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。CI失敗と通常P1/P2はこの例外に含めない。
 
