@@ -20,6 +20,8 @@ describe('WorkspaceShell', () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(6);
+    expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
+    expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
     expect(container.textContent).toContain('あなたの情報');
     expect(container.textContent).toContain('Free');
     cleanup();
