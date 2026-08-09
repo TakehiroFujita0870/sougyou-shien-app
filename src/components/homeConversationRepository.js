@@ -9,11 +9,16 @@ const roles = new Set(['user', 'assistant']);
 const proposalStatuses = new Set(['pending', 'adopted', 'held', 'rejected']);
 
 export function homeConversationStorageKey(ownerId, spaceId) {
-  return `${HOME_CONVERSATION_STORAGE_KEY}:${ownerId}:${spaceId}:v${HOME_CONVERSATION_SCHEMA_VERSION}`;
+  return `${HOME_CONVERSATION_STORAGE_KEY}:${scopePart(ownerId)}:${scopePart(spaceId)}:v${HOME_CONVERSATION_SCHEMA_VERSION}`;
 }
 
 export function homeDraftStorageKey(ownerId, spaceId) {
-  return `${HOME_DRAFT_STORAGE_KEY}:${ownerId}:${spaceId}:v${HOME_CONVERSATION_SCHEMA_VERSION}`;
+  return `${HOME_DRAFT_STORAGE_KEY}:${scopePart(ownerId)}:${scopePart(spaceId)}:v${HOME_CONVERSATION_SCHEMA_VERSION}`;
+}
+
+function scopePart(value) {
+  const text = String(value);
+  return `${text.length}:${text}`;
 }
 
 function isNonEmptyString(value) {
@@ -64,11 +69,12 @@ export function createHomeConversationRepository(options = {}) {
   const draftKey = homeDraftStorageKey(ownerId, spaceId);
   let conversationLoaded;
   let draftLoaded;
+  let legacyLoaded;
   let conversationWriteBlocked = false;
   let draftWriteBlocked = false;
 
   function read(key) {
-    try { return storage?.getItem(key) ?? null; } catch { return null; }
+    try { return { ok: true, value: storage?.getItem(key) ?? null }; } catch { return { ok: false, value: null }; }
   }
 
   function quarantine(key, raw) {
@@ -94,35 +100,55 @@ export function createHomeConversationRepository(options = {}) {
     return normalizeConversation(parsed.conversation);
   }
 
+  function loadLegacy() {
+    if (legacyLoaded) return legacyLoaded;
+    legacyLoaded = (() => {
+      const result = read(HOME_CONVERSATION_STORAGE_KEY);
+      if (!result.ok) {
+        conversationWriteBlocked = true;
+        draftWriteBlocked = true;
+        return { present: false, conversation: EMPTY_HOME_CONVERSATION_STATE, draft: '' };
+      }
+      if (result.value == null) return { present: false, conversation: EMPTY_HOME_CONVERSATION_STATE, draft: '' };
+      try {
+        const parsed = JSON.parse(result.value);
+        const conversation = normalizeConversation(parsed);
+        if (!conversation || (parsed.input !== undefined && typeof parsed.input !== 'string')) throw new Error('invalid legacy Home state');
+        return { present: true, conversation, draft: typeof parsed.input === 'string' ? parsed.input.slice(0, 1000) : '' };
+      } catch {
+        conversationWriteBlocked = true;
+        draftWriteBlocked = true;
+        quarantine(HOME_CONVERSATION_STORAGE_KEY, result.value);
+        return { present: true, conversation: EMPTY_HOME_CONVERSATION_STATE, draft: '' };
+      }
+    })();
+    return legacyLoaded;
+  }
+
   async function load() {
     if (conversationLoaded) return conversationLoaded;
     conversationLoaded = Promise.resolve().then(() => {
-      const scopedRaw = read(conversationKey);
-      if (scopedRaw != null) {
+      const scoped = read(conversationKey);
+      if (!scoped.ok) {
+        conversationWriteBlocked = true;
+        return EMPTY_HOME_CONVERSATION_STATE;
+      }
+      if (scoped.value != null) {
         try {
-          const conversation = parseConversationEnvelope(scopedRaw);
+          const conversation = parseConversationEnvelope(scoped.value);
           if (!conversation) throw new Error('invalid scoped conversation');
           return conversation;
         } catch {
           conversationWriteBlocked = true;
-          quarantine(conversationKey, scopedRaw);
+          quarantine(conversationKey, scoped.value);
           return EMPTY_HOME_CONVERSATION_STATE;
         }
       }
       if (!isCanonicalScope(ownerId, spaceId)) return EMPTY_HOME_CONVERSATION_STATE;
-      const legacyRaw = read(HOME_CONVERSATION_STORAGE_KEY);
-      if (legacyRaw == null) return EMPTY_HOME_CONVERSATION_STATE;
-      try {
-        const legacy = JSON.parse(legacyRaw);
-        const conversation = normalizeConversation(legacy);
-        if (!conversation) throw new Error('invalid legacy conversation');
-        try { storage?.setItem(conversationKey, JSON.stringify(conversationEnvelope(conversation))); } catch { /* legacy remains the source for the next load */ }
-        return conversation;
-      } catch {
-        conversationWriteBlocked = true;
-        quarantine(HOME_CONVERSATION_STORAGE_KEY, legacyRaw);
-        return EMPTY_HOME_CONVERSATION_STATE;
-      }
+      const legacy = loadLegacy();
+      if (!legacy.present || conversationWriteBlocked) return EMPTY_HOME_CONVERSATION_STATE;
+      try { storage?.setItem(conversationKey, JSON.stringify(conversationEnvelope(legacy.conversation))); } catch { /* legacy remains the source for the next load */ }
+      return legacy.conversation;
     });
     return conversationLoaded;
   }
@@ -133,44 +159,45 @@ export function createHomeConversationRepository(options = {}) {
     const next = normalizeConversation(value);
     if (!next) throw new Error('Invalid Home conversation');
     storage?.setItem(conversationKey, JSON.stringify(conversationEnvelope(next)));
+    conversationLoaded = Promise.resolve(next);
     return next;
   }
 
   async function loadDraft() {
     if (draftLoaded) return draftLoaded;
     draftLoaded = Promise.resolve().then(() => {
-      const scopedRaw = read(draftKey);
-      if (scopedRaw != null) {
+      const scoped = read(draftKey);
+      if (!scoped.ok) {
+        draftWriteBlocked = true;
+        return '';
+      }
+      if (scoped.value != null) {
         try {
-          const parsed = JSON.parse(scopedRaw);
+          const parsed = JSON.parse(scoped.value);
           if (parsed?.schemaVersion !== HOME_CONVERSATION_SCHEMA_VERSION || parsed.ownerId !== ownerId || parsed.spaceId !== spaceId || typeof parsed.draft !== 'string' || parsed.draft.length > 1000) throw new Error('invalid scoped draft');
           return parsed.draft;
         } catch {
           draftWriteBlocked = true;
-          quarantine(draftKey, scopedRaw);
+          quarantine(draftKey, scoped.value);
           return '';
         }
       }
       if (!isCanonicalScope(ownerId, spaceId)) return '';
+      const legacy = loadLegacy();
+      if (draftWriteBlocked) return '';
       const legacyDraft = read(HOME_DRAFT_STORAGE_KEY);
-      if (legacyDraft != null) {
-        const draft = legacyDraft.slice(0, 1000);
-        try { storage?.setItem(draftKey, JSON.stringify(draftEnvelope(draft))); } catch { /* legacy remains the source for the next load */ }
-        return draft;
-      }
-      const legacyConversationRaw = read(HOME_CONVERSATION_STORAGE_KEY);
-      if (legacyConversationRaw == null) return '';
-      try {
-        const legacy = JSON.parse(legacyConversationRaw);
-        if (legacy.input !== undefined && typeof legacy.input !== 'string') throw new Error('invalid legacy draft');
-        const draft = typeof legacy.input === 'string' ? legacy.input.slice(0, 1000) : '';
-        try { storage?.setItem(draftKey, JSON.stringify(draftEnvelope(draft))); } catch { /* legacy remains the source for the next load */ }
-        return draft;
-      } catch {
+      if (!legacyDraft.ok) {
         draftWriteBlocked = true;
-        quarantine(HOME_CONVERSATION_STORAGE_KEY, legacyConversationRaw);
         return '';
       }
+      if (legacyDraft.value != null) {
+        const draft = legacyDraft.value.slice(0, 1000);
+        try { storage?.setItem(draftKey, JSON.stringify(draftEnvelope(draft))); } catch { /* legacy remains the source for the next load */ }
+        return draft;
+      }
+      if (!legacy.present || draftWriteBlocked) return '';
+      try { storage?.setItem(draftKey, JSON.stringify(draftEnvelope(legacy.draft))); } catch { /* legacy remains the source for the next load */ }
+      return legacy.draft;
     });
     return draftLoaded;
   }
@@ -180,6 +207,7 @@ export function createHomeConversationRepository(options = {}) {
     if (draftWriteBlocked) throw new Error('Home draft requires recovery before writing');
     const draft = typeof value === 'string' ? value.slice(0, 1000) : '';
     storage?.setItem(draftKey, JSON.stringify(draftEnvelope(draft)));
+    draftLoaded = Promise.resolve(draft);
     return draft;
   }
 

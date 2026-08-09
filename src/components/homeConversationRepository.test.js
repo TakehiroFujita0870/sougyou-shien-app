@@ -56,6 +56,11 @@ describe('homeConversationRepository', () => {
     expect(await b.loadDraft()).toBe('');
   });
 
+  it('uses collision-safe scoped keys', async () => {
+    expect(homeConversationStorageKey('a:b', 'c')).not.toBe(homeConversationStorageKey('a', 'b:c'));
+    expect(homeDraftStorageKey('a:b', 'c')).not.toBe(homeDraftStorageKey('a', 'b:c'));
+  });
+
   it.each([
     ['malformed JSON', '{broken'],
     ['future schema', JSON.stringify({ schemaVersion: 2, ownerId: 'owner-a', spaceId: 'space-a', conversation })],
@@ -96,6 +101,39 @@ describe('homeConversationRepository', () => {
     await expect(repository.save(conversation)).rejects.toThrow('requires recovery');
     await expect(repository.saveDraft('replacement')).rejects.toThrow('requires recovery');
     expect(storage.getItem(HOME_CONVERSATION_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('treats legacy messages, proposals, and input as one state and blocks both channels when one field is invalid', async () => {
+    const raw = JSON.stringify({ ...conversation, input: 42 });
+    const storage = memoryStorage({ [HOME_CONVERSATION_STORAGE_KEY]: raw, [HOME_DRAFT_STORAGE_KEY]: 'must not bypass invalid state' });
+    const repository = createHomeConversationRepository({ storage });
+    expect(await repository.loadDraft()).toBe('');
+    expect(await repository.load()).toEqual({ messages: [], proposals: [] });
+    await expect(repository.save(conversation)).rejects.toThrow('requires recovery');
+    await expect(repository.saveDraft('replacement')).rejects.toThrow('requires recovery');
+    expect(storage.getItem(HOME_CONVERSATION_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('refreshes cached values after writes so history restore and an F5-equivalent consumer remount see the saved snapshot', async () => {
+    const storage = memoryStorage();
+    const repository = createHomeConversationRepository({ storage });
+    expect(await repository.load()).toEqual({ messages: [], proposals: [] });
+    expect(await repository.loadDraft()).toBe('');
+    await repository.save(conversation);
+    await repository.saveDraft('restored draft');
+    expect(await repository.load()).toEqual(conversation);
+    expect(await repository.loadDraft()).toBe('restored draft');
+  });
+
+  it('write-blocks both channels when storage reads fail without attempting a destructive replacement', async () => {
+    let writes = 0;
+    const storage = { getItem: () => { throw new Error('offline'); }, setItem: () => { writes += 1; } };
+    const repository = createHomeConversationRepository({ storage });
+    expect(await repository.load()).toEqual({ messages: [], proposals: [] });
+    expect(await repository.loadDraft()).toBe('');
+    await expect(repository.save(conversation)).rejects.toThrow('requires recovery');
+    await expect(repository.saveDraft('replacement')).rejects.toThrow('requires recovery');
+    expect(writes).toBe(0);
   });
 
   it('persists valid scoped conversation and draft across a reload', async () => {
