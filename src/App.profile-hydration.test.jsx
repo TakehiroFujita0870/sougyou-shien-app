@@ -59,6 +59,8 @@ describe('profile hydration at the application boundary', () => {
   ])('opens the interview after a successful %s load', async (_label, profile, expectedValue) => {
     const view = await mount({ load: vi.fn().mockResolvedValue(profile), save: vi.fn() });
 
+    await act(async () => view.container.querySelector('.workspace-shell__account-copy > button').click());
+    await act(async () => [...view.container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報').click());
     expect(view.container.querySelector('[role="dialog"]')).not.toBeNull();
     expect(view.container.querySelector('[role="dialog"] textarea')?.value).toBe(expectedValue);
     await view.unmount();
