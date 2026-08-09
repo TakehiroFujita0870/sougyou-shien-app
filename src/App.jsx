@@ -66,7 +66,6 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const adoptedProjectHydration = useHydratedResource(adoptedProjectRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
-  const [knowledgeFixture, setKnowledgeFixture] = useState(knowledgeDemoFixture);
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
@@ -141,7 +140,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
       if (adoptedProjectHydration.phase === 'loading') return <section aria-live="polite" className="max-w-3xl py-10 text-sm text-[var(--color-text-muted)]">プロジェクトを読み込んでいます…</section>;
       return <ProjectSurface adoptedProject={adoptedProjectHydration.value} />;
     }
-    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeFixture} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onAddAsset={() => setKnowledgeFixture(knowledgeDemoFixture)} onRemoveAsset={() => setKnowledgeFixture((current) => ({ ...current, asset: { ...current.asset, state: 'deleted' } }))} />;
+    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeDemoFixture} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace repository={homeConversationRepository} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }

@@ -23,6 +23,16 @@ describe('knowledge metadata repository', () => {
     expect(third.find('doc-1')).toMatchObject({ state: 'deleted' });
   });
 
+  it('persists metadata-only PDF/DOCX fields without a binary payload', async () => {
+    const store = storage();
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    await repository.add({ id: 'local-file:brief.pdf:2048:1', name: 'brief.pdf', version: 1, state: 'metadata_only', mediaType: 'pdf', sizeBytes: 2048, lastModified: 1 });
+    const [persisted] = repository.list();
+    expect(persisted).toMatchObject({ name: 'brief.pdf', state: 'metadata_only', mediaType: 'pdf', sizeBytes: 2048, lastModified: 1 });
+    expect(persisted).not.toHaveProperty('content');
+    expect(JSON.stringify(persisted)).not.toContain('Blob');
+  });
+
   it('isolates owner and space and quarantines corrupt records', async () => {
     const store = storage({ schemaVersion: 1, documents: [{ ...doc, ownerId: 'a', spaceId: 's' }, { ...doc, id: 'other', ownerId: 'b', spaceId: 's' }, { id: 'bad' }] });
     const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });

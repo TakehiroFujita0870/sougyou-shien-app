@@ -84,7 +84,7 @@ test('records the desktop PII-free Home, Project, and Knowledge happy path', asy
   await expect(knowledgeAsset).toHaveCount(0)
   await expect(page.getByRole('button', { name: '資料を追加' })).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Knowledge' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('button', { name: 'Knowledge', exact: true })).toHaveAttribute('aria-current', 'page')
   await expect(knowledgeAsset).toHaveCount(0)
   await expect(page.getByRole('button', { name: '資料を追加' })).toBeVisible()
   expect(applicationRequests).toEqual([])
