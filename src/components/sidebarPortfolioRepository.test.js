@@ -29,7 +29,7 @@ describe('sidebar portfolio repository', () => {
 
   it('quarantines malformed storage without leaking a partial portfolio', async () => {
     const repository = createSidebarPortfolioRepository({ storage: { getItem: () => '{', setItem: () => {} } });
-    await expect(repository.load()).resolves.toEqual({ home: [], project: [], knowledge: [] });
+    await expect(repository.load()).resolves.toEqual({ home: [], project: [], knowledge: [], activeHomeId: '' });
   });
 
   it('serializes concurrent mirror and adoption writes without dropping either item', async () => {
@@ -51,5 +51,18 @@ describe('sidebar portfolio repository', () => {
     expect(bounded.knowledge[0].id).toBe('knowledge:104');
     const read = await repository.markRead('knowledge', 'knowledge:104');
     expect(read.knowledge[0]).toMatchObject({ id: 'knowledge:104', unread: false });
+  });
+
+  it('persists the active Home id with the matching conversation snapshot', async () => {
+    const storage = createStorage();
+    const repository = createSidebarPortfolioRepository({ storage });
+    const first = { messages: [{ role: 'user', content: 'first' }], proposals: [], input: '' };
+    const second = { messages: [{ role: 'user', content: 'second' }], proposals: [], input: '' };
+    await repository.upsertAndActivateHome({ id: 'home:first', title: 'first', snapshot: first });
+    await repository.upsertAndActivateHome({ id: 'home:second', title: 'second', snapshot: second });
+    await repository.archive('home', 'home:second');
+    const reloaded = await createSidebarPortfolioRepository({ storage }).load();
+    expect(reloaded.activeHomeId).toBe('home:second');
+    expect(reloaded.home.find((item) => item.id === reloaded.activeHomeId)).toMatchObject({ archived: true, snapshot: second });
   });
 });

@@ -25,6 +25,7 @@ function NavItems({ activePage, onSelect }) {
 export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolioError = '', onArchive, onOpenPortfolioItem, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const [allOpen, setAllOpen] = useState(null);
+  const [archivePending, setArchivePending] = useState('');
   const accountTriggerRef = useRef(null);
 
   useEffect(() => {
@@ -49,6 +50,17 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
       heading?.focus?.({ preventScroll: true });
     });
   }
+  async function archiveItem(type, id) {
+    const pendingKey = `${type}:${id}`;
+    if (archivePending) return;
+    setArchivePending(pendingKey);
+    try {
+      const succeeded = await onArchive?.(type, id);
+      if (succeeded && allOpen === type) setAllOpen(null);
+    } finally {
+      setArchivePending('');
+    }
+  }
 
   return (
     <div className="workspace-shell">
@@ -62,7 +74,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
           {SHELL_NAV.map((item) => {
             const entries = (portfolio[item.id] ?? []).filter((entry) => !entry.archived);
             const visibleLimit = item.id === 'knowledge' ? 5 : 10;
-            return <section key={item.id} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.label}</p>{entries.slice(0, visibleLimit).map((entry) => <div key={entry.id} className="ml-2 flex items-center gap-1 px-2"><button type="button" className="min-w-0 flex-1 truncate py-1.5 text-left text-xs hover:underline" onClick={() => { void openPortfolioItem(item.id, entry); }}>{entry.title}{item.id === 'knowledge' && entry.unread && <span className="ml-1 inline-block size-1.5 rounded-full bg-[var(--color-primary)] motion-safe:animate-pulse" aria-label="新着" />}</button>{(item.id === 'home' || item.id === 'project') && <button type="button" aria-label={`${entry.title}をアーカイブ`} className="shrink-0 text-xs text-[var(--color-text-muted)] hover:underline" onClick={() => onArchive?.(item.id, entry.id)}>アーカイブ</button>}</div>)}{entries.length > visibleLimit && <button type="button" className="ml-2 px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:underline" onClick={() => setAllOpen(item.id)}>すべて表示</button>}</section>;
+            return <section key={item.id} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.label}</p>{entries.slice(0, visibleLimit).map((entry) => <div key={entry.id} className="ml-2 flex items-center gap-1 px-2"><button type="button" className="min-w-0 flex-1 truncate py-1.5 text-left text-xs hover:underline" onClick={() => { void openPortfolioItem(item.id, entry); }}>{entry.title}{item.id === 'knowledge' && entry.unread && <span className="ml-1 inline-block size-1.5 rounded-full bg-[var(--color-primary)] motion-safe:animate-pulse" aria-label="新着" />}</button>{(item.id === 'home' || item.id === 'project') && <button type="button" disabled={Boolean(archivePending)} aria-label={`${entry.title}をアーカイブ`} className="shrink-0 text-xs text-[var(--color-text-muted)] hover:underline disabled:opacity-50" onClick={() => { void archiveItem(item.id, entry.id); }}>{archivePending === `${item.id}:${entry.id}` ? '処理中…' : 'アーカイブ'}</button>}</div>)}{entries.length > visibleLimit && <button type="button" className="ml-2 px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:underline" onClick={() => setAllOpen(item.id)}>すべて表示</button>}</section>;
           })}
         </div>
         <footer className="workspace-shell__account">
@@ -100,7 +112,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
         <DialogContent className="max-h-[80dvh] overflow-hidden p-0">
           <DialogTitle className="border-b border-[var(--color-border-subtle)] px-6 py-5 text-lg font-semibold">{SHELL_NAV.find((item) => item.id === allOpen)?.label}の履歴</DialogTitle>
           <div className="max-h-[calc(80dvh-5rem)] overflow-y-auto px-4 py-3" aria-label="すべての履歴">
-            {(portfolio[allOpen] ?? []).filter((entry) => !entry.archived).map((entry) => <div key={entry.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-muted)]"><Button type="button" variant="ghost" className="min-w-0 flex-1 justify-start truncate" onClick={() => { void openPortfolioItem(allOpen, entry); setAllOpen(null); }}>{entry.title}</Button>{(allOpen === 'home' || allOpen === 'project') && <Button type="button" variant="ghost" className="shrink-0 text-xs" onClick={() => onArchive?.(allOpen, entry.id)}>アーカイブ</Button>}</div>)}
+            {(portfolio[allOpen] ?? []).filter((entry) => !entry.archived).map((entry) => <div key={entry.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-muted)]"><Button type="button" variant="ghost" className="min-w-0 flex-1 justify-start truncate" onClick={() => { void openPortfolioItem(allOpen, entry); setAllOpen(null); }}>{entry.title}</Button>{(allOpen === 'home' || allOpen === 'project') && <Button type="button" variant="ghost" disabled={Boolean(archivePending)} className="shrink-0 text-xs" onClick={() => { void archiveItem(allOpen, entry.id); }}>{archivePending === `${allOpen}:${entry.id}` ? '処理中…' : 'アーカイブ'}</Button>}</div>)}
           </div>
         </DialogContent>
       </Dialog>

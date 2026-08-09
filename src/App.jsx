@@ -91,7 +91,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
       const latestUserMessage = userMessages.at(-1)?.content?.trim();
       if (latestUserMessage) {
         const conversationId = portfolioMessageId(`home:${userMessages.length}`, latestUserMessage);
-        const nextPortfolio = await portfolioRepositoryRef.current.ensure('home', { id: conversationId, title: latestUserMessage.slice(0, 80), snapshot: saved, updatedAt: Date.now() });
+        const nextPortfolio = await portfolioRepositoryRef.current.upsertAndActivateHome({ id: conversationId, title: latestUserMessage.slice(0, 80), snapshot: saved, updatedAt: Date.now() });
         setPortfolio(nextPortfolio);
         setActiveHomeConversationId(conversationId);
         setPortfolioError('');
@@ -108,7 +108,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
     portfolioRepositoryRef.current.load().then((value) => {
       if (!active) return;
       setPortfolio(value);
-      setActiveHomeConversationId((current) => current || value.home.find((item) => !item.archived)?.id || value.home[0]?.id || '');
+      setActiveHomeConversationId(value.activeHomeId);
       setPortfolioHydrated(true);
     }).catch(() => { if (active) setPortfolioHydrated(true); });
     return () => { active = false; };
@@ -121,9 +121,13 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
       const latestUserMessage = userMessages.at(-1)?.content?.trim();
       if (latestUserMessage) {
         const conversationId = portfolioMessageId(`home:${userMessages.length}`, latestUserMessage);
-        const savedHome = await portfolioRepositoryRef.current.ensure('home', { id: conversationId, title: latestUserMessage.slice(0, 80), snapshot: home, updatedAt: Date.now() });
+        const currentPortfolio = await portfolioRepositoryRef.current.load();
+        const matchingRecord = currentPortfolio.home.find((item) => item.id === conversationId);
+        const savedHome = matchingRecord
+          ? await portfolioRepositoryRef.current.setActiveHome(conversationId)
+          : await portfolioRepositoryRef.current.upsertAndActivateHome({ id: conversationId, title: latestUserMessage.slice(0, 80), snapshot: home, updatedAt: Date.now() });
         if (active) setPortfolio(savedHome);
-        if (active && !activeHomeConversationId) setActiveHomeConversationId(conversationId);
+        if (active) setActiveHomeConversationId(conversationId);
       }
       if (knowledgeDemoFixture?.asset) {
         const asset = knowledgeDemoFixture.asset;
@@ -223,7 +227,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={(page) => { const archivedHome = page === 'home' && portfolio.home.some((item) => item.id === activeHomeConversationId && item.archived); const archivedProject = page === 'project' && portfolio.project.some((item) => item.id === adoptedProjectHydration.value?.id && item.archived); setActiveWorkspace(archivedHome || archivedProject ? 'knowledge' : page); }} portfolio={portfolio} portfolioError={portfolioError} onOpenPortfolioItem={async (type, entry) => { if (entry.archived) return; try { if (type === 'home' && entry.snapshot) { await rawHomeConversationRepositoryRef.current.save(entry.snapshot); setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } if (type === 'project' && entry.snapshot) { const restored = await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); adoptedProjectHydration.replaceReady(restored); } if (type === 'knowledge') { const next = await portfolioRepositoryRef.current.markRead('knowledge', entry.id); setPortfolio(next); } setPortfolioError(''); setActiveWorkspace(type); } catch { setPortfolioError('履歴を開けませんでした。項目は削除されていません。もう一度お試しください。'); throw new Error('Portfolio item open failed'); } }} onArchive={async (type, id) => { try { const next = await portfolioRepositoryRef.current.archive(type, id); setPortfolio(next); setPortfolioError(''); setActiveWorkspace('knowledge'); } catch { setPortfolioError('アーカイブできませんでした。項目はそのまま残っています。もう一度お試しください。'); } }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={(page) => { const archivedHome = page === 'home' && portfolio.home.some((item) => item.id === activeHomeConversationId && item.archived); const archivedProject = page === 'project' && portfolio.project.some((item) => item.id === adoptedProjectHydration.value?.id && item.archived); setActiveWorkspace(archivedHome || archivedProject ? 'knowledge' : page); }} portfolio={portfolio} portfolioError={portfolioError} onOpenPortfolioItem={async (type, entry) => { if (entry.archived) return; try { if (type === 'home' && entry.snapshot) { await rawHomeConversationRepositoryRef.current.save(entry.snapshot); const next = await portfolioRepositoryRef.current.setActiveHome(entry.id); setPortfolio(next); setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } if (type === 'project' && entry.snapshot) { const restored = await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); adoptedProjectHydration.replaceReady(restored); } if (type === 'knowledge') { const next = await portfolioRepositoryRef.current.markRead('knowledge', entry.id); setPortfolio(next); } setPortfolioError(''); setActiveWorkspace(type); } catch { setPortfolioError('履歴を開けませんでした。項目は削除されていません。もう一度お試しください。'); throw new Error('Portfolio item open failed'); } }} onArchive={async (type, id) => { try { const next = await portfolioRepositoryRef.current.archive(type, id); setPortfolio(next); setPortfolioError(''); setActiveWorkspace('knowledge'); return true; } catch { setPortfolioError('アーカイブできませんでした。項目はそのまま残っています。もう一度お試しください。'); return false; } }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}

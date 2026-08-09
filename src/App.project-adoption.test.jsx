@@ -128,6 +128,25 @@ describe('adopted project hydration', () => {
     await view.unmount();
   });
 
+  it('blocks an archived active Home snapshot after F5 and still reopens another conversation', async () => {
+    const portfolioRepository = createSidebarPortfolioRepository({ storage: createStorage() });
+    const firstSnapshot = { messages: [{ role: 'user', content: '残している会話' }], proposals: [], input: '' };
+    const archivedSnapshot = { messages: [{ role: 'user', content: 'アーカイブした会話' }], proposals: [], input: '' };
+    await portfolioRepository.upsertAndActivateHome({ id: 'home:first', title: '残している会話', snapshot: firstSnapshot });
+    await portfolioRepository.upsertAndActivateHome({ id: 'home:archived', title: 'アーカイブした会話', snapshot: archivedSnapshot });
+    await portfolioRepository.archive('home', 'home:archived');
+    globalThis.sessionStorage.setItem('kadode:selected-surface', 'home');
+    const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage: createStorage() }), portfolioRepository, homeInitial: archivedSnapshot, ensureHome: false });
+    await act(async () => Promise.resolve());
+    expect(view.container.querySelector('#home-supervisor-message')).toBeNull();
+    const first = [...view.container.querySelectorAll('[aria-label="最近の項目"] button')].find((button) => button.textContent === '残している会話');
+    await act(async () => { first.click(); await Promise.resolve(); });
+    expect(view.container.querySelector('#home-supervisor-message')).toBeTruthy();
+    expect(view.container.querySelector('[aria-label="会話履歴"]').textContent).toContain('残している会話');
+    expect(view.container.querySelector('[aria-label="会話履歴"]').textContent).not.toContain('アーカイブした会話');
+    await view.unmount();
+  });
+
   it.each([
     ['home', 'home:default', 'ホーム'],
     ['project', adoptedCandidate.id, 'プロジェクト'],

@@ -49,6 +49,22 @@ describe('WorkspaceShell', () => {
     act(() => { root.unmount(); container.remove(); });
   });
 
+  it('disables archive while persistence is pending and keeps the item when it fails', async () => {
+    let resolveArchive;
+    const pending = new Promise((resolve) => { resolveArchive = resolve; });
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} portfolio={{ home: [{ id: 'home:1', title: '保存中の会話' }] }} onArchive={() => pending}><h1>Home</h1></WorkspaceShell>));
+    const archive = container.querySelector('[aria-label="保存中の会話をアーカイブ"]');
+    act(() => archive.click());
+    expect(archive.disabled).toBe(true);
+    expect(archive.textContent).toBe('処理中…');
+    await act(async () => { resolveArchive(false); await pending; });
+    expect(container.textContent).toContain('保存中の会話');
+    expect(archive.disabled).toBe(false);
+    act(() => { root.unmount(); container.remove(); });
+  });
+
   it('hydrates and restores a signed-in principal through the explicit account menu', async () => {
     const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
     const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);
