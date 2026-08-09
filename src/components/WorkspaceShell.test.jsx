@@ -100,7 +100,7 @@ describe('WorkspaceShell', () => {
     expect(container.textContent).toContain('タケヒロ');
     expect(container.textContent).toContain('Free');
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
-    expect(accountTrigger.textContent).toContain('⌄');
+    expect(accountTrigger.textContent).not.toContain('⌄');
     expect(document.querySelector('[role="menu"]')).toBeNull();
     accountTrigger.focus();
     openAccount(container);
