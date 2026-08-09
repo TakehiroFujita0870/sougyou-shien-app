@@ -39,6 +39,7 @@
 - 統合部は通知されたhead SHAだけをレビューする。新しいSHAがpushされた場合、以前の承認を無効とし、新しい `PR_READY` を要求する。
 - 通常経路では、実装部は `PR_READY` を統合・リリース管理部だけへ送る。PR作成時点でCEO室へ通知しない。
 - 統合部はmergeとmain smoke完了後に `MERGED` をCEO室と担当部へ送る。CEO室向けpayloadにはPR、目的、ユーザー影響、検査、ロールバック、次の依存作業を含め、詳細diffはPRリンクで参照させる。
+- mergeとsmoke成功の同一turnで、統合部は `MERGED`、必要な`DEPENDENCY_READY` delivery、`ORG_HEALTH`、CEO室の`PORTFOLIO_DIRECTIVE`、`ASSIGNMENT` delivery、受信部のactiveまたは`BLOCKED(model_unavailable)`を順に完了する。いずれかが未完了ならmerge後handoffは未完了であり、次のPRレビューを開始しない。
 - PR時点でCEO室へ `BLOCKED` または `DECISION_REQUIRED` を送るのは、外部公開、支出、契約、法務、個人情報送信、実外部サービス初期接続、破壊的API/データ移行、部門間仕様衝突、P0セキュリティ/データ損失、main回帰/revert判断、500行超または複数目的で分割判断が必要な場合に限る。
 - CI失敗と通常のP1/P2は担当部と統合部だけで解決し、CEO室へ送らない。
 
@@ -60,7 +61,7 @@
 
 - CEO室は全社ポートフォリオ管理・要件決定を所有し、実装には介入しない。優先順位、Issue配分、WIP再配分、停止・再開、部門境界を `PORTFOLIO_DIRECTIVE` で統合部へ指示する。
 - 統合・リリース管理部は、CEO室の指示を実装部向けの `ASSIGNMENT` または `DEPENDENCY_READY` に翻訳し、レビュー、配分、handoffを所有する。実装部は割当済みスコープだけを実装する。
-- 統合部は、merge後にnext_dependenciesが空かつidle部門と未割当ready Issueが同時にある、部門WIPが0または上限超、P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界の直後だけ、全社状態を `ORG_HEALTH` としてCEO室へ送る。定期ポーリングを追加しない。同じstate fingerprintは二重送信しない。
+- 統合部は、PR mergeとsmoke成功、merge後にnext_dependenciesが空かつidle部門と未割当ready Issueが同時にある、部門WIPが0または上限超、P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界の直後だけ、全社状態を `ORG_HEALTH` としてCEO室へ送る。payloadにはmain SHA、merge source、各部active/idle/WIP、review queue、ready/unassigned Issue、dependency blocks、所有権衝突、次の配分候補、モデルavailability、mergeが解放した作業を含める。定期ポーリングを追加しない。同じstate fingerprintは二重送信しない。
 - `REQUIREMENT_REQUEST` は、P0の実装/受入条件が未決、複数部の設計衝突、価格・外部接続・個人情報・法務などCEO決裁が必要な場合だけCEO室からユーザーへ送る。通常の進捗確認、CI失敗、P1/P2は対象外とする。
 
 ### 役割別モデルプロファイル
