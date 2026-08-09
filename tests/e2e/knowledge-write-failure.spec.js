@@ -33,7 +33,7 @@ test('keeps a pending file removal open through dismissal attempts and retries a
   await page.mouse.click(4, 4)
   await expect(page.getByRole('alert')).toContainText('ファイルを削除できませんでした')
   await expect(dialog).toBeVisible()
-  await expect(dialog).toContainText('write-failure.pdf')
+  await expect(page.locator('ol[aria-label="ナレッジ一覧"]')).toContainText('write-failure.pdf')
   await dialog.getByRole('button', { name: '削除を確定' }).click()
   await expect(dialog).not.toBeVisible()
   await expect(page.getByLabel('ナレッジ一覧')).not.toContainText('write-failure.pdf')
