@@ -19,7 +19,7 @@ describe('WorkspaceShell', () => {
   it('renders the vertical information architecture and account footer', () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();
-    expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(6);
+    expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
     expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
     expect(container.textContent).toContain('あなたの情報');

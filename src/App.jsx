@@ -1,15 +1,48 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { FileLibrary } from './components/FileLibrary';
 import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
 import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
-import { ResearchWorkspace } from './components/ResearchWorkspace';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
 
-export const WORKSPACE_NAV = [{ id: 'ideas', label: '事業のタネ' }, { id: 'research', label: '横断調査' }, { id: 'files', label: '資料' }, { id: 'settings', label: '設定' }];
+export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
+export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
+
+export function readSelectedSurface(storage = globalThis.sessionStorage) {
+  try {
+    const selected = storage?.getItem(SELECTED_SURFACE_STORAGE_KEY);
+    return WORKSPACE_NAV.some(({ id }) => id === selected) ? selected : 'home';
+  } catch {
+    return 'home';
+  }
+}
+
+function persistSelectedSurface(surface, storage = globalThis.sessionStorage) {
+  if (!WORKSPACE_NAV.some(({ id }) => id === surface)) return;
+  try { storage?.setItem(SELECTED_SURFACE_STORAGE_KEY, surface); } catch { /* session storage is optional */ }
+}
+
+function HomeConversationSurface() {
+  return (
+    <section aria-labelledby="home-heading" className="max-w-3xl">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
+      <h1 id="home-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">着想や経験を話しながら整理し、確認してから次の検討へ進めます。</p>
+      <form className="mt-6 rounded-2xl border border-stone-300 bg-white p-3">
+        <label htmlFor="home-composer" className="sr-only">AIへのメッセージ</label>
+        <textarea id="home-composer" aria-describedby="home-composer-hint" className="min-h-24 w-full resize-y p-2 text-base leading-6 outline-none" placeholder="アイデアを話してみる" />
+        <p id="home-composer-hint" className="mt-2 text-xs text-stone-500">Enterで送信、Shift+Enterで改行</p>
+        <div className="mt-2 flex justify-end"><button type="button" className="min-h-11 rounded-full bg-stone-900 px-5 py-2 text-sm font-bold text-white">送信</button></div>
+      </form>
+    </section>
+  );
+}
+
+function PlaceholderSurface({ name, description }) {
+  return <section aria-labelledby={`${name.toLowerCase()}-heading`} className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">{name}</p><h1 id={`${name.toLowerCase()}-heading`} className="mt-2 text-2xl font-semibold tracking-tight">{name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{description}</p></section>;
+}
 
 function IdeaWorkspace() {
   return (
@@ -35,7 +68,7 @@ function ProfileLoadFailure({ onRetry }) {
 }
 
 export function App({ profileRepository }) {
-  const [activeWorkspace, setActiveWorkspace] = useState('ideas');
+  const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
   const [profileHydration, setProfileHydration] = useState({ phase: 'loading', profile: null });
@@ -47,6 +80,8 @@ export function App({ profileRepository }) {
   if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
   const profileComplete = profileHydration.phase === 'ready' && profileHydration.profile?.status === 'completed';
+
+  useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
 
   useEffect(() => {
     let mounted = true;
@@ -113,11 +148,9 @@ export function App({ profileRepository }) {
   }
 
   function workspaceContent() {
-    if (activeWorkspace === 'chat') return <section><h1 className="page-title">AIチャット</h1><p>プロフィールと現在の事業のタネを文脈にして対話できます。</p></section>;
-    if (activeWorkspace === 'projects') return <section><h1 className="page-title">プロジェクト</h1><p>事業のタネに紐づく作業をまとめます。</p></section>;
-    if (activeWorkspace === 'search') return <section><h1 className="page-title">検索</h1><p>ワークスペース内の情報を検索します。</p></section>;
-    if (activeWorkspace === 'research') return <ResearchWorkspace />;
-    if (activeWorkspace === 'files') return <FileLibrary />;
+    if (activeWorkspace === 'home') return <HomeConversationSurface />;
+    if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" description="プロジェクトの作業面は、次の実装で接続します。" />;
+    if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
     return <IdeaWorkspace />;
   }
@@ -125,8 +158,8 @@ export function App({ profileRepository }) {
   return (
     <main className="kadode-shell">
       <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan}>
-        <header className="kadode-header border-b"><div className="flex min-w-0 items-center justify-between gap-4 px-5 py-5"><strong className="shrink-0 text-2xl tracking-tight">Kadode</strong><span className="min-w-0 break-words text-right text-sm font-medium text-[color:var(--color-text-muted)]">アイデアを、構造で育てる。</span></div></header>
-        <div className="px-5 py-6 sm:py-10"><p className="kadode-notice mb-6 rounded-2xl border px-4 py-3 text-sm leading-6"><strong>local / fake モード</strong> — このMVPでは外部サービスへ接続・送信しません。</p>{workspaceContent()}</div>
+        <header className="kadode-header border-b"><div className="flex min-h-12 min-w-0 items-center justify-between gap-4 px-5 py-3"><strong className="shrink-0 text-lg tracking-tight">Kadode</strong><span className="rounded-full border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-600">local / fake モード</span></div></header>
+        <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {profileHydration.phase === 'ready' && <button type="button" onClick={() => { profileDialogDismissedRef.current = false; setProfileDialogDismissed(false); setProfileOpen(true); }} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>}
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.profile} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}

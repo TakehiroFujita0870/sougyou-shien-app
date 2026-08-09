@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 
 export const SHELL_NAV = [
-  { id: 'chat', label: 'AIチャット' },
-  { id: 'ideas', label: '事業のタネ' },
-  { id: 'projects', label: 'プロジェクト' },
-  { id: 'research', label: '横断調査' },
-  { id: 'files', label: '資料' },
-  { id: 'search', label: '検索' },
+  { id: 'home', label: 'Home' },
+  { id: 'project', label: 'Project' },
+  { id: 'knowledge', label: 'Knowledge' },
 ];
 
 const PLAN_LABELS = { free: 'Free', standard: 'Standard' };
