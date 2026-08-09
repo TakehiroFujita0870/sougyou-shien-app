@@ -87,4 +87,13 @@ describe('ProjectSurface evaluation tabs', () => {
     expect(container.textContent).toContain('既存の利益根拠を表示する');
     expect(container.textContent).toContain('既存の利益未確認を表示する');
   });
+
+  it('does not expose a misleading Project-only context notice', async () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => { root.render(<ProjectSurface project={project} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />); });
+
+    expect(container.textContent).not.toContain('このProjectの文脈だけを使います');
+  });
 });
