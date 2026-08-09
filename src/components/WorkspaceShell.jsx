@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Badge } from './ui/Badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 export const SHELL_NAV = [
   { id: 'home', label: 'Home' },
@@ -59,16 +59,10 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
                 accountTriggerRef.current?.focus();
               }}>
                 {accountContent && <div className="workspace-shell__account-auth px-1 pb-1">{accountContent}</div>}
-                <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)]">あなたの情報</DropdownMenuLabel>
                 <DropdownMenuItem onSelect={onOpenProfile} onClick={onOpenProfile}>プロフィールを編集</DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
-                <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)]">プランと利用状況</DropdownMenuLabel>
                 <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>プランと利用状況</DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
-                <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)]">設定</DropdownMenuLabel>
                 <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>設定</DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
-                <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)]">ヘルプ・ショートカット</DropdownMenuLabel>
                 <DropdownMenuItem>ヘルプ・ショートカット</DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
                 <DropdownMenuItem>ログアウト</DropdownMenuItem>

@@ -79,11 +79,13 @@ describe('WorkspaceShell', () => {
     accountTrigger.focus();
     openAccount(container);
     expect(document.querySelector('[role="menu"]')).toBeTruthy();
-    expect(document.body.textContent).toContain('あなたの情報');
-    expect(document.body.textContent).toContain('プランと利用状況');
-    expect(document.body.textContent).toContain('設定');
-    expect(document.body.textContent).toContain('ヘルプ・ショートカット');
-    expect(document.body.textContent).toContain('ログアウト');
+    expect([...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual([
+      'プロフィールを編集',
+      'プランと利用状況',
+      '設定',
+      'ヘルプ・ショートカット',
+      'ログアウト',
+    ]);
     await act(async () => {
       document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await Promise.resolve();
