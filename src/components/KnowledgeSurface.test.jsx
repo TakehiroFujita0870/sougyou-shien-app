@@ -29,9 +29,10 @@ describe('KnowledgeSurface', () => {
   it('requires an explicit confirmation before removal and calls the local handler only on confirm', async () => {
     const onRemoveAsset = vi.fn(); const { container, unmount } = await mount({ onRemoveAsset });
     await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy(); expect(onRemoveAsset).not.toHaveBeenCalled();
-    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy(); expect(onRemoveAsset).not.toHaveBeenCalled();
+    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
     expect(onRemoveAsset).toHaveBeenCalledWith('demo-document-001');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     await unmount();
   });
 
@@ -41,6 +42,22 @@ describe('KnowledgeSurface', () => {
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
     await act(async () => { setValue.call(input, '根拠を比べたい'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
     expect(onSend).toHaveBeenCalledWith('根拠を比べたい');
+    await unmount();
+  });
+
+  it('shares the compact model and assist controls without exposing a persistent keyboard hint', async () => {
+    const onModelChange = vi.fn();
+    const models = [{ logicalKey: 'gpt-5.6-terra', displayName: 'GPT-5.6 Terra' }, { logicalKey: 'claude-sonnet-5', displayName: 'Claude Sonnet 5' }];
+    const { container, unmount } = await mount({ models, modelKey: 'gpt-5.6-terra', onModelChange });
+    expect(container.textContent).not.toContain('Enterで送信');
+    expect(container.querySelector('[aria-label="Knowledgeの質問を送信"]')).toBeTruthy();
+    await act(async () => container.querySelector('[data-testid="knowledge-assist"]').click());
+    expect(container.querySelector('#knowledge-composer').value).toContain('過去の判断');
+    const trigger = container.querySelector('[aria-label="モデル: GPT-5.6 Terra"]');
+    await act(async () => trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })));
+    const option = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.includes('Claude Sonnet 5'));
+    await act(async () => option.click());
+    expect(onModelChange).toHaveBeenCalledWith('claude-sonnet-5');
     await unmount();
   });
 });

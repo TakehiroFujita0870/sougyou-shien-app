@@ -121,7 +121,7 @@ export function App({ profileRepository }) {
   function workspaceContent() {
     if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
     if (activeWorkspace === 'project') return <ProjectSurface adoptedProject={adoptedProject} />;
-    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeFixture} onAddAsset={() => setKnowledgeFixture(knowledgeDemoFixture)} onRemoveAsset={() => setKnowledgeFixture((current) => ({ ...current, asset: { ...current.asset, state: 'deleted' } }))} />;
+    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeFixture} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onAddAsset={() => setKnowledgeFixture(knowledgeDemoFixture)} onRemoveAsset={() => setKnowledgeFixture((current) => ({ ...current, asset: { ...current.asset, state: 'deleted' } }))} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }

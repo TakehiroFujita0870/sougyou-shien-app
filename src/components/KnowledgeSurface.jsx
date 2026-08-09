@@ -1,16 +1,19 @@
 import { useState } from 'react';
+import { SendHorizontal, Sparkles } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
-import { Field } from './ui/Field';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/Dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 const stateLabel = { processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
 
-export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset = () => {}, onSend = () => {} }) {
+export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset = () => {}, onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
   const [message, setMessage] = useState('');
   const [removeRequested, setRemoveRequested] = useState(false);
   const asset = fixture?.asset;
   const references = asset?.references?.filter((reference) => reference.status !== 'unavailable') ?? [];
+  const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
 
   function submit(event) {
     event.preventDefault();
@@ -65,17 +68,22 @@ export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset
       </Card>
     </div>
 
-    {removeRequested && <Card role="dialog" aria-modal="true" aria-labelledby="knowledge-delete-heading" className="border-red-200 p-6">
-      <h2 id="knowledge-delete-heading" className="text-lg font-semibold">この資料を削除しますか？</h2>
-      <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">原本、抽出内容、検索用の断片をこのspaceから削除します。この操作は元に戻せません。</p>
-      <div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => { onRemoveAsset(asset.id); setRemoveRequested(false); }}>削除を確定</Button><Button variant="secondary" onClick={() => setRemoveRequested(false)}>キャンセル</Button></div>
-    </Card>}
+    <Dialog open={removeRequested} onOpenChange={setRemoveRequested}>
+      <DialogContent>
+        <DialogTitle className="text-lg font-semibold">この資料を削除しますか？</DialogTitle>
+        <DialogDescription className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">原本、抽出内容、検索用の断片をこのspaceから削除します。この操作は元に戻せません。</DialogDescription>
+        <div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => { onRemoveAsset(asset.id); setRemoveRequested(false); }}>削除を確定</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div>
+      </DialogContent>
+    </Dialog>
 
     <form onSubmit={submit} className="sticky bottom-5 z-10 mx-auto w-full max-w-4xl rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3 shadow-lg">
-      <Field label="Kadode AIに相談" className="sr-only"><span /></Field>
       <label htmlFor="knowledge-composer" className="sr-only">KnowledgeについてKadode AIに相談</label>
       <textarea id="knowledge-composer" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} className="min-h-24 w-full resize-y bg-transparent px-2 py-2 text-base leading-6 outline-none" placeholder="資料や過去の判断について質問する" />
-      <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border-subtle)] pt-2"><span className="px-2 text-xs text-[var(--color-text-muted)]">Enterで送信 · Shift+Enterで改行</span><Button type="submit">送信</Button></div>
+      <div className="flex justify-end gap-1 border-t border-[var(--color-border-subtle)] pt-2">
+        <Button type="button" variant="ghost" data-testid="knowledge-assist" onClick={() => setMessage((value) => value.trim() ? `${value.trim()}。関連する資料と過去の判断を比較してください。` : '関連する資料と過去の判断を比較してください。')} className="min-h-9 gap-1 px-2 text-xs"><Sparkles size={15} aria-hidden="true" />AI補完</Button>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" className="min-h-9 px-2 text-xs" aria-label={`モデル: ${modelLabel}`}>{modelLabel}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" aria-label="AIモデルを選択"><DropdownMenuLabel>AIモデル</DropdownMenuLabel>{models.map((model) => <DropdownMenuItem key={model.logicalKey} onSelect={() => onModelChange?.(model.logicalKey)}>{model.displayName}{model.logicalKey === modelKey ? ' ✓' : ''}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
+        <Button type="submit" aria-label="Knowledgeの質問を送信" className="min-h-9 min-w-9 px-2"><SendHorizontal size={17} aria-hidden="true" /><span className="sr-only">送信</span></Button>
+      </div>
     </form>
   </section>;
 }
