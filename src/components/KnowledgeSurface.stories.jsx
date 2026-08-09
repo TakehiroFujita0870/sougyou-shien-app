@@ -7,11 +7,23 @@ const localMetadataStorage = {
   setItem: () => {},
 };
 const localMetadataRepository = createKnowledgeMetadataRepository({ ownerId: 'admin-demo-owner', spaceId: 'admin-demo-space', storage: localMetadataStorage });
+let rejectFirstKnowledgeSave = true;
+const writeFailureConversationRepository = {
+  async load() { return { messages: [], entries: [] }; },
+  async save(value) {
+    if (rejectFirstKnowledgeSave) {
+      rejectFirstKnowledgeSave = false;
+      throw new Error('Injected Knowledge write failure');
+    }
+    return value;
+  },
+};
 
 export default { title: 'Kadode/KnowledgeSurface', component: KnowledgeSurface, parameters: { layout: 'centered', a11y: { test: 'error' } } };
 export const Desktop = { args: { fixture } };
 export const Mobile = { args: { fixture }, parameters: { viewport: { defaultViewport: 'mobile1' } } };
 export const Empty = { args: { fixture: null } };
 export const LocalMetadata = { args: { fixture, repository: localMetadataRepository } };
+export const WriteFailureRecovery = { args: { fixture, conversationRepository: writeFailureConversationRepository } };
 export const Loading = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'processing' } } } };
 export const Error = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'failed' } } } };
