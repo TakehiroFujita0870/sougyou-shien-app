@@ -1,76 +1,74 @@
-# Issue #78 workspace AI chat 計画
+# T-IA-00 Home / Project / Knowledge IA reset 計画
 
 最終検証日: 2026-08-09
 
 ## 要望 / ゴール / 成功指標
 
-要望: workspace内のAIチャットを、space全体を扱うportfolio stewardとproject単位会話を切り替えられるlocal/fake UIとして提供する。
+要望: 旧idea stateをHome、Project、Knowledgeの3 surfaceへ安全に対応づけ、IA reset後の会話体験を段階実装できる計画にする。
 
-ゴール: 利用者がどのworkspaceページからでもAIチャットへ入り、文脈を確認して会話し、候補を採用・保留・理由付き却下できる。
+ゴール: Home supervisorとproject ID単位会話を混同せず、allowlist context snapshotと明示判断を持つ移行順を定義する。
 
-成功指標: 外部送信なしで、F5相当の再hydrate後も保存済み会話と未送信入力を失わず、PCと390pxで主要操作を完了できる。
+成功指標: IA reset merge前にruntime変更を加えず、後続担当がcontext snapshot、採用、保留、理由付き却下を検証可能にする。
 
 ## ユーザーストーリーと受け入れ条件
 
-### US-78-01 space会話を始める
+### US-IA-01 Homeで横断相談する
 
-As a 利用者, I want AIチャットpageでportfolio stewardとの会話を始める, so that 現在のページとspace内の情報を踏まえて考えられる。
+As a 利用者, I want Home supervisorへspace全体の相談をする, so that projectを決める前の情報を整理できる。
 
-Given: chat pageへcurrent page、profile、fixed-principal由来のspace knowledgeが渡されている
-When: portfolio steward会話を表示する
-Then: owner入力、owner切替、grantなしでavailable knowledgeの出典とlocatorを表示する。
+Given: Home surfaceが利用可能である
+When: starter promptまたは入力を選ぶ
+Then: allowlistされたprofile summary、active project summary、available knowledge locatorだけのcontext snapshotを確認できる。
 
-### US-78-02 project会話を分ける
+### US-IA-02 Project会話を分ける
 
-As a 利用者, I want project会話をspace会話から分ける, so that 個別案の検討を混ぜない。
+As a 利用者, I want project IDごとの会話を使う, so that 別projectの会話を混ぜない。
 
-Given: portfolio steward会話を表示している
-When: project会話を選ぶ
-Then: 会話のscopeがprojectとして表示され、space会話のメッセージは表示されない。
+Given: project IDが選択されている
+When: project会話を再開する
+Then: 同じproject IDの会話だけを表示し、Home会話を表示しない。
 
-### US-78-03 候補を判断する
+### US-IA-03 候補を判断する
 
-As a 利用者, I want 提案候補を採用、保留、理由付き却下できる, so that 判断を自分で保留または確定できる。
+As a 利用者, I want inline artifactを確認して採用、保留、理由付き却下を選ぶ, so that AIが自動でprojectを確定しない。
 
-Given: local replyが候補を提示している
-When: 採用、保留、または理由を入力して却下を選ぶ
-Then: 採用だけがproject化済みと表示され、保留と却下はprojectを作らない。
-
-### US-78-04 再開する
-
-As a 利用者, I want 会話と未送信入力を再開する, so that hydrateが遅くても書き始めた内容を失わない。
-
-Given: 保存済み会話を非同期で読み込んでいる
-When: 読み込み完了前に入力する
-Then: 利用者が入力した値を保存済みdraftで上書きしない。
+Given: 会話から候補artifactが提示されている
+When: 明示確認操作で採用、保留、または却下を選ぶ
+Then: 採用だけがproject化候補として保存され、却下理由は同一前提の再提示を抑制する。
 
 ## スコープ外
 
-- 外部AI、ネットワーク送信、Supabase、embedding、実ファイル処理
-- owner ID入力、owner切替、個別grant、削除済みreferenceの表示
-- entitlementの変更、モデルカタログ変更、Pro機能の実装
-- #69のアイデア候補UI、#97の資料library、App接続、WorkspaceShellの構造変更
+- IA reset merge前のApp、WorkspaceShell、shared style、nav、tokens、独立chat route
+- `kadode:workspace-chat`、外部送信、外部AI、Supabase、owner/grant入力、保存先の自動変更
+- runtime component、Storybook、API、auth、entitlementの変更
+
+## 旧idea state mapping
+
+| 旧state | IA reset後の扱い | 移行条件 |
+| --- | --- | --- |
+| idea conversation | Home supervisorの会話候補 | IA reset後にconversation providerを決定 |
+| idea candidate preview | Project inline artifact | 明示採用操作とproject IDを持つ |
+| local draft | current surfaceの未送信draft | hydrate競合テストを保持 |
+| file reference | Knowledge locator | availableのみをallowlistへ入れる |
 
 ## タスク
 
 | ID | 成果物 | 完了判定 | 不確実性 |
 | --- | --- | --- | --- |
-| T-78-01 | chat画面とlocal repository | 検査: component testで送信、scope、判断、hydrateを確認 | 既知 |
-| T-78-02 | 統合部の別ASSIGNMENTで行うApp接続契約 | 検査: 本PRのcomponent testが固定principal由来のknowledge propsを確認し、App差分が0行であることを確認 | 類推可能 |
-| T-78-03 | Storybookとa11y検査 | 検査: storyのDesktop/Mobileとaxe testが通る | 類推可能 |
+| T-IA-00 | このstate mappingと段階計画 | 検査: 3 surface、allowlist、明示判断、スコープ外をレビュー | 既知 |
+| T-IA-01 | Home supervisor context provider | 検査: context snapshotのallowlist test | 類推可能 |
+| T-IA-02 | project ID会話とdraft hydrate | 検査: project分離、F5、390px、keyboard test | 類推可能 |
+| T-IA-03 | inline artifact判断 | 検査: 採用、保留、理由付き却下、明示確認 test | 類推可能 |
 
 ## ADR
 
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 | --- | --- | --- | --- |
-| 会話保存 | 既存React stateとbrowser localStorageだけをadapter化し、F5再開を検証する | 新規状態管理ライブラリは依存、bundle、更新責任を増やすため却下 | 外部送信なし |
-| UI | 既存Tailwind utilityとWorkspaceShell navigationを再利用する | 独自dialog/menuやstyled UI基盤は二重基盤になるため却下 | 新規依存なし |
-| 文脈 | fixed principalのspace knowledgeを表示用metadataとして受け取る | UIからowner/grantをrepositoryへ渡す案は#92契約に反するため却下 | 同一spaceのみ |
+| surface | Home / Project / Knowledgeへ分離 | 独立chat routeはIAと会話責務を重複するため却下 | IA reset後に実装 |
+| context | allowlist snapshotだけをproviderが渡す | owner/grantをUIから渡す案はfixed-principal境界に反するため却下 | external送信なし |
 
 ## 変更履歴
 
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
-| 2026-08-09 | 初版 | Issue #78とportfolio steward判断を反映 | T-78-01からT-78-03 |
-| 2026-08-09 | App接続を除外 | PR #99 reviewでApp所有の分離を要求 | T-78-02 |
-| 2026-08-09 | T-78-02を別ASSIGNMENTへ分離 | #99追加P1でApp所有境界を明確化 | T-78-02 |
+| 2026-08-09 | T-IA-00へ再編 | CEO確定IAへ整合しruntimeを除外 | T-IA-00からT-IA-03 |
