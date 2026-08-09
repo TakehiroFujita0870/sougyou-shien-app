@@ -1,12 +1,27 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { PROFILE_STEPS } from './components/UserProfileInterview';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+let storageValues;
+
+beforeEach(() => {
+  storageValues = new Map();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key) => storageValues.get(key) ?? null,
+      setItem: (key, value) => storageValues.set(key, String(value)),
+      removeItem: (key) => storageValues.delete(key),
+      clear: () => storageValues.clear(),
+    },
+  });
+});
 
 const setValue = (element, value) => {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
