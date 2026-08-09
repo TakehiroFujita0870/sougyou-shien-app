@@ -7,6 +7,9 @@ describe('ProjectSurface conversation contract', () => {
     const html = renderToStaticMarkup(<ProjectSurface state={state} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />);
     expect(html).toContain('project-composer');
     expect(html.match(/data-project-question="true"/g)).toHaveLength(5);
+    expect(html).toContain('DOCXをダウンロード');
+    expect(html).not.toContain('資料を追加');
+    expect(html).not.toContain('AIで補完');
     expect(html).toContain('根拠');
     expect(html).toContain('未確認');
   });
