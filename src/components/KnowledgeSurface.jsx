@@ -6,6 +6,7 @@ import { Card } from './ui/Card';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/Dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
 import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
+import { createKnowledgeConversationRepository, respondToKnowledge } from './knowledgeConversationRepository';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const stateLabel = { metadata_only: '端末内メタデータ', processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
@@ -38,14 +39,16 @@ function formatFileSize(sizeBytes) {
   return `${Math.max(1, Math.ceil(sizeBytes / 1024))} KB`;
 }
 
-export function KnowledgeSurface({ fixture, repository, ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
+export function KnowledgeSurface({ fixture, repository, conversationRepository, ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
   const [message, setMessage] = useState('');
   const [removeRequested, setRemoveRequested] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [fixtureDeleted, setFixtureDeleted] = useState(false);
   const [persistenceError, setPersistenceError] = useState(false);
   const [notice, setNotice] = useState('');
+  const [conversation, setConversation] = useState([]);
   const repositoryRef = useRef(repository ?? createKnowledgeMetadataRepository({ ownerId, spaceId }));
+  const conversationRepositoryRef = useRef(conversationRepository ?? createKnowledgeConversationRepository({ ownerId, spaceId }));
   const fileInputRef = useRef(null);
   const asset = fixture?.asset;
   const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
@@ -61,6 +64,11 @@ export function KnowledgeSurface({ fixture, repository, ownerId = 'admin-demo-ow
     }).catch(() => { if (active) setPersistenceError(true); });
     return () => { active = false; };
   }, [asset?.id]);
+  useEffect(() => {
+    let active = true;
+    conversationRepositoryRef.current.load().then((value) => { if (active) setConversation(value.messages); });
+    return () => { active = false; };
+  }, []);
 
   const fixtureDocument = asset && !fixtureDeleted && asset.state !== 'deleted' ? { ...asset, kind: 'fixture', references: asset.references?.filter((reference) => reference.status !== 'unavailable') ?? [] } : null;
   const visibleDocuments = [...(fixtureDocument ? [fixtureDocument] : []), ...documents.filter((document) => document.id !== asset?.id).map((document) => ({ ...document, kind: 'local', references: [] }))];
@@ -69,8 +77,8 @@ export function KnowledgeSurface({ fixture, repository, ownerId = 'admin-demo-ow
     event.preventDefault();
     const value = message.trim();
     if (!value) return;
-    onSend(value);
-    setMessage('');
+    const next = [...conversation, { role: 'user', content: value }, { role: 'assistant', content: respondToKnowledge(value, fixture) }];
+    conversationRepositoryRef.current.save({ messages: next }).then(() => { setConversation(next); setMessage(''); onSend(value); }).catch(() => setNotice('会話を保存できませんでした。再試行してください。'));
   }
 
   async function addFile(event) {
@@ -124,6 +132,7 @@ export function KnowledgeSurface({ fixture, repository, ownerId = 'admin-demo-ow
 
     <Dialog open={Boolean(removeRequested)} onOpenChange={(open) => { if (!open) setRemoveRequested(null); }}><DialogContent><DialogTitle className="text-lg font-semibold">この資料を削除しますか？</DialogTitle><DialogDescription className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">資料名と端末内メタデータをこのspaceから削除します。この操作は元に戻せません。</DialogDescription><div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => void confirmRemoval()}>削除を確定</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div></DialogContent></Dialog>
 
+    {conversation.length > 0 && <ol aria-label="Knowledgeの会話履歴" className="mx-auto grid w-full max-w-4xl gap-3">{conversation.map((item, index) => <li key={`${item.role}-${index}`} className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${item.role === 'user' ? 'ml-auto bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-muted)]'}`}>{item.content}</li>)}</ol>}
     <form onSubmit={submit} className="sticky bottom-5 z-10 mx-auto w-full max-w-4xl rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3 shadow-lg"><label htmlFor="knowledge-composer" className="sr-only">KnowledgeについてKadode AIに相談</label><textarea id="knowledge-composer" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} className="min-h-24 w-full resize-y bg-transparent px-2 py-2 text-base leading-6 outline-none" placeholder="資料や過去の判断について質問する" /><div className="flex justify-end gap-1 border-t border-[var(--color-border-subtle)] pt-2"><Button type="button" variant="ghost" data-testid="knowledge-assist" onClick={() => setMessage((value) => value.trim() ? `${value.trim()}。関連する資料と過去の判断を比較してください。` : '関連する資料と過去の判断を比較してください。')} className="min-h-9 gap-1 px-2 text-xs"><Sparkles size={15} aria-hidden="true" />AI補完</Button><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" className="min-h-9 px-2 text-xs" aria-label={`モデル: ${modelLabel}`}>{modelLabel}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" aria-label="AIモデルを選択"><DropdownMenuLabel>AIモデル</DropdownMenuLabel>{models.map((model) => <DropdownMenuItem key={model.logicalKey} onSelect={() => onModelChange?.(model.logicalKey)}>{model.displayName}{model.logicalKey === modelKey ? ' ✓' : ''}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu><Button type="submit" aria-label="Knowledgeの質問を送信" className="min-h-9 min-w-9 px-2"><SendHorizontal size={17} aria-hidden="true" /><span className="sr-only">送信</span></Button></div></form>
   </section>;
 }
