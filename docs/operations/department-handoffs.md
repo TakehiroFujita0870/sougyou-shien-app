@@ -14,6 +14,40 @@
 | 統合・リリース管理部 | レビュー後に判定、マージ後に `MERGED` | `PR_READY`の差分、CI、競合、決裁境界を確認 |
 | 管理タスク | 部門間競合とCEO決裁要求を処理 | `BLOCKED`と決裁要求に判断を返す |
 
+## リソース管理と部門所有権
+
+統合・リリース管理部は、Issue assignment、WIP制限、依存順、変更ファイル所有権を決める。未割当Issueを実装部が独自に開始してはならない。実装開始は統合部の `ASSIGNMENT` または `DEPENDENCY_READY` を受信した後に限る。
+
+| 部門 | 所有範囲 |
+| --- | --- |
+| 会話体験・プロジェクト部 | chat、project workflow、data-context |
+| プロダクトUI・デザインシステム部 | surface、layout、navigation、tokens、a11y primitives |
+| 品質・プロダクト運用部 | 独立検証 |
+| 基盤・認証部 | auth、runtime |
+| 事業設計・調査部 | domain、API contracts |
+
+`App.jsx` とshared styleの同時変更は禁止する。両方が必要な場合、統合部は担当部、ファイル所有権、依存順、時分割を `ASSIGNMENT` に明記する。
+
+各実装部のWIP上限は、レビュー待ち1PRと実装中1件までとする。統合部はレビューキューを優先して空にする。
+
+### ASSIGNMENT payload
+
+```text
+event: ASSIGNMENT
+repository: owner/name
+issue: #number
+purpose: one sentence
+owner_task: receiving department task
+file_ownership: exclusive files or directories
+dependencies: required merge SHAs or none
+wip_slot: implementation | review
+acceptance_criteria: observable acceptance criteria
+change_prohibitions: excluded scope
+next_action: receiver's observable action
+```
+
+同じ `issue + owner_task` は冪等キーとし、受信側は重複着手しない。
+
 ## CEO室レポートライン
 
 通常経路では、実装部は `PR_READY` を統合・リリース管理部だけへ送る。PR作成時点のCEO室通知は禁止する。統合部がmergeとmain smokeを完了した後、`MERGED` をCEO室と担当部へ送る。
