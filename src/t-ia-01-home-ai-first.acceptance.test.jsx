@@ -49,7 +49,7 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
     const container = await mountHome(width);
     expect(container.textContent).toContain('Kadode AI');
     expect(container.querySelector('textarea#home-composer')).toBeTruthy();
-    expect(container.textContent).toContain('アイデアを話してみる');
+    expect(container.querySelector('textarea#home-composer').getAttribute('placeholder')).toBe('アイデアを話してみる');
     expect(container.textContent).not.toContain('アイデアを登録する');
     expect(container.querySelector('h1')).toBeTruthy();
     expect(container.querySelector('h1[class*="text-6xl"], h1[class*="text-5xl"], h1[class*="text-4xl"]')).toBeNull();
