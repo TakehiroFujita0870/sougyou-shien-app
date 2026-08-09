@@ -1,12 +1,15 @@
-// Explicit admin/demo boundary. This fixture contains no real user data and must not be used by runtime auth.
+// Explicit admin/demo boundary. Mirrors the PII-free synthetic dataset from #139.
+// This adapter is presentation-only and must not be used by runtime auth or user data.
 export const demoProjectFixture = {
-  name: '製造現場向け省エネ診断',
+  datasetId: 'kadode-admin-demo-v1',
+  provenance: 'synthetic_demo',
+  name: '現場改善ミニ診断（合成デモ）',
   status: '採用済み',
   sections: {
-    事業: { status: '整理済み', summary: '工場の設備データを診断し、削減施策を提案するサービス。', evidence: '顧客課題インタビュー 6件', unknown: '導入後の運用体制' },
-    市場: { status: '仮説', summary: '脱炭素投資を進める中堅製造業を初期市場とする。', evidence: '公開統計と業界レポート', unknown: '有料導入可能な社数' },
-    競合: { status: '比較済み', summary: '大手SIerの総合提案と、専門コンサルの間に機会がある。', evidence: '競合3社の公開サービス比較', unknown: '現場定着率の差' },
-    利益: { status: '試算済み', summary: '診断費と継続利用料の二本立てで粗利を確保する。', evidence: '初年度の単価・原価試算', unknown: '営業獲得コスト' },
-    実現性: { status: '検証中', summary: '既存センサー連携の小規模実証から開始できる。', evidence: '連携方式の技術検証メモ', unknown: '複数拠点展開の負荷' },
+    事業: { status: '整理済み', summary: '製造現場の改善候補を短時間で整理するサービス。', evidence: '匿名化済み課題要約', unknown: '経験知を診断テンプレートへ転換できる範囲' },
+    市場: { status: '仮説', summary: '反復課題を持つ小規模事業者を初期顧客候補とする。', evidence: '合成市場メモ', unknown: '有料導入可能な社数' },
+    競合: { status: '比較済み', summary: '同種サービス、専門家相談、社内改善会議の3分類で比較する。', evidence: '合成市場メモ', unknown: '短納期と現場言語の差別化効果' },
+    利益: { status: '試算済み', summary: '月次base/upside/downsideを決定的に試算し、固定費回収を確認する。', evidence: '合成市場メモ', unknown: '継続率と営業獲得コスト' },
+    実現性: { status: '検証中', summary: '週6時間・家計資金5万円以内の可逆な週末実験から開始する。', evidence: '匿名化済み課題要約', unknown: '2週連続で上限を超えない運用' },
   },
 };
