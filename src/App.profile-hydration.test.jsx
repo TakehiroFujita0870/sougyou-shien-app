@@ -23,6 +23,16 @@ async function mount(repository) {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => document.body.replaceChildren());
 
 describe('profile hydration at the application boundary', () => {
@@ -66,5 +76,32 @@ describe('profile hydration at the application boundary', () => {
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
     expect(view.container.textContent).toContain('あなたの情報を更新');
     await view.unmount();
+  });
+
+  it('ignores a late first load after retry starts a newer hydration request', async () => {
+    const first = deferred();
+    const second = deferred();
+    const repository = { load: vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise), save: vi.fn() };
+    const view = await mount(repository);
+
+    await act(async () => first.reject(new Error('offline')));
+    await act(async () => Array.from(view.container.querySelectorAll('button')).find((button) => button.textContent === '再試行').click());
+    await act(async () => first.resolve(null));
+    expect(view.container.textContent).toContain('準備しています…');
+
+    await act(async () => second.resolve(completed));
+    expect(view.container.querySelector('[role="dialog"]')).toBeNull();
+    expect(view.container.textContent).toContain('あなたの情報を更新');
+    await view.unmount();
+  });
+
+  it('does not apply a late load after unmount', async () => {
+    const pending = deferred();
+    const repository = { load: vi.fn().mockReturnValue(pending.promise), save: vi.fn() };
+    const view = await mount(repository);
+
+    await view.unmount();
+    await expect(act(async () => pending.resolve(completed))).resolves.toBeUndefined();
+    expect(repository.save).not.toHaveBeenCalled();
   });
 });
