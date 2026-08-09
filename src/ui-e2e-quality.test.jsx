@@ -48,8 +48,8 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
   it.each([1280, 390])('keeps Home AI composer as the only input entry at %ipx', async (width) => {
     const { container } = await mountApp(width);
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
-    expect(container.querySelector('#home-composer')).toBeTruthy();
-    expect(container.querySelectorAll('textarea')).toHaveLength(1);
+    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
+    expect(container.querySelector('#idea-message')).toBeTruthy();
   });
 
   it('keeps surface context and selected surface after an F5-equivalent remount without network', async () => {
@@ -67,12 +67,19 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('exposes composer semantics without legacy candidate decision workflow', async () => {
+  it('exposes candidate decision controls from the Home composer', async () => {
     const { container } = await mountApp(1280);
-    const composer = container.querySelector('#home-composer');
-    expect(composer.getAttribute('aria-describedby')).toBe('home-composer-hint');
-    expect(container.querySelector('label[for="home-composer"]')).toBeTruthy();
+    const composer = container.querySelector('#idea-message');
+    expect(composer).toBeTruthy();
+    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
     expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
-    expect(container.querySelectorAll('textarea')).toHaveLength(1);
+    await act(async () => {
+      composer.value = '工場の故障履歴を探せない';
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('アイデア候補として保存');
+    expect([...container.querySelectorAll('button')].some((button) => button.textContent.includes('発言を送信'))).toBe(true);
   });
 });

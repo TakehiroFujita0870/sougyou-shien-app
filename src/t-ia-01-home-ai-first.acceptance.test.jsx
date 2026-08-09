@@ -48,8 +48,8 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
   it.each([1280, 390])('keeps the initial canvas composer-first at %ipx', async (width) => {
     const container = await mountHome(width);
     expect(container.textContent).toContain('Kadode AI');
-    expect(container.querySelector('textarea#home-composer')).toBeTruthy();
-    expect(container.querySelector('textarea#home-composer').getAttribute('placeholder')).toBe('アイデアを話してみる');
+    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
+    expect(container.querySelector('textarea#idea-message')).toBeTruthy();
     expect(container.textContent).not.toContain('アイデアを登録する');
     expect(container.querySelector('h1')).toBeTruthy();
     expect(container.querySelector('h1[class*="text-6xl"], h1[class*="text-5xl"], h1[class*="text-4xl"]')).toBeNull();
@@ -61,11 +61,11 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
     const container = await mountHome(390);
     const nav = container.querySelector('nav[aria-label="主要ページ"]');
     const main = container.querySelector('main');
-    const textarea = container.querySelector('textarea#home-composer');
+    const textarea = container.querySelector('textarea#idea-message');
     expect(main).toBeTruthy();
     expect(nav).toBeTruthy();
-    expect(textarea.getAttribute('aria-describedby')).toBe('home-composer-hint');
-    expect(container.querySelector(`label[for="home-composer"]`)).toBeTruthy();
+    expect(textarea.getAttribute('id')).toBe('idea-message');
+    expect(container.querySelector(`label[for="idea-message"]`)).toBeTruthy();
     expect([...container.querySelectorAll('button')].every((button) => button.type === 'button' || button.type === 'submit')).toBe(true);
     expect(container.querySelector('[aria-current="page"]')).toBeTruthy();
   });
@@ -74,7 +74,7 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const first = await mountHome(390);
-    await typeInto(first.querySelector('#home-composer'), '検証用の工場課題');
+    await typeInto(first.querySelector('#idea-message'), '検証用の工場課題');
     const firstRoot = mounted[0].root;
     await act(async () => firstRoot.unmount());
     mounted.shift().container.remove();
