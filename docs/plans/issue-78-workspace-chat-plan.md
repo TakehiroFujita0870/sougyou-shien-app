@@ -14,11 +14,11 @@
 
 ### US-78-01 space会話を始める
 
-As a 利用者, I want sidebarのAIチャットからportfolio stewardとの会話を始める, so that 現在のページとspace内の情報を踏まえて考えられる。
+As a 利用者, I want AIチャットpageでportfolio stewardとの会話を始める, so that 現在のページとspace内の情報を踏まえて考えられる。
 
-Given: 任意のworkspaceページを表示している
-When: AIチャットを選ぶ
-Then: 現在ページ、プロフィール、space knowledgeを含む文脈が会話ページに表示される。
+Given: chat pageへcurrent page、profile、fixed-principal由来のspace knowledgeが渡されている
+When: portfolio steward会話を表示する
+Then: owner入力、owner切替、grantなしでavailable knowledgeの出典とlocatorを表示する。
 
 ### US-78-02 project会話を分ける
 
@@ -49,14 +49,14 @@ Then: 利用者が入力した値を保存済みdraftで上書きしない。
 - 外部AI、ネットワーク送信、Supabase、embedding、実ファイル処理
 - owner ID入力、owner切替、個別grant、削除済みreferenceの表示
 - entitlementの変更、モデルカタログ変更、Pro機能の実装
-- #69のアイデア候補UI、#97の資料library、WorkspaceShellの構造変更
+- #69のアイデア候補UI、#97の資料library、App接続、WorkspaceShellの構造変更
 
 ## タスク
 
 | ID | 成果物 | 完了判定 | 不確実性 |
 | --- | --- | --- | --- |
 | T-78-01 | chat画面とlocal repository | 検査: component testで送信、scope、判断、hydrateを確認 | 既知 |
-| T-78-02 | Appのchat placeholder接続 | 検査: App testでナビゲーションと現在ページcontextを確認 | 類推可能 |
+| T-78-02 | chat propsのknowledge境界 | 検査: deleted/unavailableを除外し、owner/grant UIがないcomponent testを確認 | 類推可能 |
 | T-78-03 | Storybookとa11y検査 | 検査: storyのDesktop/Mobileとaxe testが通る | 類推可能 |
 
 ## ADR
@@ -72,3 +72,4 @@ Then: 利用者が入力した値を保存済みdraftで上書きしない。
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | Issue #78とportfolio steward判断を反映 | T-78-01からT-78-03 |
+| 2026-08-09 | App接続を除外 | PR #99 reviewでApp所有の分離を要求 | T-78-02 |
