@@ -146,4 +146,17 @@ describe('WorkspaceShell', () => {
     expect(container.querySelector('.workspace-shell__sidebar').className).not.toContain('workspace-shell__sidebar--open');
     cleanup();
   });
+
+  it('opens distinct Settings and keyboard help dialogs, while logout stays unavailable', async () => {
+    const { container, cleanup } = mount();
+    openAccount(container);
+    await act(async () => [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === '設定').click());
+    expect(document.body.textContent).toContain('通知と認証連携は準備中です');
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    openAccount(container);
+    await act(async () => [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === 'ヘルプ・ショートカット').click());
+    expect(document.body.textContent).toContain('Alt + Shift + 1');
+    expect([...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.includes('ログアウト')).getAttribute('data-disabled')).not.toBeNull();
+    cleanup();
+  });
 });
