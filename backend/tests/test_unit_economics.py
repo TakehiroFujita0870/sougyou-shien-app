@@ -30,6 +30,8 @@ def test_calculates_base_upside_downside_with_deterministic_unit_economics() -> 
     assert base.revenue == yen("20000")
     assert base.contribution_margin == yen("12000")
     assert base.contribution_margin_rate == Decimal("0.6")
+    assert base.retention_contribution_margin == yen("2400")
+    assert base.lifetime_value_to_cac_ratio == Decimal("8")
     assert base.cac_payback_units == Decimal("0.5")
     assert base.break_even_units == Decimal("10")
     assert base.operating_profit == yen("6000")
@@ -38,7 +40,7 @@ def test_calculates_base_upside_downside_with_deterministic_unit_economics() -> 
 
 @pytest.mark.parametrize(
     ("field", "value", "reason"),
-    [("price", yen("0"), "price_must_be_positive"), ("variable_cost", yen("1000"), "contribution_margin_must_be_positive")],
+    [("price", yen("0"), "price_must_be_positive"), ("cac", yen("0"), "cac_must_be_positive"), ("variable_cost", yen("1000"), "contribution_margin_must_be_positive")],
 )
 def test_rejects_zero_division_and_non_positive_margin(field: str, value: Money, reason: str) -> None:
     input_value = scenario("base")
@@ -58,3 +60,14 @@ def test_rejects_currency_mixing_capacity_overflow_and_missing_scenario() -> Non
         calculate_plan((scenario("base"), mixed_period, scenario("downside")))
     with pytest.raises(CalculationInputError, match="missing_scenarios"):
         calculate_plan((scenario("base"), scenario("upside")))
+
+
+def test_retention_periods_changes_lifetime_contribution_and_ltv_to_cac_ratio() -> None:
+    one_period = scenario("base").model_copy(update={"retention_periods": 1})
+    four_periods = scenario("base").model_copy(update={"retention_periods": 4})
+    one = calculate_plan((one_period, scenario("upside"), scenario("downside"))).scenarios[0]
+    four = calculate_plan((four_periods, scenario("upside"), scenario("downside"))).scenarios[0]
+    assert one.retention_contribution_margin == yen("600")
+    assert four.retention_contribution_margin == yen("2400")
+    assert one.lifetime_value_to_cac_ratio == Decimal("2")
+    assert four.lifetime_value_to_cac_ratio == Decimal("8")
