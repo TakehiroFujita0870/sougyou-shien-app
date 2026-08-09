@@ -80,7 +80,7 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
     mounted.shift().container.remove();
     const second = await mountHome(390);
     expect(second.textContent).toContain('検証用の工場課題');
-    expect(second.textContent).toContain('local / fake モード');
+    expect(second.textContent).not.toContain('local / fake');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

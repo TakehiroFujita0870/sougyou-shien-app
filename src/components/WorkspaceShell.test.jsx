@@ -18,36 +18,45 @@ function mount() {
 }
 
 describe('WorkspaceShell', () => {
+  it('hydrates and restores a signed-in principal through the explicit account menu', async () => {
+    const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
+    const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);
+    const render = () => act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} accountContent={<LocalGoogleSignIn authAdapter={createLocalGoogleAuthAdapter({ storage })} />}><h1>ページ</h1></WorkspaceShell>));
+    render();
+    act(() => container.querySelector('.workspace-shell__account-copy > button').click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(container.textContent).toContain('Googleで続ける');
+    await act(async () => container.querySelector('.workspace-shell__account-auth button').click());
+    expect(container.textContent).toContain('ローカル Google テスト利用者');
+    act(() => root.unmount()); root = createRoot(container); render(); act(() => container.querySelector('.workspace-shell__account-copy > button').click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(container.querySelector('[role="menu"]')).toBeTruthy();
+    const restoredAdapter = createLocalGoogleAuthAdapter({ storage });
+    await expect(restoredAdapter.hydrate()).resolves.toEqual(expect.objectContaining({ id: 'local-google-user' }));
+    act(() => { root.unmount(); container.remove(); });
+  });
   it.each([
     ['desktop account area', false],
     ['390px mobile drawer account area', true],
   ])('restores the signed-in principal after remount in the %s', async (_label, mobile) => {
-    const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
     const container = document.createElement('div');
     document.body.append(container);
     let root = createRoot(container);
 
     function renderWithFreshAdapter(initialDrawerOpen = false) {
-      const adapter = createLocalGoogleAuthAdapter({ storage });
-      act(() => root.render(<WorkspaceShell activePage="ideas" onSelect={() => {}} initialDrawerOpen={initialDrawerOpen} accountContent={<LocalGoogleSignIn authAdapter={adapter} />}><h1>ページ</h1></WorkspaceShell>));
+      act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} initialDrawerOpen={initialDrawerOpen}><h1>ページ</h1></WorkspaceShell>));
     }
 
     renderWithFreshAdapter();
-    expect(container.textContent).toContain('確認中');
     if (mobile) {
       act(() => container.querySelector('.workspace-shell__mobile-trigger').click());
       expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
     }
-    await act(async () => Promise.resolve());
-    expect(container.textContent).toContain('Googleで続ける');
-    await act(async () => container.querySelector('.workspace-shell__account-auth button').click());
-    expect(container.textContent).toContain('ローカル Google テスト利用者');
-
     act(() => root.unmount());
     root = createRoot(container);
     renderWithFreshAdapter(mobile);
     await act(async () => Promise.resolve());
-    expect(container.textContent).toContain('ローカル Google テスト利用者');
+    expect(container.textContent).toContain('アカウント');
     act(() => { root.unmount(); container.remove(); });
   });
 
@@ -57,15 +66,21 @@ describe('WorkspaceShell', () => {
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
     expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
-    expect(container.textContent).toContain('あなたの情報');
+    expect(container.textContent).toContain('アカウント');
     expect(container.textContent).toContain('Free');
+    const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+    act(() => accountTrigger.click());
+    expect(container.querySelector('[role="menu"]')).toBeTruthy();
+    expect(container.textContent).toContain('プランと利用状況');
+    act(() => accountTrigger.click());
+    expect(container.querySelector('[role="menu"]')).toBeNull();
     cleanup();
   });
 
-  it('collapses the sidebar and closes the mobile drawer with Escape', () => {
+  it('keeps the account menu collapsed and closes the mobile drawer with Escape', () => {
     const { container, cleanup } = mount();
-    act(() => container.querySelector('.workspace-shell__collapse').click());
-    expect(container.querySelector('.workspace-shell').className).toContain('workspace-shell--collapsed');
+    expect(container.querySelector('[role="menu"]')).toBeNull();
     act(() => container.querySelector('.workspace-shell__mobile-trigger').click());
     expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
     act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));

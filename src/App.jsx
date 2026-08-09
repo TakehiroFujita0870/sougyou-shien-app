@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
-import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
-import { LocalGoogleSignIn } from './components/LocalGoogleSignIn';
 import { useHydratedResource } from './runtime/useHydratedResource';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
@@ -48,7 +46,7 @@ function PlaceholderSurface({ name, description }) {
 
 function IdeaWorkspace() {
   return (
-    <div className="max-w-3xl">
+    <div className="mx-auto w-full max-w-5xl [&_[aria-label='アイデアストック']>div:nth-child(2)]:hidden [&_[aria-label='アイデアストック']>div:first-child>p:first-of-type]:hidden">
       <section aria-labelledby="idea-heading">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
         <h1 id="idea-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>
@@ -81,13 +79,12 @@ export function App({ profileRepository }) {
   if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
   const profileHydration = useHydratedResource(profileRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
-  const profileComplete = profileHydration.phase === 'ready' && profileHydration.value?.status === 'completed';
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
-      setProfileOpen(!profileDialogDismissedRef.current && profileHydration.value?.status !== 'completed');
+      setProfileOpen(false);
     }
   }, [profileHydration.phase, profileHydration.value]);
 
@@ -112,20 +109,8 @@ export function App({ profileRepository }) {
     return () => window.removeEventListener('keydown', closeProfile);
   }, []);
 
-  useEffect(() => {
-    if (activeWorkspace === 'settings') document.getElementById('model')?.focus();
-  }, [activeWorkspace, subscription.plan]);
-
   function updatePlan(plan) {
     setSubscription(repositoryRef.current.applyPlan(plan, subscription));
-  }
-
-  function updateModel(modelKey) {
-    setSubscription((current) => ({ ...current, modelKey, reasoningMode: null }));
-  }
-
-  function updateReasoning(reasoningMode) {
-    setSubscription((current) => ({ ...current, reasoningMode }));
   }
 
   function retryProfileLoad() {
@@ -144,17 +129,15 @@ export function App({ profileRepository }) {
     if (activeWorkspace === 'home') return <IdeaWorkspace />;
     if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
-    if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
+    if (activeWorkspace === 'settings') return <div className="max-w-4xl"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace />;
   }
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
-        <header className="kadode-header border-b"><div className="flex min-h-12 min-w-0 items-center justify-between gap-4 px-5 py-3"><strong className="shrink-0 text-lg tracking-tight">Kadode</strong><span className="rounded-full border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-600">local / fake モード</span></div></header>
-        <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
+        <div className="px-5 pb-5 pt-12 sm:py-7"><style>{`[aria-label="アイデアストック"]{grid-template-columns:minmax(0,1fr)!important}[aria-label="アイデアストック"]>div:first-child{border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;min-width:0}[aria-label="アイデアストック"]>div:first-child>p:first-of-type,[aria-label="アイデアストック"]>div:first-child>h2:first-of-type{display:none}[aria-label="アイデアストック"] label[for="idea-message"]{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}[aria-label="アイデアストック"] form{border:1px solid rgb(231 229 228);border-radius:1.5rem;padding:.75rem;background:#fff;box-shadow:0 8px 30px rgb(28 25 23 / .06)}[aria-label="アイデアストック"] form>textarea{min-height:7rem;border:0!important;outline:0!important;box-shadow:none!important}[aria-label="アイデアストック"] form>p{display:none}[aria-label="アイデアストック"] form>div{margin-top:.5rem;gap:.5rem}[aria-label="アイデアストック"] form button{min-height:2.75rem!important;padding:.5rem .75rem!important;font-size:0!important}[aria-label="アイデアストック"] form button::after{font-size:.8125rem}[aria-label="アイデアストック"] form button[type="submit"]::after{content:'↑'}[aria-label="アイデアストック"] form button[data-testid="assist-request"]::after{content:'✦ AI'}[aria-label="アイデアストック"] form button[data-testid="idea-help"]::after{content:'?'}`}</style>{workspaceContent()}</div>
       </WorkspaceShell>
-      {profileHydration.phase === 'ready' && <button type="button" onClick={() => { profileDialogDismissedRef.current = false; setProfileDialogDismissed(false); setProfileOpen(true); }} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>}
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
   );
