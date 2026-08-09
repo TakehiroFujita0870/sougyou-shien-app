@@ -11,9 +11,9 @@ let root;
 let container;
 
 function deferred() {
-  let resolve;
-  const promise = new Promise((next) => { resolve = next; });
-  return { promise, resolve };
+  let resolve; let reject;
+  const promise = new Promise((next, fail) => { resolve = next; reject = fail; });
+  return { promise, reject, resolve };
 }
 
 async function mount(props) {
@@ -70,5 +70,39 @@ describe('ProjectSurface conversation parity', () => {
     expect(saved.map((message) => message.content).join(' ')).toContain('最初の確認');
     expect(saved.map((message) => message.content).join(' ')).toContain('次の確認');
     expect(container.querySelectorAll('[data-message-role]').length).toBe(4);
+  });
+
+  it('never rolls the optimistic reference back when an intermediate queued save resolves', async () => {
+    const first = deferred(); const second = deferred(); let calls = 0;
+    const save = vi.fn((messages) => { calls += 1; if (calls === 1) return first.promise; if (calls === 2) return second.promise; return Promise.resolve(messages); });
+    await mount({ conversationRepository: { load: async () => [], save } });
+    await act(async () => { await Promise.resolve(); });
+    await enter('最初の質問');
+    await enter('二つ目の質問');
+    const firstSnapshot = save.mock.calls[0][0];
+    await act(async () => { first.resolve(firstSnapshot); await first.promise; await Promise.resolve(); });
+    expect(save).toHaveBeenCalledTimes(2);
+    await enter('三つ目の質問');
+    const secondSnapshot = save.mock.calls[1][0];
+    await act(async () => { second.resolve(secondSnapshot); await second.promise; await Promise.resolve(); await Promise.resolve(); });
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save.mock.calls.map(([messages]) => messages.length)).toEqual([2, 4, 6]);
+    expect(save.mock.calls[2][0]).toHaveLength(6);
+    expect(container.querySelectorAll('[data-message-role]')).toHaveLength(6);
+  });
+
+  it('continues from the optimistic conversation after a save rejection', async () => {
+    const save = vi.fn().mockRejectedValueOnce(new Error('offline')).mockImplementation(async (messages) => messages);
+    await mount({ conversationRepository: { load: async () => [], save } });
+    await act(async () => { await Promise.resolve(); });
+    await enter('保存に失敗する質問');
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(container.getAttribute('aria-busy')).not.toBe('true');
+    expect(container.querySelector('[role="alert"]').textContent).toContain('会話を保存できませんでした');
+    await enter('失敗後の質問');
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(save.mock.calls[1][0]).toHaveLength(4);
+    expect(container.querySelectorAll('[data-message-role]')).toHaveLength(4);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 });

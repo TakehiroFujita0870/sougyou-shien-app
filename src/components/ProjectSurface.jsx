@@ -126,6 +126,7 @@ export function ProjectSurface({
   const messagesRef = useRef([]);
   const persistQueueRef = useRef(Promise.resolve());
   const messageSequenceRef = useRef(0);
+  const messageRevisionRef = useRef(0);
 
   useEffect(() => {
     const request = ++loadId.current;
@@ -157,6 +158,7 @@ export function ProjectSurface({
     const request = loadId.current;
     const now = Date.now();
     const sequence = ++messageSequenceRef.current;
+    const revision = ++messageRevisionRef.current;
     const next = [
       ...messagesRef.current,
       { id: `user-${now}-${sequence}`, role: "user", content: message },
@@ -172,7 +174,11 @@ export function ProjectSurface({
       .catch(() => undefined)
       .then(async () => {
         const saved = await repository.save(next);
-        if (request !== loadId.current) return;
+        if (
+          request !== loadId.current ||
+          revision !== messageRevisionRef.current
+        )
+          return;
         messagesRef.current = saved;
         setMessages(saved);
         setConversationError("");
