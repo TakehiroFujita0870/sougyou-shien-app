@@ -38,6 +38,8 @@ repository: owner/name
 issue: #number
 purpose: one sentence
 owner_task: receiving department task
+model: assigned model
+thinking: assigned reasoning effort
 file_ownership: exclusive files or directories
 dependencies: required merge SHAs or none
 wip_slot: implementation | review
@@ -47,6 +49,22 @@ next_action: receiver's observable action
 ```
 
 同じ `issue + owner_task` は冪等キーとし、受信側は重複着手しない。
+
+## 役割別モデルプロファイル
+
+| 役割 | model / thinking |
+| --- | --- |
+| CEO室 | `gpt-5.6-terra / medium` |
+| 統合・リリース管理部 | `gpt-5.6-terra / medium` |
+| 会話体験・プロジェクト部 | `gpt-5.6-luna / low` |
+| プロダクトUI・デザインシステム部 | `gpt-5.6-luna / low` |
+| 品質・プロダクト運用部 | `gpt-5.6-luna / low` |
+| 基盤・認証部 | `gpt-5.6-luna / low` |
+| 事業設計・調査部 | `gpt-5.6-luna / low` |
+
+指定モデルが利用不能な場合だけ、実装部は統合部へ `BLOCKED`（`reason: model_unavailable`）を送る。無断でTerraその他のプロファイルへ切り替えてはならない。統合部とCEO室も表の指定プロファイルを守る。
+
+`ASSIGNMENT` と `DEPENDENCY_READY` は `model` と `thinking` を必須項目とする。送信側はpayloadの同じoverrideで受信部の新turnを起動する。
 
 ## 全社ポートフォリオ管理と要件決定
 
@@ -143,6 +161,8 @@ acceptance_criteria: observable acceptance criteria
 change_prohibitions: prohibited scope and boundaries
 checks: merge and verification summary
 owner_task: receiving department task
+model: assigned model
+thinking: assigned reasoning effort
 idempotency_key: source merge SHA + target department
 next_action: receiver's observable action
 ```
