@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { createProjectConversationRepository } from "./projectConversationRepository";
-import { downloadFormalPlanDocx } from "./formalPlanDocxAdapter";
 import { MODEL_CATALOG } from "../models/modelCatalog";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
@@ -29,6 +28,8 @@ const DEFAULT_PROJECT_MODEL_KEY =
     ?.logicalKey ?? MODEL_CATALOG[0]?.logicalKey;
 const downloadFormalPlanPdf = async (project) =>
   (await import("./formalPlanPdfAdapter")).downloadFormalPlanPdf(project);
+const downloadFormalPlanDocx = async (project) =>
+  (await import("./formalPlanDocxAdapter")).downloadFormalPlanDocx(project);
 
 function createDraftProject() {
   return {
@@ -184,9 +185,9 @@ export function ProjectSurface({
       });
   }
 
-  function exportDocx() {
+  async function exportDocx() {
     try {
-      downloadDocx(project);
+      await downloadDocx(project);
       setExportStatus("downloaded");
     } catch {
       setExportStatus("error");
