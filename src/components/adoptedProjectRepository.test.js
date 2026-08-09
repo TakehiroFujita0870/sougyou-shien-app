@@ -35,12 +35,43 @@ describe('adopted project repository', () => {
     expect(repository.list()).toHaveLength(1);
   });
 
+  it('replaces only the same id within the current owner and space', async () => {
+    const storage = storageWith(JSON.stringify({ schemaVersion: 1, projects: [
+      { ...candidate, ownerId: 'owner-b', spaceId: 'space-a', title: '別所有者の同一ID' },
+      { ...candidate, ownerId: 'owner-a', spaceId: 'space-b', title: '別空間の同一ID' },
+    ] }));
+    const repository = createAdoptedProjectRepository({ ownerId: 'owner-a', spaceId: 'space-a', storage });
+
+    await repository.saveAdopted(candidate);
+
+    const projects = JSON.parse(storage.getItem(ADOPTED_PROJECT_STORAGE_KEY)).projects;
+    expect(projects).toHaveLength(3);
+    expect(projects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: candidate.id, ownerId: 'owner-b', spaceId: 'space-a', title: '別所有者の同一ID' }),
+      expect.objectContaining({ id: candidate.id, ownerId: 'owner-a', spaceId: 'space-b', title: '別空間の同一ID' }),
+      expect.objectContaining({ id: candidate.id, ownerId: 'owner-a', spaceId: 'space-a', title: candidate.title }),
+    ]));
+  });
+
   it('quarantines corrupt data without overwriting it during hydration', async () => {
     const storage = storageWith('{broken');
     const repository = createAdoptedProjectRepository({ storage });
 
     await expect(repository.load()).resolves.toBeNull();
     expect(storage.setItem).not.toHaveBeenCalled();
+    await expect(repository.saveAdopted(candidate)).rejects.toThrow(/recovery/);
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('does not read or rewrite an unsupported future schema', async () => {
+    const futureValue = JSON.stringify({ schemaVersion: 2, projects: [{ ...candidate, ownerId: 'local-owner', spaceId: 'local-space' }] });
+    const storage = storageWith(futureValue);
+    const repository = createAdoptedProjectRepository({ storage });
+
+    await expect(repository.load()).resolves.toBeNull();
+    await expect(repository.saveAdopted(candidate)).rejects.toThrow(/recovery/);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.getItem(ADOPTED_PROJECT_STORAGE_KEY)).toBe(futureValue);
   });
 
   it('loads browser storage only once for a stable repository instance', async () => {

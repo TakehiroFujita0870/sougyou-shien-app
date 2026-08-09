@@ -25,6 +25,7 @@ export function normalizeAdoptedProject(value) {
 export function createAdoptedProjectRepository({ ownerId = 'local-owner', spaceId = 'local-space', storage = globalThis.localStorage } = {}) {
   let records = [];
   let loadPromise;
+  let writeBlocked = false;
 
   const list = () => records.filter((record) => record.ownerId === ownerId && record.spaceId === spaceId);
   const current = () => list().at(0) ?? null;
@@ -33,10 +34,21 @@ export function createAdoptedProjectRepository({ ownerId = 'local-owner', spaceI
     if (loadPromise) return loadPromise;
     loadPromise = Promise.resolve().then(() => {
       try {
-        const parsed = JSON.parse(storage?.getItem(ADOPTED_PROJECT_STORAGE_KEY) ?? '{"projects":[]}');
-        records = Array.isArray(parsed.projects) ? parsed.projects.map(normalizeAdoptedProject).filter(Boolean) : [];
+        const stored = storage?.getItem(ADOPTED_PROJECT_STORAGE_KEY);
+        if (stored == null) {
+          records = [];
+          return current();
+        }
+        const parsed = JSON.parse(stored);
+        if (parsed?.schemaVersion !== ADOPTED_PROJECT_SCHEMA_VERSION || !Array.isArray(parsed.projects)) {
+          writeBlocked = true;
+          records = [];
+          return current();
+        }
+        records = parsed.projects.map(normalizeAdoptedProject).filter(Boolean);
       } catch {
         // A corrupted value must never trigger a replacement write during hydration.
+        writeBlocked = true;
         records = [];
       }
       return current();
@@ -46,6 +58,7 @@ export function createAdoptedProjectRepository({ ownerId = 'local-owner', spaceI
 
   async function saveAdopted(candidate) {
     await load();
+    if (writeBlocked) throw new Error('Stored adopted projects require recovery before writing');
     const project = normalizeAdoptedProject({
       id: candidate?.id,
       ownerId,
@@ -57,7 +70,7 @@ export function createAdoptedProjectRepository({ ownerId = 'local-owner', spaceI
       status: 'adopted',
     });
     if (!project) throw new Error('Invalid adopted project');
-    const next = [project, ...records.filter((record) => record.id !== project.id)];
+    const next = [project, ...records.filter((record) => !(record.id === project.id && record.ownerId === ownerId && record.spaceId === spaceId))];
     storage?.setItem(ADOPTED_PROJECT_STORAGE_KEY, JSON.stringify({ schemaVersion: ADOPTED_PROJECT_SCHEMA_VERSION, projects: next }));
     records = next;
     return project;

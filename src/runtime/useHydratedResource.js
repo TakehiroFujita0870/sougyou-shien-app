@@ -28,7 +28,10 @@ export function useHydratedResource(repository) {
     setAttempt((current) => current + 1);
   }, []);
 
-  const replaceReady = useCallback((value) => setState({ phase: 'ready', value }), []);
+  const replaceReady = useCallback((value) => {
+    requestId.current += 1;
+    setState({ phase: 'ready', value });
+  }, []);
 
   return { ...state, retry, replaceReady };
 }
