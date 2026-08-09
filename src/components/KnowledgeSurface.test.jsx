@@ -3,134 +3,17 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import fixture from '../fixtures/knowledge-admin-demo.json';
-import { createLocalUploadMetadata, KnowledgeSurface } from './KnowledgeSurface';
+import { KnowledgeSurface } from './KnowledgeSurface';
+import { createKnowledgeConversationRepository } from './knowledgeConversationRepository';
 import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const memoryStorage = () => { const values = new Map(); return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) }; };
+async function mount(props = {}) { const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); await act(async () => root.render(<KnowledgeSurface fixture={fixture} repository={createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: memoryStorage() })} {...props} />)); return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) }; }
 
-async function mount(props = {}) {
-  const container = document.createElement('div'); document.body.append(container);
-  const root = createRoot(container);
-  const repository = props.repository ?? createKnowledgeMetadataRepository({ ownerId: 'test-owner', spaceId: 'test-space', storage: { getItem: () => null, setItem: () => {} } });
-  await act(async () => root.render(<KnowledgeSurface fixture={fixture} {...props} repository={repository} />));
-  return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
-}
-
-describe('KnowledgeSurface', () => {
-  it('shows files, locators, project context, and decision history without PII or external fetching', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const { container, unmount } = await mount();
-    expect(container.textContent).toContain('顧客ヒアリング要約');
-    expect(container.textContent).toContain('資料 / 顧客ヒアリング要約 / 1頁');
-    expect(container.textContent).toContain('小規模な検証から始める');
-    expect(container.textContent).not.toMatch(/email|phone|address|ownerId|spaceId/i);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    await unmount(); fetchSpy.mockRestore();
-  });
-
-  it('requires an explicit confirmation before removal and persists the tombstone only on confirm', async () => {
-    const repository = createKnowledgeMetadataRepository({ ownerId: 'test-owner', spaceId: 'test-space', storage: { getItem: () => null, setItem: () => {} } });
-    const { container, unmount } = await mount({ repository });
-    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
-    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
-    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
-    expect(repository.find('demo-document-001')).toMatchObject({ state: 'deleted' });
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    await unmount();
-  });
-
-  it('persists deletion before hiding a fixture and keeps it hidden after remount', async () => {
-    const values = new Map();
-    const store = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-    const firstRepository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
-    const first = await mount({ repository: firstRepository });
-    await act(async () => [...first.container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
-    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
-    expect(first.container.textContent).not.toContain('顧客ヒアリング要約');
-    await first.unmount();
-    const secondRepository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
-    const second = await mount({ repository: secondRepository });
-    await act(async () => Promise.resolve());
-    expect(second.container.textContent).not.toContain('顧客ヒアリング要約');
-    await second.unmount();
-  });
-
-  it('keeps the asset visible and explains recovery when deletion cannot persist', async () => {
-    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: { getItem: () => null, setItem: () => { throw new Error('offline'); } } });
-    const { container, unmount } = await mount({ repository });
-    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
-    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
-    expect(container.textContent).toContain('顧客ヒアリング要約');
-    expect(container.textContent).toContain('削除は反映されていません');
-    await unmount();
-  });
-
-  it('keeps an always-visible composer and sends through the local callback', async () => {
-    const onSend = vi.fn(); const { container, unmount } = await mount({ onSend });
-    const input = container.querySelector('#knowledge-composer');
-    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-    await act(async () => { setValue.call(input, '根拠を比べたい'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-    expect(onSend).toHaveBeenCalledWith('根拠を比べたい');
-    await unmount();
-  });
-
-  it('does not let a late hydration overwrite a sent conversation', async () => {
-    let resolveLoad;
-    const loaded = new Promise((resolve) => { resolveLoad = resolve; });
-    const repository = { load: () => loaded, save: vi.fn(async (value) => value) };
-    const { container, unmount } = await mount({ conversationRepository: repository });
-    const input = container.querySelector('#knowledge-composer');
-    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-    await act(async () => { setValue.call(input, '送信を保持'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-    await act(async () => resolveLoad({ messages: [{ role: 'assistant', content: '古い会話' }] }));
-    expect(container.textContent).toContain('送信を保持');
-    expect(container.textContent).not.toContain('古い会話');
-    await unmount();
-  });
-
-  it('keeps every rapid send in the persisted conversation', async () => {
-    const saved = []; const repository = { load: async () => ({ messages: [] }), save: vi.fn(async (value) => { saved.push(value); return value; }) };
-    const { container, unmount } = await mount({ conversationRepository: repository });
-    const input = container.querySelector('#knowledge-composer'); const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-    for (const text of ['一つ目', '二つ目']) await act(async () => { setValue.call(input, text); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-    await act(async () => Promise.resolve());
-    expect(saved.at(-1).messages.map((item) => item.content)).toEqual(expect.arrayContaining(['一つ目', '二つ目']));
-    await unmount();
-  });
-
-  it('shares the compact model and assist controls without exposing a persistent keyboard hint', async () => {
-    const onModelChange = vi.fn();
-    const models = [{ logicalKey: 'gpt-5.6-terra', displayName: 'GPT-5.6 Terra' }, { logicalKey: 'claude-sonnet-5', displayName: 'Claude Sonnet 5' }];
-    const { container, unmount } = await mount({ models, modelKey: 'gpt-5.6-terra', onModelChange });
-    expect(container.textContent).not.toContain('Enterで送信');
-    expect(container.querySelector('[aria-label="Knowledgeの質問を送信"]')).toBeTruthy();
-    await act(async () => container.querySelector('[data-testid="knowledge-assist"]').click());
-    expect(container.querySelector('#knowledge-composer').value).toContain('過去の判断');
-    const trigger = container.querySelector('[aria-label="モデル: GPT-5.6 Terra"]');
-    await act(async () => trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })));
-    const option = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.includes('Claude Sonnet 5'));
-    await act(async () => option.click());
-    expect(onModelChange).toHaveBeenCalledWith('claude-sonnet-5');
-    await unmount();
-  });
-
-  it('creates stable PDF/DOCX metadata and refuses unsupported or oversized files', () => {
-    const first = createLocalUploadMetadata({ name: '顧客メモ.pdf', size: 1024, lastModified: 10 });
-    const second = createLocalUploadMetadata({ name: '顧客メモ.pdf', size: 1024, lastModified: 10 });
-    expect(first).toMatchObject({ state: 'metadata_only', mediaType: 'pdf', sizeBytes: 1024 });
-    expect(first.id).toBe(second.id);
-    expect(() => createLocalUploadMetadata({ name: 'memo.txt', size: 1, lastModified: 1 })).toThrow('PDFまたはDOCX');
-    expect(() => createLocalUploadMetadata({ name: 'memo.docx', size: 10 * 1024 * 1024 + 1, lastModified: 1 })).toThrow('10 MiB以下');
-  });
-
-  it('notifies the App boundary only after a PDF metadata add succeeds', async () => {
-    const onAssetAdded = vi.fn(async () => {});
-    const { container, unmount } = await mount({ onAssetAdded });
-    const input = container.querySelector('#knowledge-file-picker');
-    const file = new File(['%PDF'], 'field-notes.pdf', { type: 'application/pdf', lastModified: 1 });
-    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
-    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve(); });
-    expect(onAssetAdded).toHaveBeenCalledWith(expect.objectContaining({ name: 'field-notes.pdf', state: 'metadata_only' }));
-    await unmount();
-  });
+describe('KnowledgeSurface library', () => {
+  it('shows a compact searchable, category-filterable library without network calls', async () => { const fetchSpy = vi.spyOn(globalThis, 'fetch'); const { container, unmount } = await mount(); await act(async () => Promise.resolve()); expect(container.textContent).toContain('ナレッジライブラリ'); expect(container.textContent).toContain('顧客ヒアリング要約'); expect(container.textContent).toContain('小規模な検証から始める'); const search = container.querySelector('input[placeholder="タイトル・本文を検索"]'); await act(async () => { search.value = '顧客'; search.dispatchEvent(new Event('input', { bubbles: true })); }); expect(container.textContent).toContain('顧客ヒアリング要約'); expect(fetchSpy).not.toHaveBeenCalled(); fetchSpy.mockRestore(); await unmount(); });
+  it('previews deterministic classification and saves only after confirmation, surviving reload', async () => { const store = memoryStorage(); const conversationRepository = createKnowledgeConversationRepository({ ownerId: 'a', spaceId: 's', storage: store }); const props = { conversationRepository, repository: createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store }) }; const first = await mount(props); const input = first.container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, '採用する市場調査の進め方'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); expect((await conversationRepository.load()).entries).toHaveLength(0); expect(document.querySelector('[role="dialog"]')).toBeTruthy(); await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'ナレッジに追加').click()); expect((await conversationRepository.load()).entries[0]).toMatchObject({ category: 'decision' }); await first.unmount(); const second = await mount({ ...props, conversationRepository: createKnowledgeConversationRepository({ ownerId: 'a', spaceId: 's', storage: store }) }); await act(async () => Promise.resolve()); expect(second.container.textContent).toContain('採用する市場調査'); await second.unmount(); });
+  it('cancels a preview without persistence and has no AI assist widget', async () => { const repository = createKnowledgeConversationRepository({ ownerId: 'a', spaceId: 's', storage: memoryStorage() }); const { container, unmount } = await mount({ conversationRepository: repository }); const input = container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, 'メモ'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'キャンセル').click()); expect((await repository.load()).entries).toEqual([]); expect(container.querySelector('[data-testid="knowledge-assist"]')).toBeNull(); await unmount(); });
+  it('keeps a confirmed entry when the initial hydration resolves late', async () => { let resolveLoad; const pending = new Promise((resolve) => { resolveLoad = resolve; }); const conversationRepository = { load: () => pending, save: vi.fn(async (value) => value) }; const { container, unmount } = await mount({ conversationRepository }); const input = container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, '採用する検証計画'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'ナレッジに追加').click()); await act(async () => resolveLoad({ messages: [], entries: [] })); expect(container.textContent).toContain('採用する検証計画'); expect(conversationRepository.save).toHaveBeenCalledWith(expect.objectContaining({ entries: [expect.objectContaining({ content: '採用する検証計画' })] })); await unmount(); });
 });

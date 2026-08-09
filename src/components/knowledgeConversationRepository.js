@@ -1,10 +1,16 @@
 export const KNOWLEDGE_CONVERSATION_STORAGE_KEY = 'kadode:knowledge-conversation';
-const emptyState = { messages: [] };
+const emptyState = { messages: [], entries: [] };
 
 function normalizeMessage(value) {
   return value && (value.role === 'user' || value.role === 'assistant') && typeof value.content === 'string'
-    ? { role: value.role, content: value.content.slice(0, 2000) }
+    ? { role: value.role, content: value.content.slice(0, 2000), createdAt: typeof value.createdAt === 'string' ? value.createdAt : null }
     : null;
+}
+
+function normalizeEntry(value) {
+  if (!value || typeof value.id !== 'string' || typeof value.title !== 'string' || typeof value.content !== 'string') return null;
+  const category = ['profile', 'decision', 'conversation', 'note'].includes(value.category) ? value.category : 'note';
+  return { id: value.id, category, title: value.title.slice(0, 100), content: value.content.slice(0, 4000), createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date(0).toISOString() };
 }
 
 export function createKnowledgeConversationRepository({ ownerId, spaceId, storage = globalThis.localStorage } = {}) {
@@ -13,15 +19,22 @@ export function createKnowledgeConversationRepository({ ownerId, spaceId, storag
     async load() {
       try {
         const parsed = JSON.parse(storage?.getItem(key) ?? '{}');
-        return { messages: Array.isArray(parsed.messages) ? parsed.messages.map(normalizeMessage).filter(Boolean) : [] };
+        return { messages: Array.isArray(parsed.messages) ? parsed.messages.map(normalizeMessage).filter(Boolean) : [], entries: Array.isArray(parsed.entries) ? parsed.entries.map(normalizeEntry).filter(Boolean) : [] };
       } catch { return emptyState; }
     },
     async save(value) {
-      const next = { messages: Array.isArray(value?.messages) ? value.messages.map(normalizeMessage).filter(Boolean) : [] };
+      const next = { messages: Array.isArray(value?.messages) ? value.messages.map(normalizeMessage).filter(Boolean) : [], entries: Array.isArray(value?.entries) ? value.entries.map(normalizeEntry).filter(Boolean) : [] };
       storage?.setItem(key, JSON.stringify(next));
       return next;
     },
   };
+}
+
+export function proposeKnowledgeEntry(content) {
+  const trimmed = content.trim();
+  const category = /(決定|採用|却下|保留)/.test(trimmed) ? 'decision' : /(顧客|経験|強み|プロフィール)/.test(trimmed) ? 'profile' : 'note';
+  const label = { profile: 'プロフィール', decision: '意思決定', note: 'メモ' }[category];
+  return { id: `knowledge:${Date.now()}`, category, title: `${label}: ${trimmed.replace(/\s+/g, ' ').slice(0, 36)}`, content: trimmed, createdAt: new Date().toISOString() };
 }
 
 export function respondToKnowledge(message, fixture) {
