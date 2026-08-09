@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { HomeSupervisor } from './components/HomeSupervisor';
+import { KnowledgeSurface } from './components/KnowledgeSurface';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
@@ -8,6 +9,7 @@ import { WorkspaceShell } from './components/WorkspaceShell';
 import { createHomeModelRepository, getHomeModels } from './components/homeModelRepository';
 import { ProjectSurface } from './components/ProjectSurface';
 import { useHydratedResource } from './runtime/useHydratedResource';
+import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
 export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
@@ -61,6 +63,7 @@ export function App({ profileRepository }) {
   const profileHydration = useHydratedResource(profileRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
+  const [knowledgeFixture, setKnowledgeFixture] = useState(knowledgeDemoFixture);
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
@@ -118,7 +121,7 @@ export function App({ profileRepository }) {
   function workspaceContent() {
     if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
     if (activeWorkspace === 'project') return <ProjectSurface adoptedProject={adoptedProject} />;
-    if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
+    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeFixture} onAddAsset={() => setKnowledgeFixture(knowledgeDemoFixture)} onRemoveAsset={() => setKnowledgeFixture((current) => ({ ...current, asset: { ...current.asset, state: 'deleted' } }))} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }
