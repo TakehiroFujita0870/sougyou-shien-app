@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
 import { PlanSelection } from './PlanSelection';
-import { createLocalPlanRepository } from './planSubscriptionRepository';
+import { createLocalPlanRepository, PLAN_STORAGE_KEY } from './planSubscriptionRepository';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -30,6 +30,38 @@ describe('local/fake plan subscription repository', () => {
 
     repository.applyPlan('standard', { modelKey: 'gpt-5.6-terra', reasoningMode: 'high' });
     expect(repository.applyPlan('free')).toMatchObject({ plan: 'free', modelKey: 'claude-haiku-4-5', reasoningMode: null });
+  });
+
+  it('persists and hydrates a normalized Standard model selection once', async () => {
+    const values = new Map();
+    const storage = { getItem: vi.fn((key) => values.get(key) ?? null), setItem: vi.fn((key, value) => values.set(key, value)) };
+    const first = createLocalPlanRepository({}, storage);
+    const selection = { plan: 'standard', modelKey: 'gpt-5.6-terra', reasoningMode: 'low' };
+
+    await expect(first.save(selection)).resolves.toMatchObject({ error: '' });
+    const second = createLocalPlanRepository({}, storage);
+    await expect(second.load()).resolves.toMatchObject(selection);
+    await second.load();
+    expect(storage.getItem).toHaveBeenCalledTimes(1);
+    expect(storage.setItem).toHaveBeenCalledWith(PLAN_STORAGE_KEY, expect.any(String));
+  });
+
+  it('normalizes corrupt and disallowed storage without escaping the boundary', async () => {
+    const storage = { getItem: vi.fn(() => '{broken'), setItem: vi.fn() };
+    const repository = createLocalPlanRepository({}, storage);
+    await expect(repository.load()).resolves.toEqual(repository.getSubscription());
+
+    const disallowed = createLocalPlanRepository({}, { getItem: () => JSON.stringify({ plan: 'standard', modelKey: 'unknown', reasoningMode: 'unsafe' }) });
+    const normalized = await disallowed.load();
+    expect(normalized.plan).toBe('standard');
+    expect(normalized.modelKey).not.toBe('unknown');
+    expect(normalized.reasoningMode).not.toBe('unsafe');
+  });
+
+  it('keeps the current state when storage write fails', async () => {
+    const before = createLocalPlanRepository({}, { setItem: () => { throw new Error('offline'); } }).getSubscription();
+    const repository = createLocalPlanRepository({}, { setItem: () => { throw new Error('offline'); } });
+    await expect(repository.save({ plan: 'standard', modelKey: 'gpt-5.6-terra', reasoningMode: 'low' })).resolves.toMatchObject({ error: expect.any(String), subscription: before });
   });
 });
 
