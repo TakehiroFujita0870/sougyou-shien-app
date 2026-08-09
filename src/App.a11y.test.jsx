@@ -70,7 +70,7 @@ describe('App keyboard and accessibility quality', () => {
 
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
 
-    expect(container.querySelector('#idea-message')).not.toBeNull();
+    expect(container.querySelector('#home-supervisor-message')).not.toBeNull();
     expect(container.querySelector('header')).toBeNull();
     expect(navigation.className).toContain('min-w-0');
     expect(container.querySelector('main').className).toContain('kadode-shell');

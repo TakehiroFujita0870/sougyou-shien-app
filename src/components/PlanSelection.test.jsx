@@ -138,10 +138,14 @@ describe('plan selection acceptance', () => {
     await openAccount(container);
     await click(menuItem('設定'));
 
-    const standard = container.querySelector('input[value="standard"]');
-    standard.focus();
-    expect(document.activeElement).toBe(standard);
-    await act(() => standard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    const selectedPlan = container.querySelector('input[name="plan"]:checked')?.value;
+    const targetPlan = container.querySelector(`input[value="${selectedPlan === 'standard' ? 'free' : 'standard'}"]`);
+    targetPlan.focus();
+    expect(document.activeElement).toBe(targetPlan);
+    await act(async () => {
+      targetPlan.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+    });
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
 
     expect(container.querySelector('#model')).toBeNull();

@@ -48,8 +48,8 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
   it.each([1280, 390])('keeps Home AI composer as the only input entry at %ipx', async (width) => {
     const { container } = await mountApp(width);
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
-    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
-    expect(container.querySelector('#idea-message')).toBeTruthy();
+    expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
+    expect(container.querySelector('#home-supervisor-message')).toBeTruthy();
   });
 
   it('keeps surface context and selected surface after an F5-equivalent remount without network', async () => {
@@ -69,10 +69,10 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
 
   it('exposes candidate decision controls from the Home composer', async () => {
     const { container } = await mountApp(1280);
-    const composer = container.querySelector('#idea-message');
+    const composer = container.querySelector('#home-supervisor-message');
     expect(composer).toBeTruthy();
-    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
-    expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
+    expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
+    expect(container.textContent).not.toContain('Enterで送信、Shift+Enterで改行');
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
       setter.call(composer, '工場の故障履歴を探せない');
@@ -81,7 +81,24 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(container.textContent).toContain('アイデア候補として保存');
+    expect(container.textContent).toContain('プロジェクトに採用');
     expect([...container.querySelectorAll('button')].some((button) => button.textContent.includes('発言を送信'))).toBe(true);
+  });
+
+  it('promotes an adopted inline candidate to the Project surface', async () => {
+    const { container } = await mountApp(1280);
+    const composer = container.querySelector('#home-supervisor-message');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(composer, 'プロジェクトを一覧で確認');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用').click());
+    expect(container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(container.textContent).toContain('採用したプロジェクト');
+    expect(container.textContent).toContain('現在のsurface: Home');
+    expect(container.textContent).toContain('入力を「inspect_projects」として整理しました。');
   });
 });

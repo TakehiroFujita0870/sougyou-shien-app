@@ -19,8 +19,7 @@ function NavItems({ activePage, onSelect }) {
   ));
 }
 
-export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialCollapsed = false, initialDrawerOpen = false }) {
-  const [collapsed, setCollapsed] = useState(initialCollapsed);
+export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
 
   useEffect(() => {
@@ -36,15 +35,14 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
   }
 
   return (
-    <div className={`workspace-shell${collapsed ? ' workspace-shell--collapsed' : ''}`}>
+    <div className="workspace-shell">
       <button type="button" className="workspace-shell__mobile-trigger" aria-label="サイドバーを開く" aria-controls="workspace-sidebar" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}><span aria-hidden="true" className="workspace-shell__menu-mark" />メニュー</button>
       {drawerOpen && <button type="button" className="workspace-shell__scrim" aria-label="サイドバーを閉じる" onClick={() => setDrawerOpen(false)} />}
       <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
-        <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" />{!collapsed && <span>Kadode workspace</span>}</div>
+        <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" /><span>Kadode</span></div>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
         <footer className="workspace-shell__account">
-          <div className="workspace-shell__avatar" aria-hidden="true">K</div>
-          {!collapsed && <div className="workspace-shell__account-copy">
+          <div className="workspace-shell__account-copy">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left hover:bg-[var(--color-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]" aria-label={`アカウント ${PLAN_LABELS[currentPlan] ?? currentPlan}`}>
@@ -66,7 +64,7 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
                 <DropdownMenuItem>ログアウト</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>}
+          </div>
         </footer>
       </aside>
       <section className="workspace-shell__main">

@@ -12,16 +12,16 @@ describe('Kadode three-surface workspace shell', () => {
 
   it('starts Home with the reachable Kadode AI candidate composer', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html).toContain('id="idea-message"');
+    expect(html).toContain('id="home-supervisor-message"');
     expect(html).toContain('Kadode AI');
     expect(html).not.toContain('STAGE GATE');
   });
 
   it('keeps the Home composer accessible and independent of external services', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html).toContain('for="idea-message"');
-    expect(html).toContain('Enterで送信、Shift+Enterで改行');
-    expect(html).toContain('Enterで送信、Shift+Enterで改行');
+    expect(html).toContain('for="home-supervisor-message"');
+    expect(html).toContain('GPT-5.6 Terra');
+    expect(html).not.toContain('Enterで送信、Shift+Enterで改行');
     expect(html).not.toContain('fetch(');
     expect(html).not.toContain('AI広報');
   });
