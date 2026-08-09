@@ -65,7 +65,7 @@ describe('WorkspaceShell', () => {
     act(() => { root.unmount(); container.remove(); });
   });
 
-  it('renders the vertical information architecture and account footer', () => {
+  it('renders the vertical information architecture and account footer', async () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
@@ -84,7 +84,10 @@ describe('WorkspaceShell', () => {
     expect(document.body.textContent).toContain('設定');
     expect(document.body.textContent).toContain('ヘルプ・ショートカット');
     expect(document.body.textContent).toContain('ログアウト');
-    act(() => document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await act(async () => {
+      document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await Promise.resolve();
+    });
     expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(accountTrigger);
     cleanup();
