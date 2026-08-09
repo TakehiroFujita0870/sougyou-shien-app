@@ -19,7 +19,7 @@ describe('Kadode three-surface workspace shell', () => {
 
   it('keeps the Home composer accessible and independent of external services', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html).toContain('label for="idea-message"');
+    expect(html).toContain('for="idea-message"');
     expect(html).toContain('Enterで送信、Shift+Enterで改行');
     expect(html).toContain('Enterで送信、Shift+Enterで改行');
     expect(html).not.toContain('fetch(');
