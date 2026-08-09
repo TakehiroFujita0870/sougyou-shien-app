@@ -21,7 +21,8 @@ describe('T-IA-02-R runtime shell contract', () => {
     expect(html).toContain('Kadode AI');
     expect(html).toContain('AIへのメッセージ');
     expect(html).toContain('Enterで送信、Shift+Enterで改行');
-    expect(html).not.toContain('local / fake モード');
+    expect(html).toContain('local / fake モード');
+    expect(html).toContain('rounded-full border border-stone-300');
     expect(html).not.toContain('始める前に、');
   });
 
