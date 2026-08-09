@@ -12,14 +12,53 @@ function normalizeDocument(value) {
 export function createKnowledgeMetadataRepository({ ownerId, spaceId, storage = globalThis.localStorage } = {}) {
   let documents = [];
   let loadPromise;
+  let lastError = null;
   const writeDocuments = (nextDocuments) => storage?.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify({ schemaVersion: KNOWLEDGE_SCHEMA_VERSION, documents: nextDocuments }));
   async function load() {
     if (loadPromise) return loadPromise;
-    loadPromise = Promise.resolve().then(() => { try { const parsed = JSON.parse(storage?.getItem(KNOWLEDGE_STORAGE_KEY) ?? '{"documents":[]}'); const next = Array.isArray(parsed.documents) ? parsed.documents.map(normalizeDocument).filter(Boolean) : []; documents = next; } catch { /* quarantine corrupt records and retain safe empty state */ } return list(); });
+    loadPromise = Promise.resolve().then(() => {
+      try {
+        const parsed = JSON.parse(storage?.getItem(KNOWLEDGE_STORAGE_KEY) ?? '{"documents":[]}');
+        const next = Array.isArray(parsed.documents) ? parsed.documents.map(normalizeDocument).filter(Boolean) : [];
+        documents = next;
+        lastError = null;
+      } catch (error) {
+        lastError = error;
+      }
+      return list();
+    });
     return loadPromise;
   }
   const list = () => documents.filter((document) => document.ownerId === ownerId && document.spaceId === spaceId && document.state !== 'deleted');
-  async function add(metadata) { const document = normalizeDocument({ ...metadata, ownerId, spaceId }); if (!document) throw new Error('Invalid metadata'); const nextDocuments = [...documents.filter((item) => item.id !== document.id), document]; writeDocuments(nextDocuments); documents = nextDocuments; return document; }
-  async function remove(id) { const current = documents.find((item) => item.id === id && item.ownerId === ownerId && item.spaceId === spaceId); if (!current) return null; const deleted = { ...current, state: 'deleted', deletedAt: new Date().toISOString() }; const nextDocuments = documents.map((item) => item.id === id ? deleted : item); writeDocuments(nextDocuments); documents = nextDocuments; return deleted; }
-  return { load, list, add, delete: remove };
+  const find = (id) => documents.find((document) => document.id === id && document.ownerId === ownerId && document.spaceId === spaceId) ?? null;
+  async function add(metadata) {
+    const document = normalizeDocument({ ...metadata, ownerId, spaceId });
+    if (!document) throw new Error('Invalid metadata');
+    const nextDocuments = [...documents.filter((item) => item.id !== document.id), document];
+    try {
+      writeDocuments(nextDocuments);
+      documents = nextDocuments;
+      lastError = null;
+      return document;
+    } catch (error) {
+      lastError = error;
+      throw error;
+    }
+  }
+  async function remove(id, fallbackMetadata) {
+    const current = find(id) ?? normalizeDocument({ ...fallbackMetadata, id, ownerId, spaceId });
+    if (!current) return null;
+    const deleted = { ...current, state: 'deleted', deletedAt: new Date().toISOString() };
+    const nextDocuments = [...documents.filter((item) => item.id !== id), deleted];
+    try {
+      writeDocuments(nextDocuments);
+      documents = nextDocuments;
+      lastError = null;
+      return deleted;
+    } catch (error) {
+      lastError = error;
+      throw error;
+    }
+  }
+  return { load, list, find, add, delete: remove, getLastError: () => lastError };
 }
