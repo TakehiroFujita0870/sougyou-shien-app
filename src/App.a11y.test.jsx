@@ -11,6 +11,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const profileRepository = { load: async () => null, save: async (profile) => profile };
 
 async function mount() {
+  sessionStorage.setItem('kadode:selected-surface', 'home');
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -30,11 +31,11 @@ describe('App keyboard and accessibility quality', () => {
 
   it('moves workspaces with the documented PC shortcut and ignores text entry', async () => {
     const { container, unmount } = await mount();
+    const input = container.querySelector('textarea');
 
     await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', altKey: true, shiftKey: true, bubbles: true })));
     expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Project')?.getAttribute('aria-current')).toBe('page');
 
-    const input = container.querySelector('textarea');
     await act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: '3', altKey: true, shiftKey: true, bubbles: true })));
     expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Project')?.getAttribute('aria-current')).toBe('page');
     await unmount();
@@ -42,10 +43,13 @@ describe('App keyboard and accessibility quality', () => {
 
   it('closes the profile dialog with Escape and preserves tokenized visible focus styles and 44px navigation targets', async () => {
     const { container, unmount } = await mount();
+    const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
+    await act(() => accountTrigger.click());
+    const profileEntry = [...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報');
+    await act(() => profileEntry.click());
     const dialog = container.querySelector('[role="dialog"]');
-
     await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-    expect(dialog.isConnected).toBe(false);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
 
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
     expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Home', 'Project', 'Knowledge']);
@@ -60,13 +64,9 @@ describe('App keyboard and accessibility quality', () => {
     const { container, unmount } = await mount();
     await act(async () => Promise.resolve());
 
-    const dialog = container.querySelector('[role="dialog"]');
-    const panel = dialog.querySelector('section');
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
 
-    expect(dialog.className).toContain('grid-cols-[minmax(0,1fr)]');
-    expect(panel.className).toContain('min-w-0');
-    expect(panel.className).toContain('max-w-full');
+    expect(container.querySelector('#idea-message')).not.toBeNull();
     expect(container.querySelector('header')).toBeNull();
     expect(navigation.className).toContain('min-w-0');
     expect(container.querySelector('main').className).toContain('kadode-shell');

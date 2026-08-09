@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 
 import { WorkspaceShell } from './WorkspaceShell';
+import { LocalGoogleSignIn } from './LocalGoogleSignIn';
+import { createLocalGoogleAuthAdapter } from '../auth/localAuthAdapter';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,6 +18,23 @@ function mount() {
 }
 
 describe('WorkspaceShell', () => {
+  it('hydrates and restores a signed-in principal through the explicit account menu', async () => {
+    const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
+    const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);
+    const render = () => act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} accountContent={<LocalGoogleSignIn authAdapter={createLocalGoogleAuthAdapter({ storage })} />}><h1>ページ</h1></WorkspaceShell>));
+    render();
+    act(() => container.querySelector('.workspace-shell__account-copy > button').click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(container.textContent).toContain('Googleで続ける');
+    await act(async () => container.querySelector('.workspace-shell__account-auth button').click());
+    expect(container.textContent).toContain('ローカル Google テスト利用者');
+    act(() => root.unmount()); root = createRoot(container); render(); act(() => container.querySelector('.workspace-shell__account-copy > button').click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(container.querySelector('[role="menu"]')).toBeTruthy();
+    const restoredAdapter = createLocalGoogleAuthAdapter({ storage });
+    await expect(restoredAdapter.hydrate()).resolves.toEqual(expect.objectContaining({ id: 'local-google-user' }));
+    act(() => { root.unmount(); container.remove(); });
+  });
   it.each([
     ['desktop account area', false],
     ['390px mobile drawer account area', true],
