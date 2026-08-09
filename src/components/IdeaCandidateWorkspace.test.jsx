@@ -65,7 +65,7 @@ describe('idea conversation controls', () => {
     const controls = [...container.querySelectorAll('button')]; const hold = controls.find((button) => button.textContent === '保留'); const adopt = controls.find((button) => button.textContent === 'プロジェクトに採用'); const reject = controls.find((button) => button.textContent === '理由付きで却下');
     expect(hold && adopt && reject).toBeTruthy();
     await act(async () => reject.click()); expect(container.textContent).toContain('却下理由を入力してください');
-    const reason = container.querySelector('#reject-reason'); await act(async () => { reason.value = '対象顧客が不明'; reason.dispatchEvent(new Event('input', { bubbles: true })); }); await act(async () => reject.click()); expect(stored[0]).toMatchObject({ status: 'rejected', rejectionReason: '対象顧客が不明' });
+    const reason = container.querySelector('#reject-reason'); const setReason = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setReason.call(reason, '対象顧客が不明'); reason.dispatchEvent(new Event('change', { bubbles: true })); }); await act(async () => reject.click()); expect(stored[0]).toMatchObject({ status: 'rejected', rejectionReason: '対象顧客が不明' });
     await act(async () => hold.click()); expect(stored[0]).toMatchObject({ status: 'held' }); expect(stored[0].promotedTo).toBeUndefined();
     await act(async () => adopt.click()); expect(stored[0]).toMatchObject({ status: 'adopted', promotedTo: 'project' }); expect(fetchSpy).not.toHaveBeenCalled();
     await act(() => root.unmount()); container.remove(); fetchSpy.mockRestore();
@@ -74,7 +74,7 @@ describe('idea conversation controls', () => {
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); const stored = [{ ...candidate, id: 'a', status: 'adopted', promotedTo: 'project' }, { ...candidate, id: 'h', title: '保留案', status: 'held' }, { ...candidate, id: 'r', title: '却下案', status: 'rejected', rejectionReason: '重複している' }]; const repository = { load: async () => stored, save: async (items) => items };
     await act(async () => root.render(<IdeaCandidateWorkspace repository={repository} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />)); await act(async () => {});
     expect(container.textContent).toContain('状態: 採用'); expect(container.textContent).toContain('状態: 保留'); expect(container.textContent).toContain('状態: 却下');
-    await act(async () => container.querySelectorAll('button')[3].click()); expect(container.querySelector('#reject-reason').value).toBe('重複している'); await act(() => root.unmount()); container.remove();
+    const rejectedButton = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('却下案')); await act(async () => rejectedButton.click()); expect(container.querySelector('#reject-reason').value).toBe('重複している'); await act(() => root.unmount()); container.remove();
   });
   it('exposes labeled, focusable decision controls for keyboard and screen readers', async () => {
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); const repository = { load: async () => [{ ...candidate, id: '1' }], save: async (items) => items };
