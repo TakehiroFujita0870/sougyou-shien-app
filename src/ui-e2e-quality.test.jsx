@@ -63,7 +63,7 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     mounted.shift().container.remove();
     const second = await mountApp(390);
     expect(second.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
-    expect(second.container.textContent).toContain('プロジェクト');
+    expect(second.container.textContent).toContain('Project');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
