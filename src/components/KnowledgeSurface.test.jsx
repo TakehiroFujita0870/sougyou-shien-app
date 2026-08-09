@@ -74,6 +74,30 @@ describe('KnowledgeSurface', () => {
     await unmount();
   });
 
+  it('does not let a late hydration overwrite a sent conversation', async () => {
+    let resolveLoad;
+    const loaded = new Promise((resolve) => { resolveLoad = resolve; });
+    const repository = { load: () => loaded, save: vi.fn(async (value) => value) };
+    const { container, unmount } = await mount({ conversationRepository: repository });
+    const input = container.querySelector('#knowledge-composer');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setValue.call(input, '送信を保持'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    await act(async () => resolveLoad({ messages: [{ role: 'assistant', content: '古い会話' }] }));
+    expect(container.textContent).toContain('送信を保持');
+    expect(container.textContent).not.toContain('古い会話');
+    await unmount();
+  });
+
+  it('keeps every rapid send in the persisted conversation', async () => {
+    const saved = []; const repository = { load: async () => ({ messages: [] }), save: vi.fn(async (value) => { saved.push(value); return value; }) };
+    const { container, unmount } = await mount({ conversationRepository: repository });
+    const input = container.querySelector('#knowledge-composer'); const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    for (const text of ['一つ目', '二つ目']) await act(async () => { setValue.call(input, text); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+    await act(async () => Promise.resolve());
+    expect(saved.at(-1).messages.map((item) => item.content)).toEqual(expect.arrayContaining(['一つ目', '二つ目']));
+    await unmount();
+  });
+
   it('shares the compact model and assist controls without exposing a persistent keyboard hint', async () => {
     const onModelChange = vi.fn();
     const models = [{ logicalKey: 'gpt-5.6-terra', displayName: 'GPT-5.6 Terra' }, { logicalKey: 'claude-sonnet-5', displayName: 'Claude Sonnet 5' }];

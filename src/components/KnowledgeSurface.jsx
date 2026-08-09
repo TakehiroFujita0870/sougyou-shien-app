@@ -81,7 +81,6 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
     event.preventDefault();
     const value = message.trim();
     if (!value) return;
-    if (!conversationReady) return;
     conversationDirtyRef.current = true;
     const next = [...conversationRef.current, { role: 'user', content: value }, { role: 'assistant', content: respondToKnowledge(value, fixture) }];
     conversationRef.current = next;
