@@ -11,6 +11,7 @@
 3. 実装では implementation の再帰ループに従う。テストとセルフレビューの Exit Criteria を満たすまでPRを出さない。3周しても満たせない場合は、実装を止めて planning に差し戻す。
 4. 既存の未コミット変更は利用者または別作業のものとして扱う。対象外のファイルを変更、ステージ、復元しない。
 5. 次工程のtask、review、merge後handoffがある作業では、[handoff-closure](skills/dev/handoff-closure/SKILL.md)を使い、送達と受領確認まで同一turnで閉じる。
+6. 自律的な製品作業では、[ceo-decision-backlog](skills/dev/ceo-decision-backlog/SKILL.md)を使い、未解決の `ceo-decision` Issue件数と10件停止条件を確認する。
 
 ## プロダクト段階とAIモデル
 
@@ -66,6 +67,7 @@
 - `PORTFOLIO_DIRECTIVE action=CHANGE` を受信した統合部は、CEOがscopeを明示的に限定しない限り、同一turnで全担当のactive work/review/next owner、idle capacity、dependency/ownership conflictとunblock action、意図して未割当の理由をcompact portfolio scanとして評価する。続けてWIP、所有権、依存に基づく `ASSIGNMENT`、`CONTINUE`、`HOLD`、`CLOSE` を配信する。scanは次のCEO向け`MERGED.org_health`へ短く内包し、通常のCHANGEごとに運用文書PRを作らない。
 - 統合部は、部門WIPが0または上限超、P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界の直後だけ、全社状態を独立`ORG_HEALTH`としてCEO室へ送る。PR mergeとsmoke成功時の同じ内容は`MERGED.org_health`に内包し、独立送信しない。payloadにはmain SHA、merge source、各部active/idle/WIP、review queue、ready/unassigned Issue、dependency blocks、所有権衝突、次の配分候補、モデルavailability、mergeが解放した作業、dependency deliveryを含める。定期ポーリングを追加しない。同じstate fingerprintは二重送信しない。
 - `REQUIREMENT_REQUEST` は、P0の実装/受入条件が未決、複数部の設計衝突、価格・外部接続・個人情報・法務などCEO決裁が必要な場合だけCEO室からユーザーへ送る。通常の進捗確認、CI失敗、P1/P2は対象外とする。
+- CEO判断が必要な不明点は、重複確認後に `ceo-decision` と `blocked` を付けたGitHub Issueへ蓄積する。未解決が10件に達したら新規の自動実装を停止し、判断待ちの解消、既存PRの検査、緊急のセキュリティ・データ損失修正だけを継続する。10件未満では判断待ちスコープだけを止める。正本は [`docs/operations/ceo-decision-backlog.md`](docs/operations/ceo-decision-backlog.md) とする。
 
 ### 役割別モデルプロファイル
 
