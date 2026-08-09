@@ -50,7 +50,7 @@ Then: the same local mock sign-in component is available without redirect, netwo
 ## 3 surface IA / context boundary
 
 - T-IA-03 (context/privacy)との接続境界はAuthAdapterが返すfixture principalとowner-scoped local stateの間に置く。認証principal以外のcontext、会話内容、個人情報はこのPRへ渡さない。
-- 3 surface IA（workspace home / research / files）は共通のWorkspaceShell account領域を利用し、各surface固有の認証UIや状態を持たない。mobileはdrawer内の同一account領域を使う。
+- 3 surface IA（Home / Project / Knowledge）は共通のWorkspaceShell account領域を利用し、各surface固有の認証UIや状態を持たない。mobileはdrawer内の同一account領域を使う。
 - T-IA-03の実session、実RLS、実外部providerへの接続は別Issue/PRの契約とし、本PRではlocal adapter境界を越えない。
 
 ## スコープ外

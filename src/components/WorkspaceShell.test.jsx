@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 
 import { WorkspaceShell } from './WorkspaceShell';
+import { LocalGoogleSignIn } from './LocalGoogleSignIn';
+import { createLocalGoogleAuthAdapter } from '../auth/localAuthAdapter';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,6 +18,25 @@ function mount() {
 }
 
 describe('WorkspaceShell', () => {
+  it.each([
+    ['desktop account area', false],
+    ['390px mobile drawer account area', true],
+  ])('exposes local Google sign-in in the %s', async (_label, mobile) => {
+    const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
+    const adapter = createLocalGoogleAuthAdapter({ storage });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="ideas" onSelect={() => {}} initialDrawerOpen={mobile} accountContent={<LocalGoogleSignIn authAdapter={adapter} />}><h1>ページ</h1></WorkspaceShell>));
+    expect(container.querySelector('.workspace-shell__account-auth')).toBeNull();
+    expect(container.textContent).toContain('確認中');
+    await act(async () => adapter.hydrate());
+    expect(container.textContent).toContain('Googleで続ける');
+    await act(async () => container.querySelector('.workspace-shell__account-auth button').click());
+    expect(container.textContent).toContain('ローカル Google テスト利用者');
+    act(() => { root.unmount(); container.remove(); });
+  });
+
   it('renders the vertical information architecture and account footer', () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();

@@ -8,6 +8,7 @@ import { createLocalPlanRepository } from './components/planSubscriptionReposito
 import { ResearchWorkspace } from './components/ResearchWorkspace';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
+import { LocalGoogleSignIn } from './components/LocalGoogleSignIn';
 
 export const WORKSPACE_NAV = [{ id: 'ideas', label: '事業のタネ' }, { id: 'research', label: '横断調査' }, { id: 'files', label: '資料' }, { id: 'settings', label: '設定' }];
 
@@ -124,7 +125,7 @@ export function App({ profileRepository }) {
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan}>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
         <header className="kadode-header border-b"><div className="flex min-w-0 items-center justify-between gap-4 px-5 py-5"><strong className="shrink-0 text-2xl tracking-tight">Kadode</strong><span className="min-w-0 break-words text-right text-sm font-medium text-[color:var(--color-text-muted)]">アイデアを、構造で育てる。</span></div></header>
         <div className="px-5 py-6 sm:py-10"><p className="kadode-notice mb-6 rounded-2xl border px-4 py-3 text-sm leading-6"><strong>local / fake モード</strong> — このMVPでは外部サービスへ接続・送信しません。</p>{workspaceContent()}</div>
       </WorkspaceShell>
