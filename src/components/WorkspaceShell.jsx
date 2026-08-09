@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Dialog, DialogContent, DialogTitle } from './ui/Dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 export const SHELL_NAV = [
@@ -20,8 +22,9 @@ function NavItems({ activePage, onSelect }) {
   ));
 }
 
-export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
+export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive, onOpenPortfolioItem, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
+  const [allOpen, setAllOpen] = useState(null);
   const accountTriggerRef = useRef(null);
 
   useEffect(() => {
@@ -35,6 +38,10 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive
     onSelect(page);
     setDrawerOpen(false);
   }
+  function openPortfolioItem(type, entry) {
+    onOpenPortfolioItem?.(type, entry);
+    choosePage(type);
+  }
 
   return (
     <div className="workspace-shell">
@@ -43,7 +50,12 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive
       <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" /><span>Kadode</span></div>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="最近の項目">{SHELL_NAV.map((item) => <section key={item.id} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.label}</p>{(portfolio[item.id] ?? []).filter((entry) => !entry.archived).slice(0, 10).map((entry) => <div key={entry.id} className="flex items-center gap-1 px-2"><button type="button" className="min-w-0 flex-1 truncate py-1 text-left text-xs" onClick={() => choosePage(item.id)}>{entry.title}</button>{(item.id === 'home' || item.id === 'project') && <button type="button" aria-label={`${entry.title}をアーカイブ`} className="text-xs" onClick={() => onArchive?.(item.id, entry.id)}>アーカイブ</button>}</div>)}</section>)}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="最近の項目">
+          {SHELL_NAV.map((item) => {
+            const entries = (portfolio[item.id] ?? []).filter((entry) => !entry.archived);
+            return <section key={item.id} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.label}</p>{entries.slice(0, 10).map((entry) => <div key={entry.id} className="flex items-center gap-1 px-2"><button type="button" className="min-w-0 flex-1 truncate py-1.5 text-left text-xs hover:underline" onClick={() => openPortfolioItem(item.id, entry)}>{entry.title}</button>{(item.id === 'home' || item.id === 'project') && <button type="button" aria-label={`${entry.title}をアーカイブ`} className="shrink-0 text-xs text-[var(--color-text-muted)] hover:underline" onClick={() => onArchive?.(item.id, entry.id)}>アーカイブ</button>}</div>)}{entries.length > 10 && <button type="button" className="px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:underline" onClick={() => setAllOpen(item.id)}>すべて表示</button>}</section>;
+          })}
+        </div>
         <footer className="workspace-shell__account">
           <div className="workspace-shell__account-copy">
             <DropdownMenu>
@@ -75,6 +87,14 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive
       <section className="workspace-shell__main">
         {children}
       </section>
+      <Dialog open={Boolean(allOpen)} onOpenChange={(open) => { if (!open) setAllOpen(null); }}>
+        <DialogContent className="max-h-[80dvh] overflow-hidden p-0">
+          <DialogTitle className="border-b border-[var(--color-border-subtle)] px-6 py-5 text-lg font-semibold">{SHELL_NAV.find((item) => item.id === allOpen)?.label}の履歴</DialogTitle>
+          <div className="max-h-[calc(80dvh-5rem)] overflow-y-auto px-4 py-3" aria-label="すべての履歴">
+            {(portfolio[allOpen] ?? []).filter((entry) => !entry.archived).map((entry) => <div key={entry.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-muted)]"><Button type="button" variant="ghost" className="min-w-0 flex-1 justify-start truncate" onClick={() => { openPortfolioItem(allOpen, entry); setAllOpen(null); }}>{entry.title}</Button>{(allOpen === 'home' || allOpen === 'project') && <Button type="button" variant="ghost" className="shrink-0 text-xs" onClick={() => onArchive?.(allOpen, entry.id)}>アーカイブ</Button>}</div>)}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

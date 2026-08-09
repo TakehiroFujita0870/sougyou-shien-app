@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { HomeSupervisor } from './components/HomeSupervisor';
+import { createHomeConversationRepository, HomeSupervisor } from './components/HomeSupervisor';
 import { KnowledgeSurface } from './components/KnowledgeSurface';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
@@ -69,12 +69,33 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
   const portfolioRepositoryRef = useRef(null);
   if (!portfolioRepositoryRef.current) portfolioRepositoryRef.current = createSidebarPortfolioRepository();
+  const homeConversationRepositoryRef = useRef(null);
+  if (!homeConversationRepositoryRef.current) homeConversationRepositoryRef.current = homeConversationRepository ?? createHomeConversationRepository();
   const [portfolio, setPortfolio] = useState({ home: [], project: [], knowledge: [] });
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
   useEffect(() => { homeModelRepositoryRef.current.load().then(setHomeModelKey); }, []);
   useEffect(() => { portfolioRepositoryRef.current.load().then(setPortfolio); }, []);
+  useEffect(() => {
+    let active = true;
+    async function mirrorPersistedContext() {
+      const next = await portfolioRepositoryRef.current.load();
+      const home = await homeConversationRepositoryRef.current.load();
+      const firstUserMessage = home.messages?.find((entry) => entry.role === 'user')?.content?.trim();
+      if (firstUserMessage) {
+        next.home = [{ id: 'home:default', title: firstUserMessage.slice(0, 80), updatedAt: Date.now(), archived: next.home.some((item) => item.id === 'home:default' && item.archived) }, ...next.home.filter((item) => item.id !== 'home:default')];
+      }
+      if (knowledgeDemoFixture?.asset) {
+        const asset = knowledgeDemoFixture.asset;
+        next.knowledge = [{ id: asset.id, title: asset.name, updatedAt: Date.now(), archived: false }, ...next.knowledge.filter((item) => item.id !== asset.id)];
+      }
+      const saved = await portfolioRepositoryRef.current.save(next);
+      if (active) setPortfolio(saved);
+    }
+    void mirrorPersistedContext();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
@@ -142,19 +163,19 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   }, [adoptedProjectHydration.phase, adoptedProjectHydration.replaceReady, adoptedProjectHydration.value]);
 
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace repository={homeConversationRepository} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace repository={homeConversationRepositoryRef.current} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
     if (activeWorkspace === 'project') {
       if (adoptedProjectHydration.phase === 'loading') return <section aria-live="polite" className="max-w-3xl py-10 text-sm text-[var(--color-text-muted)]">プロジェクトを読み込んでいます…</section>;
       return <ProjectSurface adoptedProject={adoptedProjectHydration.value} />;
     }
-    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeDemoFixture} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
+    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeDemoFixture} archiveHistory={[...portfolio.home, ...portfolio.project].filter((item) => item.archived)} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
-    return <IdeaWorkspace repository={homeConversationRepository} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
+    return <IdeaWorkspace repository={homeConversationRepositoryRef.current} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} portfolio={portfolio} onArchive={(type, id) => { const next = { ...portfolio, [type]: (portfolio[type] ?? []).map((item) => item.id === id ? { ...item, archived: true } : item) }; setPortfolio(next); void portfolioRepositoryRef.current.save(next); if (activeWorkspace === type) setActiveWorkspace('knowledge'); }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={(page) => { const archivedDefault = page === 'home' && portfolio.home.some((item) => item.id === 'home:default' && item.archived); const archivedProject = page === 'project' && portfolio.project.some((item) => item.archived); setActiveWorkspace(archivedDefault || archivedProject ? 'knowledge' : page); }} portfolio={portfolio} onOpenPortfolioItem={(type, entry) => { if (!entry.archived) setActiveWorkspace(type); }} onArchive={(type, id) => { void portfolioRepositoryRef.current.archive(type, id).then((next) => { setPortfolio(next); setActiveWorkspace('knowledge'); }); }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
