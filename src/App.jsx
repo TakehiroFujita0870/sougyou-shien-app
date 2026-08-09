@@ -15,7 +15,6 @@ import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'ホーム' }, { id: 'project', label: 'プロジェクト' }, { id: 'knowledge', label: 'ナレッジ' }];
 export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
-export const ACTIVE_HOME_CONVERSATION_STORAGE_KEY = 'kadode:active-home-conversation';
 
 function portfolioMessageId(prefix, value) {
   let hash = 2166136261;
@@ -35,10 +34,6 @@ export function readSelectedSurface(storage = globalThis.sessionStorage) {
 function persistSelectedSurface(surface, storage = globalThis.sessionStorage) {
   if (!WORKSPACE_NAV.some(({ id }) => id === surface)) return;
   try { storage?.setItem(SELECTED_SURFACE_STORAGE_KEY, surface); } catch { /* session storage is optional */ }
-}
-
-function readActiveHomeConversation(storage = globalThis.sessionStorage) {
-  try { return storage?.getItem(ACTIVE_HOME_CONVERSATION_STORAGE_KEY) || ''; } catch { return ''; }
 }
 
 function PlaceholderSurface({ name, description, project }) {
@@ -84,7 +79,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const [portfolioHydrated, setPortfolioHydrated] = useState(false);
   const [portfolioError, setPortfolioError] = useState('');
   const [homeConversationRevision, setHomeConversationRevision] = useState(0);
-  const [activeHomeConversationId, setActiveHomeConversationId] = useState(() => readActiveHomeConversation());
+  const [activeHomeConversationId, setActiveHomeConversationId] = useState('');
   const rawHomeConversationRepositoryRef = useRef(null);
   if (!rawHomeConversationRepositoryRef.current) rawHomeConversationRepositoryRef.current = homeConversationRepository ?? createHomeConversationRepository();
   const trackedHomeConversationRepositoryRef = useRef(null);
@@ -106,7 +101,6 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   };
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
-  useEffect(() => { try { if (activeHomeConversationId) sessionStorage.setItem(ACTIVE_HOME_CONVERSATION_STORAGE_KEY, activeHomeConversationId); } catch { /* optional */ } }, [activeHomeConversationId]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
   useEffect(() => { homeModelRepositoryRef.current.load().then(setHomeModelKey); }, []);
   useEffect(() => {
@@ -114,6 +108,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
     portfolioRepositoryRef.current.load().then((value) => {
       if (!active) return;
       setPortfolio(value);
+      setActiveHomeConversationId((current) => current || value.home.find((item) => !item.archived)?.id || value.home[0]?.id || '');
       setPortfolioHydrated(true);
     }).catch(() => { if (active) setPortfolioHydrated(true); });
     return () => { active = false; };
