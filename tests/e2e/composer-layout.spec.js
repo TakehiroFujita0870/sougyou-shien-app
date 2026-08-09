@@ -55,7 +55,7 @@ test('keeps Project and Knowledge composers anchored with outer-only keyboard fo
   await page.setViewportSize({ width: 820, height: 900 });
   await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
   await expectAnchoredGeometry(page, projectInput);
-  const narrowContentBottom = await page.locator('aside[aria-labelledby="decision-history-heading"]').evaluate((node) => node.getBoundingClientRect().bottom);
+  const narrowContentBottom = await page.locator('[role="tabpanel"]').evaluate((node) => node.getBoundingClientRect().bottom);
   const narrowComposerTop = await projectInput.evaluate((node) => node.closest('form').getBoundingClientRect().top);
   expect(narrowContentBottom).toBeLessThanOrEqual(narrowComposerTop);
   await page.screenshot({ path: 'test-results/project-composer-820.png' });
@@ -69,4 +69,29 @@ test('keeps Project and Knowledge composers anchored with outer-only keyboard fo
   await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
   await expect(knowledgeInput).toBeInViewport();
   await page.screenshot({ path: 'test-results/knowledge-scrolled-composer-1440.png' });
+});
+
+test('keeps the Knowledge Library searchable and saves only after confirmation', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('nav button').nth(2).click();
+  await expect(page.getByRole('heading', { name: 'ナレッジライブラリ' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '意思決定' })).toBeVisible();
+  const search = page.getByPlaceholder('タイトル・本文を検索');
+  await search.fill('小規模');
+  await expect(page.getByLabel('ナレッジ一覧')).toContainText('小規模な検証から始める');
+  await search.fill('');
+  const composer = page.locator('#knowledge-composer');
+  await composer.fill('採用する市場調査の進め方');
+  await composer.press('Enter');
+  await expect(page.getByRole('dialog')).toContainText('意思決定');
+  await page.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(page.getByText('採用する市場調査の進め方', { exact: false })).toHaveCount(0);
+  await composer.fill('採用する市場調査の進め方');
+  await composer.press('Enter');
+  await page.getByRole('button', { name: 'ナレッジに追加' }).click();
+  await expect(page.getByLabel('ナレッジ一覧')).toContainText('採用する市場調査の進め方');
+  await page.reload();
+  await expect(page.getByLabel('ナレッジ一覧')).toContainText('採用する市場調査の進め方');
+  await expectAnchoredGeometry(page, page.locator('#knowledge-composer'));
+  await page.screenshot({ path: 'test-results/knowledge-library-1440.png' });
 });

@@ -182,7 +182,7 @@ describe('adopted project hydration', () => {
     const reloaded = await mount({ projectRepository: createAdoptedProjectRepository({ storage }) });
     await act(async () => selectProject(reloaded.container));
     expect(reloaded.container.textContent).toContain(adoptedCandidate.title);
-    expect(reloaded.container.textContent).toContain(adoptedCandidate.reason);
+    expect(reloaded.container.textContent).not.toContain('意思決定の履歴');
     await reloaded.unmount();
   });
 

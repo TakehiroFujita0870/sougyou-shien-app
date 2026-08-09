@@ -1,148 +1,53 @@
-import { useEffect, useRef, useState } from 'react';
-import { SendHorizontal, Sparkles, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search, SendHorizontal, Upload } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/Dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
 import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
-import { createKnowledgeConversationRepository, respondToKnowledge } from './knowledgeConversationRepository';
+import { createKnowledgeConversationRepository, proposeKnowledgeEntry, respondToKnowledge } from './knowledgeConversationRepository';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const stateLabel = { metadata_only: '端末内メタデータ', processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
-
-function assetMetadata(asset) {
-  return { id: asset.id, name: asset.name, version: asset.version, state: asset.state, extractedTextState: asset.state === 'searchable' ? 'ready' : 'pending', indexState: asset.state === 'searchable' ? 'ready' : 'pending' };
-}
+const categoryLabel = { all: 'すべて', profile: 'プロフィール', decision: '意思決定', conversation: '過去の会話', file: 'ファイル', note: 'メモ' };
+const stateLabel = { metadata_only: 'メタデータのみ', processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
 
 export function createLocalUploadMetadata(file) {
-  const name = String(file?.name ?? '').trim();
-  const extension = name.split('.').at(-1)?.toLowerCase();
+  const name = String(file?.name ?? '').trim(); const extension = name.split('.').at(-1)?.toLowerCase();
   if (!['pdf', 'docx'].includes(extension)) throw new Error('PDFまたはDOCXを選択してください。');
-  if (!Number.isFinite(file?.size) || file.size > MAX_FILE_SIZE) throw new Error('10 MiB以下の資料を選択してください。');
+  if (!Number.isFinite(file?.size) || file.size > MAX_FILE_SIZE) throw new Error('10 MiB以下のファイルを選択してください。');
   const lastModified = Number.isFinite(file?.lastModified) ? file.lastModified : 0;
-  return {
-    id: `local-file:${encodeURIComponent(name.toLocaleLowerCase())}:${file.size}:${lastModified}`,
-    name,
-    version: 1,
-    state: 'metadata_only',
-    mediaType: extension,
-    sizeBytes: file.size,
-    lastModified,
-    extractedTextState: 'pending',
-    indexState: 'pending',
-  };
+  return { id: `local-file:${encodeURIComponent(name.toLocaleLowerCase())}:${file.size}:${lastModified}`, name, version: 1, state: 'metadata_only', mediaType: extension, sizeBytes: file.size, lastModified, extractedTextState: 'pending', indexState: 'pending' };
 }
 
-function formatFileSize(sizeBytes) {
-  if (!Number.isFinite(sizeBytes)) return 'サイズ情報なし';
-  return `${Math.max(1, Math.ceil(sizeBytes / 1024))} KB`;
-}
+const dateText = (value) => new Intl.DateTimeFormat('ja-JP', { month: 'short', day: 'numeric' }).format(new Date(value));
 
-export function KnowledgeSurface({ fixture, repository, conversationRepository, archiveHistory = [], ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, onAssetAdded = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
-  const [message, setMessage] = useState('');
-  const [removeRequested, setRemoveRequested] = useState(null);
-  const [documents, setDocuments] = useState([]);
-  const [fixtureDeleted, setFixtureDeleted] = useState(false);
-  const [persistenceError, setPersistenceError] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [conversation, setConversation] = useState([]);
-  const [conversationReady, setConversationReady] = useState(false);
-  const repositoryRef = useRef(repository ?? createKnowledgeMetadataRepository({ ownerId, spaceId }));
-  const conversationRepositoryRef = useRef(conversationRepository ?? createKnowledgeConversationRepository({ ownerId, spaceId }));
-  const conversationRef = useRef([]);
-  const saveQueueRef = useRef(Promise.resolve());
-  const conversationDirtyRef = useRef(false);
-  const fileInputRef = useRef(null);
-  const asset = fixture?.asset;
+export function KnowledgeSurface({ fixture, repository, conversationRepository, profile, archiveHistory = [], ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, onAssetAdded = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
+  const [message, setMessage] = useState(''); const [documents, setDocuments] = useState([]); const [state, setState] = useState({ messages: [], entries: [] });
+  const [candidate, setCandidate] = useState(null); const [category, setCategory] = useState('all'); const [query, setQuery] = useState(''); const [removeRequested, setRemoveRequested] = useState(null); const [notice, setNotice] = useState('');
+  const repositoryRef = useRef(repository ?? createKnowledgeMetadataRepository({ ownerId, spaceId })); const conversationRepositoryRef = useRef(conversationRepository ?? createKnowledgeConversationRepository({ ownerId, spaceId })); const fileInputRef = useRef(null); const dirtyRef = useRef(false); const loadGenerationRef = useRef(0);
+  useEffect(() => { let active = true; const generation = ++loadGenerationRef.current; Promise.all([repositoryRef.current.load(), conversationRepositoryRef.current.load()]).then(([, saved]) => { if (active && generation === loadGenerationRef.current && !dirtyRef.current) { setDocuments(repositoryRef.current.list().filter((item) => item.state !== 'deleted')); setState({ messages: Array.isArray(saved?.messages) ? saved.messages : [], entries: Array.isArray(saved?.entries) ? saved.entries : [] }); } }).catch(() => active && setNotice('保存状態を読み込めませんでした。')); return () => { active = false; }; }, []);
+  const items = useMemo(() => {
+    const fixtureFile = fixture?.asset ? [{ id: fixture.asset.id, category: 'file', title: fixture.asset.name, content: 'プロジェクトに紐づく参照資料', createdAt: fixture.asset.updatedAt ?? new Date().toISOString(), state: fixture.asset.state }] : [];
+    const files = documents.map((file) => ({ id: file.id, category: 'file', title: file.name, content: `${file.mediaType?.toUpperCase() ?? '資料'} · ${Math.max(1, Math.ceil((file.sizeBytes ?? 0) / 1024))} KB`, createdAt: new Date(file.lastModified ?? 0).toISOString(), state: file.state }));
+    const decision = fixture?.decision ? [{ id: `decision:${fixture.decision.id ?? 'current'}`, category: 'decision', title: fixture.decision.judgement, content: `${fixture.decision.background} ${fixture.decision.reason}`, createdAt: fixture.decision.date ?? '2026-01-01T00:00:00.000Z' }] : [];
+    const profileEntry = profile?.status === 'completed' ? [{ id: 'profile:completed', category: 'profile', title: '完了プロフィール', content: Object.values(profile.values ?? {}).filter((value) => typeof value === 'string' && value.trim()).join(' · '), createdAt: profile.completedAt ?? profile.updatedAt ?? '2026-01-01T00:00:00.000Z' }] : [];
+    const conversations = state.messages.filter((entry) => entry.role === 'user').map((entry, index) => ({ id: `conversation:${index}:${entry.content}`, category: 'conversation', title: entry.content.slice(0, 72), content: 'Kadode AIとの過去の会話', createdAt: entry.createdAt ?? '1970-01-01T00:00:00.000Z' }));
+    return [...state.entries, ...profileEntry, ...decision, ...fixtureFile, ...files, ...conversations, ...archiveHistory.map((entry) => ({ id: `archive:${entry.id}`, category: 'conversation', title: entry.title, content: 'アーカイブ済みの会話またはプロジェクト', createdAt: entry.archivedAt ?? '1970-01-01T00:00:00.000Z' }))].filter((entry) => (category === 'all' || entry.category === category) && `${entry.title} ${entry.content}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [archiveHistory, category, documents, fixture, profile, query, state]);
+  const save = async (next) => { dirtyRef.current = true; ++loadGenerationRef.current; await conversationRepositoryRef.current.save(next); setState(next); };
+  function submit(event) { event.preventDefault(); const value = message.trim(); if (!value) return; setCandidate(proposeKnowledgeEntry(value)); setMessage(''); }
+  async function confirmCandidate() { if (!candidate) return; const createdAt = candidate.createdAt; const next = { ...state, entries: [candidate, ...state.entries], messages: [...state.messages, { role: 'user', content: candidate.content, createdAt }, { role: 'assistant', content: respondToKnowledge(candidate.content, fixture), createdAt }] }; await save(next); onSend(candidate.title); setCandidate(null); setNotice('ナレッジに追加しました。'); }
+  async function addFile(event) { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; try { const metadata = createLocalUploadMetadata(file); await repositoryRef.current.add(metadata); setDocuments(repositoryRef.current.list().filter((item) => item.state !== 'deleted')); await onAssetAdded(metadata); setNotice('ファイルのメタデータを追加しました。本文は保存・送信しません。'); } catch (error) { setNotice(error.message); } }
+  async function confirmRemoval() { const target = removeRequested; if (!target) return; await repositoryRef.current.delete(target.id, target); setDocuments(repositoryRef.current.list().filter((item) => item.state !== 'deleted')); setRemoveRequested(null); setNotice('ファイルを一覧から削除しました。'); }
   const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
-
-  useEffect(() => {
-    let active = true;
-    const localRepository = repositoryRef.current;
-    localRepository.load().then(() => {
-      if (!active) return;
-      setDocuments(localRepository.list());
-      setFixtureDeleted(localRepository.find(asset?.id)?.state === 'deleted');
-      setPersistenceError(Boolean(localRepository.getLastError?.()));
-    }).catch(() => { if (active) setPersistenceError(true); });
-    return () => { active = false; };
-  }, [asset?.id]);
-  useEffect(() => {
-    let active = true;
-    conversationRepositoryRef.current.load().then((value) => { if (active && !conversationDirtyRef.current) { conversationRef.current = value.messages; setConversation(value.messages); } if (active) setConversationReady(true); }).catch(() => { if (active) setConversationReady(true); });
-    return () => { active = false; };
-  }, []);
-
-  const fixtureDocument = asset && !fixtureDeleted && asset.state !== 'deleted' ? { ...asset, kind: 'fixture', references: asset.references?.filter((reference) => reference.status !== 'unavailable') ?? [] } : null;
-  const visibleDocuments = [...(fixtureDocument ? [fixtureDocument] : []), ...documents.filter((document) => document.id !== asset?.id).map((document) => ({ ...document, kind: 'local', references: [] }))];
-
-  function submit(event) {
-    event.preventDefault();
-    const value = message.trim();
-    if (!value) return;
-    conversationDirtyRef.current = true;
-    const next = [...conversationRef.current, { role: 'user', content: value }, { role: 'assistant', content: respondToKnowledge(value, fixture) }];
-    conversationRef.current = next;
-    setConversation(next); setMessage(''); onSend(value);
-    saveQueueRef.current = saveQueueRef.current.then(() => conversationRepositoryRef.current.save({ messages: conversationRef.current })).catch(() => setNotice('会話を保存できませんでした。再試行してください。'));
-  }
-
-  async function addFile(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    try {
-      const metadata = createLocalUploadMetadata(file);
-      const existing = repositoryRef.current.find(metadata.id);
-      await repositoryRef.current.add(metadata);
-      setDocuments(repositoryRef.current.list());
-      await onAssetAdded(metadata);
-      setPersistenceError(false);
-      setNotice(existing ? 'この資料はすでに追加されています。' : '資料名とメタデータを端末内に追加しました。本文は保存・送信していません。');
-    } catch (error) {
-      setPersistenceError(true);
-      setNotice(error instanceof Error ? error.message : '資料を追加できませんでした。ページを再読み込みしてから、もう一度お試しください。');
-    }
-  }
-
-  async function confirmRemoval() {
-    const target = removeRequested;
-    if (!target) return;
-    try {
-      const fallback = target.kind === 'fixture' ? assetMetadata(target) : target;
-      const deletedMetadata = await repositoryRef.current.delete(target.id, fallback);
-      if (!deletedMetadata) throw new Error('Metadata could not be deleted');
-      setDocuments(repositoryRef.current.list());
-      if (target.id === asset?.id) setFixtureDeleted(true);
-      setPersistenceError(false);
-      setNotice('資料を端末内の一覧から削除しました。');
-      setRemoveRequested(null);
-    } catch {
-      setPersistenceError(true);
-      setNotice('削除は反映されていません。ページを再読み込みしてから、もう一度お試しください。');
-      setRemoveRequested(null);
-    }
-  }
-
-  return <section aria-labelledby="knowledge-heading" className="kadode-composer-layout mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-6xl gap-6 pb-36">
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Knowledge</p><h1 id="knowledge-heading" className="mt-3 text-3xl font-semibold tracking-tight">知識を育てる</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">資料と判断を同じ場所で振り返れます。追加した資料の本文はこの端末に保存・送信しません。</p></div>
-      <div><label className="sr-only" htmlFor="knowledge-file-picker">追加する資料を選択</label><input ref={fileInputRef} id="knowledge-file-picker" className="sr-only" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-describedby="knowledge-file-help" onChange={(event) => void addFile(event)} /><Button type="button" className="gap-2" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" aria-hidden="true" />資料を追加</Button><p id="knowledge-file-help" className="mt-2 max-w-56 text-xs leading-5 text-[var(--color-text-muted)]">PDF・DOCX、10 MiB以下。本文は保存・送信しません。</p></div>
-    </header>
-
-    {(notice || persistenceError) && <p role={persistenceError ? 'alert' : 'status'} className={`text-sm ${persistenceError ? 'text-[var(--color-destructive)]' : 'text-[var(--color-text-muted)]'}`}>{notice || '保存状態を確認できません。ページを再読み込みしてから、もう一度お試しください。'}</p>}
-
-    {archiveHistory.length > 0 && <Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">History</p><h2 className="mt-2 text-lg font-semibold">アーカイブ履歴</h2><p className="mt-1 text-sm text-[var(--color-text-muted)]">保管済みの会話とプロジェクトです。ここでは読み取り専用です。</p><ul className="mt-4 grid gap-2" aria-label="アーカイブ履歴">{archiveHistory.map((entry) => <li key={`${entry.id}-${entry.archivedAt ?? ''}`} className="rounded-lg bg-[var(--color-muted)] px-3 py-2 text-sm"><span className="mr-2 text-xs text-[var(--color-text-muted)]">{entry.id.startsWith('home:') ? 'ホーム' : 'プロジェクト'}</span>{entry.title}</li>)}</ul></Card>}
-
-    {visibleDocuments.length === 0 ? <Card className="p-6"><h2 className="text-lg font-semibold">まだ資料はありません</h2><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">資料を追加すると、ファイル名と端末内メタデータをここで確認できます。</p></Card> : <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,.85fr)]">
-      <div className="grid gap-4">{visibleDocuments.map((document) => <Card key={document.id} className="p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-semibold">{document.name}</h2><Badge variant="outline">{stateLabel[document.state] ?? document.state}</Badge></div><p className="mt-2 text-sm text-[var(--color-text-muted)]">{document.kind === 'local' ? `${document.mediaType?.toUpperCase() ?? '資料'} · ${formatFileSize(document.sizeBytes)} · 本文は未保存` : `バージョン ${document.version} · このspaceで参照可能`}</p></div><Button variant="secondary" onClick={() => setRemoveRequested(document)}>削除</Button></div>{document.references.length > 0 && <div className="mt-6 border-t border-[var(--color-border-subtle)] pt-5"><h3 className="text-sm font-semibold">参照元</h3><ul aria-label={`${document.name}の利用可能な出典`} className="mt-3 grid gap-2 text-sm text-[var(--color-text-muted)]">{document.references.map((reference) => <li key={`${reference.kind}-${reference.sourceId}-${reference.locator}`} className="rounded-lg bg-[var(--color-muted)] px-3 py-2"><span className="font-medium text-[var(--color-text)]">{reference.kind}</span> · {reference.locator}</li>)}</ul></div>}</Card>)}</div>
-      {fixture && <Card className="p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Project context</p><h2 className="mt-3 text-lg font-semibold">{fixture.project.name}</h2><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">{fixture.project.summary}</p><dl className="mt-6 grid gap-4 border-t border-[var(--color-border-subtle)] pt-5 text-sm"><div><dt className="font-medium text-[var(--color-text-muted)]">背景</dt><dd className="mt-1">{fixture.decision.background}</dd></div><div><dt className="font-medium text-[var(--color-text-muted)]">判断</dt><dd className="mt-1">{fixture.decision.judgement}</dd></div><div><dt className="font-medium text-[var(--color-text-muted)]">理由</dt><dd className="mt-1">{fixture.decision.reason}</dd></div></dl></Card>}
-    </div>}
-
-    <Dialog open={Boolean(removeRequested)} onOpenChange={(open) => { if (!open) setRemoveRequested(null); }}><DialogContent><DialogTitle className="text-lg font-semibold">この資料を削除しますか？</DialogTitle><DialogDescription className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">資料名と端末内メタデータをこのspaceから削除します。この操作は元に戻せません。</DialogDescription><div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => void confirmRemoval()}>削除を確定</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div></DialogContent></Dialog>
-
-    {conversation.length > 0 && <ol aria-label="Knowledgeの会話履歴" className="mx-auto grid w-full max-w-4xl gap-3">{conversation.map((item, index) => <li key={`${item.role}-${index}`} className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${item.role === 'user' ? 'ml-auto bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-muted)]'}`}>{item.content}</li>)}</ol>}
-    <form onSubmit={submit} className="kadode-composer kadode-composer--anchored mx-auto w-full max-w-4xl"><label htmlFor="knowledge-composer" className="sr-only">KnowledgeについてKadode AIに相談</label><textarea id="knowledge-composer" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} className="kadode-composer__textarea kadode-composer__textarea--compact" placeholder="追加したい情報はありますか？" /><div className="kadode-composer__actions"><Button type="button" variant="ghost" data-testid="knowledge-assist" onClick={() => setMessage((value) => value.trim() ? `${value.trim()}。関連する資料と過去の判断を比較してください。` : '関連する資料と過去の判断を比較してください。')} className="min-h-9 gap-1 px-2 text-xs"><Sparkles size={15} aria-hidden="true" />AI補完</Button><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" className="min-h-9 px-2 text-xs" aria-label={`モデル: ${modelLabel}`}>{modelLabel}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" aria-label="AIモデルを選択"><DropdownMenuLabel>AIモデル</DropdownMenuLabel>{models.map((model) => <DropdownMenuItem key={model.logicalKey} onSelect={() => onModelChange?.(model.logicalKey)}>{model.displayName}{model.logicalKey === modelKey ? ' ✓' : ''}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu><Button type="submit" aria-label="Knowledgeの質問を送信" className="min-h-9 min-w-9 px-2"><SendHorizontal size={17} aria-hidden="true" /><span className="sr-only">送信</span></Button></div></form>
+  return <section aria-labelledby="knowledge-heading" className="kadode-composer-layout mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-6xl gap-5 pb-36">
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--color-text-muted)]">Knowledge</p><h1 id="knowledge-heading" className="mt-2 text-3xl font-semibold tracking-tight">ナレッジライブラリ</h1><p className="mt-2 text-sm text-[var(--color-text-muted)]">判断・会話・資料を、検索して時系列で振り返れます。</p></div><div><label htmlFor="knowledge-file-picker" className="sr-only">追加するファイルを選択</label><input ref={fileInputRef} id="knowledge-file-picker" className="sr-only" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => void addFile(event)} /><Button type="button" className="gap-2" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />ファイルを追加</Button></div></header>
+    {notice && <p role="status" className="text-sm text-[var(--color-text-muted)]">{notice}</p>}
+    <div className="flex flex-wrap items-center gap-2" aria-label="ナレッジのカテゴリ">{Object.entries(categoryLabel).map(([key, label]) => <Button key={key} type="button" aria-pressed={category === key} variant={category === key ? 'default' : 'secondary'} className="min-h-8 px-3 text-xs" onClick={() => setCategory(key)}>{label}</Button>)}<label className="ml-auto flex min-w-[14rem] items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2 text-sm"><Search className="size-4" /><span className="sr-only">ナレッジを検索</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent outline-none" placeholder="タイトル・本文を検索" /></label></div>
+    {archiveHistory.length > 0 && <h2 className="text-sm font-semibold text-[var(--color-text-muted)]">アーカイブ履歴</h2>}<ol aria-label="ナレッジ一覧" className="grid gap-2">{items.length ? items.map((item) => <li key={item.id}><Card className="flex items-start gap-3 p-3"><Badge variant="outline">{categoryLabel[item.category]}</Badge><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{item.title}</h2><p className="mt-1 line-clamp-1 text-xs text-[var(--color-text-muted)]">{item.content}</p></div><time className="shrink-0 text-xs text-[var(--color-text-muted)]">{dateText(item.createdAt)}</time>{item.category === 'file' && item.id.startsWith('local-file:') && <Button type="button" variant="ghost" className="min-h-8 px-2 text-xs" onClick={() => setRemoveRequested(item)}>削除</Button>}</Card></li>) : <li><Card className="p-5 text-sm text-[var(--color-text-muted)]">条件に合うナレッジはまだありません。</Card></li>}</ol>
+    <Dialog open={Boolean(candidate)} onOpenChange={(open) => !open && setCandidate(null)}><DialogContent><DialogTitle>ナレッジに追加しますか？</DialogTitle>{candidate && <><DialogDescription className="mt-2">AIが分類とタイトル案を作成しました。保存前に確認できます。</DialogDescription><p className="mt-4 text-sm"><Badge variant="outline">{categoryLabel[candidate.category]}</Badge></p><p className="mt-2 font-semibold">{candidate.title}</p><p className="mt-2 text-sm text-[var(--color-text-muted)]">{candidate.content}</p></>}<div className="mt-5 flex gap-2"><Button onClick={() => void confirmCandidate()}>ナレッジに追加</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div></DialogContent></Dialog>
+    <Dialog open={Boolean(removeRequested)} onOpenChange={(open) => !open && setRemoveRequested(null)}><DialogContent><DialogTitle>このファイルを削除しますか？</DialogTitle><DialogDescription>ファイル名と端末内メタデータを一覧から削除します。</DialogDescription><div className="mt-5 flex gap-2"><Button onClick={() => void confirmRemoval()}>削除を確定</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div></DialogContent></Dialog>
+    <form onSubmit={submit} className="kadode-composer kadode-composer--anchored mx-auto w-full max-w-4xl"><label htmlFor="knowledge-composer" className="sr-only">KnowledgeについてKadode AIに相談</label><textarea id="knowledge-composer" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} className="kadode-composer__textarea kadode-composer__textarea--compact" placeholder="追加したい情報はありますか？" /><div className="kadode-composer__actions"><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" className="min-h-9 px-2 text-xs" aria-label={`モデル: ${modelLabel}`}>{modelLabel}</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuLabel>AIモデル</DropdownMenuLabel>{models.map((model) => <DropdownMenuItem key={model.logicalKey} onSelect={() => onModelChange?.(model.logicalKey)}>{model.displayName}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu><Button type="submit" aria-label="Knowledgeの質問を送信" className="min-h-9 min-w-9 px-2"><SendHorizontal className="size-4" /></Button></div></form>
   </section>;
 }

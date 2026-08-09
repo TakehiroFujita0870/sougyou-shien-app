@@ -272,7 +272,6 @@ export function ProjectSurface({
   const [phase, setPhase] = useState("loading");
   const [conversationError, setConversationError] = useState("");
   const [exportStatus, setExportStatus] = useState("idle");
-  const [decisionFilter, setDecisionFilter] = useState("all");
   const [modelKey, setModelKey] = useState(() =>
     models.some((model) => model.logicalKey === initialModelKey)
       ? initialModelKey
@@ -442,11 +441,6 @@ export function ProjectSurface({
     empty: "検討中",
     populated: project.status,
   }[state];
-  const decisions =
-    project.decisions?.filter(
-      (decision) =>
-        decisionFilter === "all" || decision.kind === decisionFilter,
-    ) ?? [];
   return (
     <section
       aria-labelledby="project-surface-heading"
@@ -546,57 +540,6 @@ export function ProjectSurface({
           </div>
           <EvaluationTabs project={project} />
         </div>
-        <aside className="space-y-4" aria-labelledby="decision-history-heading">
-          <div className="flex items-center justify-between gap-2">
-            <h2
-              id="decision-history-heading"
-              className="text-base font-semibold"
-            >
-              意思決定の履歴
-            </h2>
-            <select
-              aria-label="表示する種類を選ぶ"
-              value={decisionFilter}
-              onChange={(event) => setDecisionFilter(event.target.value)}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2 py-1 text-xs"
-            >
-              <option value="all">すべて</option>
-              <option value="採用">採用</option>
-              <option value="保留">保留</option>
-              <option value="却下">却下</option>
-            </select>
-          </div>
-          <Card className="divide-y divide-[var(--color-border-subtle)]">
-            {decisions.length ? (
-              decisions.map((decision) => (
-                <div
-                  key={decision.id}
-                  data-decision-kind={decision.kind}
-                  className="p-4"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge
-                      variant={decision.kind === "採用" ? "default" : "outline"}
-                    >
-                      {decision.kind}
-                    </Badge>
-                    <time className="text-xs text-[var(--color-text-muted)]">
-                      {decision.date}
-                    </time>
-                  </div>
-                  <p className="mt-3 text-sm font-medium">{decision.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                    {decision.reason}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="p-4 text-sm text-[var(--color-text-muted)]">
-                このプロジェクトの判断はまだありません。
-              </p>
-            )}
-          </Card>
-        </aside>
       </div>
     </section>
   );
