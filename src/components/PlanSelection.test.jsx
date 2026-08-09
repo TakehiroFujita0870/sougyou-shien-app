@@ -108,7 +108,7 @@ describe('plan selection acceptance', () => {
 
     expect(container.querySelector('#model').value).toBe('claude-haiku-4-5');
     expect(container.querySelector('#reasoning-effort')).toBeNull();
-    expect(document.activeElement).toBe(container.querySelector('#model'));
+    expect(document.activeElement?.id).toBe('model');
     await unmount();
   });
 });
