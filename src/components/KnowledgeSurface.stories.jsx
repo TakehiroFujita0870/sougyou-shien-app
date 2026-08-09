@@ -24,6 +24,6 @@ export const Desktop = { args: { fixture } };
 export const Mobile = { args: { fixture }, parameters: { viewport: { defaultViewport: 'mobile1' } } };
 export const Empty = { args: { fixture: null } };
 export const LocalMetadata = { args: { fixture, repository: localMetadataRepository } };
-export const WriteFailureRecovery = { args: { fixture, conversationRepository: writeFailureConversationRepository } };
+export const WriteFailureRecovery = { render: () => <KnowledgeSurface fixture={fixture} conversationRepository={writeFailureConversationRepository} /> };
 export const Loading = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'processing' } } } };
 export const Error = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'failed' } } } };
