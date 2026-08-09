@@ -7,6 +7,7 @@ import { createLocalPlanRepository } from './components/planSubscriptionReposito
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
 import { LocalGoogleSignIn } from './components/LocalGoogleSignIn';
+import { ProjectSurface } from './components/ProjectSurface';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
 export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
@@ -151,7 +152,7 @@ export function App({ profileRepository }) {
 
   function workspaceContent() {
     if (activeWorkspace === 'home') return <IdeaWorkspace />;
-    if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" description="プロジェクトの作業面は、次の実装で接続します。" />;
+    if (activeWorkspace === 'project') return <ProjectSurface />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
     return <IdeaWorkspace />;
