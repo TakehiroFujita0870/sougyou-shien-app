@@ -34,6 +34,26 @@ describe('Home supervisor', () => {
     expect(onProjectAdopt).not.toHaveBeenCalled(); container.remove();
   });
 
+  it('keeps load failure actionable and retries with a new guarded generation', async () => {
+    let resolveRetry; let calls = 0;
+    const repository = { load: vi.fn(() => { calls += 1; if (calls <= 2) return Promise.reject(new Error('offline')); return new Promise((resolve) => { resolveRetry = resolve; }); }), loadDraft: async () => '', save: async (value) => value, saveDraft: async (value) => value };
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(<HomeSupervisor repository={repository} />)); await act(async () => {});
+    const input = container.querySelector('#home-supervisor-message'); const retry = [...container.querySelectorAll('button')].find((button) => button.textContent === '再試行');
+    expect(input.disabled).toBe(false); expect(retry).toBeTruthy(); expect(container.querySelector('[role="alert"]').textContent).toContain('会話を読み込めませんでした');
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setter.call(input, '手元の下書き'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => retry.click()); await act(async () => {});
+    expect(input.disabled).toBe(false); expect(input.value).toBe('手元の下書き'); expect(repository.load).toHaveBeenCalledTimes(2);
+    const secondRetry = [...container.querySelectorAll('button')].find((button) => button.textContent === '再試行');
+    expect(secondRetry).toBeTruthy(); expect(container.querySelector('[role="alert"]').textContent).toContain('会話を読み込めませんでした');
+    await act(async () => secondRetry.click());
+    expect(input.disabled).toBe(true); expect(input.value).toBe('手元の下書き'); expect(input.form.getAttribute('aria-busy')).toBe('true'); expect(repository.load).toHaveBeenCalledTimes(3);
+    await act(async () => { resolveRetry({ messages: [{ role: 'user', content: '再試行で復元' }], proposals: [] }); await Promise.resolve(); });
+    expect(input.disabled).toBe(false); expect(container.textContent).toContain('再試行で復元'); expect(container.querySelector('[role="alert"]')).toBeNull();
+    await act(() => root.unmount()); container.remove();
+  });
+
   it('keeps an optimistic turn visible and reports a conversation save rejection', async () => {
     const repository = { load: async () => ({ messages: [], proposals: [] }), loadDraft: async () => '', saveDraft: async (value) => value, save: vi.fn(async () => { throw new Error('offline'); }) };
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
