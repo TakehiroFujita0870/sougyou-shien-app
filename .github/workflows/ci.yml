@@ -42,10 +42,10 @@ jobs:
             test-results/sidebar-archive-project-1440.png
             test-results/sidebar-restored-project-1440.png
           if-no-files-found: error
-      - name: Verify composer layout at desktop widths
-        run: npx playwright test tests/e2e/composer-layout.spec.js
       - name: Verify Chrome PDF and DOCX downloads
         run: npx playwright test tests/e2e/pdf-export.spec.js
+      - name: Verify composer layout at desktop widths
+        run: npx playwright test tests/e2e/composer-layout.spec.js
       - name: Verify recorded WebM
         run: test -n "$(find test-results -type f -name '*.webm' -size +0c -print -quit)"
       - name: Upload desktop E2E video
