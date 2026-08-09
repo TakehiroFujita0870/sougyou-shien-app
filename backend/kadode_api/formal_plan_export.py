@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 from xml.sax.saxutils import escape
 
 from pydantic import BaseModel, Field
@@ -33,7 +33,10 @@ class DocxTemplateAdapter:
         output = BytesIO()
         with ZipFile(output, "w", ZIP_DEFLATED) as archive:
             for name, value in files.items():
-                archive.writestr(name, value)
+                entry = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                entry.compress_type = ZIP_DEFLATED
+                entry.external_attr = 0o600 << 16
+                archive.writestr(entry, value, compress_type=ZIP_DEFLATED, compresslevel=9)
         return output.getvalue()
 
 

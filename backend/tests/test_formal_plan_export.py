@@ -18,6 +18,7 @@ def test_docx_is_deterministic_editable_and_preserves_unconfirmed_and_locator():
     assert first == adapter.render(content, "owner-a")
     with ZipFile(BytesIO(first)) as archive:
         xml = archive.read("word/document.xml").decode("utf-8")
+        assert all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in archive.infolist())
     assert all(label in xml for label in ("どんな事業", "市場はある", "実現できる", "未確認", "src-1", "p1#para2"))
     assert "owner-a" not in xml
 
