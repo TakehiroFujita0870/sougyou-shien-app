@@ -33,6 +33,13 @@ Given: Homeが表示されている。
 When: Tab、Enter、Shift+Enter、reduced-motion設定を使う。
 Then: visible focus、screen-reader label、44px target、motionなしの意味、account footerのprofile accessが確認できる。
 
+### US-4
+As a 利用者, I want account menuとplan summaryを分離して見たい, so that profile、利用状況、設定の役割が重複しない。
+
+Given: account footerを表示している。
+When: account triggerを明示的にクリックする。
+Then: 一つのmenuにprofile、plan、設定、help、logoutが表示され、Plan画面にmodel controlsとupgrade CTAが表示されない。
+
 ## 質問リスト
 
 | ID | 質問 | 決定者 | 期限 |
@@ -42,6 +49,7 @@ Then: visible focus、screen-reader label、44px target、motionなしの意味�
 ## スコープ外
 
 - conversation送受信、candidate decision、hydration、storage、API、auth、外部サービス、domain変更。
+- model catalogからの選択・保存ロジック、conversation contextへのmodel接続。
 - Project/Knowledge presentation、shared style全体、global token再定義、外部UI library。
 
 ## タスク

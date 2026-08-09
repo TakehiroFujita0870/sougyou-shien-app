@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
-import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
-import { LocalGoogleSignIn } from './components/LocalGoogleSignIn';
 import { useHydratedResource } from './runtime/useHydratedResource';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
@@ -112,7 +110,6 @@ export function App({ profileRepository }) {
   }, []);
 
   useEffect(() => {
-    if (activeWorkspace === 'settings') document.getElementById('model')?.focus();
   }, [activeWorkspace, subscription.plan]);
 
   function updatePlan(plan) {
@@ -143,13 +140,13 @@ export function App({ profileRepository }) {
     if (activeWorkspace === 'home') return <IdeaWorkspace />;
     if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
-    if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /><ModelSelector plan={subscription.plan} selectedModelKey={subscription.modelKey} selectedReasoningMode={subscription.reasoningMode} onModelChange={updateModel} onReasoningModeChange={updateReasoning} /></div>;
+    if (activeWorkspace === 'settings') return <div className="max-w-4xl"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace />;
   }
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
         <div className="px-5 py-5 sm:py-7">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
