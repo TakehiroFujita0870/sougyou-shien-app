@@ -115,6 +115,39 @@ Then: T-IA-00で確定した対応表に従ってHomeまたはproject会話へre
 4. Home、Project、Knowledge、context snapshot、quality acceptanceを1 surfaceまたは1 contractごとのPRに分割する。
 5. migration失敗時は旧端末内stateを削除せず、読み取り不能として表示し、rollback PRで新しいread pathだけを戻す。
 
+## AI-first surface density contract
+
+この契約はHome、Project一覧、Project詳細、Knowledge一覧、Knowledge詳細、設定、プラン、プロフィール、空状態、読込状態、エラー状態、dialog、drawerに適用する。
+
+1. **Content/action first**: first viewportは利用者の主要action、表示中の成果物、Kadode AIとのinteractionを優先する。ページ名、ブランド名、説明文、環境警告を主役にしない。
+2. **Empty state minimalism**: データがないsurfaceは短い一文とprimary actionまたはcomposerだけを表示する。巨大hero、巨大page title、空カードの2カラム、将来機能placeholder、説明の重複を表示しない。
+3. **Progressive disclosure**: 補足説明、状態詳細、履歴、設定、開発情報は利用者操作で展開する。初期表示へ常設しない。
+4. **Compact hierarchy**: surface titleはbreadcrumbまたはcontext labelの視覚密度にする。display headingは提出文書previewで内容自体が見出しとなる場合だけ許可する。
+5. **AI in context**: Kadode AIはHome、Project、Knowledgeの現在surfaceを理解して画面内に常駐する。独立AI chat pageへ遷移させない。
+6. **No duplicated entry points**: 同じ目的のフォーム、カード、chat、floating actionを並立させない。primary actionは1つとし、補助導線は同じworkflowへ接続する。
+7. **Quiet system chrome**: local/fake、plan、profile update、technical statusはsmall badge、account、settingsへ集約する。作業canvasを占領しない。
+8. **Evidence-based density**: 390pxとdesktopのfirst viewportでprimary actionまたはcomposerをscrollなしで可視にする。desktopの余白を説明カードで埋めない。
+
+### US-IA-7: 全surfaceの表示密度
+
+As a 利用者, I want どのsurfaceでも最初に主要操作へ到達したい, so that 説明や開発情報に遮られず作業を始められる。
+
+Given: 対象surfaceをEmpty、Populated、Loading、Errorのいずれかでdesktopまたは390pxに表示している
+When: first viewportと操作導線を確認する
+Then: primary actionまたはcomposerがscrollなしで可視であり、巨大heading、重複CTA、空カード、常設開発警告、同目的の複数entry pointは表示されない。
+
+Given: keyboardまたはscreen readerを使用している
+When: compact hierarchyのsurfaceを操作する
+Then: heading階層、label、focus order、44px targetは維持され、視覚サイズだけが過大にならない。
+
+### 横断品質・レビューchecklist
+
+- 各surface Storyは必要なEmpty、Populated、Loading、Error、390px、Desktopを持つ。
+- 品質部は巨大heading、重複CTA、空カード、常設開発警告、first viewportのprimary action不可視を検出するUI contractを所有する。
+- 同型違反は個別画面patchで解決しない。design token、shared component、acceptance rule、またはworkflow contractの所有部へ差し戻す。
+- #99は独立chat pageとentry point重複のためBLOCKED。#89は古いshell統合のためBLOCKED。#111はUI表示契約の対象外である。
+- 今後のUI PRはこの節、US-IA-1、US-IA-1a、US-IA-7、context boundary、PC/390px、F5、a11y、owner隔離を独立レビューする。
+
 ## 部門ごとの所有権・依存順・Issue再配分
 
 | 順序 | ID | 担当部 | 所有ファイルまたはcontract | 依存 | 完了条件 |
@@ -126,6 +159,9 @@ Then: T-IA-00で確定した対応表に従ってHomeまたはproject会話へre
 | 4 | T-IA-04 | 会話体験・プロジェクト部 | Home supervisor、starter prompts、inline artifact、project会話、採用/保留/理由付き却下/reopen workflow、context provider | T-IA-02、T-IA-03 | 検査: composer、surface別会話分離、明示確認、F5 contractをcomponent/E2Eで確認。 |
 | 5 | T-IA-05 | 事業設計・調査部 | Knowledgeの成文化schema、project domain contract、reference metadata | T-IA-00、T-IA-03 | 検査: 原本一意、同一space横断参照、owner隔離、削除伝播のpytestが成功。 |
 | 6 | T-IA-06 | 品質・プロダクト運用部 | cross-surface E2E acceptanceとcontext leakage検証 | T-IA-02からT-IA-05 | 検査: Home→Project→Knowledge、PC/390px、F5、screen reader、別owner/非表示/raw file不露出をE2Eで確認。 |
+| 7 | T-IA-07 | プロダクトUI・デザインシステム部 | AI-first surface densityのpresentation、compact hierarchy、quiet chrome | T-IA-01 | 検査: Empty/Populated/Loading/Error/390px/Desktop Storyとfirst viewport確認が成功。 |
+| 8 | T-IA-08 | 会話体験・プロジェクト部 | 重複entry pointを持たないHome/Project workflow | T-IA-02、T-IA-03 | 検査: primary actionが1つ、inline artifactと明示決定が同じworkflowに接続するtestが成功。 |
+| 9 | T-IA-09 | 基盤・認証部 | quiet environment/profile statusとsession/profile privacy boundary | T-IA-03 | 検査: statusがbadge/account/settingsへ限定され、機微値がsnapshotと画面に不露出のcontract testが成功。 |
 
 `App.jsx`と`src/styles.css`はT-IA-01で対象行と時分割を明示するまで変更しない。T-IA-03はconversation workflowだけ、T-IA-04はdomain/API contractだけを所有し、同じPRで相互の所有ファイルを変更しない。
 
@@ -140,6 +176,9 @@ Then: T-IA-00で確定した対応表に従ってHomeまたはproject会話へre
 | T-IA-04 | Home supervisorとproject conversation PR群 | 検査: starter prompts、inline artifact、surfaceごとの会話分離、決定workflow、明示確認testが成功 | 類推可能 |
 | T-IA-05 | Knowledge schema/reference contract PR | 検査: 原本一意、reference locator、同一space横断、削除伝播のpytestが成功 | 類推可能 |
 | T-IA-06 | cross-surface E2E PR | 検査: Home→Project→Knowledge、PC/390px、F5、screen reader、context leakageなしを確認 | 類推可能 |
+| T-IA-07 | surface density presentation PR | 検査: 全対象surfaceの必要Storyとfirst viewportのprimary action可視を確認 | 類推可能 |
+| T-IA-08 | duplicate entry/workflow contract PR | 検査: 同目的entryが1つ、inline artifactと明示決定が同じworkflowへ接続するtestが成功 | 類推可能 |
+| T-IA-09 | quiet status/privacy contract PR | 検査: environment/profile statusがcanvasを占領せず、機微値を露出しないtestが成功 | 類推可能 |
 
 ## ADR
 
@@ -151,6 +190,7 @@ Then: T-IA-00で確定した対応表に従ってHomeまたはproject会話へre
 | context | allowlist形式のUI context snapshotだけを自動投入する。 | raw file全文、非表示knowledge、他user情報、機微profile値の自動投入は最小権限に反するため却下。 | 採用 |
 | 安全な操作 | Kadode AIはproposalを提示し、破壊的操作、外部送信、料金変更、データ削除は明示確認後だけ実行する。 | AIが利用者操作を自動確定する案は本人判断を奪うため却下。 | 採用 |
 | Home初期canvas | 初期viewは短いAIメッセージ、最大3 chip、常設composerだけにする。 | hero、説明カード、空のアイデアストック、手入力フォームは会話開始を遅らせるため却下。 | 採用 |
+| 表示密度 | AI-first surface density contractを全surface共通のreview gateにする。 | 画面ごとの場当たりpatchは同型違反を再発させるため却下。 | 採用 |
 
 ## 変更履歴
 
@@ -158,3 +198,4 @@ Then: T-IA-00で確定した対応表に従ってHomeまたはproject会話へre
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | CEO室の3 surface IAとcontext contractを実装前に固定 | T-IA-00からT-IA-05 |
 | 2026-08-09 | Home会話中心の初期canvas、compact header、visual regression先行を追加 | Home/アイディエーションUX決定をIA resetへ統合 | T-IA-01からT-IA-06 |
+| 2026-08-09 | AI-first surface density contractを追加 | 全surfaceの表示密度を共通契約として再レビューする | T-IA-07からT-IA-09 |
