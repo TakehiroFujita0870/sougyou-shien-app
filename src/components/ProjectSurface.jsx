@@ -9,6 +9,14 @@ import { Card } from './ui/Card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 export const projectEvaluationTabs = ['どんな事業？', '市場はある？', '競合は誰？', '利益は出る？', '実現できる？'];
+const evaluationDefinitions = [
+  { key: 'どんな事業？', label: 'どんな事業？' },
+  { key: '市場はある？', label: '市場はある？' },
+  { key: '競合は誰？', label: '競合は誰？' },
+  // Existing persisted data uses this original spelling. The visible copy is modernized only.
+  { key: '利益はでる？', label: '利益は出る？' },
+  { key: '実現できる？', label: '実現できる？' },
+];
 const DEFAULT_PROJECT_MODEL_KEY = MODEL_CATALOG.find((model) => model.logicalKey === 'gpt-5.6-terra')?.logicalKey ?? MODEL_CATALOG[0]?.logicalKey;
 
 function createDraftProject() {
@@ -17,7 +25,7 @@ function createDraftProject() {
     status: '下書き',
     overview: 'Kadode AI との会話から、事業の仮説を少しずつ育てていきます。',
     decisions: [],
-    sections: Object.fromEntries(projectEvaluationTabs.map((label) => [label, {
+    sections: Object.fromEntries(evaluationDefinitions.map(({ key }) => [key, {
       status: '未確認',
       summary: 'この観点について、まず確かめたいことを言葉にしてみましょう。',
       evidence: 'まだ根拠は登録されていません。',
@@ -58,22 +66,26 @@ function Composer({ disabled, onSubmit, modelKey, models, onModelChange }) {
 
 function EvaluationTabs({ project }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const activeLabel = projectEvaluationTabs[activeIndex];
-  const activeSection = project.sections?.[activeLabel] ?? createDraftProject().sections[activeLabel];
+  const activeTab = evaluationDefinitions[activeIndex];
+  const activeLabel = activeTab.label;
+  const fallbackSections = createDraftProject().sections;
+  const activeSection = project.sections?.[activeTab.key]
+    ?? project.sections?.[activeTab.label]
+    ?? fallbackSections[activeTab.key];
 
   function selectFromKeyboard(event, index) {
     let nextIndex = index;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % projectEvaluationTabs.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + projectEvaluationTabs.length) % projectEvaluationTabs.length;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % evaluationDefinitions.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + evaluationDefinitions.length) % evaluationDefinitions.length;
     else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = projectEvaluationTabs.length - 1;
+    else if (event.key === 'End') nextIndex = evaluationDefinitions.length - 1;
     else return;
     event.preventDefault();
     setActiveIndex(nextIndex);
     document.getElementById(`project-evaluation-tab-${nextIndex}`)?.focus();
   }
 
-  return <section aria-labelledby="project-questions-heading"><div className="mb-3 flex items-baseline justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">EVALUATION</p><h2 id="project-questions-heading" className="mt-1 text-lg font-semibold">事業を深める</h2></div><p className="text-xs text-[var(--color-text-muted)]">根拠と未確認を分けて検討</p></div><div role="tablist" aria-label="事業を深める観点" className="flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] pb-px">{projectEvaluationTabs.map((label, index) => <button key={label} data-project-question="true" id={`project-evaluation-tab-${index}`} type="button" role="tab" aria-selected={activeIndex === index} aria-controls={`project-evaluation-panel-${index}`} tabIndex={activeIndex === index ? 0 : -1} onClick={() => setActiveIndex(index)} onKeyDown={(event) => selectFromKeyboard(event, index)} className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${activeIndex === index ? 'border-[var(--color-primary)] text-[var(--color-text)]' : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}>{label}</button>)}</div><Card id={`project-evaluation-panel-${activeIndex}`} role="tabpanel" aria-labelledby={`project-evaluation-tab-${activeIndex}`} className="mt-4 p-5"><div className="flex items-center justify-between gap-3"><h3 className="text-base font-semibold">{activeLabel}</h3><Badge variant="secondary">{activeSection.status}</Badge></div><p className="mt-3 text-sm leading-6">{activeSection.summary}</p><dl className="mt-5 grid gap-4 border-t border-[var(--color-border-subtle)] pt-4 text-sm leading-6 sm:grid-cols-2"><div><dt className="font-semibold text-[var(--color-text-muted)]">根拠</dt><dd className="mt-1">{activeSection.evidence}</dd></div><div><dt className="font-semibold text-[var(--color-text-muted)]">未確認</dt><dd className="mt-1">{activeSection.unknown}</dd></div></dl></Card></section>;
+  return <section aria-labelledby="project-questions-heading"><div className="mb-3 flex items-baseline justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">EVALUATION</p><h2 id="project-questions-heading" className="mt-1 text-lg font-semibold">事業を深める</h2></div><p className="text-xs text-[var(--color-text-muted)]">根拠と未確認を分けて検討</p></div><div role="tablist" aria-label="事業を深める観点" className="flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] pb-px">{evaluationDefinitions.map(({ key, label }, index) => <button key={key} data-project-question="true" id={`project-evaluation-tab-${index}`} type="button" role="tab" aria-selected={activeIndex === index} aria-controls={`project-evaluation-panel-${index}`} tabIndex={activeIndex === index ? 0 : -1} onClick={() => setActiveIndex(index)} onKeyDown={(event) => selectFromKeyboard(event, index)} className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${activeIndex === index ? 'border-[var(--color-primary)] text-[var(--color-text)]' : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}>{label}</button>)}</div><Card id={`project-evaluation-panel-${activeIndex}`} role="tabpanel" aria-labelledby={`project-evaluation-tab-${activeIndex}`} className="mt-4 p-5"><div className="flex items-center justify-between gap-3"><h3 className="text-base font-semibold">{activeLabel}</h3><Badge variant="secondary">{activeSection.status}</Badge></div><p className="mt-3 text-sm leading-6">{activeSection.summary}</p><dl className="mt-5 grid gap-4 border-t border-[var(--color-border-subtle)] pt-4 text-sm leading-6 sm:grid-cols-2"><div><dt className="font-semibold text-[var(--color-text-muted)]">根拠</dt><dd className="mt-1">{activeSection.evidence}</dd></div><div><dt className="font-semibold text-[var(--color-text-muted)]">未確認</dt><dd className="mt-1">{activeSection.unknown}</dd></div></dl></Card></section>;
 }
 
 export function ProjectSurface({ state = 'populated', project: projectFixture, adoptedProject, conversationRepository, downloadDocx = downloadFormalPlanDocx, models = MODEL_CATALOG, initialModelKey = DEFAULT_PROJECT_MODEL_KEY }) {
@@ -85,7 +97,7 @@ export function ProjectSurface({ state = 'populated', project: projectFixture, a
   const [decisionFilter, setDecisionFilter] = useState('all');
   const [modelKey, setModelKey] = useState(() => models.some((model) => model.logicalKey === initialModelKey) ? initialModelKey : models[0]?.logicalKey);
   const hasProject = Boolean(adoptedProject || projectFixture || draftStarted);
-  const project = adoptedProject ? { name: adoptedProject.title, status: adoptedProject.status, overview: adoptedProject.inference, decisions: adoptedProject.reason ? [{ id: `${adoptedProject.id}-adoption`, kind: '採用', date: '', title: adoptedProject.title, reason: adoptedProject.reason }] : [], sections: Object.fromEntries(projectEvaluationTabs.map((label) => [label, { status: '未確認', summary: 'この観点はProjectで検討します。', evidence: adoptedProject.fact, unknown: 'Projectでの会話から仮説を更新します。' }])) } : projectFixture ?? createDraftProject();
+  const project = adoptedProject ? { name: adoptedProject.title, status: adoptedProject.status, overview: adoptedProject.inference, decisions: adoptedProject.reason ? [{ id: `${adoptedProject.id}-adoption`, kind: '採用', date: '', title: adoptedProject.title, reason: adoptedProject.reason }] : [], sections: Object.fromEntries(evaluationDefinitions.map(({ key }) => [key, { status: '未確認', summary: 'この観点はProjectで検討します。', evidence: adoptedProject.fact, unknown: 'Projectでの会話から仮説を更新します。' }])) } : projectFixture ?? createDraftProject();
   const projectId = adoptedProject?.id ?? projectFixture?.datasetId ?? 'new-project';
   const ownerId = adoptedProject?.ownerId ?? 'local-owner';
   const spaceId = adoptedProject?.spaceId ?? 'local-space';
@@ -138,7 +150,7 @@ export function ProjectSurface({ state = 'populated', project: projectFixture, a
     try { downloadDocx(project); setExportStatus('downloaded'); } catch { setExportStatus('error'); }
   }
 
-  if (!hasProject) return <section aria-labelledby="project-surface-heading" className="mx-auto w-full max-w-5xl py-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">PROJECT</p><h1 id="project-surface-heading" className="mt-1 text-xl font-semibold tracking-tight">Projectをはじめる</h1><Card className="mt-6 max-w-2xl p-6"><h2 className="text-base font-semibold">話したアイデアを、ひとつのプロジェクトに育てましょう</h2><ol className="mt-4 space-y-2 text-sm leading-6 text-[var(--color-text-muted)]"><li>1. Kadode AI と仮説を話す</li><li>2. 残したい案をプロジェクトに採用する</li><li>3. 5つの観点から根拠を確かめる</li></ol><Button type="button" className="mt-5 gap-2" onClick={() => setDraftStarted(true)}><Plus className="size-4" aria-hidden="true" />このページで下書きを作る</Button></Card></section>;
+  if (!hasProject) return <section aria-labelledby="project-surface-heading" className="mx-auto w-full max-w-5xl py-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">PROJECT</p><h1 id="project-surface-heading" className="mt-1 text-xl font-semibold tracking-tight">Projectをはじめる</h1><Card className="mt-6 max-w-2xl p-6"><h2 className="text-base font-semibold">話したアイデアを、ひとつのプロジェクトに育てましょう</h2><ol className="mt-4 space-y-2 text-sm leading-6 text-[var(--color-text-muted)]"><li>1. Kadode AI と仮説を話す</li><li>2. 残したい案をプロジェクトに採用する</li><li>3. 5つの観点から根拠を確かめる</li></ol><Button type="button" className="mt-5 gap-2" onClick={() => setDraftStarted(true)}><Plus className="size-4" aria-hidden="true" />一時的な下書きを試す</Button><p className="mt-3 text-xs text-[var(--color-text-muted)]">この下書きはまだ保存されません。</p></Card></section>;
 
   const status = { loading: '読み込み中', error: '確認が必要', empty: '検討中', populated: project.status }[state];
   const decisions = project.decisions?.filter((decision) => decisionFilter === 'all' || decision.kind === decisionFilter) ?? [];

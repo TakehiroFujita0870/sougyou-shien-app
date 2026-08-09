@@ -54,8 +54,37 @@ describe('ProjectSurface evaluation tabs', () => {
     root = createRoot(container);
     await act(async () => { root.render(<ProjectSurface conversationRepository={{ load: async () => [], save: async (messages) => messages }} />); });
     expect(container.textContent).toContain('Projectをはじめる');
-    expect(container.textContent).toContain('このページで下書きを作る');
     expect(container.querySelector('#project-composer')).toBeNull();
+    expect(container.textContent).toContain('一時的な下書きを試す');
+    expect(container.textContent).toContain('この下書きはまだ保存されません。');
     expect(container.textContent).not.toContain('現場改善');
+  });
+
+  it('renders persisted legacy profit evidence under the modern display label', async () => {
+    const legacyProject = {
+      ...project,
+      sections: {
+        ...project.sections,
+        '利益はでる？': {
+          status: '計算済み',
+          summary: '既存の利益仮説を表示する',
+          evidence: '既存の利益根拠を表示する',
+          unknown: '既存の利益未確認を表示する',
+        },
+      },
+    };
+    delete legacyProject.sections['利益は出る？'];
+
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => { root.render(<ProjectSurface project={legacyProject} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />); });
+    const profitTab = [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === '利益は出る？');
+
+    await act(async () => { profitTab.click(); });
+
+    expect(container.textContent).toContain('既存の利益仮説を表示する');
+    expect(container.textContent).toContain('既存の利益根拠を表示する');
+    expect(container.textContent).toContain('既存の利益未確認を表示する');
   });
 });
