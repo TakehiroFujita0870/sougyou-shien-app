@@ -18,7 +18,7 @@ As a 390px幅の初回訪問者, I want プロフィールdialogを横スクロ�
 
 Given: 390×844 viewportで未完了プロフィールdialogを表示する
 When: header、閉じる操作、質問、textarea、送信操作を確認する
-Then: 各要素は縮小可能かつ最大幅制約を持ち、document横overflowを許容しない契約テストが通る。
+Then: 各要素は縮小可能かつ最大幅制約を持つDOM/CSS契約テストが通る。実ブラウザでのdocument横overflowと390×844 screenshotは#81後のvisual PRで必須確認する。
 
 ### US-56-2
 
@@ -40,13 +40,13 @@ Then: 44px target、focus、aria関係は既存検査を退行させず、実ブ
 
 - App.jsx、UserProfileInterview runtime、shared style、WorkspaceShell、profile hydrationの変更。
 - 認証、API、外部接続、cookie、token、owner state。
-- #81の実表示状態、physical screenshot比較、browser dependencyの追加。
+- #81の実表示状態、physical screenshot比較、browser dependencyの追加。これらは#81後のvisual PRで必須確認する。
 
 ## タスク
 
 | ID | 成果物 | 完了判定（検査:） | 不確実性 |
 | --- | --- | --- | --- |
-| T-56-1 | viewportとdialog構造の受入テスト | 検査: `npm run test -- --run src/issue-56-profile-mobile-visual-regression.test.jsx` が成功 | 既知 |
+| T-56-1 | viewportとdialog構造の受入テスト | 検査: `npm run test -- --run src/issue-56-profile-mobile-visual-regression.test.jsx` が成功。実ブラウザ390×844 screenshotとphysical overflowは#81後visual PRで確認 | 既知 |
 | T-56-2 | keyboard非破壊回帰テスト | 検査: Escape、Enter、Shift+Enterの各assertionが成功 | 既知 |
 | T-56-3 | a11y/44px条件の引継ぎ記録 | 検査: `npm run test -- --run src/App.a11y.test.jsx` が成功 | 類推可能 |
 
@@ -54,7 +54,7 @@ Then: 44px target、focus、aria関係は既存検査を退行させず、実ブ
 
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 | --- | --- | --- | --- |
-| ADR-56-1: visual境界 | 既存Vitest/happy-domでDOM幅制約とkeyboard契約を固定する。依存追加なくCIで実行できる。 | Playwright screenshotはbrowser依存追加と#81のruntime境界を広げるため却下。 | 採用 |
+| ADR-56-1: visual境界 | 既存Vitest/happy-domでDOM/CSS幅制約とkeyboard契約を固定する。物理レイアウトは計測しないため、実ブラウザ390×844 screenshotとphysical overflow確認を#81後visual PRの必須受入条件にする。 | Playwright screenshotを本PRへ追加する案はbrowser依存追加と#81のruntime境界を広げるため却下。 | 採用 |
 | ADR-56-2: 44px条件 | 既存a11y検査を非破壊条件とし、profile controlの物理寸法は#81後の実ブラウザvisual PRで測定する。 | UI sourceへ最小高さを追加する案はfile ownership違反のため却下。 | 採用 |
 
 ## 変更履歴
@@ -62,3 +62,4 @@ Then: 44px target、focus、aria関係は既存検査を退行させず、実ブ
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | #81と競合しないtest-only受入契約を固定 | T-56-1〜3 |
+| 2026-08-09 | happy-domの物理overflow assertionを削除 | DOM/CSS契約と実ブラウザvisual検証の境界を明確化 | T-56-1 |

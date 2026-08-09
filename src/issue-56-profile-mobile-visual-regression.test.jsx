@@ -49,7 +49,6 @@ describe('Issue #56 profile mobile visual regression contract', () => {
     expect(textarea.className).toContain('min-w-0');
     expect(textarea.className).toContain('max-w-full');
     expect(close).toBeTruthy();
-    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   });
 
   it('keeps Escape, Enter, and Shift+Enter behavior non-destructive at 390px', async () => {
