@@ -1,0 +1,5 @@
+{
+  "asset": { "id": "demo-document-001", "name": "顧客ヒアリング要約", "version": 1, "state": "searchable", "references": [{ "kind": "source", "sourceId": "demo-source-market", "locator": "資料 / 顧客ヒアリング要約 / 1頁" }] },
+  "project": { "id": "demo-project-001", "name": "現場改善メモ支援", "summary": "現場で生まれる改善の気づきを、短時間で共有・検討できるようにする構想です。" },
+  "decision": { "id": "decision-001", "background": "紙の記録と口頭の共有に時間がかかる", "judgement": "小規模な検証から始める", "reason": "既存の業務負荷を増やさず、利用頻度を確かめられるため" }
+}
