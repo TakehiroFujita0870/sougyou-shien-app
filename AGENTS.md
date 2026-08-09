@@ -66,7 +66,7 @@
 ### 役割別モデルプロファイル
 
 - CEO室と統合・リリース管理部は `gpt-5.6-terra / medium` を使う。会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-luna / low` を使う。
-- 指定モデルが利用不能な場合だけ、実装部は `BLOCKED`（`reason: model_unavailable`）を統合部へ送る。無断で `gpt-5.6-terra` その他のプロファイルへ切り替えてはならない。
+- 指定モデルが利用不能な場合だけ、担当部は `BLOCKED`（`reason: model_unavailable`）を統合部へ送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断で `gpt-5.6-terra` その他のプロファイルへ切り替えてはならない。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 
 ## Windows / PowerShell の実行規約

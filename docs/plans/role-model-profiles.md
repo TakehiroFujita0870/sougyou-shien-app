@@ -21,8 +21,8 @@ Then: 受信部の指定 `model` と `thinking` がpayloadとturn overrideで一
 ### US-2
 
 Given: 指定モデルを利用できない
-When: 実装部が開始できない
-Then: `reason: model_unavailable` のBLOCKEDを統合部へ送り、別プロファイルへ無断切替しない。
+When: 担当部が開始できない
+Then: `reason: model_unavailable` のBLOCKEDを統合部へ送る。統合部自身の場合はCEO室へ送り、別プロファイルへ無断切替しない。
 
 ## スコープ外
 

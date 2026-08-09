@@ -62,7 +62,7 @@ next_action: receiver's observable action
 | 基盤・認証部 | `gpt-5.6-luna / low` |
 | 事業設計・調査部 | `gpt-5.6-luna / low` |
 
-指定モデルが利用不能な場合だけ、実装部は統合部へ `BLOCKED`（`reason: model_unavailable`）を送る。無断でTerraその他のプロファイルへ切り替えてはならない。統合部とCEO室も表の指定プロファイルを守る。
+指定モデルが利用不能な場合だけ、担当部は統合部へ `BLOCKED`（`reason: model_unavailable`）を送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断でTerraその他のプロファイルへ切り替えてはならない。統合部とCEO室も表の指定プロファイルを守る。
 
 `ASSIGNMENT` と `DEPENDENCY_READY` は `model` と `thinking` を必須項目とする。送信側はpayloadの同じoverrideで受信部の新turnを起動する。
 
