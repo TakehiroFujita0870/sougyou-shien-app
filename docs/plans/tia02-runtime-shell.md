@@ -97,3 +97,4 @@ Then: focusable controlにvisible focusがあり、composer labelとEnter送信/
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版作成 | T-IA-02-Rのruntime shell first sliceを分解 | T-1からT-5 |
+| 2026-08-09 | CEO承認の一度限りのatomic coordinated migrationへ更新 | legacy-testと3-surface runtimeの循環を解消するため、Quality ownerの受入契約commit `844491a7ce9d37e68d35e55ef95e5c368af4402b`を同一PRへ取り込む。Qualityはtest差分を独立承認し、Designはruntime shellを担当する。 | T-2からT-5 |
