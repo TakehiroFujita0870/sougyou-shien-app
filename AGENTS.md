@@ -56,6 +56,13 @@
 - `App.jsx` とshared styleの同時変更は禁止する。両方が必要な場合、統合部が先にファイル所有権と時分割を明記する。
 - 各実装部のWIP上限はレビュー待ち1PRと実装中1件である。統合部はレビューキューを優先して空にする。
 
+### 全社ポートフォリオ管理と要件決定
+
+- CEO室は全社ポートフォリオ管理・要件決定を所有し、実装には介入しない。優先順位、Issue配分、WIP再配分、停止・再開、部門境界を `PORTFOLIO_DIRECTIVE` で統合部へ指示する。
+- 統合・リリース管理部は、CEO室の指示を実装部向けの `ASSIGNMENT` または `DEPENDENCY_READY` に翻訳し、レビュー、配分、handoffを所有する。実装部は割当済みスコープだけを実装する。
+- 統合部は、merge後にnext_dependenciesが空かつidle部門と未割当ready Issueが同時にある、部門WIPが0または上限超、P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界の直後だけ、全社状態を `ORG_HEALTH` としてCEO室へ送る。定期ポーリングを追加しない。同じstate fingerprintは二重送信しない。
+- `REQUIREMENT_REQUEST` は、P0の実装/受入条件が未決、複数部の設計衝突、価格・外部接続・個人情報・法務などCEO決裁が必要な場合だけCEO室からユーザーへ送る。通常の進捗確認、CI失敗、P1/P2は対象外とする。
+
 ## Windows / PowerShell の実行規約
 
 - Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。

@@ -48,6 +48,51 @@ next_action: receiver's observable action
 
 同じ `issue + owner_task` は冪等キーとし、受信側は重複着手しない。
 
+## 全社ポートフォリオ管理と要件決定
+
+CEO室は全社ポートフォリオ管理・要件決定を所有する。CEO室は実装部へ直接実装指示せず、優先順位、Issue配分、WIP再配分、停止・再開、部門境界だけを `PORTFOLIO_DIRECTIVE` で統合・リリース管理部へ送る。統合部はこれを `ASSIGNMENT` または `DEPENDENCY_READY` に翻訳し、実装部はその割当済みスコープだけを実装する。
+
+### ORG_HEALTH
+
+統合部は次の状態変化の直後に限り、CEO室へ `ORG_HEALTH` を送る。定期ポーリングは追加しない。payloadの正規化した内容をstate fingerprintとし、同じfingerprintは二重送信しない。
+
+- merge後にnext_dependenciesが空で、idle部門と未割当ready Issueが同時にある。
+- 部門のWIPが0または上限超になった。
+- P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界が発生した。
+
+```text
+event: ORG_HEALTH
+repository: owner/name
+state_fingerprint: deterministic digest of the fields below
+trigger: merged_idle_unassigned | wip_zero_or_over_limit | p0_blocked | file_ownership_conflict | dependency_unassigned | ceo_boundary
+departments: active/idle and WIP by department
+review_queue: open review PRs and owner
+unassigned_ready_issues: ready Issue numbers or none
+dependency_blocks: source -> target or none
+next_24h_risks: likely stop points or none
+next_action: CEO portfolio decision or acknowledge
+```
+
+通常のCI詳細やP1/P2詳細は `ORG_HEALTH` に含めない。
+
+### PORTFOLIO_DIRECTIVE
+
+```text
+event: PORTFOLIO_DIRECTIVE
+repository: owner/name
+priority_order: ordered Issues/goals
+issue_allocation: Issue -> department or none
+wip_reallocation: department -> target WIP or none
+stop_resume: scopes to stop/resume or none
+boundary_direction: ownership decision or none
+reason: portfolio or requirement rationale
+next_action: integration translates to ASSIGNMENT/DEPENDENCY_READY
+```
+
+### REQUIREMENT_REQUEST
+
+CEO室がユーザーへ送る `REQUIREMENT_REQUEST` は、P0の実装または受入条件が決められない、複数部の設計が衝突する、価格・外部接続・個人情報・法務などCEO決裁が必要な場合に限定する。質問には判断可能な選択肢、推奨、未決時に停止する範囲を必須とする。通常の進捗確認、CI失敗、P1/P2の報告には使わない。
+
 ## CEO室レポートライン
 
 通常経路では、実装部は `PR_READY` を統合・リリース管理部だけへ送る。PR作成時点のCEO室通知は禁止する。統合部がmergeとmain smokeを完了した後、`MERGED` をCEO室と担当部へ送る。
