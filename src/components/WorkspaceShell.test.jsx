@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceShell } from './WorkspaceShell';
 import { LocalGoogleSignIn } from './LocalGoogleSignIn';
@@ -126,14 +126,14 @@ describe('WorkspaceShell', () => {
       'プランと利用状況',
       '設定',
       'ヘルプ・ショートカット',
-      'ログアウト',
+      'ログアウト（認証連携前）',
     ]);
     await act(async () => {
       document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await Promise.resolve();
     });
     expect(document.querySelector('[role="menu"]')).toBeNull();
-    expect(document.activeElement).toBe(accountTrigger);
+    await vi.waitFor(() => expect(document.activeElement).toBe(accountTrigger));
     cleanup();
   });
 
@@ -144,6 +144,25 @@ describe('WorkspaceShell', () => {
     expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
     act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
     expect(container.querySelector('.workspace-shell__sidebar').className).not.toContain('workspace-shell__sidebar--open');
+    cleanup();
+  });
+
+  it('opens distinct Settings and keyboard help dialogs, while logout stays unavailable', async () => {
+    const { container, cleanup } = mount();
+    const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
+    openAccount(container);
+    expect([...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.includes('ログアウト')).getAttribute('data-disabled')).not.toBeNull();
+    await act(async () => [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === '設定').click());
+    expect(document.body.textContent).toContain('通知と認証連携は準備中です');
+    await act(async () => document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(accountTrigger));
+    openAccount(container);
+    await act(async () => [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === 'ヘルプ・ショートカット').click());
+    expect(document.body.textContent).toContain('Alt + Shift + 1');
+    await act(async () => document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(accountTrigger));
     cleanup();
   });
 });
