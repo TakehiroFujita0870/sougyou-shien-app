@@ -268,4 +268,64 @@ describe('adopted project hydration', () => {
     expect(view.container.querySelector('[role="alert"]').textContent).toContain('アーカイブは保持');
     await view.unmount();
   });
+
+  it('keeps an archived Home record and the pre-restore snapshot through an F5-equivalent remount after restore persistence fails', async () => {
+    const storage = createStorage();
+    const portfolio = createSidebarPortfolioRepository({ storage });
+    const archivedSnapshot = { messages: [{ role: 'user', content: 'archived Home snapshot' }], proposals: [], input: '' };
+    const priorSnapshot = { messages: [{ role: 'user', content: 'prior Home snapshot' }], proposals: [], input: '' };
+    await portfolio.upsertAndActivateHome({ id: 'home:archived', title: 'archived Home snapshot', snapshot: archivedSnapshot });
+    await portfolio.archive('home', 'home:archived');
+
+    let persistedHome = priorSnapshot;
+    const homeRepository = { load: async () => persistedHome, save: async (value) => { persistedHome = value; return value; } };
+    const failingRestorePortfolio = { ...portfolio, restore: async () => { throw new Error('restore write failed'); } };
+    const first = await mount({ projectRepository: createAdoptedProjectRepository({ storage }), portfolioRepository: failingRestorePortfolio, homeRepository, ensureHome: false });
+    const activeHomeIdBeforeRestore = (await portfolio.load()).activeHomeId;
+    const restore = first.container.querySelector('button[aria-label$="を再開"]');
+    expect(restore).toBeTruthy();
+    await act(async () => { restore.click(); await Promise.resolve(); });
+    expect(first.container.querySelector('[role="alert"]').textContent).toContain('アーカイブ');
+    expect(persistedHome).toEqual(priorSnapshot);
+    expect((await portfolio.load()).activeHomeId).toBe(activeHomeIdBeforeRestore);
+    expect((await portfolio.load()).home).toContainEqual(expect.objectContaining({ id: 'home:archived', archived: true, snapshot: archivedSnapshot }));
+    await first.unmount();
+
+    const reloaded = await mount({ projectRepository: createAdoptedProjectRepository({ storage }), portfolioRepository: portfolio, homeRepository, ensureHome: false });
+    expect(await homeRepository.load()).toEqual(priorSnapshot);
+    expect((await portfolio.load()).activeHomeId).toBe(activeHomeIdBeforeRestore);
+    expect((await portfolio.load()).home).toContainEqual(expect.objectContaining({ id: 'home:archived', archived: true, snapshot: archivedSnapshot }));
+    expect(reloaded.container.querySelector('#home-supervisor-message')).toBeTruthy();
+    expect(reloaded.container.querySelector('[aria-label="会話履歴"]').textContent).toContain('prior Home snapshot');
+    await reloaded.unmount();
+  });
+
+  it('keeps an archived Project record and restores the prior Project after an F5-equivalent remount when restore persistence fails', async () => {
+    const storage = createStorage();
+    const portfolio = createSidebarPortfolioRepository({ storage });
+    const archivedProject = { ...adoptedCandidate, id: 'project:archived', title: 'archived Project snapshot' };
+    const priorProject = { ...adoptedCandidate, id: 'project:prior', title: 'prior Project snapshot' };
+    await portfolio.upsert('project', { id: archivedProject.id, title: archivedProject.title, snapshot: archivedProject });
+    await portfolio.archive('project', archivedProject.id);
+    let persistedProject = priorProject;
+    const projectRepository = { load: async () => persistedProject, saveAdopted: async (value) => { persistedProject = value; return value; } };
+    const failingRestorePortfolio = { ...portfolio, restore: async () => { throw new Error('restore write failed'); } };
+    const first = await mount({ projectRepository, portfolioRepository: failingRestorePortfolio, ensureHome: false });
+    await act(async () => { selectProject(first.container); await Promise.resolve(); });
+    await vi.waitFor(() => expect(first.container.querySelector('#project-surface-heading')?.textContent).toBe(priorProject.title));
+    const restore = first.container.querySelector('button[aria-label$="を再開"]');
+    expect(restore).toBeTruthy();
+    await act(async () => { restore.click(); await Promise.resolve(); });
+    expect(first.container.querySelector('[role="alert"]').textContent).toContain('アーカイブ');
+    expect((await projectRepository.load()).title).toBe(priorProject.title);
+    expect((await portfolio.load()).project).toEqual([expect.objectContaining({ id: archivedProject.id, archived: true, snapshot: archivedProject })]);
+    await first.unmount();
+
+    globalThis.sessionStorage.setItem('kadode:selected-surface', 'project');
+    const reloadedRepository = { load: async () => persistedProject, saveAdopted: async (value) => { persistedProject = value; return value; } };
+    const reloaded = await mount({ projectRepository: reloadedRepository, portfolioRepository: portfolio, ensureHome: false });
+    expect(reloaded.container.querySelector('#project-surface-heading').textContent).toBe(priorProject.title);
+    expect((await portfolio.load()).project).toEqual([expect.objectContaining({ id: archivedProject.id, archived: true, snapshot: archivedProject })]);
+    await reloaded.unmount();
+  });
 });
