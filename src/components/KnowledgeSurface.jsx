@@ -13,11 +13,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 // Browser E2E uses this narrowly-scoped switch to exercise the component's
 // write-recovery path without replacing the storage object the repository uses.
 function shouldInjectKnowledgeWriteFailure() {
-  try {
-    return globalThis.sessionStorage?.getItem('kadode:e2e:knowledge-write-failure') === '1';
-  } catch {
-    return false;
-  }
+  return globalThis.__KADODE_E2E_KNOWLEDGE_WRITE_FAILURE__ === true;
 }
 const categoryLabel = { all: 'すべて', profile: 'プロフィール', decision: '意思決定', conversation: '過去の会話', file: 'ファイル', note: 'メモ' };
 const stateLabel = { metadata_only: 'メタデータのみ', processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
