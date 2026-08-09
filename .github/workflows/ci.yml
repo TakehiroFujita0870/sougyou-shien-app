@@ -74,6 +74,15 @@ jobs:
             test-results/project-composer-820.png
             test-results/knowledge-library-1440.png
           if-no-files-found: error
+      - name: Verify shared AI composer empty-send contract
+        run: npx playwright test tests/e2e/ai-composer-empty-send.spec.js
+      - name: Upload shared AI composer desktop evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-ai-composer-empty-send-1440
+          path: test-results/ai-composer-empty-send-1440x900.png
+          if-no-files-found: error
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups
       - name: Install LibreOffice for DOCX visual QA
