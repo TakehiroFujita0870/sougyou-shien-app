@@ -74,7 +74,6 @@ describe('plan selection acceptance', () => {
 
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
     expect(container.textContent).toContain('現在のプラン: Standard');
-    expect(container.querySelector('#model').value).toBe('gpt-5.6-terra');
     await unmount();
   });
 
@@ -90,7 +89,7 @@ describe('plan selection acceptance', () => {
     await unmount();
   });
 
-  it('supports keyboard confirmation and removes an invalid model and reasoning choice after returning to Free', async () => {
+  it('supports keyboard plan confirmation without exposing model controls', async () => {
     const { container, unmount } = await mount(<App />);
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
 
@@ -100,15 +99,8 @@ describe('plan selection acceptance', () => {
     await act(() => standard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
 
-    const model = container.querySelector('#model');
-    await act(() => { model.value = 'gpt-5.6-terra'; model.dispatchEvent(new Event('change', { bubbles: true })); });
-    const free = container.querySelector('input[value="free"]');
-    await click(free);
-    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
-
-    expect(container.querySelector('#model').value).toBe('claude-haiku-4-5');
+    expect(container.querySelector('#model')).toBeNull();
     expect(container.querySelector('#reasoning-effort')).toBeNull();
-    expect(document.activeElement?.id).toBe('model');
     await unmount();
   });
 });
