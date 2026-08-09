@@ -1,0 +1,12 @@
+{
+  "status": "completed",
+  "step": 6,
+  "values": {
+    "role": "検証用利用者",
+    "industry": "製造",
+    "challenge": "業務の整理",
+    "goal": "改善案を考える",
+    "style": "短く確認する",
+    "context": "ローカル受入テスト"
+  }
+}
