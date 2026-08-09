@@ -49,11 +49,12 @@ export function createLocalContextSnapshot({ ownerId, surface, selected = {}, se
       .map((name) => [name, allowSelectedEntity(selected[name], ownerId)])
       .filter(([, value]) => value !== null),
   );
+  const selectedEntityIds = new Set(Object.values(allowedSelected).map((entity) => entity.id));
   const allowedDirtyChanges = dirtyChanges
-    .filter((change) => change?.explicit === true && change.target !== 'profile')
-    .filter((change) => typeof change.id === 'string' && typeof change.label === 'string' && typeof change.value === 'string')
-    .map(({ id, label, value }) => ({ id, label, value }))
-    .sort(compareById);
+    .filter((change) => change?.explicit === true && selectedEntityIds.has(change?.entityId))
+    .map(({ entityId }) => ({ entityId, dirty: true }))
+    .sort((left, right) => left.entityId.localeCompare(right.entityId))
+    .filter((change, index, values) => index === 0 || values[index - 1].entityId !== change.entityId);
   const allowedSources = sources
     .map((source) => allowSource(source, ownerId))
     .filter((source) => source !== null)

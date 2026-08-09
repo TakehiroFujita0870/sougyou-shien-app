@@ -12,7 +12,7 @@ describe('local context snapshot', () => {
       surface: { name: 'Project', route: '/projects/project-1', view: 'detail', subview: 'overview' },
       selected: { project: selectedProject },
       selection: ['decision-2', 'asset-1'],
-      dirtyChanges: [{ id: 'title', label: 'Project title', value: 'Renamed', explicit: true }],
+      dirtyChanges: [{ entityId: 'project-1', value: 'Renamed', explicit: true }],
       sources: [
         { kind: 'inference', entityId: 'decision-2', locator: 'decision:decision-2', revision: 'r1', ownerId, permission: 'read' },
         { kind: 'fact', entityId: 'asset-1', locator: 'asset:asset-1', revision: 'r3', ownerId, permission: 'read' },
@@ -28,7 +28,7 @@ describe('local context snapshot', () => {
       surface: { name: 'Project', route: '/projects/project-1', view: 'detail', subview: 'overview' },
       selected: { project: { id: 'project-1', displayName: 'Project One', locator: 'project:project-1', revision: 'r2' } },
       selection: ['asset-1', 'decision-2'],
-      dirtyChanges: [{ id: 'title', label: 'Project title', value: 'Renamed' }],
+      dirtyChanges: [{ entityId: 'project-1', dirty: true }],
       sources: [
         { kind: 'fact', entityId: 'asset-1', locator: 'asset:asset-1', revision: 'r3' },
         { kind: 'inference', entityId: 'decision-2', locator: 'decision:decision-2', revision: 'r1' },
@@ -46,8 +46,10 @@ describe('local context snapshot', () => {
         decision: { id: 'decision-1', displayName: 'Deleted decision', locator: 'decision:decision-1', revision: 'r1', ownerId, permission: 'read', deleted: true },
       },
       dirtyChanges: [
-        { id: 'profile', label: 'Profile', value: 'private detail', explicit: true, target: 'profile' },
-        { id: 'draft', label: 'Draft', value: 'safe', explicit: false },
+        { entityId: 'asset-1', value: 'raw upload body and auth token secret', explicit: true },
+        { entityId: 'project-1', value: 'hidden knowledge text', explicit: true },
+        { entityId: 'unknown', value: 'unselected data', explicit: true },
+        { entityId: 'asset-1', value: 'not explicit', explicit: false },
       ],
       sources: [
         { kind: 'fact', entityId: 'asset-1', locator: '', revision: 'r1', ownerId, permission: 'read' },
@@ -62,9 +64,11 @@ describe('local context snapshot', () => {
     });
 
     expect(snapshot.selected).toEqual({ asset: { id: 'asset-1', displayName: 'Visible asset', locator: 'asset:asset-1', revision: 'r1' } });
-    expect(snapshot.dirtyChanges).toEqual([]);
+    expect(snapshot.dirtyChanges).toEqual([{ entityId: 'asset-1', dirty: true }]);
     expect(snapshot.sources).toEqual([]);
     expect(JSON.stringify(snapshot)).not.toContain('exclude');
-    expect(JSON.stringify(snapshot)).not.toContain('private detail');
+    expect(JSON.stringify(snapshot)).not.toContain('raw upload body');
+    expect(JSON.stringify(snapshot)).not.toContain('auth token secret');
+    expect(JSON.stringify(snapshot)).not.toContain('hidden knowledge text');
   });
 });
