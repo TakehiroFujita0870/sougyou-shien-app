@@ -10,6 +10,7 @@
 2. 機能追加、仕様変更、修正、技術選定では、先に planning を実施して計画文書と受け入れ条件を用意する。
 3. 実装では implementation の再帰ループに従う。テストとセルフレビューの Exit Criteria を満たすまでPRを出さない。3周しても満たせない場合は、実装を止めて planning に差し戻す。
 4. 既存の未コミット変更は利用者または別作業のものとして扱う。対象外のファイルを変更、ステージ、復元しない。
+5. 次工程のtask、review、merge後handoffがある作業では、[handoff-closure](skills/dev/handoff-closure/SKILL.md)を使い、送達と受領確認まで同一turnで閉じる。
 
 ## プロダクト段階とAIモデル
 
