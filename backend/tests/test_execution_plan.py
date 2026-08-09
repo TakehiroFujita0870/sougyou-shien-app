@@ -27,6 +27,7 @@ def test_returns_safe_allocation_for_employee_childcare_weekend_low_capital_fixt
     result = evaluate_execution_plan(plan())
     assert result.remaining_weekly_hours == Decimal("2")
     assert result.remaining_household_fund == Decimal("15000")
+    assert result.profit_funded_experiment_limit == Decimal("6000")
     assert result.safe_to_start is True
     assert result.funding_candidates == ["self_funded_experiment", "official_conditions_check"]
     assert result.required_resources == ["interview_script", "prototype"]
@@ -53,3 +54,10 @@ def test_rejects_personal_details_and_preserves_no_institution_recommendation() 
         plan(constraint_categories=["employee", "family-name"])
     result = evaluate_execution_plan(plan(constraint_categories=["caregiving", "weekend_only"]))
     assert all("bank" not in candidate.lower() for candidate in result.funding_candidates)
+
+
+def test_unit_economics_profit_limits_experiment_funding() -> None:
+    safe = evaluate_execution_plan(plan(unit_economics_operating_profit=Decimal("5000")))
+    assert safe.profit_funded_experiment_limit == Decimal("5000")
+    with pytest.raises(ExecutionInputError, match="unit_economics_funding_exceeded"):
+        evaluate_execution_plan(plan(unit_economics_operating_profit=Decimal("-1")))

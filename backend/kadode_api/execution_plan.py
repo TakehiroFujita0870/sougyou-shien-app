@@ -38,6 +38,7 @@ class ExecutionPlanResult(BaseModel):
     safe_to_start: bool
     remaining_weekly_hours: Decimal
     remaining_household_fund: Decimal
+    profit_funded_experiment_limit: Decimal
     required_resources: list[str]
     roadmap_steps: list[str]
     funding_candidates: list[str]
@@ -55,10 +56,14 @@ def evaluate_execution_plan(plan: ExecutionPlanInput) -> ExecutionPlanResult:
         raise ExecutionInputError("experiment_must_be_reversible")
     if not plan.withdrawal_condition.strip():
         raise ExecutionInputError("withdrawal_condition_required")
+    profit_funded_experiment_limit = max(Decimal("0"), plan.unit_economics_operating_profit)
+    if plan.small_experiment.spend > profit_funded_experiment_limit:
+        raise ExecutionInputError("unit_economics_funding_exceeded")
     return ExecutionPlanResult(
         safe_to_start=True,
         remaining_weekly_hours=plan.weekly_hours_limit - total_hours,
         remaining_household_fund=plan.household_fund_limit - total_spend,
+        profit_funded_experiment_limit=profit_funded_experiment_limit,
         required_resources=plan.required_resources,
         roadmap_steps=plan.roadmap_steps,
         funding_candidates=["self_funded_experiment", "official_conditions_check"],
