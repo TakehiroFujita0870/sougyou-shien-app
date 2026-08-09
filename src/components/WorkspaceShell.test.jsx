@@ -61,7 +61,7 @@ describe('WorkspaceShell', () => {
     root = createRoot(container);
     renderWithFreshAdapter(mobile);
     await act(async () => Promise.resolve());
-    expect(container.textContent).toContain('アカウント');
+    expect(container.textContent).toContain('タケヒロ');
     act(() => { root.unmount(); container.remove(); });
   });
 
@@ -76,6 +76,7 @@ describe('WorkspaceShell', () => {
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
     expect(accountTrigger.textContent).toContain('⌄');
     expect(document.querySelector('[role="menu"]')).toBeNull();
+    accountTrigger.focus();
     openAccount(container);
     expect(document.querySelector('[role="menu"]')).toBeTruthy();
     expect(document.body.textContent).toContain('あなたの情報');
