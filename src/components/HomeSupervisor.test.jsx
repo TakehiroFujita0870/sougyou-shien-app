@@ -7,6 +7,20 @@ import { HomeSupervisor, proposeHomeAction } from './HomeSupervisor';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('Home supervisor', () => {
+  it('keeps the empty desktop canvas as one compact greeting and wide composer cluster', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(<HomeSupervisor repository={{ load: async () => ({ messages: [], proposals: [], input: '' }), save: async (value) => value }} />)); await act(async () => {});
+    const surface = container.querySelector('[data-home-state="empty"]'); const form = container.querySelector('form');
+    expect(surface).toBeTruthy(); expect(surface.className).toContain('justify-center'); expect(form.className).toContain('max-w-[840px]'); expect(container.querySelector('#home-supervisor-message').className).toContain('min-h-16');
+    await act(() => root.unmount()); container.remove();
+  });
+  it('keeps the populated desktop composer pinned with a small bottom gutter', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(<HomeSupervisor repository={{ load: async () => ({ messages: [{ role: 'user', content: '既存の会話' }], proposals: [], input: '' }), save: async (value) => value }} />)); await act(async () => {});
+    const surface = container.querySelector('[data-home-state="populated"]'); const form = container.querySelector('form');
+    expect(surface).toBeTruthy(); expect(form.className).toContain('sticky'); expect(form.className).toContain('pb-6'); expect(container.querySelector('[aria-label="会話履歴"]').className).not.toContain('sr-only');
+    await act(() => root.unmount()); container.remove();
+  });
   it('uses only a safe snapshot and never includes raw, token, or secret input', () => {
     const proposal = proposeHomeAction('プロジェクトを確認');
     expect(JSON.stringify(proposal)).not.toMatch(/raw|token|secret/i);
