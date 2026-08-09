@@ -42,21 +42,31 @@ function Composer({ onSubmit }) {
   );
 }
 
-export function ProjectSurface({ state = 'populated', project = demoProjectFixture, adoptedProject }) {
+export function ProjectSurface({ state = 'populated', project: projectFixture = demoProjectFixture, adoptedProject }) {
   const [messages, setMessages] = useState([]);
   const [exported, setExported] = useState(false);
   const [decisionFilter, setDecisionFilter] = useState('all');
+  const resolvedProject = adoptedProject
+    ? {
+      name: adoptedProject.title,
+      status: adoptedProject.status,
+      overview: adoptedProject.inference,
+      decisions: adoptedProject.reason ? [{ id: `${adoptedProject.id}-adoption`, kind: 'adopted', date: '', title: adoptedProject.title, reason: adoptedProject.reason }] : [],
+      sections: Object.fromEntries(sectionLabels.map((label) => [label, { status: '未確認', summary: 'この仮説をProjectで検討します。', evidence: adoptedProject.fact, unknown: 'Projectでの会話から具体化します。' }])),
+    }
+    : projectFixture;
+  const project = resolvedProject;
   const status = { loading: '読み込み中', error: '確認が必要です', empty: '準備中', populated: project.status }[state];
-  const decisions = project.decisions?.filter((decision) => decisionFilter === 'all' || decision.kind === decisionFilter) ?? [];
+  const decisions = resolvedProject.decisions?.filter((decision) => decisionFilter === 'all' || decision.kind === decisionFilter) ?? [];
 
   return (
     <section aria-labelledby="project-surface-heading" className="mx-auto w-full max-w-6xl pb-12">
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] pb-6">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">PROJECT</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3"><h1 id="project-surface-heading" className="text-3xl font-semibold tracking-tight">{adoptedProject ? '採用したプロジェクト' : project.name}</h1><Badge variant="outline">{status}</Badge></div>
+          <div className="mt-2 flex flex-wrap items-center gap-3"><h1 id="project-surface-heading" className="text-3xl font-semibold tracking-tight">{project.name}</h1><Badge variant="outline">{status}</Badge></div>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--color-text-muted)]">{project.overview}</p>
-          {adoptedProject && <div className="mt-3 space-y-1 text-sm"><p><strong>事実:</strong> {adoptedProject.fact}</p><p><strong>推論:</strong> {adoptedProject.inference}</p></div>}
+          {adoptedProject && <div className="mt-3 space-y-1 text-sm"><p><strong>事実:</strong> {adoptedProject.fact}</p><p><strong>推論:</strong> {adoptedProject.inference}</p><p><strong>採用理由:</strong> {adoptedProject.reason}</p></div>}
         </div>
         <Button type="button" variant="secondary" className="gap-2" onClick={() => setExported(true)}><FileText className="size-4" />事業計画書をエクスポート</Button>
       </header>
@@ -73,7 +83,7 @@ export function ProjectSurface({ state = 'populated', project = demoProjectFixtu
           <div aria-labelledby="project-questions-heading">
             <div className="mb-3 flex items-baseline justify-between gap-3"><h2 id="project-questions-heading" className="text-base font-semibold">事業を具体化する</h2><p className="text-xs text-[var(--color-text-muted)]">根拠と未確認を分けて記録</p></div>
             <div className="grid gap-3 md:grid-cols-2">{sectionLabels.map((label) => {
-              const item = project.sections[label];
+              const item = resolvedProject.sections[label];
               return <Card key={label} data-project-question="true" className="p-4"><div className="flex items-baseline justify-between gap-3"><h3 className="font-semibold">{label}</h3><Badge variant="secondary">{item.status}</Badge></div><p className="mt-3 text-sm leading-6">{state === 'loading' ? '読み込み中です。' : state === 'error' ? '確認が必要です。' : item.summary}</p><dl className="mt-4 space-y-2 border-t border-[var(--color-border-subtle)] pt-3 text-xs leading-5"><div><dt className="font-semibold text-[var(--color-text-muted)]">根拠</dt><dd>{item.evidence}</dd></div><div><dt className="font-semibold text-[var(--color-text-muted)]">未確認</dt><dd>{item.unknown}</dd></div></dl></Card>;
             })}</div>
           </div>

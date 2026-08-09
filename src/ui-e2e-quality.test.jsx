@@ -97,7 +97,7 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     });
     await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用').click());
     expect(container.querySelector('[aria-current="page"]').textContent).toBe('Project');
-    expect(container.textContent).toContain('採用したプロジェクト');
+    expect(container.querySelector('#project-surface-heading').textContent).toBe('プロジェクトを一覧で確認');
     expect(container.textContent).toContain('現在のsurface: Home');
     expect(container.textContent).toContain('入力を「inspect_projects」として整理しました。');
   });
