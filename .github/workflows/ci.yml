@@ -10,7 +10,7 @@ jobs:
       - run: npm ci
       - run: npm run test
       - name: Generate and inspect formal-plan PDF
-        run: mkdir -p test-results && KADODE_PDF_QA_PATH=test-results/formal-plan.pdf npm test -- --run src/components/formalPlanPdfAdapter.test.js
+        run: mkdir -p pdf-qa-artifacts && KADODE_PDF_QA_PATH=pdf-qa-artifacts/formal-plan.pdf npm test -- --run src/components/formalPlanPdfAdapter.test.js
       - run: npm run test:a11y
       - run: npm run build
       - run: npm run build-storybook
@@ -41,14 +41,14 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups
       - name: Verify formal-plan Japanese text and render every PDF page
-        run: uv run python scripts/verify-formal-plan-pdf.py test-results/formal-plan.pdf test-results/formal-plan-png
+        run: uv run python scripts/verify-formal-plan-pdf.py pdf-qa-artifacts/formal-plan.pdf pdf-qa-artifacts/png
       - name: Upload formal-plan PDF visual QA
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: kadode-formal-plan-pdf-qa
           path: |
-            test-results/formal-plan.pdf
-            test-results/formal-plan-png/*.png
+            pdf-qa-artifacts/formal-plan.pdf
+            pdf-qa-artifacts/png/*.png
           if-no-files-found: error
       - run: uv run pytest
