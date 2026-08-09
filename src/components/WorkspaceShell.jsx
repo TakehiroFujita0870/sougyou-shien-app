@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Badge } from './ui/Badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 export const SHELL_NAV = [
   { id: 'home', label: 'Home' },
@@ -9,6 +9,7 @@ export const SHELL_NAV = [
 ];
 
 const PLAN_LABELS = { free: 'Free', standard: 'Standard' };
+const ACCOUNT_DISPLAY_NAME = 'タケヒロ';
 
 function NavItems({ activePage, onSelect }) {
   return SHELL_NAV.map((item) => (
@@ -21,6 +22,7 @@ function NavItems({ activePage, onSelect }) {
 
 export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
+  const accountTriggerRef = useRef(null);
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -45,17 +47,19 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
           <div className="workspace-shell__account-copy">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left hover:bg-[var(--color-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]" aria-label={`アカウント ${PLAN_LABELS[currentPlan] ?? currentPlan}`}>
+                <button ref={accountTriggerRef} type="button" className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left hover:bg-[var(--color-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]" aria-label={`${ACCOUNT_DISPLAY_NAME}のアカウント ${PLAN_LABELS[currentPlan] ?? currentPlan}`}>
                   <span className="grid size-8 shrink-0 place-items-center rounded-full bg-stone-200 text-sm font-bold">K</span>
-                  <strong className="min-w-0 flex-1 truncate">アカウント</strong>
+                  <strong className="min-w-0 flex-1 truncate">{ACCOUNT_DISPLAY_NAME}</strong>
                   <Badge variant="outline">{PLAN_LABELS[currentPlan] ?? currentPlan}</Badge>
                   <span aria-hidden="true" className="text-stone-500">⌄</span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent aria-label="アカウントメニュー" side="top" align="start">
+              <DropdownMenuContent aria-label="アカウントメニュー" side="top" align="start" onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                accountTriggerRef.current?.focus();
+              }}>
                 {accountContent && <div className="workspace-shell__account-auth px-1 pb-1">{accountContent}</div>}
-                <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)]">アカウント</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={onOpenProfile} onClick={onOpenProfile}>あなたの情報</DropdownMenuItem>
+                <DropdownMenuItem onSelect={onOpenProfile} onClick={onOpenProfile}>プロフィールを編集</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>プランと利用状況</DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
                 <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>設定</DropdownMenuItem>

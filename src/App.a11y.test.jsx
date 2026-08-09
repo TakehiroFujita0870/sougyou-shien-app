@@ -49,7 +49,7 @@ describe('App keyboard and accessibility quality', () => {
     const { container, unmount } = await mount();
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
     await openAccount(accountTrigger);
-    const profileEntry = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報');
+    const profileEntry = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'プロフィールを編集');
     await act(() => profileEntry.click());
     const dialog = container.querySelector('[role="dialog"]');
     await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));

@@ -61,25 +61,37 @@ describe('WorkspaceShell', () => {
     root = createRoot(container);
     renderWithFreshAdapter(mobile);
     await act(async () => Promise.resolve());
-    expect(container.textContent).toContain('アカウント');
+    expect(container.textContent).toContain('タケヒロ');
     act(() => { root.unmount(); container.remove(); });
   });
 
-  it('renders the vertical information architecture and account footer', () => {
+  it('renders the vertical information architecture and account footer', async () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
     expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
-    expect(container.textContent).toContain('アカウント');
+    expect(container.textContent).toContain('タケヒロ');
     expect(container.textContent).toContain('Free');
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
+    expect(accountTrigger.textContent).toContain('⌄');
     expect(document.querySelector('[role="menu"]')).toBeNull();
+    accountTrigger.focus();
     openAccount(container);
     expect(document.querySelector('[role="menu"]')).toBeTruthy();
-    expect(document.body.textContent).toContain('プランと利用状況');
-    openAccount(container);
+    expect([...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual([
+      'プロフィールを編集',
+      'プランと利用状況',
+      '設定',
+      'ヘルプ・ショートカット',
+      'ログアウト',
+    ]);
+    await act(async () => {
+      document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await Promise.resolve();
+    });
     expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(accountTrigger);
     cleanup();
   });
 

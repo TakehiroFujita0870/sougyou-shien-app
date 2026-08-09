@@ -39,7 +39,7 @@ function openAccount(container) {
 }
 
 function profileMenuItem() {
-  return [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報');
+  return [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'プロフィールを編集');
 }
 
 afterEach(() => document.body.replaceChildren());
@@ -51,7 +51,7 @@ describe('profile hydration at the application boundary', () => {
 
     expect(repository.load).toHaveBeenCalledTimes(1);
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('アカウント');
+    expect(view.container.textContent).toContain('タケヒロ');
 
     await openAccount(view.container);
     await act(async () => profileMenuItem().click());
@@ -86,7 +86,7 @@ describe('profile hydration at the application boundary', () => {
     await act(async () => Array.from(view.container.querySelectorAll('button')).find((button) => button.textContent === '再試行').click());
     expect(repository.load).toHaveBeenCalledTimes(2);
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('アカウント');
+    expect(view.container.textContent).toContain('タケヒロ');
     await view.unmount();
   });
 
@@ -103,7 +103,7 @@ describe('profile hydration at the application boundary', () => {
 
     await act(async () => second.resolve(completed));
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('アカウント');
+    expect(view.container.textContent).toContain('タケヒロ');
     await view.unmount();
   });
 
