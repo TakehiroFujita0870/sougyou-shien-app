@@ -8,7 +8,7 @@
 
 ゴール: Home supervisorとproject ID単位会話を混同せず、allowlist context snapshotと明示判断を持つ移行順を定義する。
 
-成功指標: IA reset merge前にruntime変更を加えず、後続担当がcontext snapshot、採用、保留、理由付き却下を検証可能にする。
+成功指標: merged済みIA resetに続くdocs-only計画として、後続の明示ASSIGNMENTまたはDEPENDENCY_READY後にruntime実装を検証可能にする。
 
 ## ユーザーストーリーと受け入れ条件
 
@@ -38,7 +38,7 @@ Then: 採用だけがproject化候補として保存され、却下理由は同�
 
 ## スコープ外
 
-- IA reset merge前のApp、WorkspaceShell、shared style、nav、tokens、独立chat route
+- merged済みIA resetの後続runtime実装に含めるApp、WorkspaceShell、shared style、nav、tokens、独立chat route
 - `kadode:workspace-chat`、外部送信、外部AI、Supabase、owner/grant入力、保存先の自動変更
 - runtime component、Storybook、API、auth、entitlementの変更
 
@@ -46,7 +46,7 @@ Then: 採用だけがproject化候補として保存され、却下理由は同�
 
 | 旧state | IA reset後の扱い | 移行条件 |
 | --- | --- | --- |
-| idea conversation | Home supervisorの会話候補 | IA reset後にconversation providerを決定 |
+| idea conversation | Home supervisorの会話候補 | 後続ASSIGNMENT/DEPENDENCY_READY後にconversation providerを決定 |
 | idea candidate preview | Project inline artifact | 明示採用操作とproject IDを持つ |
 | local draft | current surfaceの未送信draft | hydrate競合テストを保持 |
 | file reference | Knowledge locator | availableのみをallowlistへ入れる |
@@ -64,7 +64,7 @@ Then: 採用だけがproject化候補として保存され、却下理由は同�
 
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 | --- | --- | --- | --- |
-| surface | Home / Project / Knowledgeへ分離 | 独立chat routeはIAと会話責務を重複するため却下 | IA reset後に実装 |
+| surface | Home / Project / Knowledgeへ分離 | 独立chat routeはIAと会話責務を重複するため却下 | 後続ASSIGNMENT/DEPENDENCY_READY後にruntime実装 |
 | context | allowlist snapshotだけをproviderが渡す | owner/grantをUIから渡す案はfixed-principal境界に反するため却下 | external送信なし |
 
 ## 変更履歴
