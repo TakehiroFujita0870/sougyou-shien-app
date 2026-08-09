@@ -64,3 +64,34 @@ def test_other_owner_cannot_read_or_approve_report() -> None:
     assert read.status_code == 404
     assert read.json()["detail"] == {"code": "market_report_not_found"}
     assert approve.status_code == 404
+
+
+def test_separates_three_competitor_categories_potential_risk_and_owner_judgments() -> None:
+    api = client()
+    payload = report_payload()
+    payload.update({
+        "competitors": [
+            {"id": "direct-1", "name": "直接社", "category": "direct", "comparison_axis": "導入速度", "evidence_ids": ["web-1"]},
+            {"id": "indirect-1", "name": "代替予算社", "category": "indirect", "comparison_axis": "費用", "evidence_ids": ["web-2"]},
+            {"id": "alternative-1", "name": "手作業", "category": "alternative", "comparison_axis": "運用負担", "evidence_ids": ["web-3"]},
+        ],
+        "potential_entrant_risks": [{"description": "大手参入", "evidence_ids": ["web-2"]}],
+        "owner_judgments": [{"kind": "winning_move", "statement": "現場入力を最短化する", "evidence_ids": ["web-1"]}, {"kind": "opportunity", "statement": "小規模工場から始める", "evidence_ids": []}],
+    })
+    response = api.post("/v1/market-reports", headers={"X-Local-Owner-Id": "owner-a"}, json=payload)
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert [item["category"] for item in body["competitors"]] == ["direct", "indirect", "alternative"]
+    assert body["potential_entrant_risks"][0]["description"] == "大手参入"
+    assert [item["kind"] for item in body["owner_judgments"]] == ["winning_move", "opportunity"]
+    assert body["evidence"] == body["supporting_evidence"] + body["counter_evidence"] + [{"id": "web-3", "locator": "https://example.test/unknown", "excerpt": "対象社数は未調査", "classification": "unverified"}]
+    assert all("owner_judgments" not in item for item in body["evidence"])
+
+
+def test_rejects_potential_competitor_category_and_unknown_evidence_reference() -> None:
+    api = client()
+    payload = report_payload()
+    payload["competitors"] = [{"id": "bad", "name": "潜在", "category": "potential", "comparison_axis": "参入", "evidence_ids": []}]
+    assert api.post("/v1/market-reports", headers={"X-Local-Owner-Id": "owner-a"}, json=payload).status_code == 422
+    payload["competitors"] = [{"id": "direct", "name": "直接", "category": "direct", "comparison_axis": "価格", "evidence_ids": ["missing"]}]
+    assert api.post("/v1/market-reports", headers={"X-Local-Owner-Id": "owner-a"}, json=payload).status_code == 422

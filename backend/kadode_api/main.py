@@ -142,7 +142,10 @@ def create_app(
     def create_market_report(
         request: MarketReportRequest, owner_id: Annotated[str, Depends(local_owner_context)]
     ) -> MarketReportResponse:
-        return report_repository.create(owner_id, request)
+        try:
+            return report_repository.create(owner_id, request)
+        except ValueError as error:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": "market_report_evidence_reference_invalid"}) from error
 
     @app.get("/v1/market-reports/{report_id}", response_model=MarketReportResponse)
     def get_market_report(report_id: str, owner_id: Annotated[str, Depends(local_owner_context)]) -> MarketReportResponse:
