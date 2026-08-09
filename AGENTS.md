@@ -63,6 +63,12 @@
 - 統合部は、merge後にnext_dependenciesが空かつidle部門と未割当ready Issueが同時にある、部門WIPが0または上限超、P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界の直後だけ、全社状態を `ORG_HEALTH` としてCEO室へ送る。定期ポーリングを追加しない。同じstate fingerprintは二重送信しない。
 - `REQUIREMENT_REQUEST` は、P0の実装/受入条件が未決、複数部の設計衝突、価格・外部接続・個人情報・法務などCEO決裁が必要な場合だけCEO室からユーザーへ送る。通常の進捗確認、CI失敗、P1/P2は対象外とする。
 
+### 役割別モデルプロファイル
+
+- CEO室と統合・リリース管理部は `gpt-5.6-terra / medium` を使う。会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-luna / low` を使う。
+- 指定モデルが利用不能な場合だけ、担当部は `BLOCKED`（`reason: model_unavailable`）を統合部へ送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断で `gpt-5.6-terra` その他のプロファイルへ切り替えてはならない。
+- `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
+
 ## Windows / PowerShell の実行規約
 
 - Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。
