@@ -99,5 +99,6 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     expect(container.querySelector('[aria-current="page"]').textContent).toBe('Project');
     expect(container.textContent).toContain('採用したプロジェクト');
     expect(container.textContent).toContain('現在のsurface: Home');
+    expect(container.textContent).toContain('入力を「inspect_projects」として整理しました。');
   });
 });

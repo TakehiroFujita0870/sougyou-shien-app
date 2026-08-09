@@ -119,7 +119,7 @@ export function App({ profileRepository }) {
   }
 
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace onProjectAdopt={() => setActiveWorkspace('project')} />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
     if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" project={adoptedProject} description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
