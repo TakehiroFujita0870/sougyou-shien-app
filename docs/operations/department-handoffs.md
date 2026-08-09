@@ -35,7 +35,7 @@
 | 品質・プロダクト運用部 | `019fe475-2b12-72c2-91c6-007e5a5ef0ba` | T-IA-01 implementation 1 | `019fe36f-6bba-7653-8499-325c528e30fa`は移行記録のみ。新規ASSIGNMENTを送らない。 |
 | 基盤・認証部 | `019fe475-2b1d-7621-86e5-84b4a434f569` | #89 implementation 1 | `019fe36f-5228-7f71-9519-3a09b73922ee`は移行記録のみ。新規ASSIGNMENTを送らない。 |
 
-新owner taskはLuna/low部長本人の実装環境である。移管後の同一Issueは新owner taskを含むidempotency keyで送信し、旧taskのBLOCKEDを新taskへ引き継がない。
+新owner taskはTerra/low部長本人の実装環境である。移管後の同一Issueは新owner taskを含むidempotency keyで送信し、旧taskのBLOCKEDを新taskへ引き継がない。
 
 各実装部のWIP上限は、レビュー待ち1PRと実装中1件までとする。統合部はレビューキューを優先して空にする。
 
@@ -50,7 +50,7 @@ owner_task: receiving department task
 model: assigned model
 thinking: assigned reasoning effort
 file_ownership: exclusive files or directories
-dependencies: required merge SHAs or none
+dependencies: required 12-character merge SHAs or none
 wip_slot: implementation | review
 acceptance_criteria: observable acceptance criteria
 change_prohibitions: excluded scope
@@ -67,7 +67,7 @@ next_action: receiver's observable action
 event: REVIEW_REQUEST
 repository: owner/name
 pr: #number + URL
-head_sha: full SHA
+head_sha: 12-character short SHA
 purpose: one sentence
 reviewer_task: independent department lead task
 checks: scope and completed checks
@@ -82,17 +82,17 @@ next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
 
 | 役割 | model / thinking |
 | --- | --- |
-| CEO室 | `gpt-5.6-terra / medium` |
-| 統合・リリース管理部 | `gpt-5.6-terra / medium` |
-| 会話体験・プロジェクト部 | `gpt-5.6-luna / low` |
-| プロダクトUI・デザインシステム部 | `gpt-5.6-luna / low` |
-| 品質・プロダクト運用部 | `gpt-5.6-luna / low` |
-| 基盤・認証部 | `gpt-5.6-luna / low` |
-| 事業設計・調査部 | `gpt-5.6-luna / low` |
+| CEO室 | `gpt-5.6-terra / low` |
+| 統合・リリース管理部 | `gpt-5.6-terra / low` |
+| 会話体験・プロジェクト部 | `gpt-5.6-terra / low` |
+| プロダクトUI・デザインシステム部 | `gpt-5.6-terra / low` |
+| 品質・プロダクト運用部 | `gpt-5.6-terra / low` |
+| 基盤・認証部 | `gpt-5.6-terra / low` |
+| 事業設計・調査部 | `gpt-5.6-terra / low` |
 
-指定モデルが利用不能な場合だけ、担当部は統合部へ `BLOCKED`（`reason: model_unavailable`）を送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断でTerraその他のプロファイルへ切り替えてはならない。統合部とCEO室も表の指定プロファイルを守る。
+すべての担当は表の `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは廃止する。
 
-会話体験、UIデザイン、品質、基盤認証、事業設計の各部長は`gpt-5.6-luna / low`で自ら実装する。部門間の通常作業ではsubagentをspawnしない。subagentを明示的に使う場合だけTerra制約を適用する。Luna/lowが利用できる部長実装を`model_unavailable`として止めてはならない。
+部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 
 `ASSIGNMENT` と `DEPENDENCY_READY` は `model` と `thinking` を必須項目とする。送信側はpayloadの同じoverrideで受信部の新turnを起動する。
 
@@ -112,8 +112,8 @@ event: ORG_HEALTH
 repository: owner/name
 state_fingerprint: deterministic digest of the fields below
 trigger: wip_zero_or_over_limit | p0_blocked | file_ownership_conflict | dependency_unassigned | ceo_boundary
-main_sha: full SHA
-merge_source: PR and merge SHA or none
+main_sha: 12-character short SHA
+merge_source: PR and 12-character short SHA or none
 departments: active/idle and WIP by department
 review_queue: open review PRs and owner
 unassigned_ready_issues: ready Issue numbers or none
@@ -126,7 +126,7 @@ next_24h_risks: likely stop points or none
 next_action: CEO portfolio decision or acknowledge
 ```
 
-idle部門とready/unassigned work、P0 block、所有権競合、またはCEO境界が同じ`ORG_HEALTH`または`MERGED.org_health`にある場合、CEO室は同じ因果連鎖で1通の`PORTFOLIO_DIRECTIVE`を返す。統合部は同一turnで`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、delivery成功と受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。該当がなければCEO室は応答しない。
+idle部門とready/unassigned work、P0 block、所有権競合、またはCEO境界が同じ`ORG_HEALTH`または`MERGED.org_health`にある場合、CEO室は同じ因果連鎖で1通の`PORTFOLIO_DIRECTIVE`を返す。統合部は同一turnで`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、delivery成功と受信部のactiveまたは具体的な`BLOCKED`を確認する。該当がなければCEO室は応答しない。
 
 通常のCI詳細やP1/P2詳細は `ORG_HEALTH` に含めない。
 
@@ -166,8 +166,8 @@ CEO室向け `MERGED` payloadには、PR、目的、ユーザー影響、検査�
 
 ```text
 org_health:
-  main_sha: full SHA
-  merge_source: PR and merge SHA
+  main_sha: 12-character short SHA
+  merge_source: PR and 12-character short SHA
   released_capacity: work unlocked by merge or none
   departments: active/idle and WIP by department
   review_queue: open review PRs and owner
@@ -176,18 +176,18 @@ org_health:
   ownership_conflicts: files/scopes or none
   model_availability: profile availability by affected department
   next_allocation_candidates: ready work and owner
-  dependency_delivery: target, idempotency key, and delivery result or none
+  dependency_delivery: target, event, short SHA, and delivery result or none
 ```
 
-同じmerge SHAの`MERGED`は冪等とする。merge起因の状態について、同じstate fingerprintを独立`ORG_HEALTH`でも送信してはならない。
+同じ12文字merge SHAの`MERGED`は冪等とする。merge起因の状態について、同じstate fingerprintを独立`ORG_HEALTH`でも送信してはならない。
 
-CEO室は`MERGED.org_health`を受信したturnで、同じmerge SHAに対して`PORTFOLIO_DIRECTIVE`を必ず1通返す。actionは次の3種だけとする。返信なしを承認扱いにしてはならない。
+CEO室は`MERGED.org_health`を受信したturnで、同じ12文字merge SHAに対して`PORTFOLIO_DIRECTIVE`を必ず1通返す。actionは次の3種だけとする。返信なしを承認扱いにしてはならない。
 
 - `GO_ON`: 提案済みのdependency handoffと既定配分を要件変更なしに実行する。
 - `CHANGE`: 優先順位、Issue、WIP、担当、停止を明示して上書きする。
 - `BLOCK`: CEO決裁または要件回答待ちとして停止対象を限定する。
 
-`GO_ON`は承認待ちを増やさない軽量な継続指示である。統合部はGO_ONまたはCHANGEを受け次第、`ASSIGNMENT`または`DEPENDENCY_READY`を実行してreceiver activeまたは`BLOCKED(model_unavailable)`を確認する。通常の進捗とCI詳細はCEO室へ送らない。
+`GO_ON`は承認待ちを増やさない軽量な継続指示である。統合部はGO_ONまたはCHANGEを受け次第、`ASSIGNMENT`または`DEPENDENCY_READY`を実行してreceiver activeまたは具体的な`BLOCKED`を確認する。通常の進捗とCI詳細はCEO室へ送らない。
 
 CEO返信前に統合部が実行できるのは、既承認計画に明記された`DEPENDENCY_READY`、merge smoke、review queue継続だけである。新規Issue選択、idle部門への新規ASSIGNMENT、優先順位変更、WIP再配分は`PORTFOLIO_DIRECTIVE`を受けてから実行する。CEO決裁境界、要件未決、所有権衝突、P0 BLOCKEDは`REQUIREMENT_REQUEST`または`BLOCKED`を送る。
 
@@ -200,7 +200,7 @@ event: PR_READY | REVIEW_REQUEST | REVIEW_APPROVED | REVIEW_CHANGES_REQUESTED | 
 repository: owner/name
 issue: #number
 pr: #number + URL
-head_sha: full SHA
+head_sha: 12-character short SHA
 purpose: one sentence
 checks: command/status summary
 ceo_boundary: none | category and reason
@@ -218,7 +218,7 @@ next_action: receiver's observable action
 event: DEPENDENCY_READY
 repository: owner/name
 source_pr: #number + URL
-source_merge_sha: full SHA
+source_merge_sha: 12-character short SHA
 provided_contract: reusable contract summary
 next_issue_or_goal: next issue or observable goal
 acceptance_criteria: observable acceptance criteria
@@ -227,7 +227,7 @@ checks: merge and verification summary
 owner_task: receiving department task
 model: assigned model
 thinking: assigned reasoning effort
-idempotency_key: source merge SHA + target department
+idempotency_key: source merge short SHA + target department (full key internal only)
 next_action: receiver's observable action
 ```
 
@@ -253,7 +253,7 @@ flowchart LR
 - 発火: PR作成直後、またはレビュー済みSHAから新しいSHAをpushした直後
 - 送信者: 実装部門
 - 受信者: 統合・リリース管理部
-- 受信者の行動: head SHA一致を確認し、差分とCIのレビューを開始する
+- 受信者の行動: 12文字head SHAがPRの完全SHAへ一意に一致することを確認し、差分とCIのレビューを開始する
 
 ### REVIEW_CHANGES_REQUESTED
 
@@ -267,7 +267,7 @@ flowchart LR
 - 発火: 差し戻し修正をpushした直後
 - 送信者: 実装部門
 - 受信者: 統合・リリース管理部
-- 受信者の行動: 以前の承認を破棄し、新しいhead SHAを再レビューする
+- 受信者の行動: 以前の承認を破棄し、新しい12文字head SHAを再レビューする
 
 ### CI_FAILED
 
@@ -289,8 +289,8 @@ merge後handoffは次の順序をすべて満たすまで未完了とする。
 
 1. main smoke成功後に、`next_dependencies`があれば`DEPENDENCY_READY`を送りdelivery成功を確認する。
 2. 担当部へ`MERGED`を送り、CEO室へは全社状態、dependency delivery、next allocation candidatesを内包する`MERGED`を1通だけ送る。
-3. CEO室が同じmerge SHAに対して必ず返す`PORTFOLIO_DIRECTIVE action=GO_ON|CHANGE|BLOCK`を受信する。
-4. GO_ONまたはCHANGEを`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、deliveryと受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。BLOCKは停止対象だけを記録する。
+3. CEO室が同じ12文字merge SHAに対して必ず返す`PORTFOLIO_DIRECTIVE action=GO_ON|CHANGE|BLOCK`を受信する。
+4. GO_ONまたはCHANGEを`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、deliveryと受信部のactiveまたは具体的な`BLOCKED`を確認する。BLOCKは停止対象だけを記録する。
 
 回帰ケース: PR #112の計画merge後に初期assignmentが同一turnで配信されなかった。以後、merge後handoffのreview checklistはdependency delivery、`MERGED.org_health`、CEO室の`PORTFOLIO_DIRECTIVE action=GO_ON|CHANGE|BLOCK`、assignment delivery、receiver stateをすべて検査する。PR #115直後に送られた`MERGED`と独立`ORG_HEALTH`は3通だった旧形式として、この二重送信を再発させない。CEO返信なしを承認扱いにして新規配分したdefault allocation案は、CEO室のポートフォリオ決定権を損なうため却下する。
 
@@ -308,11 +308,11 @@ merge後handoffは次の順序をすべて満たすまで未完了とする。
 1. Codexの既存タスクへメッセージを送り、そのタスクの新しいturnを起動する。
 2. 受信タスクIDは各部門の引き継ぎ文書または管理タスクが保持する。タスクIDをソースコードへハードコードしない。
 3. 送信に失敗した場合、PRコメントへpayloadを記録し、管理タスクへ `BLOCKED`を送る。
-4. 同じ `event + pr + head_sha` は冪等キーとし、受信側は二重処理しない。
+4. 通常payloadの同じ `event + pr + 12文字head_sha` は冪等参照とし、受信側は二重処理しない。完全idempotency keyは監査、rollback、collision、delivery failureの内部記録だけに残す。
 
 ## レビューとマージの停止条件
 
-- 通知されたhead SHAとPRのhead SHAが一致しない
+- 通知された12文字head SHAがPRの完全head SHAへ一意に一致しない
 - required CIが未完了または失敗
 - merge conflictがある
 - P1/P2指摘が未解決
@@ -326,11 +326,10 @@ merge後handoffは次の順序をすべて満たすまで未完了とする。
 1. ルート`AGENTS.md`を読む。
 2. 本文書で自部門の送信責任と応答責任を確認する。
 3. 管理タスクから現在の部門タスク宛先を受け取る。
-4. 自分が所有するIssue、branch、PR、最新head SHAを確認する。
+4. 自分が所有するIssue、branch、PR、最新12文字head SHAを確認する。
 5. 未送信イベントがあれば、実装を始める前に送信する。
 
 ## 統合・リリース管理部の実行プロファイル
 
-- 標準プロファイルは `gpt-5.6-terra / medium` とする。
-- プロファイルが利用不能な場合だけ、管理タスクへ `BLOCKED` を送る。
-- 代替モデル・推論強度への無断変更はしない。管理タスクの明示判断を受けてから変更する。
+- 標準プロファイルは `gpt-5.6-terra / low` とする。
+- 全担当に同じprofileを適用し、Lunaの選択、fallback、`model_unavailable`扱いを使わない。
