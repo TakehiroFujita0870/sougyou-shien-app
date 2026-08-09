@@ -34,5 +34,5 @@ export function LocalGoogleSignIn({ authAdapter }) {
   if (status === 'hydrating') return <span className="workspace-shell__account-status" aria-label="認証状態を確認中">確認中…</span>;
   if (status === 'error') return <span className="workspace-shell__account-status" role="alert">認証状態を読み込めません。再試行してください。</span>;
   if (principal) return <div className="workspace-shell__account-auth"><strong>{principal.displayName}</strong><button type="button" onClick={signOut}>サインアウト</button></div>;
-  return <div className="workspace-shell__account-auth"><button type="button" onClick={signIn}>Googleで続ける（local mock）</button>{error && <span role="alert">{error}</span>}</div>;
+  return <div className="workspace-shell__account-auth"><button type="button" onClick={signIn}>Googleで続ける</button>{error && <span role="alert">{error}</span>}</div>;
 }

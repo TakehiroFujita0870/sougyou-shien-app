@@ -40,7 +40,6 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
       {drawerOpen && <button type="button" className="workspace-shell__scrim" aria-label="サイドバーを閉じる" onClick={() => setDrawerOpen(false)} />}
       <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" />{!collapsed && <span>Kadode workspace</span>}</div>
-        <button type="button" className="workspace-shell__collapse" aria-label={collapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'} onClick={() => setCollapsed((value) => !value)}><span aria-hidden="true" className="workspace-shell__collapse-mark" />{!collapsed ? '折りたたむ' : '展開'}</button>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
         <footer className="workspace-shell__account">
           <div className="workspace-shell__avatar" aria-hidden="true">K</div>

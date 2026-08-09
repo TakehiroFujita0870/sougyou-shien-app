@@ -17,7 +17,7 @@ As a 利用者, I want Homeを開いた直後にKadode AI composerだけへ集�
 
 Given: Homeを1440x900または390x844で開いている。
 When: first viewportを確認する。
-Then: compact headerと一つのcomposerが表示され、空のIdea stock、重複header、巨大hero、floating profile buttonは表示されない。
+Then: compact headerと一つのtext composerが表示され、Idea stock、environment-mode copy、collapse control、重複header、巨大hero、floating profile buttonは表示されない。
 
 ### US-2
 As a 利用者, I want 会話後にmessage streamとcomposerを同時に見たい, so that 入力と直前の文脈を失わない。
@@ -58,7 +58,7 @@ Then: visible focus、screen-reader label、44px target、motionなしの意味�
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 | --- | --- | --- | --- |
 | Home entry | 既存conversation workflowのpresentationをHomeへ置く。storageと候補判断を保てる。 | 新workflow追加は状態と責務を二重化するため却下。 | 実装する。 |
-| chrome | header一層、sidebar三項目、account footerに限定する。 | breadcrumb/header/Kadodeの重複はfirst viewportを圧迫するため却下。 | 実装する。 |
+| chrome | header一層、sidebar三項目、account footerに限定し、collapse widgetを置かない。 | breadcrumb/header/Kadodeの重複とcollapse controlはfirst viewportを圧迫するため却下。 | 実装する。 |
 | profile access | floating buttonをaccount footer/menuへ移す。 | 常時floating buttonはcomposerと競合するため却下。 | 実装する。 |
 
 ## 変更履歴

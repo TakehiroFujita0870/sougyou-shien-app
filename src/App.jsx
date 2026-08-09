@@ -48,7 +48,7 @@ function PlaceholderSurface({ name, description }) {
 
 function IdeaWorkspace() {
   return (
-    <div className="max-w-3xl [&_[aria-label='アイデアストック']>div:nth-child(2):has(>p:only-child)]:hidden">
+    <div className="max-w-3xl [&_[aria-label='アイデアストック']]:hidden">
       <section aria-labelledby="idea-heading">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
         <h1 id="idea-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>
@@ -150,7 +150,7 @@ export function App({ profileRepository }) {
   return (
     <main className="kadode-shell">
       <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
-        <div className="px-5 py-5 sm:py-7"><div className="mb-4 flex justify-end"><span className="rounded-full border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-600">local / fake</span></div>{workspaceContent()}</div>
+        <div className="px-5 py-5 sm:py-7">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
