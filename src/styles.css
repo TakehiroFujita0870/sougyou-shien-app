@@ -21,6 +21,11 @@
   --color-warning: #8c3c2d;
   --color-warning-surface: #fff1e9;
   --color-focus: #73453d;
+  --color-primary: var(--color-action);
+  --color-primary-hover: var(--color-action-hover);
+  --color-primary-foreground: var(--color-action-text);
+  --color-muted: #f3eadf;
+  --color-ring: var(--color-focus);
   --motion-feedback: 160ms;
   --motion-easing: ease-out;
 }
