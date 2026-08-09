@@ -3,9 +3,9 @@ import { Badge } from './ui/Badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 export const SHELL_NAV = [
-  { id: 'home', label: 'Home' },
-  { id: 'project', label: 'Project' },
-  { id: 'knowledge', label: 'Knowledge' },
+  { id: 'home', label: 'ホーム' },
+  { id: 'project', label: 'プロジェクト' },
+  { id: 'knowledge', label: 'ナレッジ' },
 ];
 
 const PLAN_LABELS = { free: 'Free', standard: 'Standard' };

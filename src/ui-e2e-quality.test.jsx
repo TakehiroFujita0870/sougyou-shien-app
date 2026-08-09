@@ -56,13 +56,13 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const first = await mountApp(390);
-    const project = [...first.container.querySelectorAll('nav button')].find((button) => button.textContent.trim() === 'Project');
+    const project = [...first.container.querySelectorAll('nav button')].find((button) => button.textContent.trim() === 'プロジェクト');
     await act(async () => project.click());
-    expect(first.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(first.container.querySelector('[aria-current="page"]').textContent).toBe('プロジェクト');
     await act(async () => first.root.unmount());
     mounted.shift().container.remove();
     const second = await mountApp(390);
-    expect(second.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(second.container.querySelector('[aria-current="page"]').textContent).toBe('プロジェクト');
     expect(second.container.textContent).toContain('Project');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -96,7 +96,7 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
       await Promise.resolve();
     });
     await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用').click());
-    expect(container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(container.querySelector('[aria-current="page"]').textContent).toBe('プロジェクト');
     expect(container.querySelector('#project-surface-heading').textContent).toBe('プロジェクトを一覧で確認');
     expect(container.textContent).toContain('現在のsurface: Home');
     expect(container.textContent).toContain('入力を「inspect_projects」として整理しました。');
