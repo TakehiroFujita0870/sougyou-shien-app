@@ -1,22 +1,331 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
-import fixture from '../fixtures/knowledge-admin-demo.json';
-import { KnowledgeSurface } from './KnowledgeSurface';
-import { createKnowledgeConversationRepository } from './knowledgeConversationRepository';
-import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
+import fixture from "../fixtures/knowledge-admin-demo.json";
+import { KnowledgeSurface } from "./KnowledgeSurface";
+import { createKnowledgeConversationRepository } from "./knowledgeConversationRepository";
+import { createKnowledgeMetadataRepository } from "./knowledgeMetadataRepository";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-const memoryStorage = () => { const values = new Map(); return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) }; };
-async function mount(props = {}) { const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); await act(async () => root.render(<KnowledgeSurface fixture={fixture} repository={createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: memoryStorage() })} {...props} />)); return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) }; }
+const memoryStorage = () => {
+  const values = new Map();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  };
+};
+async function mount(props = {}) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      <KnowledgeSurface
+        fixture={fixture}
+        repository={createKnowledgeMetadataRepository({
+          ownerId: "a",
+          spaceId: "s",
+          storage: memoryStorage(),
+        })}
+        {...props}
+      />,
+    ),
+  );
+  return {
+    container,
+    unmount: () =>
+      act(() => {
+        root.unmount();
+        container.remove();
+      }),
+  };
+}
 
-describe('KnowledgeSurface library', () => {
-  it('shows a compact searchable, category-filterable library without network calls', async () => { const fetchSpy = vi.spyOn(globalThis, 'fetch'); const { container, unmount } = await mount(); await act(async () => Promise.resolve()); expect(container.textContent).toContain('ナレッジライブラリ'); expect(container.textContent).toContain('顧客ヒアリング要約'); expect(container.textContent).toContain('小規模な検証から始める'); const search = container.querySelector('input[placeholder="タイトル・本文を検索"]'); await act(async () => { search.value = '顧客'; search.dispatchEvent(new Event('input', { bubbles: true })); }); expect(container.textContent).toContain('顧客ヒアリング要約'); expect(fetchSpy).not.toHaveBeenCalled(); fetchSpy.mockRestore(); await unmount(); });
-  it('previews deterministic classification and saves only after confirmation, surviving reload', async () => { const store = memoryStorage(); const conversationRepository = createKnowledgeConversationRepository({ ownerId: 'a', spaceId: 's', storage: store }); const props = { conversationRepository, repository: createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store }) }; const first = await mount(props); const input = first.container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, '採用する市場調査の進め方'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); expect((await conversationRepository.load()).entries).toHaveLength(0); expect(document.querySelector('[role="dialog"]')).toBeTruthy(); await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'ナレッジに追加').click()); expect((await conversationRepository.load()).entries[0]).toMatchObject({ category: 'decision' }); await first.unmount(); const second = await mount({ ...props, conversationRepository: createKnowledgeConversationRepository({ ownerId: 'a', spaceId: 's', storage: store }) }); await act(async () => Promise.resolve()); expect(second.container.textContent).toContain('採用する市場調査'); await second.unmount(); });
-  it('cancels a preview without persistence and has no AI assist widget', async () => { const repository = createKnowledgeConversationRepository({ ownerId: 'a', spaceId: 's', storage: memoryStorage() }); const { container, unmount } = await mount({ conversationRepository: repository }); const input = container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, 'メモ'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'キャンセル').click()); expect((await repository.load()).entries).toEqual([]); expect(container.querySelector('[data-testid="knowledge-assist"]')).toBeNull(); await unmount(); });
-  it('keeps a confirmed entry when the initial hydration resolves late', async () => { let resolveLoad; const pending = new Promise((resolve) => { resolveLoad = resolve; }); const conversationRepository = { load: () => pending, save: vi.fn(async (value) => value) }; const { container, unmount } = await mount({ conversationRepository }); const input = container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, '採用する検証計画'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === 'ナレッジに追加').click()); await act(async () => resolveLoad({ messages: [], entries: [] })); expect(container.textContent).toContain('採用する検証計画'); expect(conversationRepository.save).toHaveBeenCalledWith(expect.objectContaining({ entries: [expect.objectContaining({ content: '採用する検証計画' })] })); await unmount(); });
-  it('keeps the add confirmation open with a retryable alert after a rejected save and ignores a late hydration result', async () => { let resolveLoad; const pendingLoad = new Promise((resolve) => { resolveLoad = resolve; }); const conversationRepository = { load: () => pendingLoad, save: vi.fn(async () => { throw new Error('offline'); }) }; const { container, unmount } = await mount({ conversationRepository }); const input = container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, '保存失敗後も確認を残す'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); const dialog = document.querySelector('[role="dialog"]'); const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent === 'ナレッジに追加'); await act(async () => { confirm.click(); await Promise.resolve(); }); await act(async () => resolveLoad({ messages: [], entries: [] })); expect(conversationRepository.save).toHaveBeenCalledTimes(1); expect(document.querySelector('[role="dialog"]')).toBeTruthy(); expect(container.querySelector('[role="alert"]').textContent).toContain('ナレッジを保存できませんでした'); expect(document.querySelector('[role="dialog"]').textContent).toContain('保存失敗後も確認を残す'); await act(async () => { confirm.click(); await Promise.resolve(); }); expect(conversationRepository.save).toHaveBeenCalledTimes(2); await unmount(); });
-  it('disables duplicate confirmation while saving and only commits once', async () => { let resolveSave; const pendingSave = new Promise((resolve) => { resolveSave = resolve; }); const conversationRepository = { load: async () => ({ messages: [], entries: [] }), save: vi.fn(() => pendingSave) }; const { container, unmount } = await mount({ conversationRepository }); const input = container.querySelector('#knowledge-composer'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; await act(async () => { setter.call(input, '重複保存を防ぐ'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }); const dialog = document.querySelector('[role="dialog"]'); const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent === 'ナレッジに追加'); await act(async () => { confirm.click(); await Promise.resolve(); }); expect(conversationRepository.save).toHaveBeenCalledTimes(1); expect([...dialog.querySelectorAll('button')].find((button) => button.textContent === '保存中…').disabled).toBe(true); await act(async () => resolveSave({ messages: [], entries: [] })); expect(document.querySelector('[role="dialog"]')).toBeNull(); expect(conversationRepository.save).toHaveBeenCalledTimes(1); await unmount(); });
-  it('keeps the delete confirmation and document intact after a rejected delete', async () => { const documentRecord = { id: 'local-file:failure.pdf', name: 'failure.pdf', state: 'metadata_only', mediaType: 'pdf', sizeBytes: 1024, lastModified: 1 }; const repository = { load: async () => {}, list: () => [documentRecord], delete: vi.fn(async () => { throw new Error('offline'); }) }; const { container, unmount } = await mount({ repository }); await act(async () => Promise.resolve()); await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除').click()); const confirm = [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定'); await act(async () => { confirm.click(); await Promise.resolve(); }); expect(repository.delete).toHaveBeenCalledTimes(1); expect(document.querySelector('[role="dialog"]')).toBeTruthy(); expect(container.querySelector('[role="alert"]').textContent).toContain('ファイルを削除できませんでした'); expect(container.textContent).toContain('failure.pdf'); await unmount(); });
+describe("KnowledgeSurface library", () => {
+  it("shows a compact searchable, category-filterable library without network calls", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { container, unmount } = await mount();
+    await act(async () => Promise.resolve());
+    expect(container.textContent).toContain("ナレッジライブラリ");
+    expect(container.textContent).toContain("顧客ヒアリング要約");
+    expect(container.textContent).toContain("小規模な検証から始める");
+    const search = container.querySelector(
+      'input[placeholder="タイトル・本文を検索"]',
+    );
+    await act(async () => {
+      search.value = "顧客";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("顧客ヒアリング要約");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    await unmount();
+  });
+  it("previews deterministic classification and saves only after confirmation, surviving reload", async () => {
+    const store = memoryStorage();
+    const conversationRepository = createKnowledgeConversationRepository({
+      ownerId: "a",
+      spaceId: "s",
+      storage: store,
+    });
+    const props = {
+      conversationRepository,
+      repository: createKnowledgeMetadataRepository({
+        ownerId: "a",
+        spaceId: "s",
+        storage: store,
+      }),
+    };
+    const first = await mount(props);
+    const input = first.container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    ).set;
+    await act(async () => {
+      setter.call(input, "採用する市場調査の進め方");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect((await conversationRepository.load()).entries).toHaveLength(0);
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent === "ナレッジに追加")
+        .click(),
+    );
+    expect((await conversationRepository.load()).entries[0]).toMatchObject({
+      category: "decision",
+    });
+    await first.unmount();
+    const second = await mount({
+      ...props,
+      conversationRepository: createKnowledgeConversationRepository({
+        ownerId: "a",
+        spaceId: "s",
+        storage: store,
+      }),
+    });
+    await act(async () => Promise.resolve());
+    expect(second.container.textContent).toContain("採用する市場調査");
+    await second.unmount();
+  });
+  it("cancels a preview without persistence and has no AI assist widget", async () => {
+    const repository = createKnowledgeConversationRepository({
+      ownerId: "a",
+      spaceId: "s",
+      storage: memoryStorage(),
+    });
+    const { container, unmount } = await mount({
+      conversationRepository: repository,
+    });
+    const input = container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    ).set;
+    await act(async () => {
+      setter.call(input, "メモ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent === "キャンセル")
+        .click(),
+    );
+    expect((await repository.load()).entries).toEqual([]);
+    expect(
+      container.querySelector('[data-testid="knowledge-assist"]'),
+    ).toBeNull();
+    await unmount();
+  });
+  it("keeps a confirmed entry when the initial hydration resolves late", async () => {
+    let resolveLoad;
+    const pending = new Promise((resolve) => {
+      resolveLoad = resolve;
+    });
+    const conversationRepository = {
+      load: () => pending,
+      save: vi.fn(async (value) => value),
+    };
+    const { container, unmount } = await mount({ conversationRepository });
+    const input = container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    ).set;
+    await act(async () => {
+      setter.call(input, "採用する検証計画");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent === "ナレッジに追加")
+        .click(),
+    );
+    await act(async () => resolveLoad({ messages: [], entries: [] }));
+    expect(container.textContent).toContain("採用する検証計画");
+    expect(conversationRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entries: [expect.objectContaining({ content: "採用する検証計画" })],
+      }),
+    );
+    await unmount();
+  });
+  it("keeps the add confirmation open with a retryable alert after a rejected save and ignores a late hydration result", async () => {
+    let resolveLoad;
+    const pendingLoad = new Promise((resolve) => {
+      resolveLoad = resolve;
+    });
+    const conversationRepository = {
+      load: () => pendingLoad,
+      save: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    };
+    const { container, unmount } = await mount({ conversationRepository });
+    const input = container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    ).set;
+    await act(async () => {
+      setter.call(input, "保存失敗後も確認を残す");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    const confirm = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "ナレッジに追加",
+    );
+    await act(async () => {
+      confirm.click();
+      await Promise.resolve();
+    });
+    await act(async () => resolveLoad({ messages: [], entries: [] }));
+    expect(conversationRepository.save).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+    expect(document.querySelector('[role="alert"]').textContent).toContain(
+      "ナレッジを保存できませんでした",
+    );
+    expect(document.querySelector('[role="dialog"]').textContent).toContain(
+      "保存失敗後も確認を残す",
+    );
+    await act(async () => {
+      confirm.click();
+      await Promise.resolve();
+    });
+    expect(conversationRepository.save).toHaveBeenCalledTimes(2);
+    await unmount();
+  });
+  it("disables duplicate confirmation while saving and only commits once", async () => {
+    let resolveSave;
+    const pendingSave = new Promise((resolve) => {
+      resolveSave = resolve;
+    });
+    const conversationRepository = {
+      load: async () => ({ messages: [], entries: [] }),
+      save: vi.fn(() => pendingSave),
+    };
+    const { container, unmount } = await mount({ conversationRepository });
+    const input = container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    ).set;
+    await act(async () => {
+      setter.call(input, "重複保存を防ぐ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    const confirm = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "ナレッジに追加",
+    );
+    await act(async () => {
+      confirm.click();
+      await Promise.resolve();
+    });
+    expect(conversationRepository.save).toHaveBeenCalledTimes(1);
+    expect(
+      [...dialog.querySelectorAll("button")].find(
+        (button) => button.textContent === "保存中…",
+      ).disabled,
+    ).toBe(true);
+    await act(async () => resolveSave({ messages: [], entries: [] }));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(conversationRepository.save).toHaveBeenCalledTimes(1);
+    await unmount();
+  });
+  it("keeps the delete confirmation and document intact after a rejected delete", async () => {
+    const documentRecord = {
+      id: "local-file:failure.pdf",
+      name: "failure.pdf",
+      state: "metadata_only",
+      mediaType: "pdf",
+      sizeBytes: 1024,
+      lastModified: 1,
+    };
+    const repository = {
+      load: async () => {},
+      list: () => [documentRecord],
+      delete: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    };
+    const { container, unmount } = await mount({ repository });
+    await act(async () => Promise.resolve());
+    await act(async () =>
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "削除")
+        .click(),
+    );
+    const confirm = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "削除を確定",
+    );
+    await act(async () => {
+      confirm.click();
+      await Promise.resolve();
+    });
+    expect(repository.delete).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+    expect(document.querySelector('[role="alert"]').textContent).toContain(
+      "ファイルを削除できませんでした",
+    );
+    expect(container.textContent).toContain("failure.pdf");
+    await unmount();
+  });
 });
