@@ -6,6 +6,7 @@ import { createLocalPlanRepository } from './components/planSubscriptionReposito
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
 import { createHomeModelRepository, getHomeModels } from './components/homeModelRepository';
+import { ProjectSurface } from './components/ProjectSurface';
 import { useHydratedResource } from './runtime/useHydratedResource';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
@@ -116,7 +117,7 @@ export function App({ profileRepository }) {
 
   function workspaceContent() {
     if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
-    if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" project={adoptedProject} description="プロジェクトの作業面は、次の実装で接続します。" />;
+    if (activeWorkspace === 'project') return <ProjectSurface adoptedProject={adoptedProject} />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
