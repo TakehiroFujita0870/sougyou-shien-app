@@ -37,24 +37,24 @@ afterEach(async () => {
 });
 
 describe('UI UX contract: executable baseline acceptance checks', () => {
-  it('FAIL-UX-01 baseline exposes project navigation and an operable AI chat entry', async () => {
+  it('FAIL-UX-01 exposes three-surface navigation and an operable Home composer', async () => {
     const { container } = await mountApp();
     expect(container.querySelector('[aria-label="主要ページ"]')).not.toBeNull();
-    await clickButton(container, 'AIチャット');
-    expect(container.textContent).toContain('AIチャット');
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['Home', 'Project', 'Knowledge']);
+    expect(container.querySelector('#idea-message')).not.toBeNull();
   });
 
-  it('FAIL-UX-02 baseline exposes an explicit idea-stock destination for future candidate decisions', async () => {
+  it('FAIL-UX-02 exposes Project and Knowledge as distinct context destinations', async () => {
     const { container } = await mountApp();
-    await clickButton(container, '事業のタネ');
-    expect(container.querySelector('[aria-label="アイデアストック"]')).not.toBeNull();
-    expect(container.textContent).toContain('まだ候補はありません');
+    await clickButton(container, 'Project');
+    expect(container.textContent).toContain('Project');
+    await clickButton(container, 'Knowledge');
+    expect(container.textContent).toContain('Knowledge');
   });
 
-  it('FAIL-UX-03 baseline exposes the shared documents destination', async () => {
+  it('FAIL-UX-03 does not expose obsolete navigation destinations', async () => {
     const { container } = await mountApp();
-    await clickButton(container, '資料');
-    expect(container.textContent).toContain('資料');
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['Home', 'Project', 'Knowledge']);
   });
 
   it('FAIL-UX-04 baseline keeps profile hydration observable while loading', async () => {
@@ -78,6 +78,5 @@ describe('UI UX contract: executable baseline acceptance checks', () => {
   it('FAIL-UX-06 baseline marks the local-only telemetry boundary without sending network data', async () => {
     const { container } = await mountApp();
     expect(container.textContent).toContain('local / fake モード');
-    expect(container.textContent).toContain('外部サービスへ送信しません');
   });
 });

@@ -32,11 +32,11 @@ describe('App keyboard and accessibility quality', () => {
     const { container, unmount } = await mount();
 
     await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', altKey: true, shiftKey: true, bubbles: true })));
-    expect([...container.querySelectorAll('button')].find((button) => button.textContent === '横断調査')?.getAttribute('aria-current')).toBe('page');
+    expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Project')?.getAttribute('aria-current')).toBe('page');
 
     const input = container.querySelector('textarea');
     await act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: '3', altKey: true, shiftKey: true, bubbles: true })));
-    expect([...container.querySelectorAll('button')].find((button) => button.textContent === '横断調査')?.getAttribute('aria-current')).toBe('page');
+    expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Project')?.getAttribute('aria-current')).toBe('page');
     await unmount();
   });
 
@@ -48,16 +48,8 @@ describe('App keyboard and accessibility quality', () => {
     expect(dialog.isConnected).toBe(false);
 
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
-    expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
-      'AIチャット',
-      '事業のタネ',
-      'プロジェクト',
-      '横断調査',
-      '資料',
-      '検索',
-    ]);
+    expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Home', 'Project', 'Knowledge']);
     expect(navigation.textContent).not.toContain('AI広報');
-    expect(navigation.textContent).not.toContain('始める前に、');
     expect(navigation.querySelector('button').className).toContain('workspace-shell__nav-item');
     expect(container.querySelector('main').className).toContain('kadode-shell');
     expect(container.querySelector('.workspace-shell__nav-item').className).toContain('workspace-shell__nav-item');
