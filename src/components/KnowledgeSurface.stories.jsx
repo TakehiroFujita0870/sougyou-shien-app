@@ -13,6 +13,7 @@ const writeFailureConversationRepository = {
   async save(value) {
     if (rejectFirstKnowledgeSave) {
       rejectFirstKnowledgeSave = false;
+      await new Promise((resolve) => setTimeout(resolve, 300));
       throw new Error('Injected Knowledge write failure');
     }
     return value;

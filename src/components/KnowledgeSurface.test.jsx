@@ -291,6 +291,10 @@ describe("KnowledgeSurface library", () => {
     await unmount();
   });
   it("keeps the delete confirmation and document intact after a rejected delete", async () => {
+    let rejectDelete;
+    const pendingDelete = new Promise((_, reject) => {
+      rejectDelete = reject;
+    });
     const documentRecord = {
       id: "local-file:failure.pdf",
       name: "failure.pdf",
@@ -302,9 +306,7 @@ describe("KnowledgeSurface library", () => {
     const repository = {
       load: async () => {},
       list: () => [documentRecord],
-      delete: vi.fn(async () => {
-        throw new Error("offline");
-      }),
+      delete: vi.fn(() => pendingDelete),
     };
     const { container, unmount } = await mount({ repository });
     await act(async () => Promise.resolve());
@@ -321,6 +323,11 @@ describe("KnowledgeSurface library", () => {
       await Promise.resolve();
     });
     expect(repository.delete).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      rejectDelete(new Error("offline"));
+      await Promise.resolve();
+    });
     expect(document.querySelector('[role="dialog"]')).toBeTruthy();
     expect(document.querySelector('[role="alert"]').textContent).toContain(
       "ファイルを削除できませんでした",
