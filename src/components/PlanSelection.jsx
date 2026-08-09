@@ -6,13 +6,13 @@ import { Card } from './ui/Card';
 const PLAN_DETAILS = {
   free: {
     name: 'Free',
-    summary: '軽量モデルで、まず一案を育てるプランです。',
-    benefits: ['軽量モデル', 'Thinkingなし', '手動調査に上限あり'],
+    summary: 'まず一案を育て、検討の手触りを確かめるプランです。',
+    benefits: ['アイデア整理', '小さな調査枠', 'プロジェクトの基本機能'],
   },
   standard: {
     name: 'Standard',
-    summary: '複数のモデルを選べる、比較と検証を進めるプランです。',
-    benefits: ['月額980円', '複数モデル', '既定 GPT-5.6 Terra', 'Freeより大きい調査枠'],
+    summary: '比較と検証を深め、事業の形に近づけるプランです。',
+    benefits: ['月額980円', '大きな調査枠', '事業検討の拡張機能'],
   },
 };
 
@@ -46,10 +46,8 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
   return (
     <Card aria-labelledby="plan-selection-heading" className="rounded-3xl p-6">
       <div>
-        <p className="text-sm font-bold text-[var(--color-sakura-ink)]">local / fake 契約</p>
-        <h1 id="plan-selection-heading" className="mt-2 text-2xl font-bold">プランを確認する</h1>
+        <h1 id="plan-selection-heading" className="text-2xl font-bold">プランと利用状況</h1>
         <p className="mt-2 text-sm leading-6 text-stone-600">現在のプラン: <strong>{PLAN_DETAILS[currentPlan].name}</strong></p>
-        <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950">外部課金には接続していません。変更はこの画面内の確認用です。</p>
       </div>
 
       <fieldset className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -66,7 +64,7 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
           <p id="pro-plan-heading" className="text-sm font-bold text-stone-800">{PRO_PLAN_DETAILS.name}</p>
           <p className="mt-2 text-lg font-bold text-stone-950">{PRO_PLAN_DETAILS.price}</p>
           <p className="mt-3 text-sm leading-6 text-stone-700">{PRO_PLAN_DETAILS.summary}</p>
-          <p id="pro-plan-availability" className="mt-2 text-sm font-bold text-stone-800">現在は選択、申込み、決済できません。</p>
+          <p id="pro-plan-availability" className="mt-2 text-sm font-bold text-stone-800">提供開始に向けて準備中です。</p>
           <Button type="button" disabled aria-describedby="pro-plan-availability" variant="secondary" className="mt-4 rounded-full">準備中・現在利用不可</Button>
         </aside>
       </fieldset>
@@ -74,7 +72,7 @@ export function PlanSelection({ currentPlan, onApplyPlan }) {
       {isConfirming && isChangePending && (
         <section aria-live="polite" aria-labelledby="plan-confirmation-heading" className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <h2 id="plan-confirmation-heading" className="font-bold">変更内容を確認</h2>
-          <p className="mt-1 text-sm leading-6">{detail.name}へ変更します。申込確定や外部決済は行いません。</p>
+          <p className="mt-1 text-sm leading-6">{detail.name}へ利用プランを更新します。</p>
           <div className="mt-4 flex flex-wrap gap-3"><Button type="button" onClick={applyChange} className="rounded-full">変更を適用</Button><Button type="button" onClick={cancelChange} variant="secondary" className="rounded-full">キャンセル</Button></div>
         </section>
       )}

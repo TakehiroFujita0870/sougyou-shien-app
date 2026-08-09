@@ -11,7 +11,7 @@
 As a UI実装者, I want 共通primitiveとtokenを利用したい, so that surfaceごとの見た目と操作を統一できる。
 Given: React/Tailwindの既存構成がある。
 When: UI基盤ファイルを参照する。
-Then: `cn`、semantic variables、Button/Card/Badge/Fieldが利用できる。
+Then: `cn`、semantic variables、Button/Card/Badge/FieldとRadixベースのDropdownMenu/Popover/Sheetが利用できる。
 
 ### US-2
 As a Kadode利用者, I want AccountとPlan surfaceを共通UIで確認したい, so that account状態と契約境界を理解できる。
@@ -44,7 +44,7 @@ Then: 各surfaceのowner、移行状態、禁止範囲、許可用語が記録�
 ## ADR
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 |---|---|---|---|
-| UI基盤 | 既存Tailwind v4上にshadcn/ui互換のローカルprimitiveを置く | 大規模component依存追加はbundleと更新責任を増やすため却下 | 依存追加なし |
+| UI基盤 | 既存Tailwind v4上にshadcn/ui公式構成に沿うRadix/CVA primitiveを置く | 見た目だけを模した独自primitiveはアクセシビリティと保守性を損なうため却下 | Radix/CVAと`cn`を採用 |
 | CSS token | 既存色をsemantic CSS variablesへ整理しTailwindから参照する | hexの画面直書きはテーマ/a11y検証を分断するため却下 | tokenを正本化 |
 | migration | Account/Planから段階移行する | Home等のworkflowと同時変更は所有権衝突のため却下 | 後続PRへ分割 |
 
