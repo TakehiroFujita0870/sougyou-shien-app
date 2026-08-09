@@ -11,7 +11,27 @@ describe('Home supervisor', () => {
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
     await act(async () => root.render(<HomeSupervisor repository={{ load: async () => ({ messages: [], proposals: [], input: '' }), save: async (value) => value }} />)); await act(async () => {});
     const surface = container.querySelector('[data-home-state="empty"]'); const form = container.querySelector('form');
-    expect(surface).toBeTruthy(); expect(surface.className).toContain('justify-center'); expect(form.className).toContain('max-w-[840px]'); expect(container.querySelector('#home-supervisor-message').className).toContain('min-h-16');
+    expect(surface).toBeTruthy(); expect(surface.className).toContain('justify-center'); expect(form.className).toContain('max-w-[840px]'); expect(container.querySelector('#home-supervisor-message').className).toContain('min-h-36');
+    await act(() => root.unmount()); container.remove();
+  });
+  it('starts with an empty large writing area and only inserts prompt text after an explicit click', async () => {
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    const repository = { load: async () => ({ messages: [], proposals: [], input: '古い下書きは表示しない' }), save: async (value) => value };
+    await act(async () => root.render(<HomeSupervisor repository={repository} />)); await act(async () => {});
+    const input = container.querySelector('#home-supervisor-message');
+    expect(input.value).toBe('');
+    expect(input.placeholder).toBe('誰の、どんな困りごとを解決したいか、思いつくことを何でも教えてください。');
+    expect(input.className).toContain('min-h-36');
+    expect(container.textContent).toContain('アイディエーションからプロジェクト管理まで、あらゆる相談役');
+    expect(container.textContent).not.toContain('AI補完');
+    const mic = container.querySelector('[aria-label="音声入力（準備中）"]');
+    expect(mic.disabled).toBe(true);
+    const prompt = container.querySelector('[aria-label="会話のきっかけ"] button');
+    await act(async () => prompt.click());
+    expect(input.value).toBe(prompt.textContent);
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setter.call(input, '自分の言葉で入力する'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(input.value).toBe('自分の言葉で入力する');
     await act(() => root.unmount()); container.remove();
   });
   it('keeps the populated desktop composer pinned with a small bottom gutter', async () => {
