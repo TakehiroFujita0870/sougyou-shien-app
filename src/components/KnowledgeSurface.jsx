@@ -47,8 +47,12 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
   const [persistenceError, setPersistenceError] = useState(false);
   const [notice, setNotice] = useState('');
   const [conversation, setConversation] = useState([]);
+  const [conversationReady, setConversationReady] = useState(false);
   const repositoryRef = useRef(repository ?? createKnowledgeMetadataRepository({ ownerId, spaceId }));
   const conversationRepositoryRef = useRef(conversationRepository ?? createKnowledgeConversationRepository({ ownerId, spaceId }));
+  const conversationRef = useRef([]);
+  const saveQueueRef = useRef(Promise.resolve());
+  const conversationDirtyRef = useRef(false);
   const fileInputRef = useRef(null);
   const asset = fixture?.asset;
   const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
@@ -66,7 +70,7 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
   }, [asset?.id]);
   useEffect(() => {
     let active = true;
-    conversationRepositoryRef.current.load().then((value) => { if (active) setConversation(value.messages); });
+    conversationRepositoryRef.current.load().then((value) => { if (active && !conversationDirtyRef.current) { conversationRef.current = value.messages; setConversation(value.messages); } if (active) setConversationReady(true); }).catch(() => { if (active) setConversationReady(true); });
     return () => { active = false; };
   }, []);
 
@@ -77,8 +81,12 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
     event.preventDefault();
     const value = message.trim();
     if (!value) return;
-    const next = [...conversation, { role: 'user', content: value }, { role: 'assistant', content: respondToKnowledge(value, fixture) }];
-    conversationRepositoryRef.current.save({ messages: next }).then(() => { setConversation(next); setMessage(''); onSend(value); }).catch(() => setNotice('会話を保存できませんでした。再試行してください。'));
+    if (!conversationReady) return;
+    conversationDirtyRef.current = true;
+    const next = [...conversationRef.current, { role: 'user', content: value }, { role: 'assistant', content: respondToKnowledge(value, fixture) }];
+    conversationRef.current = next;
+    setConversation(next); setMessage(''); onSend(value);
+    saveQueueRef.current = saveQueueRef.current.then(() => conversationRepositoryRef.current.save({ messages: conversationRef.current })).catch(() => setNotice('会話を保存できませんでした。再試行してください。'));
   }
 
   async function addFile(event) {
