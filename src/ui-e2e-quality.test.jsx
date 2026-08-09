@@ -72,7 +72,7 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     const composer = container.querySelector('#home-supervisor-message');
     expect(composer).toBeTruthy();
     expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
-    expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
+    expect(container.textContent).not.toContain('Enterで送信、Shift+Enterで改行');
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
       setter.call(composer, '工場の故障履歴を探せない');

@@ -42,7 +42,6 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" /><span>Kadode</span></div>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
         <footer className="workspace-shell__account">
-          <div className="workspace-shell__avatar" aria-hidden="true">K</div>
           <div className="workspace-shell__account-copy">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

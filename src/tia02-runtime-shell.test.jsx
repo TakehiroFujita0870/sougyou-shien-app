@@ -20,7 +20,7 @@ describe('T-IA-02-R runtime shell contract', () => {
 
     expect(html).toContain('Kadode AI');
     expect(html).toContain('Kadode AIへのメッセージ');
-    expect(html).toContain('Enterで送信、Shift+Enterで改行');
+    expect(html).not.toContain('Enterで送信、Shift+Enterで改行');
     expect(html).not.toMatch(/local|fake|mock/i);
     expect(html).toContain('sticky bottom-0');
     expect(html).toContain('max-w-[900px]');

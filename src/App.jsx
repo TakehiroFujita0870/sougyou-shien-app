@@ -5,6 +5,7 @@ import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
+import { createHomeModelRepository, getHomeModels } from './components/homeModelRepository';
 import { useHydratedResource } from './runtime/useHydratedResource';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
@@ -29,8 +30,8 @@ function PlaceholderSurface({ name, description, project }) {
   return <section aria-labelledby={`${name.toLowerCase()}-heading`} className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">{name}</p><h1 id={`${name.toLowerCase()}-heading`} className="mt-2 text-2xl font-semibold tracking-tight">{name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{description}</p></section>;
 }
 
-function IdeaWorkspace({ onProjectAdopt, modelKey }) {
-  return <div className="max-w-6xl"><HomeSupervisor onProjectAdopt={onProjectAdopt} modelKey={modelKey} /></div>;
+function IdeaWorkspace({ onProjectAdopt, modelKey, models, onModelChange }) {
+  return <div className="max-w-6xl"><HomeSupervisor onProjectAdopt={onProjectAdopt} modelKey={modelKey} models={models} onModelChange={onModelChange} /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
@@ -51,14 +52,18 @@ export function App({ profileRepository }) {
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
   const repositoryRef = useRef(null);
   if (!repositoryRef.current) repositoryRef.current = createLocalPlanRepository();
+  const homeModelRepositoryRef = useRef(null);
+  if (!homeModelRepositoryRef.current) homeModelRepositoryRef.current = createHomeModelRepository();
   const profileRepositoryRef = useRef(null);
   const profileDialogDismissedRef = useRef(false);
   if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
   const profileHydration = useHydratedResource(profileRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
+  const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
+  useEffect(() => { homeModelRepositoryRef.current.load().then(setHomeModelKey); }, []);
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
@@ -92,6 +97,10 @@ export function App({ profileRepository }) {
     setSubscription(next);
     void repositoryRef.current.save(next);
   }
+  function updateModel(modelKey) {
+    setHomeModelKey(modelKey);
+    void homeModelRepositoryRef.current.save(modelKey);
+  }
 
   function retryProfileLoad() {
     profileDialogDismissedRef.current = false;
@@ -106,11 +115,11 @@ export function App({ profileRepository }) {
   }
 
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={subscription.modelKey} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
     if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" project={adoptedProject} description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
-    return <IdeaWorkspace modelKey={subscription.modelKey} />;
+    return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }
 
   return (
