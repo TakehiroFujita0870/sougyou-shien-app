@@ -63,12 +63,13 @@
 
 - CEO室は全社ポートフォリオ管理・要件決定を所有し、実装には介入しない。優先順位、Issue配分、WIP再配分、停止・再開、部門境界を `PORTFOLIO_DIRECTIVE` で統合部へ指示する。
 - 統合・リリース管理部は、CEO室の指示を実装部向けの `ASSIGNMENT` または `DEPENDENCY_READY` に翻訳し、レビュー、配分、handoffを所有する。実装部は割当済みスコープだけを実装する。
+- `PORTFOLIO_DIRECTIVE action=CHANGE` を受信した統合部は、CEOがscopeを明示的に限定しない限り、同一turnで全担当のactive work/review/next owner、idle capacity、dependency/ownership conflictとunblock action、意図して未割当の理由をcompact portfolio scanとして評価する。続けてWIP、所有権、依存に基づく `ASSIGNMENT`、`CONTINUE`、`HOLD`、`CLOSE` を配信する。scanは次のCEO向け`MERGED.org_health`へ短く内包し、通常のCHANGEごとに運用文書PRを作らない。
 - 統合部は、部門WIPが0または上限超、P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界の直後だけ、全社状態を独立`ORG_HEALTH`としてCEO室へ送る。PR mergeとsmoke成功時の同じ内容は`MERGED.org_health`に内包し、独立送信しない。payloadにはmain SHA、merge source、各部active/idle/WIP、review queue、ready/unassigned Issue、dependency blocks、所有権衝突、次の配分候補、モデルavailability、mergeが解放した作業、dependency deliveryを含める。定期ポーリングを追加しない。同じstate fingerprintは二重送信しない。
 - `REQUIREMENT_REQUEST` は、P0の実装/受入条件が未決、複数部の設計衝突、価格・外部接続・個人情報・法務などCEO決裁が必要な場合だけCEO室からユーザーへ送る。通常の進捗確認、CI失敗、P1/P2は対象外とする。
 
 ### 役割別モデルプロファイル
 
-- CEO室、統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部はすべて `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
+- CEO室は `gpt-5.6-sol / low` を使う。統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
 - 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 

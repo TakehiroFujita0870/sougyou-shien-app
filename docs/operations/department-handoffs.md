@@ -82,7 +82,7 @@ next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
 
 | 役割 | model / thinking |
 | --- | --- |
-| CEO室 | `gpt-5.6-terra / low` |
+| CEO室 | `gpt-5.6-sol / low` |
 | 統合・リリース管理部 | `gpt-5.6-terra / low` |
 | 会話体験・プロジェクト部 | `gpt-5.6-terra / low` |
 | プロダクトUI・デザインシステム部 | `gpt-5.6-terra / low` |
@@ -90,7 +90,7 @@ next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
 | 基盤・認証部 | `gpt-5.6-terra / low` |
 | 事業設計・調査部 | `gpt-5.6-terra / low` |
 
-すべての担当は表の `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは廃止する。
+CEO室は `gpt-5.6-sol / low`、統合部と全実装部は `gpt-5.6-terra / low` を表のとおり使う。Lunaの選択、fallback、`model_unavailable`扱いは廃止する。
 
 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 
@@ -99,6 +99,15 @@ next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
 ## 全社ポートフォリオ管理と要件決定
 
 CEO室は全社ポートフォリオ管理・要件決定を所有する。CEO室は実装部へ直接実装指示せず、優先順位、Issue配分、WIP再配分、停止・再開、部門境界だけを `PORTFOLIO_DIRECTIVE` で統合・リリース管理部へ送る。統合部はこれを `ASSIGNMENT` または `DEPENDENCY_READY` に翻訳し、実装部はその割当済みスコープだけを実装する。
+
+`PORTFOLIO_DIRECTIVE action=CHANGE` を受信した統合部は、CEOが明示的にscopeを限定しない限り、単発Issueではなく全社ポートフォリオを同一turnで評価する。compact portfolio scanは次を必須とする。
+
+1. active work/reviewとexact next owner
+2. idle capacityと直ちに有効なassignment candidate
+3. dependency/ownership conflictとunblock action
+4. 意図して未割当の作業と理由
+
+統合部はscan後にWIP、所有権、依存を基準として、全体の`ASSIGNMENT`、`CONTINUE`、`HOLD`、`CLOSE`を配信する。scanは次のCEO向け`MERGED.org_health`へ12文字SHAと状態要約だけで短く内包する。通常のCHANGEごとに追加の運用文書PRを作らない。
 
 ### ORG_HEALTH
 
