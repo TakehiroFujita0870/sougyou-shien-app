@@ -24,6 +24,15 @@ jobs:
         run: npm run test:video
       - name: Verify desktop sidebar portfolio E2E
         run: npx playwright test tests/e2e/sidebar-portfolio.spec.js
+      - name: Verify Account and Plan desktop contracts
+        run: npx playwright test tests/e2e/account-plan.spec.js
+      - name: Upload Account and Plan desktop evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-account-plan-1440-screenshot
+          path: test-results/account-plan-1440x900.png
+          if-no-files-found: error
       - name: Upload desktop sidebar screenshot
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

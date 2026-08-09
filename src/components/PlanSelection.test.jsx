@@ -79,7 +79,7 @@ describe('plan selection acceptance', () => {
     const { container, unmount } = await mount(<App />);
 
     await openAccount(container);
-    await click(menuItem('設定'));
+    await click(menuItem('プランと利用状況'));
     const results = await axe.run(container);
     expect(results.violations).toEqual([]);
     await unmount();
@@ -89,7 +89,7 @@ describe('plan selection acceptance', () => {
     const { container, unmount } = await mount(<App />);
 
     await openAccount(container);
-    await click(menuItem('設定'));
+    await click(menuItem('プランと利用状況'));
     expect(container.textContent).toContain('アイデア整理');
     expect(container.textContent).toContain('月間の会話・調査枠: 小');
     expect(container.textContent).toContain('月額0円');
@@ -139,7 +139,7 @@ describe('plan selection acceptance', () => {
   it('supports keyboard plan confirmation without exposing model controls', async () => {
     const { container, unmount } = await mount(<App />);
     await openAccount(container);
-    await click(menuItem('設定'));
+    await click(menuItem('プランと利用状況'));
 
     const selectedPlan = container.querySelector('input[name="plan"]:checked')?.value;
     const targetPlan = container.querySelector(`input[value="${selectedPlan === 'standard' ? 'free' : 'standard'}"]`);

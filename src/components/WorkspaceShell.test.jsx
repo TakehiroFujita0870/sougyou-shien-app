@@ -149,14 +149,20 @@ describe('WorkspaceShell', () => {
 
   it('opens distinct Settings and keyboard help dialogs, while logout stays unavailable', async () => {
     const { container, cleanup } = mount();
+    const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
     openAccount(container);
+    expect([...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.includes('ログアウト')).getAttribute('data-disabled')).not.toBeNull();
     await act(async () => [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === '設定').click());
     expect(document.body.textContent).toContain('通知と認証連携は準備中です');
-    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    await act(async () => document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(accountTrigger);
     openAccount(container);
     await act(async () => [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === 'ヘルプ・ショートカット').click());
     expect(document.body.textContent).toContain('Alt + Shift + 1');
-    expect([...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.includes('ログアウト')).getAttribute('data-disabled')).not.toBeNull();
+    await act(async () => document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(accountTrigger);
     cleanup();
   });
 });

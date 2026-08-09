@@ -130,10 +130,10 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
         </DialogContent>
       </Dialog>
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent><DialogTitle>設定</DialogTitle><p className="mt-3 text-sm leading-6 text-[var(--color-text-muted)]">通知と認証連携は準備中です。プランと利用状況はアカウントメニューから開けます。</p></DialogContent>
+        <DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); accountTriggerRef.current?.focus(); }}><DialogTitle>設定</DialogTitle><p className="mt-3 text-sm leading-6 text-[var(--color-text-muted)]">通知と認証連携は準備中です。プランと利用状況はアカウントメニューから開けます。</p></DialogContent>
       </Dialog>
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-        <DialogContent><DialogTitle>ヘルプ・ショートカット</DialogTitle><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-semibold">Alt + Shift + 1</dt><dd>ホームを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 2</dt><dd>プロジェクトを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 3</dt><dd>ナレッジを開く</dd></div><div><dt className="font-semibold">Escape</dt><dd>メニューまたはダイアログを閉じる</dd></div></dl></DialogContent>
+        <DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); accountTriggerRef.current?.focus(); }}><DialogTitle>ヘルプ・ショートカット</DialogTitle><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-semibold">Alt + Shift + 1</dt><dd>ホームを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 2</dt><dd>プロジェクトを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 3</dt><dd>ナレッジを開く</dd></div><div><dt className="font-semibold">Escape</dt><dd>メニューまたはダイアログを閉じる</dd></div></dl></DialogContent>
       </Dialog>
     </div>
   );
