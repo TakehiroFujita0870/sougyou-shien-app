@@ -2,6 +2,14 @@
 
 最終検証日: 2026-08-09
 
+## 接続先
+
+- Kadodeアプリ: `http://localhost:5174/`
+- Storybook: `http://localhost:6006/`
+- ローカルAPIヘルスチェック: `http://localhost:8000/health`
+
+このrunbookのpreviewスクリプトが起動するのはアプリとAPIである。Storybookは同じclone/worktreeで`npm run storybook`を別プロセスとして実行し、アプリと同じ変更内容を確認する。
+
 WSL clone、依存同期、systemd前提は[WSL開発環境](wsl-development.md)、PowerShellのUTF-8規約は[Windows / PowerShell](windows-powershell.md)を正本とする。この文書はpreviewのstart/status/stopだけを定める。
 
 ## 前提
