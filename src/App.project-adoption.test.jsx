@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { App } from './App';
+import { ACTIVE_HOME_CONVERSATION_STORAGE_KEY, App } from './App';
 import { createAdoptedProjectRepository } from './components/adoptedProjectRepository';
 import { createSidebarPortfolioRepository } from './components/sidebarPortfolioRepository';
 import { EMPTY_PROFILE } from './components/UserProfileInterview';
@@ -138,6 +138,7 @@ describe('adopted project hydration', () => {
     await portfolioRepository.archive(surface, id);
     if (surface === 'project') await createAdoptedProjectRepository({ storage }).saveAdopted(adoptedCandidate);
     globalThis.sessionStorage.setItem('kadode:selected-surface', surface);
+    if (surface === 'home') globalThis.sessionStorage.setItem(ACTIVE_HOME_CONVERSATION_STORAGE_KEY, id);
 
     const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage }), portfolioRepository, ensureHome: false });
     await act(async () => Promise.resolve());

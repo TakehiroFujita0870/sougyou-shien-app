@@ -39,7 +39,7 @@ function formatFileSize(sizeBytes) {
   return `${Math.max(1, Math.ceil(sizeBytes / 1024))} KB`;
 }
 
-export function KnowledgeSurface({ fixture, repository, conversationRepository, archiveHistory = [], ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
+export function KnowledgeSurface({ fixture, repository, conversationRepository, archiveHistory = [], ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, onAssetAdded = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
   const [message, setMessage] = useState('');
   const [removeRequested, setRemoveRequested] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -97,6 +97,7 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
       const existing = repositoryRef.current.find(metadata.id);
       await repositoryRef.current.add(metadata);
       setDocuments(repositoryRef.current.list());
+      await onAssetAdded(metadata);
       setPersistenceError(false);
       setNotice(existing ? 'この資料はすでに追加されています。' : '資料名とメタデータを端末内に追加しました。本文は保存・送信していません。');
     } catch (error) {

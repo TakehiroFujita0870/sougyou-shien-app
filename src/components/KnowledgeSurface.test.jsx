@@ -122,4 +122,15 @@ describe('KnowledgeSurface', () => {
     expect(() => createLocalUploadMetadata({ name: 'memo.txt', size: 1, lastModified: 1 })).toThrow('PDFまたはDOCX');
     expect(() => createLocalUploadMetadata({ name: 'memo.docx', size: 10 * 1024 * 1024 + 1, lastModified: 1 })).toThrow('10 MiB以下');
   });
+
+  it('notifies the App boundary only after a PDF metadata add succeeds', async () => {
+    const onAssetAdded = vi.fn(async () => {});
+    const { container, unmount } = await mount({ onAssetAdded });
+    const input = container.querySelector('#knowledge-file-picker');
+    const file = new File(['%PDF'], 'field-notes.pdf', { type: 'application/pdf', lastModified: 1 });
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve(); });
+    expect(onAssetAdded).toHaveBeenCalledWith(expect.objectContaining({ name: 'field-notes.pdf', state: 'metadata_only' }));
+    await unmount();
+  });
 });

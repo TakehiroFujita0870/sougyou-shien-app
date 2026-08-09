@@ -29,4 +29,13 @@ test('mirrors a real Home message, keeps the account fixed, and archives only af
   await page.getByRole('button', { name: '地域の小さな工場の受注管理を助けたいをアーカイブ' }).click()
   await expect(page.getByRole('heading', { name: 'アーカイブ履歴' })).toBeVisible()
   await expect(page.locator('#home-supervisor-message')).toHaveCount(0)
+  await page.getByRole('button', { name: 'ホーム', exact: true }).click()
+  await expect(page.locator('#home-supervisor-message')).toHaveCount(0)
+  await expect(page.locator('#knowledge-heading')).toBeVisible()
+
+  await page.locator('#knowledge-file-picker').setInputFiles({ name: 'field-notes.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 local test') })
+  await expect(page.getByRole('button', { name: /field-notes\.pdf/ })).toBeVisible()
+  await expect(page.getByLabel('新着')).toBeVisible()
+  await page.getByRole('button', { name: /field-notes\.pdf/ }).click()
+  await expect(page.locator('#knowledge-heading')).toBeFocused()
 })
