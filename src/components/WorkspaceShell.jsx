@@ -86,7 +86,6 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
                   <span className="grid size-8 shrink-0 place-items-center rounded-full bg-stone-200 text-sm font-bold">K</span>
                   <strong className="min-w-0 flex-1 truncate">{ACCOUNT_DISPLAY_NAME}</strong>
                   <Badge variant="outline">{PLAN_LABELS[currentPlan] ?? currentPlan}</Badge>
-                  <span aria-hidden="true" className="text-stone-500">⌄</span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent aria-label="アカウントメニュー" side="top" align="start" onCloseAutoFocus={(event) => {

@@ -54,9 +54,9 @@ describe('ProjectSurface evaluation tabs', () => {
     root = createRoot(container);
     await act(async () => { root.render(<ProjectSurface conversationRepository={{ load: async () => [], save: async (messages) => messages }} />); });
     expect(container.textContent).toContain('Projectをはじめる');
-    expect(container.querySelector('#project-composer')).toBeNull();
-    expect(container.textContent).toContain('一時的な下書きを試す');
-    expect(container.textContent).toContain('この下書きはまだ保存されません。');
+    expect(container.querySelector('#project-composer')).toBeTruthy();
+    expect(container.querySelector('#project-composer').placeholder).toBe('検討したい事業案を簡単に教えてください');
+    expect(container.textContent).toContain('入力すると一時的な下書きとして始まります。');
     expect(container.textContent).not.toContain('現場改善');
   });
 

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { createAdoptedProjectRepository } from './components/adoptedProjectRepository';
@@ -192,7 +192,7 @@ describe('adopted project hydration', () => {
       load: () => pendingLoad.promise,
       saveAdopted: async (candidate) => ({ ...candidate, status: 'adopted' }),
     };
-    const view = await mount({ projectRepository });
+    const view = await mount({ projectRepository, portfolioRepository: createSidebarPortfolioRepository({ storage: createStorage() }) });
     const composer = view.container.querySelector('#home-supervisor-message');
 
     await act(async () => {
@@ -202,8 +202,13 @@ describe('adopted project hydration', () => {
       composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
+    let adoptButton;
+    await vi.waitFor(() => {
+      adoptButton = [...view.container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用');
+      expect(adoptButton).toBeTruthy();
+    });
     await act(async () => {
-      [...view.container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用').click();
+      adoptButton.click();
       await Promise.resolve();
     });
 

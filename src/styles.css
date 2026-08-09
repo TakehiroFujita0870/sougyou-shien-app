@@ -50,8 +50,8 @@ textarea {
   color: var(--color-text);
 }
 
-.workspace-shell { display: flex; min-height: 100dvh; }
-.workspace-shell__sidebar { position: sticky; top: 0; height: 100dvh; width: 168px; flex: 0 0 168px; display: flex; flex-direction: column; gap: .65rem; padding: 1rem .6rem .75rem; border-right: 1px solid var(--color-border-subtle); background: var(--color-surface); transition: width 160ms ease-out, flex-basis 160ms ease-out; }
+.workspace-shell { --workspace-sidebar-width: 168px; display: flex; min-height: 100dvh; }
+.workspace-shell__sidebar { position: sticky; top: 0; height: 100dvh; width: var(--workspace-sidebar-width); flex: 0 0 var(--workspace-sidebar-width); display: flex; flex-direction: column; gap: .65rem; padding: 1rem .6rem .75rem; border-right: 1px solid var(--color-border-subtle); background: var(--color-surface); transition: width 160ms ease-out, flex-basis 160ms ease-out; }
 .workspace-shell--collapsed .workspace-shell__sidebar { width: 76px; flex-basis: 76px; align-items: center; }
 .workspace-shell__brand { display: flex; align-items: center; gap: .65rem; min-height: 44px; font-weight: 800; }
 .workspace-shell__brand-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--color-sakura-blush); box-shadow: 0 0 0 5px var(--color-sakura-petal); }
@@ -72,6 +72,18 @@ textarea {
   .workspace-shell__sidebar { transition: none; }
   .workspace-shell [class*='animate-'] { animation: none !important; }
 }
+.workspace-shell__account { padding-block: .75rem; }
+
+/* Shared desktop AI composer: one outer surface owns the border and focus ring. */
+.kadode-composer { border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface-raised); padding: .75rem; box-shadow: 0 1px 2px rgb(0 0 0 / 6%); }
+.kadode-composer:focus-within { border-color: var(--color-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 22%, transparent); }
+.kadode-composer__textarea { display: block; min-width: 0; width: 100%; min-height: 9rem; resize: vertical; border: 0; outline: 0; background: transparent; padding: .25rem .5rem; font-size: 1rem; line-height: 1.75rem; }
+.kadode-composer__textarea--compact { min-height: 5.5rem; }
+.kadode-composer-layout { padding-bottom: 12rem; }
+.kadode-composer--anchored { position: fixed; right: max(1.5rem, calc((100vw - var(--workspace-sidebar-width) - 56rem) / 2)); bottom: 1.25rem; left: calc(var(--workspace-sidebar-width) + max(1.5rem, (100vw - var(--workspace-sidebar-width) - 56rem) / 2)); z-index: 10; width: auto; max-width: 56rem; margin-inline: auto; }
+.kadode-composer__actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .625rem; border-top: 1px solid var(--color-border-subtle); padding-top: .625rem; }
+.kadode-composer__actions > * { flex: 0 0 auto; }
+.kadode-composer__actions .flex.items-center { gap: .625rem; }
 .workspace-shell__main { min-width: 0; flex: 1; }
 .workspace-shell__breadcrumb { display: flex; gap: .5rem; align-items: center; min-height: 48px; padding: .75rem 1.25rem; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: .875rem; }
 .workspace-shell__mobile-trigger, .workspace-shell__scrim { display: none; }
@@ -133,6 +145,15 @@ textarea {
 .kadode-shell :is(button, input, textarea, select):focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 3px;
+}
+
+.kadode-shell textarea.kadode-composer__textarea:focus-visible {
+  outline: 0;
+  outline-offset: 0;
+}
+
+@media (max-width: 700px) {
+  .kadode-composer--anchored { right: 1rem; left: 1rem; }
 }
 
 .kadode-high-contrast {
