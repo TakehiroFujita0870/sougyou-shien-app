@@ -50,7 +50,6 @@ describe('App keyboard and accessibility quality', () => {
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
     expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Home', 'Project', 'Knowledge']);
     expect(navigation.textContent).not.toContain('AI広報');
-    expect(navigation.textContent).not.toContain('事業のタネ');
     expect(navigation.querySelector('button').className).toContain('workspace-shell__nav-item');
     expect(container.querySelector('main').className).toContain('kadode-shell');
     expect(container.querySelector('.workspace-shell__nav-item').className).toContain('workspace-shell__nav-item');

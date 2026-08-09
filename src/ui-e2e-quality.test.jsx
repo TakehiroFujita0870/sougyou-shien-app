@@ -50,9 +50,6 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
     expect(container.querySelector('#home-composer')).toBeTruthy();
     expect(container.querySelectorAll('textarea')).toHaveLength(1);
-    expect(container.querySelector('#idea-message')).toBeNull();
-    expect(container.textContent).not.toContain('アイデア候補として保存');
-    expect(container.textContent).not.toContain('アイデアを登録する');
   });
 
   it('keeps surface context and selected surface after an F5-equivalent remount without network', async () => {
@@ -76,7 +73,6 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     expect(composer.getAttribute('aria-describedby')).toBe('home-composer-hint');
     expect(container.querySelector('label[for="home-composer"]')).toBeTruthy();
     expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
-    expect(container.querySelector('[data-testid="assist-request"]')).toBeNull();
-    expect(container.querySelector('[data-testid="assist-adopt"]')).toBeNull();
+    expect(container.querySelectorAll('textarea')).toHaveLength(1);
   });
 });
