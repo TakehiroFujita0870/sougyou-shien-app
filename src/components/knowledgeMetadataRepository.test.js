@@ -17,6 +17,10 @@ describe('knowledge metadata repository', () => {
     expect(second.list()).toHaveLength(1);
     await second.delete('doc-1');
     expect(second.list()).toEqual([]);
+    const third = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    await third.load();
+    expect(third.list()).toEqual([]);
+    expect(third.find('doc-1')).toMatchObject({ state: 'deleted' });
   });
 
   it('isolates owner and space and quarantines corrupt records', async () => {
@@ -42,5 +46,26 @@ describe('knowledge metadata repository', () => {
     expect(repository.list().map(({ id }) => id)).toEqual(['doc-1']);
     await expect(repository.delete('doc-1')).rejects.toThrow('offline');
     expect(repository.list().map(({ id }) => id)).toEqual(['doc-1']);
+  });
+
+  it('persists a tombstone for a fixture that was not previously added', async () => {
+    const store = storage();
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    await repository.load();
+    await repository.delete('fixture-1', { id: 'fixture-1', name: 'fixture.pdf', state: 'searchable' });
+    expect(repository.find('fixture-1')).toMatchObject({ state: 'deleted', ownerId: 'a', spaceId: 's' });
+  });
+
+  it('uses the composite id, owner, and space key when replacing or tombstoning metadata', async () => {
+    const store = storage({ schemaVersion: 1, documents: [{ ...doc, ownerId: 'other-owner', spaceId: 'other-space' }] });
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    await repository.load();
+    await repository.add(doc);
+    await repository.delete(doc.id);
+    const persisted = JSON.parse(store.setItem.mock.calls.at(-1)[1]).documents;
+    expect(persisted).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: doc.id, ownerId: 'other-owner', spaceId: 'other-space', state: 'searchable' }),
+      expect.objectContaining({ id: doc.id, ownerId: 'a', spaceId: 's', state: 'deleted' }),
+    ]));
   });
 });

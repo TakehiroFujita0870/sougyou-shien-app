@@ -4,13 +4,15 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import fixture from '../fixtures/knowledge-admin-demo.json';
 import { KnowledgeSurface } from './KnowledgeSurface';
+import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 async function mount(props = {}) {
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(<KnowledgeSurface fixture={fixture} {...props} />));
+  const repository = props.repository ?? createKnowledgeMetadataRepository({ ownerId: 'test-owner', spaceId: 'test-space', storage: { getItem: () => null, setItem: () => {} } });
+  await act(async () => root.render(<KnowledgeSurface fixture={fixture} {...props} repository={repository} />));
   return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
 }
 
@@ -33,6 +35,32 @@ describe('KnowledgeSurface', () => {
     await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
     expect(onRemoveAsset).toHaveBeenCalledWith('demo-document-001');
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await unmount();
+  });
+
+  it('persists deletion before hiding a fixture and keeps it hidden after remount', async () => {
+    const values = new Map();
+    const store = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    const firstRepository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    const first = await mount({ repository: firstRepository });
+    await act(async () => [...first.container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
+    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
+    expect(first.container.textContent).not.toContain('顧客ヒアリング要約');
+    await first.unmount();
+    const secondRepository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    const second = await mount({ repository: secondRepository });
+    await act(async () => Promise.resolve());
+    expect(second.container.textContent).not.toContain('顧客ヒアリング要約');
+    await second.unmount();
+  });
+
+  it('keeps the asset visible and explains recovery when deletion cannot persist', async () => {
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: { getItem: () => null, setItem: () => { throw new Error('offline'); } } });
+    const { container, unmount } = await mount({ repository });
+    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
+    await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
+    expect(container.textContent).toContain('顧客ヒアリング要約');
+    expect(container.textContent).toContain('削除は反映されていません');
     await unmount();
   });
 

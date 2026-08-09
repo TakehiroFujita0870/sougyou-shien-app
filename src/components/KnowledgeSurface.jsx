@@ -1,19 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SendHorizontal, Sparkles } from 'lucide-react';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/Dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
+import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
 
 const stateLabel = { processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
 
-export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset = () => {}, onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
+function assetMetadata(asset) {
+  return { id: asset.id, name: asset.name, version: asset.version, state: asset.state, extractedTextState: asset.state === 'searchable' ? 'ready' : 'pending', indexState: asset.state === 'searchable' ? 'ready' : 'pending' };
+}
+
+export function KnowledgeSurface({ fixture, repository, ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onAddAsset = () => {}, onRemoveAsset = () => {}, onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
   const [message, setMessage] = useState('');
   const [removeRequested, setRemoveRequested] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [persistenceError, setPersistenceError] = useState(false);
+  const repositoryRef = useRef(repository ?? createKnowledgeMetadataRepository({ ownerId, spaceId }));
   const asset = fixture?.asset;
   const references = asset?.references?.filter((reference) => reference.status !== 'unavailable') ?? [];
   const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
+
+  useEffect(() => {
+    let active = true;
+    const localRepository = repositoryRef.current;
+    localRepository.load().then(() => {
+      if (!active) return;
+      setDeleted(localRepository.find(asset?.id)?.state === 'deleted');
+      setPersistenceError(Boolean(localRepository.getLastError?.()));
+    }).catch(() => {
+      if (active) setPersistenceError(true);
+    });
+    return () => { active = false; };
+  }, [asset?.id]);
 
   function submit(event) {
     event.preventDefault();
@@ -23,11 +44,27 @@ export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset
     setMessage('');
   }
 
-  if (!fixture || !asset || asset.state === 'deleted') {
+  async function confirmRemoval() {
+    if (!asset) return;
+    try {
+      const deletedMetadata = await repositoryRef.current.delete(asset.id, assetMetadata(asset));
+      if (!deletedMetadata) throw new Error('Metadata could not be deleted');
+      onRemoveAsset(asset.id);
+      setDeleted(true);
+      setPersistenceError(false);
+      setRemoveRequested(false);
+    } catch {
+      setPersistenceError(true);
+      setRemoveRequested(false);
+    }
+  }
+
+  if (!fixture || !asset || asset.state === 'deleted' || deleted) {
     return <section aria-labelledby="knowledge-heading" className="mx-auto w-full max-w-6xl">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Knowledge</p>
       <h1 id="knowledge-heading" className="mt-3 text-3xl font-semibold tracking-tight">知識を育てる</h1>
       <p className="mt-2 text-sm text-[var(--color-text-muted)]">ファイル、対話、判断を同じ場所で振り返れます。</p>
+      {persistenceError && <p role="status" className="mt-4 text-sm text-[var(--color-destructive)]">保存状態を確認できません。ページを再読み込みしてから、もう一度お試しください。</p>}
       <Button className="mt-6" onClick={onAddAsset}>資料を追加</Button>
     </section>;
   }
@@ -37,6 +74,7 @@ export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Knowledge</p>
       <h1 id="knowledge-heading" className="mt-3 text-3xl font-semibold tracking-tight">知識を育てる</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-muted)]">アップロードした資料と、プロジェクトの判断を横断して確認できます。</p>
+      {persistenceError && <p role="status" className="mt-3 text-sm text-[var(--color-destructive)]">保存状態を確認できません。削除は反映されていません。ページを再読み込みしてから、もう一度お試しください。</p>}
     </header>
 
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,.85fr)]">
@@ -72,7 +110,7 @@ export function KnowledgeSurface({ fixture, onAddAsset = () => {}, onRemoveAsset
       <DialogContent>
         <DialogTitle className="text-lg font-semibold">この資料を削除しますか？</DialogTitle>
         <DialogDescription className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">原本、抽出内容、検索用の断片をこのspaceから削除します。この操作は元に戻せません。</DialogDescription>
-        <div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => { onRemoveAsset(asset.id); setRemoveRequested(false); }}>削除を確定</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div>
+        <div className="mt-5 flex flex-wrap gap-3"><Button onClick={confirmRemoval}>削除を確定</Button><DialogClose asChild><Button variant="secondary">キャンセル</Button></DialogClose></div>
       </DialogContent>
     </Dialog>
 
