@@ -42,4 +42,14 @@ describe('sidebar portfolio repository', () => {
     expect(saved.knowledge).toEqual([expect.objectContaining({ id: 'asset:1' })]);
     expect(saved.project).toEqual([expect.objectContaining({ id: 'project:1' })]);
   });
+
+  it('bounds the all-items contract to the newest 100 records and marks Knowledge as read', async () => {
+    const repository = createSidebarPortfolioRepository({ storage: createStorage() });
+    for (let index = 0; index < 105; index += 1) await repository.upsert('knowledge', { id: `knowledge:${index}`, title: `資料 ${index}`, unread: true, updatedAt: index + 1 });
+    const bounded = await repository.load();
+    expect(bounded.knowledge).toHaveLength(100);
+    expect(bounded.knowledge[0].id).toBe('knowledge:104');
+    const read = await repository.markRead('knowledge', 'knowledge:104');
+    expect(read.knowledge[0]).toMatchObject({ id: 'knowledge:104', unread: false });
+  });
 });

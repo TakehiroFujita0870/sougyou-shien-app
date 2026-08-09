@@ -34,8 +34,8 @@ function deferred() {
   return { promise, resolve };
 }
 
-async function mount({ projectRepository, portfolioRepository, ensureHome = true }) {
-  let homeState = { messages: [], proposals: [], input: '' };
+async function mount({ projectRepository, portfolioRepository, ensureHome = true, homeInitial }) {
+  let homeState = homeInitial ?? { messages: [], proposals: [], input: '' };
   const homeConversationRepository = {
     load: async () => homeState,
     save: async (value) => { homeState = value; return value; },
@@ -76,8 +76,19 @@ describe('adopted project hydration', () => {
     });
     const recent = [...view.container.querySelectorAll('[aria-label="最近の項目"] button')].find((button) => button.textContent === '地域の小さな工場の受注管理を助けたい');
     expect(recent).toBeTruthy();
-    await act(async () => recent.click());
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(composer, '商店街の空き店舗活用を考えたい');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect([...view.container.querySelectorAll('[aria-label="最近の項目"] button')].some((button) => button.textContent === '商店街の空き店舗活用を考えたい')).toBe(true);
+    await act(async () => { recent.click(); await Promise.resolve(); });
     expect(view.container.querySelector('#home-supervisor-message')).toBeTruthy();
+    const reopenedConversation = view.container.querySelector('[aria-label="会話履歴"]');
+    expect(reopenedConversation.textContent).toContain('地域の小さな工場の受注管理を助けたい');
+    expect(reopenedConversation.textContent).not.toContain('商店街の空き店舗活用を考えたい');
     await view.unmount();
   });
 
@@ -90,6 +101,30 @@ describe('adopted project hydration', () => {
     expect(view.container.textContent).toContain('保存済みの会話');
     expect(view.container.querySelector('[role="alert"]').textContent).toContain('アーカイブできませんでした');
     expect(view.container.querySelector('#home-supervisor-message')).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('reports a failed persisted-context mirror without an unhandled rejection', async () => {
+    const portfolioRepository = { load: async () => ({ home: [], project: [], knowledge: [] }), ensure: async () => { throw new Error('offline'); }, archive: async () => ({ home: [], project: [], knowledge: [] }) };
+    const homeInitial = { messages: [{ role: 'user', content: '保存済み会話' }], proposals: [], input: '' };
+    const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage: createStorage() }), portfolioRepository, homeInitial });
+    await act(async () => Promise.resolve());
+    expect(view.container.querySelector('[role="alert"]').textContent).toContain('履歴を読み込めませんでした');
+    await view.unmount();
+  });
+
+  it('reopens multiple persisted Project titles from their own real snapshots', async () => {
+    const portfolioRepository = createSidebarPortfolioRepository({ storage: createStorage() });
+    const firstProject = { ...adoptedCandidate, id: 'project-one', title: '町工場の受注管理' };
+    const secondProject = { ...adoptedCandidate, id: 'project-two', title: '商店街の空き店舗活用' };
+    await portfolioRepository.upsert('project', { id: firstProject.id, title: firstProject.title, snapshot: firstProject });
+    await portfolioRepository.upsert('project', { id: secondProject.id, title: secondProject.title, snapshot: secondProject });
+    let currentProject = null;
+    const projectRepository = { load: async () => currentProject, saveAdopted: async (value) => { currentProject = value; return value; } };
+    const view = await mount({ projectRepository, portfolioRepository });
+    const first = [...view.container.querySelectorAll('[aria-label="最近の項目"] button')].find((button) => button.textContent === firstProject.title);
+    await act(async () => { first.click(); await Promise.resolve(); });
+    expect(view.container.querySelector('#project-surface-heading').textContent).toBe(firstProject.title);
     await view.unmount();
   });
 

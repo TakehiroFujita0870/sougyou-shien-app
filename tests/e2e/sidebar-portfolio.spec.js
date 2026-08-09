@@ -17,6 +17,9 @@ test('mirrors a real Home message, keeps the account fixed, and archives only af
 
   const historyItem = page.getByRole('button', { name: '地域の小さな工場の受注管理を助けたい', exact: true })
   await expect(historyItem).toBeVisible()
+  const sidebarBox = await page.locator('#workspace-sidebar').boundingBox()
+  expect(sidebarBox?.width).toBe(168)
+  expect(await page.locator('.workspace-shell__nav-item').first().evaluate((element) => getComputedStyle(element).fontSize)).toBe('12.8px')
   const account = page.getByRole('button', { name: /タケヒロのアカウント/ })
   const accountBox = await account.boundingBox()
   expect(accountBox?.y).toBeGreaterThan(760)

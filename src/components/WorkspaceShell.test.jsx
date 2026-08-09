@@ -38,6 +38,17 @@ describe('WorkspaceShell', () => {
     act(() => { root.unmount(); container.remove(); });
   });
 
+  it('shows five Knowledge recents with an accessible unread dot and keeps the rest in all-items', () => {
+    const entries = Array.from({ length: 6 }, (_, index) => ({ id: `knowledge-${index}`, title: `資料 ${index}`, unread: index === 0 }));
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="knowledge" onSelect={() => {}} portfolio={{ knowledge: entries }}><h1>Knowledge</h1></WorkspaceShell>));
+    expect(container.querySelector('[aria-label="最近の項目"]').textContent).not.toContain('資料 5');
+    expect(container.querySelector('[aria-label="新着"]')).toBeTruthy();
+    expect([...container.querySelectorAll('button')].some((button) => button.textContent === 'すべて表示')).toBe(true);
+    act(() => { root.unmount(); container.remove(); });
+  });
+
   it('hydrates and restores a signed-in principal through the explicit account menu', async () => {
     const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
     const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);

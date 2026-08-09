@@ -3,6 +3,7 @@ export function createSidebarPortfolioRepository({ ownerId = 'local-owner', spac
   const key = `${SIDEBAR_PORTFOLIO_KEY}:${ownerId}:${spaceId}`;
   const empty = { home: [], project: [], knowledge: [] };
   const types = new Set(Object.keys(empty));
+  // The all-items dialog is intentionally bounded to the newest 100 local records per surface.
   const normalizeEntries = (entries) => (Array.isArray(entries) ? entries : [])
     .filter((entry) => entry && typeof entry.id === 'string' && typeof entry.title === 'string')
     .slice(0, 100)
@@ -49,5 +50,9 @@ export function createSidebarPortfolioRepository({ ownerId = 'local-owner', spac
     if (!types.has(type)) throw new Error('Unknown portfolio type');
     return commit((current) => ({ ...current, [type]: current[type].map((item) => item.id === id ? { ...item, archived: true, archivedAt: Date.now() } : item) }));
   }
-  return { load, save, upsert, ensure, archive };
+  async function markRead(type, id) {
+    if (!types.has(type)) throw new Error('Unknown portfolio type');
+    return commit((current) => ({ ...current, [type]: current[type].map((item) => item.id === id ? { ...item, unread: false } : item) }));
+  }
+  return { load, save, upsert, ensure, archive, markRead };
 }
