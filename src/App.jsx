@@ -10,6 +10,7 @@ import { createHomeModelRepository, getHomeModels } from './components/homeModel
 import { ProjectSurface } from './components/ProjectSurface';
 import { createAdoptedProjectRepository } from './components/adoptedProjectRepository';
 import { useHydratedResource } from './runtime/useHydratedResource';
+import { createSidebarPortfolioRepository } from './components/sidebarPortfolioRepository';
 import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'ホーム' }, { id: 'project', label: 'プロジェクト' }, { id: 'knowledge', label: 'ナレッジ' }];
@@ -66,10 +67,14 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const adoptedProjectHydration = useHydratedResource(adoptedProjectRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
+  const portfolioRepositoryRef = useRef(null);
+  if (!portfolioRepositoryRef.current) portfolioRepositoryRef.current = createSidebarPortfolioRepository();
+  const [portfolio, setPortfolio] = useState({ home: [], project: [], knowledge: [] });
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
   useEffect(() => { homeModelRepositoryRef.current.load().then(setHomeModelKey); }, []);
+  useEffect(() => { portfolioRepositoryRef.current.load().then(setPortfolio); }, []);
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
@@ -147,7 +152,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} portfolio={portfolio} onArchive={(type, id) => { const next = { ...portfolio, [type]: (portfolio[type] ?? []).map((item) => item.id === id ? { ...item, archived: true } : item) }; setPortfolio(next); void portfolioRepositoryRef.current.save(next); if (activeWorkspace === type) setActiveWorkspace('knowledge'); }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}

@@ -20,7 +20,7 @@ function NavItems({ activePage, onSelect }) {
   ));
 }
 
-export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
+export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const accountTriggerRef = useRef(null);
 
@@ -43,6 +43,7 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
       <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" /><span>Kadode</span></div>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="最近の項目">{SHELL_NAV.map((item) => <section key={item.id} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.label}</p>{(portfolio[item.id] ?? []).filter((entry) => !entry.archived).slice(0, 10).map((entry) => <div key={entry.id} className="flex items-center gap-1 px-2"><button type="button" className="min-w-0 flex-1 truncate py-1 text-left text-xs" onClick={() => choosePage(item.id)}>{entry.title}</button>{(item.id === 'home' || item.id === 'project') && <button type="button" aria-label={`${entry.title}をアーカイブ`} className="text-xs" onClick={() => onArchive?.(item.id, entry.id)}>アーカイブ</button>}</div>)}</section>)}</div>
         <footer className="workspace-shell__account">
           <div className="workspace-shell__account-copy">
             <DropdownMenu>
