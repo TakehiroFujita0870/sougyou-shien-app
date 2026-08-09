@@ -42,7 +42,7 @@ describe('profile hydration at the application boundary', () => {
 
     expect(repository.load).toHaveBeenCalledTimes(1);
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('あなたの情報を更新');
+    expect(view.container.textContent).toContain('あなたの情報');
 
     await act(async () => view.container.querySelector('.kadode-profile-button').click());
     expect(view.container.textContent).toContain('営業経験');
