@@ -12,7 +12,7 @@ import { createAdoptedProjectRepository } from './components/adoptedProjectRepos
 import { useHydratedResource } from './runtime/useHydratedResource';
 import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
-export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
+export const WORKSPACE_NAV = [{ id: 'home', label: 'ホーム' }, { id: 'project', label: 'プロジェクト' }, { id: 'knowledge', label: 'ナレッジ' }];
 export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
 
 export function readSelectedSurface(storage = globalThis.sessionStorage) {
