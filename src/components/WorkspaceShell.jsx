@@ -86,7 +86,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
           {['home', 'project'].map((type) => {
             const archived = (portfolio[type] ?? []).filter((entry) => entry.archived);
             if (!archived.length) return null;
-            return <section key={`${type}-archive`} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">アーカイブ · {SHELL_NAV.find((item) => item.id === type)?.label}</p>{archived.map((entry) => <div key={entry.id} className="ml-2 flex items-center gap-1 px-2"><span className="min-w-0 flex-1 truncate py-1.5 text-xs text-[var(--color-text-muted)]">{entry.title}</span><button type="button" disabled={Boolean(archivePending)} className="shrink-0 text-xs text-[var(--color-primary)] hover:underline disabled:opacity-50" onClick={() => { void restoreItem(type, entry); }}>{archivePending === `${type}:${entry.id}` ? '復元中…' : '再開'}</button></div>)}</section>;
+            return <section key={`${type}-archive`} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">アーカイブ · {SHELL_NAV.find((item) => item.id === type)?.label}</p>{archived.map((entry) => <div key={entry.id} className="ml-2 flex items-center gap-1 px-2"><span className="min-w-0 flex-1 truncate py-1.5 text-xs text-[var(--color-text-muted)]">{entry.title}</span><button type="button" aria-label={`${entry.title}を再開`} disabled={Boolean(archivePending)} className="shrink-0 text-xs text-[var(--color-primary)] hover:underline disabled:opacity-50" onClick={() => { void restoreItem(type, entry); }}>{archivePending === `${type}:${entry.id}` ? '復元中…' : '再開'}</button></div>)}</section>;
           })}
         </div>
         <footer className="workspace-shell__account">
