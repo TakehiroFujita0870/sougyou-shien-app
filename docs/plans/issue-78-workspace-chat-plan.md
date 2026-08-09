@@ -56,7 +56,7 @@ Then: 利用者が入力した値を保存済みdraftで上書きしない。
 | ID | 成果物 | 完了判定 | 不確実性 |
 | --- | --- | --- | --- |
 | T-78-01 | chat画面とlocal repository | 検査: component testで送信、scope、判断、hydrateを確認 | 既知 |
-| T-78-02 | chat propsのknowledge境界 | 検査: deleted/unavailableを除外し、owner/grant UIがないcomponent testを確認 | 類推可能 |
+| T-78-02 | 統合部の別ASSIGNMENTで行うApp接続契約 | 検査: 本PRのcomponent testが固定principal由来のknowledge propsを確認し、App差分が0行であることを確認 | 類推可能 |
 | T-78-03 | Storybookとa11y検査 | 検査: storyのDesktop/Mobileとaxe testが通る | 類推可能 |
 
 ## ADR
@@ -73,3 +73,4 @@ Then: 利用者が入力した値を保存済みdraftで上書きしない。
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | Issue #78とportfolio steward判断を反映 | T-78-01からT-78-03 |
 | 2026-08-09 | App接続を除外 | PR #99 reviewでApp所有の分離を要求 | T-78-02 |
+| 2026-08-09 | T-78-02を別ASSIGNMENTへ分離 | #99追加P1でApp所有境界を明確化 | T-78-02 |
