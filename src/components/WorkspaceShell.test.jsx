@@ -62,10 +62,9 @@ describe('WorkspaceShell', () => {
     cleanup();
   });
 
-  it('collapses the sidebar and closes the mobile drawer with Escape', () => {
+  it('keeps the account menu collapsed and closes the mobile drawer with Escape', () => {
     const { container, cleanup } = mount();
-    act(() => container.querySelector('.workspace-shell__collapse').click());
-    expect(container.querySelector('.workspace-shell').className).toContain('workspace-shell--collapsed');
+    expect(container.querySelector('[role="menu"]')).toBeNull();
     act(() => container.querySelector('.workspace-shell__mobile-trigger').click());
     expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
     act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));

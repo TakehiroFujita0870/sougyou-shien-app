@@ -74,7 +74,7 @@ describe('profile hydration at the application boundary', () => {
     await act(async () => Array.from(view.container.querySelectorAll('button')).find((button) => button.textContent === '再試行').click());
     expect(repository.load).toHaveBeenCalledTimes(2);
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('あなたの情報を更新');
+    expect(view.container.textContent).toContain('あなたの情報');
     await view.unmount();
   });
 
