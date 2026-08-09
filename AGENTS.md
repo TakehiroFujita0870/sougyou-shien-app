@@ -34,11 +34,11 @@
 
 - 定期ポーリングを部門間連携の正本にしない。PR作成、PR更新、レビュー差し戻し、CI完了、マージ、ブロックの発生元が、発生直後に担当タスクへメッセージを送って次工程を起動する。
 - 作業開始時に [`docs/operations/department-handoffs.md`](docs/operations/department-handoffs.md) を読み、自部門の送信責任と応答責任を確認する。会話履歴だけを引き継ぎ情報にしない。
-- 実装部門はPR作成またはhead SHA更新後、統合・リリース管理部へ `PR_READY` を送る。統合部は `REVIEW_CHANGES_REQUESTED`、`MERGED`、`BLOCKED` のいずれかを担当部へ返す。
+- 実装部門はPR作成またはhead SHA更新後、統合・リリース管理部へ `PR_READY` を送る。通常イベントのSHAは12文字short SHAとし、統合部はそのPR上の完全SHAと照合してから `REVIEW_CHANGES_REQUESTED`、`MERGED`、`BLOCKED` のいずれかを担当部へ返す。
 - 統合部が運用文書PRを作成した場合は、自部門へ `PR_READY` や `MERGED` を送らない。統合部は独立した部門長をreviewerとして指定し、`REVIEW_REQUEST`を送る。reviewerの`REVIEW_APPROVED`または`REVIEW_CHANGES_REQUESTED`を受けてから、統合部がmergeする。自己通知、自己レビュー、自己マージの循環は禁止する。
-- メッセージにはリポジトリ、Issue、PR、head SHA、変更目的、検査結果、CEO決裁境界の有無を含める。秘密情報、認証情報、個人情報を含めない。
+- メッセージにはリポジトリ、Issue、PR、12文字short SHA、変更目的、検査結果、CEO決裁境界の有無を含める。完全SHAはGit command、監査、rollback、collision、delivery failureの内部記録だけに使う。秘密情報、認証情報、個人情報を含めない。
 - 送信先タスクが停止中でも、メッセージ送信によって新しいturnを起動する。送信不能時はPRコメントへ同じ非機密情報を記録し、管理タスクへ `BLOCKED` を送る。
-- 統合部は通知されたhead SHAだけをレビューする。新しいSHAがpushされた場合、以前の承認を無効とし、新しい `PR_READY` を要求する。
+- 統合部は通知された12文字short SHAがPRの完全head SHAへ一意に一致することを確認してレビューする。新しいSHAがpushされた場合、以前の承認を無効とし、新しい `PR_READY` を要求する。
 - 通常経路では、実装部は `PR_READY` を統合・リリース管理部だけへ送る。PR作成時点でCEO室へ通知しない。
 - 統合部はmergeとmain smoke完了後に `MERGED` をCEO室と担当部へ送る。CEO室向けpayloadにはPR、目的、ユーザー影響、検査、ロールバック、次の依存作業、必須のネスト`org_health`を含め、詳細diffはPRリンクで参照させる。
 - mergeとsmoke成功の同一turnで、統合部は必要な`DEPENDENCY_READY` deliveryを完了し、`org_health`とnext allocation candidatesを内包する`MERGED`をCEO室へ1通だけ送る。CEO室は同じmerge SHAに対して`action: GO_ON | CHANGE | BLOCK`の`PORTFOLIO_DIRECTIVE`を必ず返す。統合部はGO_ONまたはCHANGEを`ASSIGNMENT`へ翻訳し、deliveryとreceiver stateを確認する。BLOCKは停止対象を限定して記録する。CEO返信前に統合部が行えるのは既承認`DEPENDENCY_READY`、merge smoke、review queue継続だけであり、新規Issue選択、idle部門への新規割当、優先順位変更、WIP再配分はしない。merge起因の独立`ORG_HEALTH`は送信しない。CEO決裁境界、要件未決、所有権衝突、P0 BLOCKEDは`REQUIREMENT_REQUEST`または`BLOCKED`を送る。いずれかが未完了ならmerge後handoffは未完了であり、次のPRレビューを開始しない。
@@ -49,7 +49,7 @@
 
 - 統合部は `MERGED` 時にnext_dependenciesが空でなければ、CEO室への報告と同時に次担当部へ `DEPENDENCY_READY` を送る。送信成功までmerge後handoffは完了ではない。
 - 次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。
-- 統合・リリース管理部の実行プロファイルは `gpt-5.6-terra / medium` とする。利用不能時だけ管理タスクへ `BLOCKED` を送り、無断で別プロファイルへ変更しない。
+- 統合・リリース管理部の実行プロファイルは `gpt-5.6-terra / low` とする。
 
 ### Issue・PRリソース管理
 
@@ -68,9 +68,8 @@
 
 ### 役割別モデルプロファイル
 
-- CEO室と統合・リリース管理部は `gpt-5.6-terra / medium` を使う。会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-luna / low` を使う。
-- 各実装部の部長は指定の`gpt-5.6-luna / low`で自ら実装する。部門間の通常作業でsubagentをspawnしない。subagentを使う場合だけ、そのsubagentへTerra制約を適用する。
-- 指定モデルが利用不能な場合だけ、担当部は `BLOCKED`（`reason: model_unavailable`）を統合部へ送る。統合・リリース管理部自身が利用不能な場合はCEO室へ同じ理由で送る。無断で `gpt-5.6-terra` その他のプロファイルへ切り替えてはならない。
+- CEO室、統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部はすべて `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
+- 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 
 ## Windows / PowerShell の実行規約
