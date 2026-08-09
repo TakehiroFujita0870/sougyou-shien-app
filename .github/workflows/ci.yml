@@ -12,6 +12,19 @@ jobs:
       - run: npm run test:a11y
       - run: npm run build
       - run: npm run build-storybook
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Record desktop happy-path E2E
+        run: npm run test:video
+      - name: Verify recorded WebM
+        run: test -n "$(find test-results -type f -name '*.webm' -size +0c -print -quit)"
+      - name: Upload desktop E2E video
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-desktop-e2e-video
+          path: test-results/**/*.webm
+          if-no-files-found: error
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups
       - run: uv run pytest

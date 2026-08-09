@@ -1,6 +1,8 @@
 node_modules/
 dist/
 storybook-static/
+playwright-report/
+test-results/
 .venv/
 .env
 __pycache__/
