@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import fixture from '../fixtures/knowledge-admin-demo.json';
-import { KnowledgeSurface } from './KnowledgeSurface';
+import { createLocalUploadMetadata, KnowledgeSurface } from './KnowledgeSurface';
 import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -28,12 +28,13 @@ describe('KnowledgeSurface', () => {
     await unmount(); fetchSpy.mockRestore();
   });
 
-  it('requires an explicit confirmation before removal and calls the local handler only on confirm', async () => {
-    const onRemoveAsset = vi.fn(); const { container, unmount } = await mount({ onRemoveAsset });
+  it('requires an explicit confirmation before removal and persists the tombstone only on confirm', async () => {
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'test-owner', spaceId: 'test-space', storage: { getItem: () => null, setItem: () => {} } });
+    const { container, unmount } = await mount({ repository });
     await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === '削除').click());
-    expect(document.querySelector('[role="dialog"]')).toBeTruthy(); expect(onRemoveAsset).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
     await act(async () => [...document.querySelectorAll('button')].find((button) => button.textContent === '削除を確定').click());
-    expect(onRemoveAsset).toHaveBeenCalledWith('demo-document-001');
+    expect(repository.find('demo-document-001')).toMatchObject({ state: 'deleted' });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     await unmount();
   });
@@ -87,5 +88,14 @@ describe('KnowledgeSurface', () => {
     await act(async () => option.click());
     expect(onModelChange).toHaveBeenCalledWith('claude-sonnet-5');
     await unmount();
+  });
+
+  it('creates stable PDF/DOCX metadata and refuses unsupported or oversized files', () => {
+    const first = createLocalUploadMetadata({ name: '顧客メモ.pdf', size: 1024, lastModified: 10 });
+    const second = createLocalUploadMetadata({ name: '顧客メモ.pdf', size: 1024, lastModified: 10 });
+    expect(first).toMatchObject({ state: 'metadata_only', mediaType: 'pdf', sizeBytes: 1024 });
+    expect(first.id).toBe(second.id);
+    expect(() => createLocalUploadMetadata({ name: 'memo.txt', size: 1, lastModified: 1 })).toThrow('PDFまたはDOCX');
+    expect(() => createLocalUploadMetadata({ name: 'memo.docx', size: 10 * 1024 * 1024 + 1, lastModified: 1 })).toThrow('10 MiB以下');
   });
 });

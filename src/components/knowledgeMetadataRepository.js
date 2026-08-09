@@ -1,12 +1,25 @@
 export const KNOWLEDGE_SCHEMA_VERSION = 1;
 export const KNOWLEDGE_STORAGE_KEY = 'kadode:knowledge-metadata';
 
-const STATES = new Set(['processing', 'searchable', 'failed', 'deleted']);
+const STATES = new Set(['metadata_only', 'processing', 'searchable', 'failed', 'deleted']);
 
 function normalizeDocument(value) {
   if (!value || typeof value.id !== 'string' || typeof value.ownerId !== 'string' || typeof value.spaceId !== 'string' || typeof value.name !== 'string') return null;
   const state = STATES.has(value.state) ? value.state : 'processing';
-  return { id: value.id, ownerId: value.ownerId, spaceId: value.spaceId, name: value.name, version: Number.isInteger(value.version) && value.version > 0 ? value.version : 1, state, extractedTextState: value.extractedTextState === 'ready' ? 'ready' : 'pending', indexState: value.indexState === 'ready' ? 'ready' : 'pending', deletedAt: state === 'deleted' && typeof value.deletedAt === 'string' ? value.deletedAt : null };
+  return {
+    id: value.id,
+    ownerId: value.ownerId,
+    spaceId: value.spaceId,
+    name: value.name,
+    version: Number.isInteger(value.version) && value.version > 0 ? value.version : 1,
+    state,
+    mediaType: typeof value.mediaType === 'string' ? value.mediaType : null,
+    sizeBytes: Number.isSafeInteger(value.sizeBytes) && value.sizeBytes >= 0 ? value.sizeBytes : null,
+    lastModified: Number.isSafeInteger(value.lastModified) && value.lastModified >= 0 ? value.lastModified : null,
+    extractedTextState: value.extractedTextState === 'ready' ? 'ready' : 'pending',
+    indexState: value.indexState === 'ready' ? 'ready' : 'pending',
+    deletedAt: state === 'deleted' && typeof value.deletedAt === 'string' ? value.deletedAt : null,
+  };
 }
 
 export function createKnowledgeMetadataRepository({ ownerId, spaceId, storage = globalThis.localStorage } = {}) {
