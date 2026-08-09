@@ -78,25 +78,31 @@ afterEach(async () => {
 
 describe('Issue #62 desktop current-main PII-free user journey', () => {
   it('keeps a completed profile on the desktop Home conversation surface', async () => {
-    const { container } = await mount();
+    const { container, root } = await mount();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(container.querySelector('#home-supervisor-message')).toBeTruthy();
     expect(container.querySelector('.workspace-shell__main')).toBeTruthy();
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label^="アカウント Free"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="タケヒロのアカウント Free"]')).toBeTruthy();
     expect(container.querySelector('[aria-label^="モデル:"]')).toBeTruthy();
   });
 
-  it('creates an explicit proposal, adopts it, and reaches a five-view Project without network', async () => {
+  it('creates an explicit proposal, adopts it, and restores the five-view Project after an F5-equivalent remount without network', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    const { container } = await mount();
+    const { container, root } = await mount();
 
     await sendMessage(container);
     expect(container.querySelector('[aria-label="会話履歴"]')?.textContent).toContain('故障履歴');
     await click(container, 'プロジェクトに採用');
     expect(container.querySelector('#project-surface-heading')).toBeTruthy();
     expect(container.querySelectorAll('[data-project-question]')).toHaveLength(5);
+    await act(async () => { root.unmount(); container.remove(); });
+    mounted.shift();
+    const restored = await mount();
+    expect(restored.container.querySelector('[aria-current="page"]')?.textContent).toBe('Project');
+    expect(restored.container.querySelector('#project-surface-heading')).toBeTruthy();
+    expect(restored.container.querySelectorAll('[data-project-question]')).toHaveLength(5);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

@@ -14,9 +14,9 @@ const completedProfile = {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((profile) => {
-    localStorage.clear()
-    sessionStorage.clear()
-    localStorage.setItem('kadode:user-profile', JSON.stringify(profile))
+    if (!localStorage.getItem('kadode:user-profile')) {
+      localStorage.setItem('kadode:user-profile', JSON.stringify(profile))
+    }
   }, completedProfile)
 })
 
@@ -30,14 +30,16 @@ test('records the desktop PII-free Home, Project, and Knowledge happy path', asy
   await expect(page.getByRole('dialog', { name: 'あなたの情報' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Kadode AI' })).toBeVisible()
 
-  const account = page.getByRole('button', { name: /アカウント Free/ })
+  const account = page.getByRole('button', { name: 'タケヒロのアカウント Free' })
   await account.click()
-  await expect(page.getByRole('menu', { name: 'アカウントメニュー' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: 'あなたの情報' })).toBeVisible()
+  await expect(page.getByRole('menu', { name: 'タケヒロのアカウント Free' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'プロフィールを編集' })).toBeVisible()
   await page.keyboard.press('Escape')
 
-  await page.getByRole('button', { name: /モデル:/ }).click()
-  await expect(page.getByRole('menu', { name: 'AIモデルを選択' })).toBeVisible()
+  const modelTrigger = page.locator('button[aria-label^="モデル:"]')
+  const modelMenuName = await modelTrigger.getAttribute('aria-label')
+  await modelTrigger.click()
+  await expect(page.getByRole('menu', { name: modelMenuName })).toBeVisible()
   await page.getByRole('menuitem', { name: /GPT-5.6 Terra/ }).click()
 
   const composer = page.locator('#home-supervisor-message')
@@ -53,8 +55,12 @@ test('records the desktop PII-free Home, Project, and Knowledge happy path', asy
 
   await expect(page.locator('#project-surface-heading')).toBeVisible()
   await expect(page.locator('[data-project-question]')).toHaveCount(5)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Project' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.locator('#project-surface-heading')).toBeVisible()
+  await expect(page.locator('[data-project-question]')).toHaveCount(5)
   await page.getByRole('button', { name: 'Knowledge' }).click()
   await expect(page.locator('#knowledge-heading')).toBeVisible()
-  await expect(page.getByLabel('KnowledgeにてKadode AIに送信')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'KnowledgeについてKadode AIに相談' })).toBeVisible()
   expect(applicationRequests).toEqual([])
 })
