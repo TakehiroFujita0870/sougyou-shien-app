@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { HomeSupervisor } from './components/HomeSupervisor';
+import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
 import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
@@ -46,7 +47,7 @@ function PlaceholderSurface({ name, description }) {
 }
 
 function IdeaWorkspace() {
-  return <div className="max-w-4xl"><HomeSupervisor /></div>;
+  return <div className="max-w-4xl space-y-6"><HomeSupervisor /><IdeaCandidateWorkspace /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
@@ -127,8 +128,9 @@ export function App({ profileRepository }) {
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
-        <div className="px-5 pb-5 pt-12 sm:py-7"><style>{`[aria-label="アイデアストック"]{grid-template-columns:minmax(0,1fr)!important}[aria-label="アイデアストック"]>div:first-child{border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;min-width:0}[aria-label="アイデアストック"]>div:first-child>p:first-of-type,[aria-label="アイデアストック"]>div:first-child>h2:first-of-type{display:none}[aria-label="アイデアストック"] label[for="idea-message"]{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}[aria-label="アイデアストック"] form{border:1px solid rgb(231 229 228);border-radius:1.5rem;padding:.75rem;background:#fff;box-shadow:0 8px 30px rgb(28 25 23 / .06)}[aria-label="アイデアストック"] form>textarea{min-height:7rem;border:0!important;outline:0!important;box-shadow:none!important}[aria-label="アイデアストック"] form>p{display:none}[aria-label="アイデアストック"] form>div{margin-top:.5rem;gap:.5rem}[aria-label="アイデアストック"] form button{min-height:2.75rem!important;padding:.5rem .75rem!important;font-size:0!important}[aria-label="アイデアストック"] form button::after{font-size:.8125rem}[aria-label="アイデアストック"] form button[type="submit"]::after{content:'↑'}[aria-label="アイデアストック"] form button[data-testid="assist-request"]::after{content:'✦ AI'}[aria-label="アイデアストック"] form button[data-testid="idea-help"]::after{content:'?'}`}</style>{workspaceContent()}</div>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
+        <header className="kadode-header border-b"><div className="flex min-h-12 min-w-0 items-center justify-between gap-4 px-5 py-3"><strong className="shrink-0 text-lg tracking-tight">Kadode</strong></div></header>
+        <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
