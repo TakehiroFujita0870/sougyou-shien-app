@@ -57,6 +57,10 @@ describe('plan selection acceptance', () => {
     expect(proCard.textContent).toContain('準備中');
     expect(proCard.textContent).toContain('現在は選択、申込み、決済できません。');
     expect(proCard.getAttribute('aria-describedby')).toBe('pro-plan-availability');
+    const comparisonGrid = container.querySelector('fieldset');
+    expect(comparisonGrid.className).toContain('sm:grid-cols-3');
+    expect(comparisonGrid.contains(proCard)).toBe(true);
+    expect([...comparisonGrid.children].filter((child) => child.tagName === 'LABEL' || child.tagName === 'ASIDE')).toHaveLength(3);
     const proButton = proCard.querySelector('button');
     expect(proCard.querySelectorAll('button')).toHaveLength(1);
     expect(proButton.disabled).toBe(true);
