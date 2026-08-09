@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { completeProjectDraft, ProjectSurface } from './ProjectSurface';
+import { demoProjectFixture } from './projectDemoFixtureAdapter';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -19,7 +20,7 @@ async function mount(props) {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => { root.render(<ProjectSurface {...props} />); });
+  await act(async () => { root.render(<ProjectSurface project={demoProjectFixture} {...props} />); });
 }
 
 async function enter(value) {
@@ -43,7 +44,7 @@ describe('ProjectSurface conversation parity', () => {
   it('uses the shared catalog with GPT-5.6 Terra by default and exposes deterministic draft completion', async () => {
     await mount({ conversationRepository: { load: async () => [], save: async (messages) => messages } });
     expect(container.querySelector('[aria-label="モデル: GPT-5.6 Terra"]')).toBeTruthy();
-    expect(container.textContent).toContain('AI補完');
+    expect(container.textContent).toContain('AIで補完');
     expect(completeProjectDraft('採算を知りたい')).toContain('顧客、根拠、次に確かめること');
   });
 

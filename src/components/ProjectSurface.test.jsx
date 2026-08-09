@@ -1,15 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { nextProjectAssistantReply, ProjectSurface } from './ProjectSurface';
+import { demoProjectFixture } from './projectDemoFixtureAdapter';
 
 describe('ProjectSurface conversation contract', () => {
   it.each(['empty', 'populated', 'loading', 'error'])('renders %s with one composer and five scannable sections', (state) => {
-    const html = renderToStaticMarkup(<ProjectSurface state={state} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />);
+    const html = renderToStaticMarkup(<ProjectSurface state={state} project={demoProjectFixture} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />);
     expect(html).toContain('project-composer');
-    expect(html.match(/data-project-question="true"/g)).toHaveLength(5);
+    expect(html.match(/role="tab"/g)).toHaveLength(5);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(1);
     expect(html).toContain('DOCXをダウンロード');
     expect(html).not.toContain('資料を追加');
-    expect(html).not.toContain('AIで補完');
+    expect(html).toContain('AIで補完');
     expect(html).toContain('根拠');
     expect(html).toContain('未確認');
   });

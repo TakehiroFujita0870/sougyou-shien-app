@@ -29,7 +29,7 @@ describe('ProjectSurface decision filter', () => {
     await act(async () => {
       root.render(<ProjectSurface project={demoProjectFixture} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />);
     });
-    const select = container.querySelector('select[aria-label="履歴を絞り込む"]');
+    const select = container.querySelector('select[aria-label="表示する種類を選ぶ"]');
     await act(async () => {
       select.value = kind;
       select.dispatchEvent(new Event('change', { bubbles: true }));
