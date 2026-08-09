@@ -7,10 +7,12 @@ describe('ProjectSurface presentation contract', () => {
     const html = renderToStaticMarkup(<ProjectSurface state={state} />);
     expect(html).toContain('project-composer');
     expect(html.match(/<article/g)).toHaveLength(5);
-    expect(html).toContain('Enterで送信、Shift+Enterで改行');
+    expect(html).toContain('根拠:');
+    expect(html).toContain('未確定:');
   });
-  it('exposes labelled composer and 44px send target', () => {
+  it('keeps the composer labelled and the send target at least 44px tall', () => {
     const html = renderToStaticMarkup(<ProjectSurface />);
+    expect(html).toContain('aria-label="Project Kadode AI composer"');
     expect(html).toContain('for="project-composer"');
     expect(html).toContain('min-h-11');
   });
