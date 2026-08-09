@@ -48,7 +48,7 @@ function PlaceholderSurface({ name, description }) {
 
 function IdeaWorkspace() {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl [&_[aria-label='アイデアストック']>div:nth-child(2):has(>p:only-child)]:hidden">
       <section aria-labelledby="idea-heading">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
         <h1 id="idea-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>

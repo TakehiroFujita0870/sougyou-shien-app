@@ -48,7 +48,6 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
         </footer>
       </aside>
       <section className="workspace-shell__main">
-        <div className="workspace-shell__breadcrumb"><span>ワークスペース</span><span aria-hidden="true">/</span><strong>{SHELL_NAV.find((item) => item.id === activePage)?.label ?? 'ページ'}</strong></div>
         {children}
       </section>
     </div>
