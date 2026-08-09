@@ -16,7 +16,7 @@ describe('MVP workspace shell', () => {
     const html = renderToStaticMarkup(<App />);
 
     expect(html).toContain('aria-current="page"');
-    expect(html).toContain('focus-visible:outline-2');
+    expect(html).toContain('workspace-shell__nav-item');
     expect(html).toContain('type="button"');
   });
 
@@ -28,13 +28,21 @@ describe('MVP workspace shell', () => {
     expect(html).not.toContain('条件を満たすまで次へ進みません');
   });
 
-  it('uses the supportive AI voice instead of starting from failure', () => {
+  it('uses a compact idea page instead of a failure-first hero', () => {
     const html = renderToStaticMarkup(<App />);
 
-    expect(html).toContain('あなたの経験から、事業の芽を育てよう。');
-    expect(html).toContain('強みと現実的な懸念を一緒に整理し');
+    expect(html).toContain('着想や経験を話しながら整理し、確認してから候補として保存します。');
+    expect(html).not.toContain('sm:text-6xl');
     expect(html).not.toContain('始める前に、');
     expect(html).not.toContain('ダメな理由を見つけよう');
+  });
+
+  it('uses one conversation entry instead of the legacy three-field idea form', () => {
+    const html = renderToStaticMarkup(<App />);
+
+    expect(html).toContain('アイデアを話してみる');
+    expect(html).not.toContain('アイデアを登録する');
+    expect(html).not.toContain('誰の、何のペインか');
   });
 
   it('does not expose AI public-relations functionality in the product workspace', () => {
