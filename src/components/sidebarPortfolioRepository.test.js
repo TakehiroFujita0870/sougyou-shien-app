@@ -65,4 +65,16 @@ describe('sidebar portfolio repository', () => {
     expect(reloaded.activeHomeId).toBe('home:second');
     expect(reloaded.home.find((item) => item.id === reloaded.activeHomeId)).toMatchObject({ archived: true, snapshot: second });
   });
+
+  it('restores an archived owner-space scoped snapshot and reactivates Home atomically', async () => {
+    const storage = createStorage();
+    const repository = createSidebarPortfolioRepository({ ownerId: 'owner-a', spaceId: 'space-a', storage });
+    const snapshot = { messages: [{ role: 'user', content: '再開する会話' }] };
+    await repository.upsertAndActivateHome({ id: 'home:restore', title: '再開する会話', snapshot });
+    await repository.archive('home', 'home:restore');
+    const restored = await repository.restore('home', 'home:restore');
+    expect(restored.activeHomeId).toBe('home:restore');
+    expect(restored.home[0]).toMatchObject({ archived: false, snapshot });
+    await expect(createSidebarPortfolioRepository({ ownerId: 'owner-b', spaceId: 'space-a', storage }).restore('home', 'home:restore')).rejects.toThrow('Archived snapshot is unavailable');
+  });
 });

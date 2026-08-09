@@ -61,9 +61,22 @@ export function createSidebarPortfolioRepository({ ownerId = 'local-owner', spac
     if (!types.has(type)) throw new Error('Unknown portfolio type');
     return commit((current) => ({ ...current, [type]: current[type].map((item) => item.id === id ? { ...item, archived: true, archivedAt: Date.now() } : item) }));
   }
+  async function restore(type, id) {
+    if (type !== 'home' && type !== 'project') throw new Error('Unsupported restore type');
+    return commit((current) => {
+      const item = current[type].find((entry) => entry.id === id);
+      if (!item?.snapshot) throw new Error('Archived snapshot is unavailable');
+      const restored = { ...item, archived: false, archivedAt: undefined, updatedAt: Date.now() };
+      return {
+        ...current,
+        activeHomeId: type === 'home' ? id : current.activeHomeId,
+        [type]: [restored, ...current[type].filter((entry) => entry.id !== id)],
+      };
+    });
+  }
   async function markRead(type, id) {
     if (!types.has(type)) throw new Error('Unknown portfolio type');
     return commit((current) => ({ ...current, [type]: current[type].map((item) => item.id === id ? { ...item, unread: false } : item) }));
   }
-  return { load, save, upsert, ensure, upsertAndActivateHome, setActiveHome, archive, markRead };
+  return { load, save, upsert, ensure, upsertAndActivateHome, setActiveHome, archive, restore, markRead };
 }
