@@ -122,12 +122,14 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
       if (latestUserMessage) {
         const conversationId = portfolioMessageId(`home:${userMessages.length}`, latestUserMessage);
         const currentPortfolio = await portfolioRepositoryRef.current.load();
-        const matchingRecord = currentPortfolio.home.find((item) => item.id === conversationId);
+        const serializedHome = JSON.stringify(home);
+        const matchingRecord = currentPortfolio.home.find((item) => item.snapshot && JSON.stringify(item.snapshot) === serializedHome)
+          ?? currentPortfolio.home.find((item) => item.id === conversationId);
         const savedHome = matchingRecord
-          ? await portfolioRepositoryRef.current.setActiveHome(conversationId)
+          ? await portfolioRepositoryRef.current.setActiveHome(matchingRecord.id)
           : await portfolioRepositoryRef.current.upsertAndActivateHome({ id: conversationId, title: latestUserMessage.slice(0, 80), snapshot: home, updatedAt: Date.now() });
         if (active) setPortfolio(savedHome);
-        if (active) setActiveHomeConversationId(conversationId);
+        if (active) setActiveHomeConversationId(matchingRecord?.id ?? conversationId);
       }
       if (knowledgeDemoFixture?.asset) {
         const asset = knowledgeDemoFixture.asset;

@@ -153,7 +153,8 @@ describe('adopted project hydration', () => {
   ])('does not render an editable archived %s surface after an F5-equivalent mount', async (surface, id) => {
     const storage = createStorage();
     const portfolioRepository = createSidebarPortfolioRepository({ storage });
-    await portfolioRepository.upsert(surface, { id, title: 'アーカイブ済み' });
+    if (surface === 'home') await portfolioRepository.upsertAndActivateHome({ id, title: 'アーカイブ済み' });
+    else await portfolioRepository.upsert(surface, { id, title: 'アーカイブ済み' });
     await portfolioRepository.archive(surface, id);
     if (surface === 'project') await createAdoptedProjectRepository({ storage }).saveAdopted(adoptedCandidate);
     globalThis.sessionStorage.setItem('kadode:selected-surface', surface);
