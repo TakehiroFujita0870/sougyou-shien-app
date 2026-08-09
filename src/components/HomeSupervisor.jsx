@@ -25,8 +25,10 @@ export function proposeHomeAction(input, snapshot = initialSnapshot) {
   const action = /プロジェクト.*(一覧|確認)|一覧.*確認/.test(input) ? 'inspect_projects' : 'ideate';
   return {
     id: crypto.randomUUID(),
+    title: input.trim(),
     fact: `現在のsurface: ${snapshot.surface.name}`,
     inference: `入力を「${action}」として整理しました。`,
+    reason: '',
     action,
     confirmed: false,
     status: 'pending',

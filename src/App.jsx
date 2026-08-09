@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { HomeSupervisor } from './components/HomeSupervisor';
 import { KnowledgeSurface } from './components/KnowledgeSurface';
@@ -8,6 +8,7 @@ import { createBrowserProfileRepository, UserProfileInterview } from './componen
 import { WorkspaceShell } from './components/WorkspaceShell';
 import { createHomeModelRepository, getHomeModels } from './components/homeModelRepository';
 import { ProjectSurface } from './components/ProjectSurface';
+import { createAdoptedProjectRepository } from './components/adoptedProjectRepository';
 import { useHydratedResource } from './runtime/useHydratedResource';
 import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
@@ -48,19 +49,21 @@ function ProfileLoadFailure({ onRetry }) {
   );
 }
 
-export function App({ profileRepository }) {
+export function App({ profileRepository, adoptedProjectRepository }) {
   const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
-  const [adoptedProject, setAdoptedProject] = useState(null);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
   const repositoryRef = useRef(null);
   if (!repositoryRef.current) repositoryRef.current = createLocalPlanRepository();
   const homeModelRepositoryRef = useRef(null);
   if (!homeModelRepositoryRef.current) homeModelRepositoryRef.current = createHomeModelRepository();
   const profileRepositoryRef = useRef(null);
+  const adoptedProjectRepositoryRef = useRef(null);
   const profileDialogDismissedRef = useRef(false);
   if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
+  if (!adoptedProjectRepositoryRef.current) adoptedProjectRepositoryRef.current = adoptedProjectRepository ?? createAdoptedProjectRepository();
   const profileHydration = useHydratedResource(profileRepositoryRef.current);
+  const adoptedProjectHydration = useHydratedResource(adoptedProjectRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
   const [knowledgeFixture, setKnowledgeFixture] = useState(knowledgeDemoFixture);
@@ -118,9 +121,26 @@ export function App({ profileRepository }) {
     setProfileOpen(false);
   }
 
+  const adoptProject = useCallback(async (candidate) => {
+    if (adoptedProjectHydration.phase === 'ready' && adoptedProjectHydration.value?.id === candidate?.id) {
+      setActiveWorkspace('project');
+      return;
+    }
+    try {
+      const project = await adoptedProjectRepositoryRef.current.saveAdopted(candidate);
+      adoptedProjectHydration.replaceReady(project);
+      setActiveWorkspace('project');
+    } catch {
+      // Home retains its own decision state if the Project mirror cannot be persisted.
+    }
+  }, [adoptedProjectHydration.phase, adoptedProjectHydration.replaceReady, adoptedProjectHydration.value]);
+
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
-    if (activeWorkspace === 'project') return <ProjectSurface adoptedProject={adoptedProject} />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
+    if (activeWorkspace === 'project') {
+      if (adoptedProjectHydration.phase === 'loading') return <section aria-live="polite" className="max-w-3xl py-10 text-sm text-[var(--color-text-muted)]">プロジェクトを読み込んでいます…</section>;
+      return <ProjectSurface adoptedProject={adoptedProjectHydration.value} />;
+    }
     if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeFixture} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onAddAsset={() => setKnowledgeFixture(knowledgeDemoFixture)} onRemoveAsset={() => setKnowledgeFixture((current) => ({ ...current, asset: { ...current.asset, state: 'deleted' } }))} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
