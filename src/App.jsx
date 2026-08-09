@@ -7,6 +7,7 @@ import { createLocalPlanRepository } from './components/planSubscriptionReposito
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
 import { LocalGoogleSignIn } from './components/LocalGoogleSignIn';
+import { useHydratedResource } from './runtime/useHydratedResource';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'Home' }, { id: 'project', label: 'Project' }, { id: 'knowledge', label: 'Knowledge' }];
 export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
@@ -73,31 +74,22 @@ export function App({ profileRepository }) {
   const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
-  const [profileHydration, setProfileHydration] = useState({ phase: 'loading', profile: null });
-  const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
   const repositoryRef = useRef(null);
   if (!repositoryRef.current) repositoryRef.current = createLocalPlanRepository();
   const profileRepositoryRef = useRef(null);
   const profileDialogDismissedRef = useRef(false);
   if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
+  const profileHydration = useHydratedResource(profileRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
-  const profileComplete = profileHydration.phase === 'ready' && profileHydration.profile?.status === 'completed';
+  const profileComplete = profileHydration.phase === 'ready' && profileHydration.value?.status === 'completed';
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
 
   useEffect(() => {
-    let mounted = true;
-    profileRepositoryRef.current.load()
-      .then((profile) => {
-        if (!mounted) return;
-        setProfileHydration({ phase: 'ready', profile });
-        setProfileOpen(!profileDialogDismissedRef.current && profile?.status !== 'completed');
-      })
-      .catch(() => {
-        if (mounted) setProfileHydration({ phase: 'error', profile: null });
-      });
-    return () => { mounted = false; };
-  }, [profileLoadAttempt]);
+    if (profileHydration.phase === 'ready') {
+      setProfileOpen(!profileDialogDismissedRef.current && profileHydration.value?.status !== 'completed');
+    }
+  }, [profileHydration.phase, profileHydration.value]);
 
   useEffect(() => {
     const shortcut = (event) => {
@@ -139,13 +131,12 @@ export function App({ profileRepository }) {
   function retryProfileLoad() {
     profileDialogDismissedRef.current = false;
     setProfileDialogDismissed(false);
-    setProfileHydration({ phase: 'loading', profile: null });
     setProfileOpen(false);
-    setProfileLoadAttempt((attempt) => attempt + 1);
+    profileHydration.retry();
   }
 
   function completeProfile(profile) {
-    setProfileHydration({ phase: 'ready', profile });
+    profileHydration.replaceReady(profile);
     setProfileOpen(false);
   }
 
@@ -164,7 +155,7 @@ export function App({ profileRepository }) {
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {profileHydration.phase === 'ready' && <button type="button" onClick={() => { profileDialogDismissedRef.current = false; setProfileDialogDismissed(false); setProfileOpen(true); }} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>}
-      {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.profile} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
+      {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
   );
 }
