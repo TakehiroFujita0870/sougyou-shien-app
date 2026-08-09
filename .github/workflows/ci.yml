@@ -24,6 +24,15 @@ jobs:
         run: npm run test:video
       - name: Verify desktop sidebar portfolio E2E
         run: npx playwright test tests/e2e/sidebar-portfolio.spec.js
+      - name: Verify Home hydration retry and draft preservation
+        run: npx playwright test tests/e2e/home-hydration-retry.spec.js
+      - name: Upload Home hydration retry evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-home-hydration-retry-1440
+          path: test-results/home-hydration-retry*-1440x900.png
+          if-no-files-found: error
       - name: Upload desktop sidebar screenshot
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

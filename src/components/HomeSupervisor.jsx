@@ -53,6 +53,7 @@ export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProje
   const mutationQueueRef = useRef(Promise.resolve());
   const mutationRevisionRef = useRef(0);
   const draftQueueRef = useRef(Promise.resolve());
+  const hasLocalDraftMutationRef = useRef(false);
   const loadGenerationRef = useRef(0);
 
   useEffect(() => {
@@ -60,8 +61,12 @@ export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProje
     setHydrationPhase('loading');
     Promise.all([activeRepository.load(), draftRepository.loadDraft()]).then(([value, draft]) => {
       if (generation !== loadGenerationRef.current) return;
-      stateRef.current = value; inputRef.current = draft;
-      setState(value); setInput(draft);
+      stateRef.current = value;
+      setState(value);
+      if (!hasLocalDraftMutationRef.current) {
+        inputRef.current = draft;
+        setInput(draft);
+      }
       setHydrationPhase('ready');
       const adopted = value.proposals.find(({ status }) => status === 'adopted');
       if (adopted) onProjectAdopt?.(adopted);
@@ -75,6 +80,7 @@ export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProje
 
   const messages = useMemo(() => state.messages, [state.messages]);
   function updateInput(value) {
+    hasLocalDraftMutationRef.current = true;
     inputRef.current = value; setInput(value);
     draftQueueRef.current = draftQueueRef.current.catch(() => undefined).then(() => draftRepository.saveDraft(value)).catch(() => setError('下書きを保存できませんでした。'));
   }
