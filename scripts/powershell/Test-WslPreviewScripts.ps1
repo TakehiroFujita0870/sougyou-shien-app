@@ -12,7 +12,7 @@ foreach ($name in $required) {
 $start = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Start-WslPreview.ps1') -Raw -Encoding utf8
 $status = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Get-WslPreviewStatus.ps1') -Raw -Encoding utf8
 $stop = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Stop-WslPreview.ps1') -Raw -Encoding utf8
-foreach ($needle in @('Test-Utf8Preflight', 'HoldSeconds', 'Start-Process', 'WindowStyle Hidden', 'Port conflict', 'systemd-run')) { if (-not $start.Contains($needle)) { throw "Start contract missing: $needle" } }
+foreach ($needle in @('Test-Utf8Preflight', 'HoldSeconds', 'Start-Process', 'WindowStyle Hidden', 'Port conflict', 'systemd-run', 'try {', 'finally {', 'Stop-StartedPreviewResources', 'stateWritten')) { if (-not $start.Contains($needle)) { throw "Start contract missing: $needle" } }
 foreach ($needle in @('WindowsViteHostPid', 'LinuxViteMainPid', 'UiListening', 'UiHttpStatus')) { if (-not $status.Contains($needle)) { throw "Status contract missing: $needle" } }
 foreach ($needle in @('systemctl', 'Stop-Process -Id', 'Remove-Item -LiteralPath')) { if (-not $stop.Contains($needle)) { throw "Stop contract missing: $needle" } }
 if ($stop -match 'taskkill|wsl.exe --shutdown|Stop-Process\s+-Name') { throw 'Unsafe broad stop operation detected.' }

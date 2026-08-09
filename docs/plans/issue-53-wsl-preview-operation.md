@@ -42,7 +42,7 @@ As a 共有環境利用者, I want 競合時に安全に失敗したい, so that
 
 Given: clone欠落、/mnt/c clone、port競合、またはstate recordがある
 When: startを実行する
-Then: 非ゼロ終了し、systemctl stop、kill、WSL全体停止を実行しない。
+Then: 非ゼロ終了し、systemctl stop、kill、WSL全体停止を実行しない。起動後の失敗はそのrunが記録したunit/PID/stateだけをcleanupする。
 
 ## スコープ外
 
@@ -54,7 +54,7 @@ Then: 非ゼロ終了し、systemctl stop、kill、WSL全体停止を実行し�
 
 | ID | 成果物 | 完了判定（検査:） | 不確実性 |
 | --- | --- | --- | --- |
-| T-53-1 | start/status/stop PowerShell scripts | 検査: `scripts/powershell/Test-WslPreviewScripts.ps1` が成功 | 類推可能 |
+| T-53-1 | start/status/stop PowerShell scripts | 検査: `scripts/powershell/Test-WslPreviewScripts.ps1` が成功し、startのtry/finally失敗cleanup構造を検査 | 類推可能 |
 | T-53-2 | runbook | 検査: required command名、60秒、ports、fail-safeを`rg`で確認 | 既知 |
 | T-53-3 | native WSL smoke | 検査: 実行環境がある場合にstart後60秒でlocalhost 200。未実行時は理由をPRへ記載 | 未知 |
 
@@ -71,3 +71,4 @@ Then: 非ゼロ終了し、systemctl stop、kill、WSL全体停止を実行し�
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版 | Issue #53の安全なpreview運用を定義 | T-53-1〜3 |
+| 2026-08-09 | 起動後失敗のcleanupを追加 | state/unit/PIDの残留で次回startが永久拒否される問題を防止 | T-53-1 |

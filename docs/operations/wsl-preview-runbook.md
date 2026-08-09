@@ -26,6 +26,8 @@ if (-not (Test-Utf8Preflight)) { throw 'UTF-8 preflight failed' }
 
 Viteは5174、APIは8000でhidden wsl.exeからtransient user unitとして開始する。開始後60秒待機し、Windowsから`http://localhost:5174/`と`http://localhost:8000/health`が200であることを確認する。
 
+起動後にAPI失敗またはsmoke失敗が起きた場合、scriptはそのrunが起動したunit、記録済みhost PID、stateだけをcleanupして非ゼロ終了する。既存stateやport所有者には触れない。
+
 ## 状態
 
 ```powershell
