@@ -31,4 +31,15 @@ describe('sidebar portfolio repository', () => {
     const repository = createSidebarPortfolioRepository({ storage: { getItem: () => '{', setItem: () => {} } });
     await expect(repository.load()).resolves.toEqual({ home: [], project: [], knowledge: [] });
   });
+
+  it('serializes concurrent mirror and adoption writes without dropping either item', async () => {
+    const repository = createSidebarPortfolioRepository({ storage: createStorage() });
+    await Promise.all([
+      repository.ensure('knowledge', { id: 'asset:1', title: '資料' }),
+      repository.upsert('project', { id: 'project:1', title: '採用した事業' }),
+    ]);
+    const saved = await repository.load();
+    expect(saved.knowledge).toEqual([expect.objectContaining({ id: 'asset:1' })]);
+    expect(saved.project).toEqual([expect.objectContaining({ id: 'project:1' })]);
+  });
 });

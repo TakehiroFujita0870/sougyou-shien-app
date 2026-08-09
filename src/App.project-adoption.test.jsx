@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { App } from './App';
 import { createAdoptedProjectRepository } from './components/adoptedProjectRepository';
+import { createSidebarPortfolioRepository } from './components/sidebarPortfolioRepository';
 import { EMPTY_PROFILE } from './components/UserProfileInterview';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -33,7 +34,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-async function mount({ projectRepository }) {
+async function mount({ projectRepository, portfolioRepository, ensureHome = true }) {
   let homeState = { messages: [], proposals: [], input: '' };
   const homeConversationRepository = {
     load: async () => homeState,
@@ -42,9 +43,9 @@ async function mount({ projectRepository }) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => { root.render(<App adoptedProjectRepository={projectRepository} homeConversationRepository={homeConversationRepository} profileRepository={completedProfileRepository()} />); });
+  await act(async () => { root.render(<App adoptedProjectRepository={projectRepository} sidebarPortfolioRepository={portfolioRepository} homeConversationRepository={homeConversationRepository} profileRepository={completedProfileRepository()} />); });
   await act(async () => Promise.resolve());
-  if (!container.querySelector('#home-supervisor-message')) {
+  if (ensureHome && !container.querySelector('#home-supervisor-message')) {
     await act(async () => [...container.querySelectorAll('.workspace-shell__nav-item')].find((item) => item.textContent === 'ホーム').click());
   }
   return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
@@ -62,6 +63,25 @@ afterEach(() => {
 });
 
 describe('adopted project hydration', () => {
+  it.each([
+    ['home', 'home:default', 'ホーム'],
+    ['project', adoptedCandidate.id, 'プロジェクト'],
+  ])('does not render an editable archived %s surface after an F5-equivalent mount', async (surface, id) => {
+    const storage = createStorage();
+    const portfolioRepository = createSidebarPortfolioRepository({ storage });
+    await portfolioRepository.upsert(surface, { id, title: 'アーカイブ済み' });
+    await portfolioRepository.archive(surface, id);
+    if (surface === 'project') await createAdoptedProjectRepository({ storage }).saveAdopted(adoptedCandidate);
+    globalThis.sessionStorage.setItem('kadode:selected-surface', surface);
+
+    const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage }), portfolioRepository, ensureHome: false });
+    await act(async () => Promise.resolve());
+    expect(view.container.querySelector('#home-supervisor-message')).toBeNull();
+    expect(view.container.querySelector('#project-surface-heading')).toBeNull();
+    expect(view.container.textContent).toContain('アーカイブ履歴');
+    await view.unmount();
+  });
+
   it('restores an adopted Home candidate in Project after a fresh App mount', async () => {
     const storage = createStorage();
     const firstRepository = createAdoptedProjectRepository({ storage });

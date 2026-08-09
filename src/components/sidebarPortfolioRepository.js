@@ -15,22 +15,39 @@ export function createSidebarPortfolioRepository({ ownerId = 'local-owner', spac
   async function load() {
     try { return normalize(JSON.parse(storage.getItem(key) || '{}')); } catch { return { ...empty }; }
   }
+  let mutationQueue = Promise.resolve();
+  function commit(mutator) {
+    const operation = mutationQueue.then(async () => {
+      const current = await load();
+      const next = normalize(mutator(current));
+      storage.setItem(key, JSON.stringify(next));
+      return next;
+    });
+    mutationQueue = operation.catch(() => undefined);
+    return operation;
+  }
   async function save(value) {
-    const next = normalize(value);
-    storage.setItem(key, JSON.stringify(next));
-    return next;
+    return commit(() => value);
   }
   async function upsert(type, entry) {
     if (!types.has(type)) throw new Error('Unknown portfolio type');
-    const current = await load();
-    const existing = current[type].find((item) => item.id === entry.id);
-    const nextEntry = { ...existing, ...entry, archived: false, updatedAt: Number(entry.updatedAt) || Date.now() };
-    return save({ ...current, [type]: [nextEntry, ...current[type].filter((item) => item.id !== entry.id)] });
+    return commit((current) => {
+      const existing = current[type].find((item) => item.id === entry.id);
+      const nextEntry = { ...existing, ...entry, archived: false, updatedAt: Number(entry.updatedAt) || Date.now() };
+      return { ...current, [type]: [nextEntry, ...current[type].filter((item) => item.id !== entry.id)] };
+    });
+  }
+  async function ensure(type, entry) {
+    if (!types.has(type)) throw new Error('Unknown portfolio type');
+    return commit((current) => {
+      const existing = current[type].find((item) => item.id === entry.id);
+      const nextEntry = { ...existing, ...entry, archived: existing?.archived ?? false, updatedAt: Number(entry.updatedAt) || Date.now() };
+      return { ...current, [type]: [nextEntry, ...current[type].filter((item) => item.id !== entry.id)] };
+    });
   }
   async function archive(type, id) {
     if (!types.has(type)) throw new Error('Unknown portfolio type');
-    const current = await load();
-    return save({ ...current, [type]: current[type].map((item) => item.id === id ? { ...item, archived: true, archivedAt: Date.now() } : item) });
+    return commit((current) => ({ ...current, [type]: current[type].map((item) => item.id === id ? { ...item, archived: true, archivedAt: Date.now() } : item) }));
   }
-  return { load, save, upsert, archive };
+  return { load, save, upsert, ensure, archive };
 }

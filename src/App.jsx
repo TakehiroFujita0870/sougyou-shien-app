@@ -50,7 +50,7 @@ function ProfileLoadFailure({ onRetry }) {
   );
 }
 
-export function App({ profileRepository, adoptedProjectRepository, homeConversationRepository }) {
+export function App({ profileRepository, adoptedProjectRepository, homeConversationRepository, sidebarPortfolioRepository }) {
   const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
@@ -68,34 +68,49 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
   const portfolioRepositoryRef = useRef(null);
-  if (!portfolioRepositoryRef.current) portfolioRepositoryRef.current = createSidebarPortfolioRepository();
+  if (!portfolioRepositoryRef.current) portfolioRepositoryRef.current = sidebarPortfolioRepository ?? createSidebarPortfolioRepository();
   const homeConversationRepositoryRef = useRef(null);
   if (!homeConversationRepositoryRef.current) homeConversationRepositoryRef.current = homeConversationRepository ?? createHomeConversationRepository();
   const [portfolio, setPortfolio] = useState({ home: [], project: [], knowledge: [] });
+  const [portfolioHydrated, setPortfolioHydrated] = useState(false);
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
   useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
   useEffect(() => { homeModelRepositoryRef.current.load().then(setHomeModelKey); }, []);
-  useEffect(() => { portfolioRepositoryRef.current.load().then(setPortfolio); }, []);
+  useEffect(() => {
+    let active = true;
+    portfolioRepositoryRef.current.load().then((value) => {
+      if (!active) return;
+      setPortfolio(value);
+      setPortfolioHydrated(true);
+    }).catch(() => { if (active) setPortfolioHydrated(true); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     let active = true;
     async function mirrorPersistedContext() {
-      const next = await portfolioRepositoryRef.current.load();
       const home = await homeConversationRepositoryRef.current.load();
       const firstUserMessage = home.messages?.find((entry) => entry.role === 'user')?.content?.trim();
       if (firstUserMessage) {
-        next.home = [{ id: 'home:default', title: firstUserMessage.slice(0, 80), updatedAt: Date.now(), archived: next.home.some((item) => item.id === 'home:default' && item.archived) }, ...next.home.filter((item) => item.id !== 'home:default')];
+        const savedHome = await portfolioRepositoryRef.current.ensure('home', { id: 'home:default', title: firstUserMessage.slice(0, 80), updatedAt: Date.now() });
+        if (active) setPortfolio(savedHome);
       }
       if (knowledgeDemoFixture?.asset) {
         const asset = knowledgeDemoFixture.asset;
-        next.knowledge = [{ id: asset.id, title: asset.name, updatedAt: Date.now(), archived: false }, ...next.knowledge.filter((item) => item.id !== asset.id)];
+        const savedKnowledge = await portfolioRepositoryRef.current.ensure('knowledge', { id: asset.id, title: asset.name, updatedAt: Date.now() });
+        if (active) setPortfolio(savedKnowledge);
       }
-      const saved = await portfolioRepositoryRef.current.save(next);
-      if (active) setPortfolio(saved);
     }
     void mirrorPersistedContext();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!portfolioHydrated) return;
+    const archivedHome = activeWorkspace === 'home' && portfolio.home.some((item) => item.id === 'home:default' && item.archived);
+    const archivedProject = activeWorkspace === 'project' && portfolio.project.some((item) => item.archived);
+    if (archivedHome || archivedProject) setActiveWorkspace('knowledge');
+  }, [activeWorkspace, portfolio, portfolioHydrated]);
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
@@ -163,6 +178,9 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   }, [adoptedProjectHydration.phase, adoptedProjectHydration.replaceReady, adoptedProjectHydration.value]);
 
   function workspaceContent() {
+    const archivedHome = portfolio.home.some((item) => item.id === 'home:default' && item.archived);
+    const archivedProject = portfolio.project.some((item) => item.archived);
+    if (portfolioHydrated && ((activeWorkspace === 'home' && archivedHome) || (activeWorkspace === 'project' && archivedProject))) return <KnowledgeSurface fixture={knowledgeDemoFixture} archiveHistory={[...portfolio.home, ...portfolio.project].filter((item) => item.archived)} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
     if (activeWorkspace === 'home') return <IdeaWorkspace repository={homeConversationRepositoryRef.current} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
     if (activeWorkspace === 'project') {
       if (adoptedProjectHydration.phase === 'loading') return <section aria-live="polite" className="max-w-3xl py-10 text-sm text-[var(--color-text-muted)]">プロジェクトを読み込んでいます…</section>;
