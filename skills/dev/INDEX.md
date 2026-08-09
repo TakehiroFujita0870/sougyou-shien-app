@@ -24,6 +24,7 @@ docs-freshness は全工程で常時適用
 | 「○○をやりたい」を実行可能な計画にする | [planning](planning/SKILL.md) |
 | コードまたは設定を変更する | [implementation](implementation/SKILL.md) |
 | 次工程のtaskへイベントを渡す、または受領確認を閉じる | [handoff-closure](handoff-closure/SKILL.md) |
+| CEO判断が必要な不明点を記録し、自動作業の停止上限を確認する | [ceo-decision-backlog](ceo-decision-backlog/SKILL.md) |
 | テスト、CI、レビュー、デバッグ、リリース、ドキュメント更新 | 対応するスキルを追加後に読む |
 
 未追加のスキルへのリンクは、それぞれのPRで追加する。プロジェクト固有の規約は、このライブラリではなく各プロジェクト側に置く。
