@@ -141,7 +141,10 @@ describe('plan selection acceptance', () => {
     const standard = container.querySelector('input[value="standard"]');
     standard.focus();
     expect(document.activeElement).toBe(standard);
-    await act(() => standard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await act(async () => {
+      standard.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+    });
     await click([...container.querySelectorAll('button')].find((button) => button.textContent === '変更を適用'));
 
     expect(container.querySelector('#model')).toBeNull();
