@@ -12,14 +12,14 @@ function normalizeDocument(value) {
 export function createKnowledgeMetadataRepository({ ownerId, spaceId, storage = globalThis.localStorage } = {}) {
   let documents = [];
   let loadPromise;
-  const write = () => storage?.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify({ schemaVersion: KNOWLEDGE_SCHEMA_VERSION, documents }));
+  const writeDocuments = (nextDocuments) => storage?.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify({ schemaVersion: KNOWLEDGE_SCHEMA_VERSION, documents: nextDocuments }));
   async function load() {
     if (loadPromise) return loadPromise;
     loadPromise = Promise.resolve().then(() => { try { const parsed = JSON.parse(storage?.getItem(KNOWLEDGE_STORAGE_KEY) ?? '{"documents":[]}'); const next = Array.isArray(parsed.documents) ? parsed.documents.map(normalizeDocument).filter(Boolean) : []; documents = next; } catch { /* quarantine corrupt records and retain safe empty state */ } return list(); });
     return loadPromise;
   }
   const list = () => documents.filter((document) => document.ownerId === ownerId && document.spaceId === spaceId && document.state !== 'deleted');
-  async function add(metadata) { const document = normalizeDocument({ ...metadata, ownerId, spaceId }); if (!document) throw new Error('Invalid metadata'); documents = [...documents.filter((item) => item.id !== document.id), document]; write(); return document; }
-  async function remove(id) { const current = documents.find((item) => item.id === id && item.ownerId === ownerId && item.spaceId === spaceId); if (!current) return null; const deleted = { ...current, state: 'deleted', deletedAt: new Date().toISOString() }; documents = documents.map((item) => item.id === id ? deleted : item); write(); return deleted; }
+  async function add(metadata) { const document = normalizeDocument({ ...metadata, ownerId, spaceId }); if (!document) throw new Error('Invalid metadata'); const nextDocuments = [...documents.filter((item) => item.id !== document.id), document]; writeDocuments(nextDocuments); documents = nextDocuments; return document; }
+  async function remove(id) { const current = documents.find((item) => item.id === id && item.ownerId === ownerId && item.spaceId === spaceId); if (!current) return null; const deleted = { ...current, state: 'deleted', deletedAt: new Date().toISOString() }; const nextDocuments = documents.map((item) => item.id === id ? deleted : item); writeDocuments(nextDocuments); documents = nextDocuments; return deleted; }
   return { load, list, add, delete: remove };
 }

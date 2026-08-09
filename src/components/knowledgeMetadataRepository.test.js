@@ -31,4 +31,16 @@ describe('knowledge metadata repository', () => {
     await expect(repository.load()).resolves.toEqual([]);
     await expect(repository.add(doc)).rejects.toThrow('offline');
   });
+
+  it('does not expose unpersisted add or delete mutations after write failure', async () => {
+    let failWrites = false;
+    const store = { getItem: () => null, setItem: () => { if (failWrites) throw new Error('offline'); } };
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    await repository.add(doc);
+    failWrites = true;
+    await expect(repository.add({ ...doc, id: 'doc-2' })).rejects.toThrow('offline');
+    expect(repository.list().map(({ id }) => id)).toEqual(['doc-1']);
+    await expect(repository.delete('doc-1')).rejects.toThrow('offline');
+    expect(repository.list().map(({ id }) => id)).toEqual(['doc-1']);
+  });
 });
