@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { HomeSupervisor } from './components/HomeSupervisor';
-import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
@@ -41,7 +40,8 @@ function HomeConversationSurface() {
   );
 }
 
-function PlaceholderSurface({ name, description }) {
+function PlaceholderSurface({ name, description, project }) {
+  if (name === 'Project' && project) return <section aria-labelledby="project-heading" className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Project</p><h1 id="project-heading" className="mt-2 text-2xl font-semibold tracking-tight">採用したプロジェクト</h1><article className="mt-6 rounded-2xl border border-stone-300 bg-white p-4"><p><strong>事実:</strong> {project.fact}</p><p><strong>推論:</strong> {project.inference}</p><p><strong>状態:</strong> 採用済み</p></article></section>;
   return <section aria-labelledby={`${name.toLowerCase()}-heading`} className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">{name}</p><h1 id={`${name.toLowerCase()}-heading`} className="mt-2 text-2xl font-semibold tracking-tight">{name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{description}</p></section>;
 }
 
@@ -63,6 +63,7 @@ function ProfileLoadFailure({ onRetry }) {
 export function App({ profileRepository }) {
   const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
+  const [adoptedProject, setAdoptedProject] = useState(null);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
   const repositoryRef = useRef(null);
   if (!repositoryRef.current) repositoryRef.current = createLocalPlanRepository();
@@ -119,9 +120,9 @@ export function App({ profileRepository }) {
 
   function workspaceContent() {
     if (activeWorkspace === 'home') return <IdeaWorkspace onProjectAdopt={() => setActiveWorkspace('project')} />;
-    if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" description="プロジェクトの作業面は、次の実装で接続します。" />;
+    if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" project={adoptedProject} description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
-    if (activeWorkspace === 'settings') return <div className="max-w-4xl"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
+    if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace />;
   }
 
