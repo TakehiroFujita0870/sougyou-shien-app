@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { IdeaCandidateWorkspace, approveCandidate, candidateFromConversation, createLocalIdeaUxObserver, findDuplicate, legacyConversationFromIdeaForm, localAssistSuggestion, nextConversationQuestion, saveCandidate } from './IdeaCandidateWorkspace';
+import { IdeaCandidateWorkspace, approveCandidate, candidateFromConversation, createLocalIdeaUxObserver, decideCandidate, findDuplicate, legacyConversationFromIdeaForm, localAssistSuggestion, nextConversationQuestion, saveCandidate } from './IdeaCandidateWorkspace';
 const candidate = { title: '工場ノート', summary: '設備保全を記録', pain: '履歴が探せない' };
 describe('idea candidate repository boundary', () => {
+  it('persists adopt, hold, and reasoned reject decisions without promoting hold/reject', async () => {
+    const repository = { save: async (items) => items };
+    const item = { ...candidate, id: '1' };
+    expect((await decideCandidate(repository, [item], item, 'adopt')).items[0]).toMatchObject({ status: 'adopted', promotedTo: 'project' });
+    expect((await decideCandidate(repository, [item], item, 'hold')).items[0]).toMatchObject({ status: 'held' });
+    expect((await decideCandidate(repository, [item], item, 'reject', '対象顧客が不明')).items[0]).toMatchObject({ status: 'rejected', rejectionReason: '対象顧客が不明' });
+    expect((await decideCandidate(repository, [item], item, 'reject')).error).toContain('理由');
+  });
   it('saves a candidate and detects duplicates', async () => { const repository = { save: async (items) => items }; const result = await saveCandidate(repository, [], candidate); expect(result.items).toHaveLength(1); expect(findDuplicate(result.items, candidate)).toBeTruthy(); });
   it('updates only after approval', async () => { const repository = { save: async (items) => items }; const result = await approveCandidate(repository, [{ ...candidate, id: '1' }], { ...candidate, id: '1', title: '更新案' }); expect(result.items[0].title).toBe('更新案'); });
   it('returns a recoverable save failure', async () => { const result = await saveCandidate({ save: async () => { throw new Error('offline'); } }, [], candidate); expect(result.error).toContain('保存'); });
