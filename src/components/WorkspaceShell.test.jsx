@@ -37,7 +37,7 @@ describe('WorkspaceShell', () => {
     root = createRoot(container);
     renderWithFreshAdapter(mobile);
     await act(async () => Promise.resolve());
-    expect(container.textContent).toContain('あなたの情報');
+    expect(container.textContent).toContain('アカウント');
     act(() => { root.unmount(); container.remove(); });
   });
 
@@ -47,7 +47,7 @@ describe('WorkspaceShell', () => {
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
     expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
-    expect(container.textContent).toContain('あなたの情報');
+    expect(container.textContent).toContain('アカウント');
     expect(container.textContent).toContain('Free');
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
     expect(container.querySelector('[role="menu"]')).toBeNull();

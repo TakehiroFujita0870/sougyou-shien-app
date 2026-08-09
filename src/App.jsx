@@ -84,7 +84,7 @@ export function App({ profileRepository }) {
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
-      setProfileOpen(!profileDialogDismissedRef.current && profileHydration.value?.status !== 'completed');
+      setProfileOpen(false);
     }
   }, [profileHydration.phase, profileHydration.value]);
 
@@ -136,7 +136,7 @@ export function App({ profileRepository }) {
   return (
     <main className="kadode-shell">
       <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
-        <div className="px-5 pb-5 pt-12 sm:py-7">{workspaceContent()}</div>
+        <div className="px-5 pb-5 pt-12 sm:py-7"><style>{`[aria-label="アイデアストック"] > div:first-child > p:first-of-type,[aria-label="アイデアストック"] > div:first-child > h2:first-of-type{display:none}`}</style>{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>

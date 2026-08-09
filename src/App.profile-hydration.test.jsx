@@ -42,7 +42,7 @@ describe('profile hydration at the application boundary', () => {
 
     expect(repository.load).toHaveBeenCalledTimes(1);
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('あなたの情報');
+    expect(view.container.textContent).toContain('アカウント');
 
     await act(async () => view.container.querySelector('.workspace-shell__account-copy > button').click());
     await act(async () => [...view.container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報').click());
@@ -75,7 +75,7 @@ describe('profile hydration at the application boundary', () => {
     await act(async () => Array.from(view.container.querySelectorAll('button')).find((button) => button.textContent === '再試行').click());
     expect(repository.load).toHaveBeenCalledTimes(2);
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('あなたの情報');
+    expect(view.container.textContent).toContain('アカウント');
     await view.unmount();
   });
 
@@ -92,7 +92,7 @@ describe('profile hydration at the application boundary', () => {
 
     await act(async () => second.resolve(completed));
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('あなたの情報');
+    expect(view.container.textContent).toContain('アカウント');
     await view.unmount();
   });
 
