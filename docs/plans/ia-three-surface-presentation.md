@@ -8,7 +8,7 @@
 
 ゴール: 実装担当が後続のsurface変更を同じ情報階層で検討できるStoryと計画文書を用意する。
 
-成功指標: Empty、Populated、Loading、Error、390px、DesktopのStoryを閲覧でき、first viewportのprimary actionまたはcomposer、3 item nav、context label、quiet local/fake badge、禁止する密度パターンを観測できる。
+成功指標: Empty、Populated、Loading、Error、390px、DesktopのStoryを閲覧でき、first viewportに同一composer、3 item nav、context label、quiet local/fake badge、禁止する密度パターンを観測できる。
 
 ## ユーザーストーリーと受け入れ条件
 
@@ -30,7 +30,7 @@ Given: Empty、Populated、Loading、Errorの各Storyを開いている。
 
 When: first viewportを確認する。
 
-Then: 状態に応じたprimary actionまたはcomposerが表示され、巨大heading、重複CTA、空カード、常設開発警告は表示されない。
+Then: 全状態で同一composerが表示され、巨大heading、重複CTA、空カード、常設開発警告は表示されない。
 
 ### US-3: quiet chrome and context
 
@@ -40,7 +40,17 @@ Given: PopulatedまたはErrorのpresentation Storyを開いている。
 
 When: headerとsurfaceの補助情報を確認する。
 
-Then: compact breadcrumb、context label、local/fake badgeが過度な装飾なしに表示され、エラー状態は次の行動を示す。
+Then: compact breadcrumb、context label、local/fake badge、composerのlabelが過度な装飾なしに表示され、エラー状態はcomposerを通じた次の行動を示す。
+
+### US-4: 常設composerの操作契約
+
+As a keyboardまたはスクリーンリーダー利用者, I want 全surface状態で名前付きcomposerを操作したい, so that 独立した別workflowへ移動せずにAIへ入力できる。
+
+Given: Empty、Populated、Loading、Error、390px、DesktopのいずれかのStoryを開いている。
+
+When: composerへTab移動し、textareaへ入力する。
+
+Then: screen-reader label、44px以上の送信button、`Enterで送信、Shift+Enterで改行`の説明が表示され、composerが唯一の入力導線である。
 
 ## 質問リスト
 
@@ -61,8 +71,8 @@ Then: compact breadcrumb、context label、local/fake badgeが過度な装飾な
 | --- | --- | --- | --- |
 | T-IA-02 | 3 item nav、compact breadcrumb/context label、quiet local/fake badgeのinventory | 検査: 本文のUS-1とStoryのContractPreviewに同じ要素がある | 既知 |
 | T-IA-07 | Empty、Populated、Loading、Error、390px、Desktopのpresentation Story | 検査: `WorkspaceShell.presentation.stories.jsx`に6つのexportとviewport設定がある | 既知 |
-| T-IA-08 | first viewport密度の禁止事項 | 検査: Storyにprimary action/composerがあり、禁止要素のテキストがない | 既知 |
-| T-IA-09 | 最終検査 | 検査: `npm run build-storybook`、`git diff --check`、UTF-8 read-backが成功 | 既知 |
+| T-IA-08 | first viewport密度と常設composer | 検査: 6つのStoryに同一composer、label、44px送信button、Enter/Shift+Enter説明があり、独立buttonがない | 既知 |
+| T-IA-09 | 最終検査 | 検査: focused Story play assertion、`npm run test`、`npm run build-storybook`、`git diff --check`、UTF-8 read-backが成功 | 既知 |
 
 ## ADR
 
@@ -76,3 +86,4 @@ Then: compact breadcrumb、context label、local/fake badgeが過度な装飾な
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-08-09 | 初版作成 | #112提供契約をpresentation-onlyのinventoryへ分解 | T-IA-02、T-IA-07、T-IA-08、T-IA-09 |
+| 2026-08-09 | composer常設契約を追加 | Empty/Errorの独立buttonがAI-firstの単一入力導線と衝突したため | T-IA-08、T-IA-09 |
