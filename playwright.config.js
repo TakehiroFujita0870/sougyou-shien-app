@@ -8,14 +8,12 @@ export default defineConfig({
   testDir: './tests/e2e',
   outputDir: './test-results',
   reporter: process.env.CI ? 'dot' : [['list'], ['html', { open: 'never' }]],
-  webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4176',
-    url: 'http://127.0.0.1:4176',
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  webServer: [
+    { command: 'npm run dev -- --host 127.0.0.1 --port 4177', url: 'http://127.0.0.1:4177', reuseExistingServer: false, timeout: 120_000 },
+    { command: 'npm run storybook -- --ci --host 127.0.0.1 --port 6007', url: 'http://127.0.0.1:6007', reuseExistingServer: false, timeout: 120_000 },
+  ],
   use: {
-    baseURL: 'http://127.0.0.1:4176',
+    baseURL: 'http://127.0.0.1:4177',
     browserName: 'chromium',
     ...(existsSync(systemChromium) ? { launchOptions: { executablePath: systemChromium } } : {}),
     headless: true,
