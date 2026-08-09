@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
+import { HomeSupervisor } from './components/HomeSupervisor';
 import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
@@ -47,16 +47,7 @@ function PlaceholderSurface({ name, description }) {
 }
 
 function IdeaWorkspace() {
-  return (
-    <div className="max-w-3xl">
-      <section aria-labelledby="idea-heading">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
-        <h1 id="idea-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">着想や経験を話しながら整理し、確認してから候補として保存します。</p>
-        <div className="mt-5"><IdeaCandidateWorkspace /></div>
-      </section>
-    </div>
-  );
+  return <div className="max-w-4xl"><HomeSupervisor /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
