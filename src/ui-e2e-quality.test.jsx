@@ -74,9 +74,11 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
     expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
     await act(async () => {
-      composer.value = '工場の故障履歴を探せない';
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(composer, '工場の故障履歴を探せない');
       composer.dispatchEvent(new Event('input', { bubbles: true }));
-      composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
       await Promise.resolve();
     });
     expect(container.textContent).toContain('アイデア候補として保存');

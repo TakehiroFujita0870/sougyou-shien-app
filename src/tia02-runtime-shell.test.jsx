@@ -19,7 +19,7 @@ describe('T-IA-02-R runtime shell contract', () => {
     const html = renderToStaticMarkup(<App />);
 
     expect(html).toContain('Kadode AI');
-    expect(html).toContain('AIへのメッセージ');
+    expect(html).toContain('発言');
     expect(html).toContain('Enterで送信、Shift+Enterで改行');
     expect(html).toContain('local / fake モード');
     expect(html).toContain('rounded-full border border-stone-300');

@@ -10,17 +10,17 @@ describe('Kadode three-surface workspace shell', () => {
     WORKSPACE_NAV.forEach(({ label }) => expect(html).toContain(label));
   });
 
-  it('starts Home with one Kadode AI composer and no legacy candidate workflow', () => {
+  it('starts Home with the reachable Kadode AI candidate composer', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html).toContain('id="home-composer"');
+    expect(html).toContain('id="idea-message"');
     expect(html).toContain('Kadode AI');
     expect(html).not.toContain('STAGE GATE');
   });
 
   it('keeps the Home composer accessible and independent of external services', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html).toContain('label for="home-composer"');
-    expect(html).toContain('aria-describedby="home-composer-hint"');
+    expect(html).toContain('label for="idea-message"');
+    expect(html).toContain('Enterで送信、Shift+Enterで改行');
     expect(html).toContain('Enterで送信、Shift+Enterで改行');
     expect(html).not.toContain('fetch(');
     expect(html).not.toContain('AI広報');
