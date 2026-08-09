@@ -120,7 +120,6 @@ textarea {
 .kadode-dialog-complete { background: var(--color-sakura-petal); }
 .kadode-dialog-submit { background: var(--color-action); color: var(--color-action-text); }
 .kadode-dialog-submit:hover { background: var(--color-action-hover); }
-.kadode-auth-status { border-color: var(--color-border); background: var(--color-surface-raised); }
 
 .kadode-shell :is(button, input, textarea, select):focus-visible {
   outline: 3px solid var(--color-focus);
