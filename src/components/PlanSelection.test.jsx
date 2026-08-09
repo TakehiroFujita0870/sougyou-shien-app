@@ -37,7 +37,8 @@ describe('plan selection acceptance', () => {
   it('has no axe violations in the settings plan chooser', async () => {
     const { container, unmount } = await mount(<App />);
 
-    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
+    await click(container.querySelector('.workspace-shell__account-copy > button'));
+    await click([...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === '設定'));
     const results = await axe.run(container);
     expect(results.violations).toEqual([]);
     await unmount();
@@ -46,7 +47,8 @@ describe('plan selection acceptance', () => {
   it('compares Free and Standard, shows readable Pro content, and requires confirmation before applying a proposed change', async () => {
     const { container, unmount } = await mount(<App />);
 
-    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
+    await click(container.querySelector('.workspace-shell__account-copy > button'));
+    await click([...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === '設定'));
     expect(container.textContent).toContain('軽量モデル');
     expect(container.textContent).toContain('Thinkingなし');
     expect(container.textContent).toContain('月額980円');

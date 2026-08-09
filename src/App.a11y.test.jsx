@@ -62,13 +62,12 @@ describe('App keyboard and accessibility quality', () => {
 
     const dialog = container.querySelector('[role="dialog"]');
     const panel = dialog.querySelector('section');
-    const header = container.querySelector('header > div');
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
 
     expect(dialog.className).toContain('grid-cols-[minmax(0,1fr)]');
     expect(panel.className).toContain('min-w-0');
     expect(panel.className).toContain('max-w-full');
-    expect(header.className).toContain('min-w-0');
+    expect(container.querySelector('header')).toBeNull();
     expect(navigation.className).toContain('min-w-0');
     expect(container.querySelector('main').className).toContain('kadode-shell');
     await unmount();
