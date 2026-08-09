@@ -74,6 +74,21 @@ describe('adopted project repository', () => {
     expect(storage.getItem(ADOPTED_PROJECT_STORAGE_KEY)).toBe(futureValue);
   });
 
+  it('quarantines the whole valid envelope when any individual record is malformed', async () => {
+    const mixedValue = JSON.stringify({ schemaVersion: 1, projects: [
+      { ...candidate, ownerId: 'local-owner', spaceId: 'local-space' },
+      { id: 'malformed', ownerId: 'local-owner', spaceId: 'local-space', title: '', fact: 'fact', inference: 'inference', status: 'adopted' },
+    ] });
+    const storage = storageWith(mixedValue);
+    const repository = createAdoptedProjectRepository({ storage });
+
+    await expect(repository.load()).resolves.toBeNull();
+    expect(repository.list()).toEqual([]);
+    await expect(repository.saveAdopted(candidate)).rejects.toThrow(/recovery/);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.getItem(ADOPTED_PROJECT_STORAGE_KEY)).toBe(mixedValue);
+  });
+
   it('loads browser storage only once for a stable repository instance', async () => {
     const storage = storageWith();
     const repository = createAdoptedProjectRepository({ storage });

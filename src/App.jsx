@@ -34,8 +34,8 @@ function PlaceholderSurface({ name, description, project }) {
   return <section aria-labelledby={`${name.toLowerCase()}-heading`} className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">{name}</p><h1 id={`${name.toLowerCase()}-heading`} className="mt-2 text-2xl font-semibold tracking-tight">{name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{description}</p></section>;
 }
 
-function IdeaWorkspace({ onProjectAdopt, modelKey, models, onModelChange }) {
-  return <div className="max-w-6xl"><HomeSupervisor onProjectAdopt={onProjectAdopt} modelKey={modelKey} models={models} onModelChange={onModelChange} /></div>;
+function IdeaWorkspace({ repository, onProjectAdopt, modelKey, models, onModelChange }) {
+  return <div className="max-w-6xl"><HomeSupervisor repository={repository} onProjectAdopt={onProjectAdopt} modelKey={modelKey} models={models} onModelChange={onModelChange} /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
@@ -49,7 +49,7 @@ function ProfileLoadFailure({ onRetry }) {
   );
 }
 
-export function App({ profileRepository, adoptedProjectRepository }) {
+export function App({ profileRepository, adoptedProjectRepository, homeConversationRepository }) {
   const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
@@ -136,14 +136,14 @@ export function App({ profileRepository, adoptedProjectRepository }) {
   }, [adoptedProjectHydration.phase, adoptedProjectHydration.replaceReady, adoptedProjectHydration.value]);
 
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace repository={homeConversationRepository} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
     if (activeWorkspace === 'project') {
       if (adoptedProjectHydration.phase === 'loading') return <section aria-live="polite" className="max-w-3xl py-10 text-sm text-[var(--color-text-muted)]">プロジェクトを読み込んでいます…</section>;
       return <ProjectSurface adoptedProject={adoptedProjectHydration.value} />;
     }
     if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeFixture} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onAddAsset={() => setKnowledgeFixture(knowledgeDemoFixture)} onRemoveAsset={() => setKnowledgeFixture((current) => ({ ...current, asset: { ...current.asset, state: 'deleted' } }))} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
-    return <IdeaWorkspace modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
+    return <IdeaWorkspace repository={homeConversationRepository} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }
 
   return (

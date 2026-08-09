@@ -45,7 +45,13 @@ export function createAdoptedProjectRepository({ ownerId = 'local-owner', spaceI
           records = [];
           return current();
         }
-        records = parsed.projects.map(normalizeAdoptedProject).filter(Boolean);
+        const normalized = parsed.projects.map(normalizeAdoptedProject);
+        if (normalized.some((record) => record === null)) {
+          writeBlocked = true;
+          records = [];
+          return current();
+        }
+        records = normalized;
       } catch {
         // A corrupted value must never trigger a replacement write during hydration.
         writeBlocked = true;

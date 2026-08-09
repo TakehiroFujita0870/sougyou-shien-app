@@ -27,12 +27,26 @@ function completedProfileRepository() {
   return { load: async () => ({ values: EMPTY_PROFILE, step: 5, status: 'completed', error: '' }), save: async (value) => value };
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
 async function mount({ projectRepository }) {
+  let homeState = { messages: [], proposals: [], input: '' };
+  const homeConversationRepository = {
+    load: async () => homeState,
+    save: async (value) => { homeState = value; return value; },
+  };
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => { root.render(<App adoptedProjectRepository={projectRepository} profileRepository={completedProfileRepository()} />); });
+  await act(async () => { root.render(<App adoptedProjectRepository={projectRepository} homeConversationRepository={homeConversationRepository} profileRepository={completedProfileRepository()} />); });
   await act(async () => Promise.resolve());
+  if (!container.querySelector('#home-supervisor-message')) {
+    await act(async () => [...container.querySelectorAll('.workspace-shell__nav-item')].find((item) => item.textContent === 'Home').click());
+  }
   return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
 }
 
@@ -41,7 +55,11 @@ function selectProject(container) {
   button.click();
 }
 
-afterEach(() => document.body.replaceChildren());
+afterEach(() => {
+  document.body.replaceChildren();
+  if (typeof globalThis.localStorage?.clear === 'function') globalThis.localStorage.clear();
+  if (typeof globalThis.sessionStorage?.clear === 'function') globalThis.sessionStorage.clear();
+});
 
 describe('adopted project hydration', () => {
   it('restores an adopted Home candidate in Project after a fresh App mount', async () => {
@@ -61,5 +79,34 @@ describe('adopted project hydration', () => {
     expect(reloaded.container.textContent).toContain(adoptedCandidate.title);
     expect(reloaded.container.textContent).toContain(adoptedCandidate.reason);
     await reloaded.unmount();
+  });
+
+  it('keeps a newly adopted project when the initial project load resolves later', async () => {
+    const pendingLoad = deferred();
+    const projectRepository = {
+      load: () => pendingLoad.promise,
+      saveAdopted: async (candidate) => ({ ...candidate, status: 'adopted' }),
+    };
+    const view = await mount({ projectRepository });
+    const composer = view.container.querySelector('#home-supervisor-message');
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(composer, '遅延読込より新しい採用プロジェクト');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      [...view.container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用').click();
+      await Promise.resolve();
+    });
+
+    expect(view.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(view.container.querySelector('#project-surface-heading').textContent).toBe('遅延読込より新しい採用プロジェクト');
+
+    await act(async () => pendingLoad.resolve(null));
+    expect(view.container.querySelector('#project-surface-heading').textContent).toBe('遅延読込より新しい採用プロジェクト');
+    await view.unmount();
   });
 });
