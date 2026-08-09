@@ -9,6 +9,16 @@ import { createKnowledgeMetadataRepository } from './knowledgeMetadataRepository
 import { createKnowledgeConversationRepository, proposeKnowledgeEntry, respondToKnowledge } from './knowledgeConversationRepository';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+// Browser E2E uses this narrowly-scoped switch to exercise the component's
+// write-recovery path without replacing the storage object the repository uses.
+function shouldInjectKnowledgeWriteFailure() {
+  try {
+    return globalThis.sessionStorage?.getItem('kadode:e2e:knowledge-write-failure') === '1';
+  } catch {
+    return false;
+  }
+}
 const categoryLabel = { all: 'すべて', profile: 'プロフィール', decision: '意思決定', conversation: '過去の会話', file: 'ファイル', note: 'メモ' };
 const stateLabel = { metadata_only: 'メタデータのみ', processing: '処理中', searchable: '検索可能', failed: '確認が必要' };
 
@@ -41,7 +51,7 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
     const archived = archiveHistory.map((entry) => ({ id: `archive:${entry.id}`, category: 'conversation', title: entry.title, content: 'アーカイブ済みの会話またはプロジェクト', createdAt: entry.archivedAt ?? '1970-01-01T00:00:00.000Z', sourceType: 'unknown', confidence: 'unknown', unknowns: [] }));
     return [...state.entries, ...profileEntry, ...decision, ...fixtureFile, ...files, ...conversations, ...archived].map((entry) => ({ sourceType: 'unknown', confidence: 'unknown', unknowns: [], updatedAt: entry.createdAt, projectId: '', evaluationView: '', ...entry })).filter((entry) => (category === 'all' || entry.category === category) && `${entry.title} ${entry.content} ${entry.sourceType} ${entry.unknowns.join(' ')}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [archiveHistory, category, documents, fixture, profile, query, state]);
-  const save = async (next) => { dirtyRef.current = true; ++loadGenerationRef.current; await conversationRepositoryRef.current.save(next); setState(next); };
+  const save = async (next) => { dirtyRef.current = true; ++loadGenerationRef.current; if (shouldInjectKnowledgeWriteFailure()) throw new Error('Injected Knowledge write failure'); await conversationRepositoryRef.current.save(next); setState(next); };
   function submit() { const value = message.trim(); if (!value) return; setCandidate(proposeKnowledgeEntry(value)); setMessage(''); }
   async function confirmCandidate() { if (!candidate || writePending) return; setWritePending(true); setWriteError(''); try { const createdAt = candidate.createdAt; const next = { ...state, entries: [candidate, ...state.entries], messages: [...state.messages, { role: 'user', content: candidate.content, createdAt }, { role: 'assistant', content: respondToKnowledge(candidate.content, fixture), createdAt }] }; await save(next); onSend(candidate.title); setCandidate(null); setNotice('ナレッジに追加しました。'); } catch { setWriteError('ナレッジを保存できませんでした。もう一度お試しください。'); } finally { setWritePending(false); } }
   async function addFile(event) { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; try { const metadata = createLocalUploadMetadata(file); await repositoryRef.current.add(metadata); setDocuments(repositoryRef.current.list().filter((item) => item.state !== 'deleted')); await onAssetAdded(metadata); setNotice('ファイルのメタデータを追加しました。本文は保存・送信しません。'); } catch (error) { setNotice(error.message); } }

@@ -22,6 +22,15 @@ jobs:
         run: npm run test:storybook-visual
       - name: Record desktop happy-path E2E
         run: npm run test:video
+      - name: Verify recorded WebM
+        run: test -n "$(find test-results -type f -name '*.webm' -size +0c -print -quit)"
+      - name: Upload desktop E2E video
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-desktop-e2e-video
+          path: test-results/**/*.webm
+          if-no-files-found: error
       - name: Verify desktop sidebar portfolio E2E
         run: npx playwright test tests/e2e/sidebar-portfolio.spec.js
       - name: Upload desktop sidebar screenshot
@@ -55,17 +64,6 @@ jobs:
         run: npx playwright test tests/e2e/pdf-export.spec.js
       - name: Verify composer layout at desktop widths
         run: npx playwright test tests/e2e/composer-layout.spec.js
-      - name: Verify Knowledge write failure recovery
-        run: npx playwright test tests/e2e/knowledge-write-failure.spec.js
-      - name: Verify recorded WebM
-        run: test -n "$(find test-results -type f -name '*.webm' -size +0c -print -quit)"
-      - name: Upload desktop E2E video
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: kadode-desktop-e2e-video
-          path: test-results/**/*.webm
-          if-no-files-found: error
       - name: Upload composer layout screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -94,6 +92,8 @@ jobs:
           name: kadode-home-hydration-retry-1440
           path: test-results/home-hydration-retry*-1440x900.png
           if-no-files-found: error
+      - name: Verify Knowledge write failure recovery
+        run: npx playwright test tests/e2e/knowledge-write-failure.spec.js
       - name: Upload Knowledge write failure evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
