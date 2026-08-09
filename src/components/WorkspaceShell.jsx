@@ -22,7 +22,7 @@ function NavItems({ activePage, onSelect }) {
   ));
 }
 
-export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive, onOpenPortfolioItem, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
+export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolioError = '', onArchive, onOpenPortfolioItem, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const [allOpen, setAllOpen] = useState(null);
   const accountTriggerRef = useRef(null);
@@ -50,6 +50,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, onArchive
       <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" /><span>Kadode</span></div>
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
+        {portfolioError && <p role="alert" className="mx-3 rounded-lg bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{portfolioError}</p>}
         <div className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="最近の項目">
           {SHELL_NAV.map((item) => {
             const entries = (portfolio[item.id] ?? []).filter((entry) => !entry.archived);

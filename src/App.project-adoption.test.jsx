@@ -63,6 +63,36 @@ afterEach(() => {
 });
 
 describe('adopted project hydration', () => {
+  it('mirrors a sent Home conversation into the sidebar immediately and reopens it', async () => {
+    const portfolioRepository = createSidebarPortfolioRepository({ storage: createStorage() });
+    const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage: createStorage() }), portfolioRepository });
+    const composer = view.container.querySelector('#home-supervisor-message');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(composer, '地域の小さな工場の受注管理を助けたい');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    const recent = [...view.container.querySelectorAll('[aria-label="最近の項目"] button')].find((button) => button.textContent === '地域の小さな工場の受注管理を助けたい');
+    expect(recent).toBeTruthy();
+    await act(async () => recent.click());
+    expect(view.container.querySelector('#home-supervisor-message')).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('keeps an item and the current surface when archive persistence fails', async () => {
+    const portfolio = { home: [{ id: 'home:default', title: '保存済みの会話', archived: false, updatedAt: 1 }], project: [], knowledge: [] };
+    const portfolioRepository = { load: async () => portfolio, ensure: async () => portfolio, archive: async () => { throw new Error('offline'); } };
+    const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage: createStorage() }), portfolioRepository });
+    const archiveButton = view.container.querySelector('[aria-label="保存済みの会話をアーカイブ"]');
+    await act(async () => { archiveButton.click(); await Promise.resolve(); });
+    expect(view.container.textContent).toContain('保存済みの会話');
+    expect(view.container.querySelector('[role="alert"]').textContent).toContain('アーカイブできませんでした');
+    expect(view.container.querySelector('#home-supervisor-message')).toBeTruthy();
+    await view.unmount();
+  });
+
   it.each([
     ['home', 'home:default', 'ホーム'],
     ['project', adoptedCandidate.id, 'プロジェクト'],
