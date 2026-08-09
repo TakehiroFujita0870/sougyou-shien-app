@@ -46,7 +46,7 @@ Then: 各Storyでnav、composer、状態に応じた会話または候補artifac
 
 | ID | 質問 | 決定者 | 期限 |
 | --- | --- | --- | --- |
-| Q-1 | Homeの既存candidate workflowを変更せずにfirst viewportへ表示できるか | プロダクトUI・デザインシステム部 | 実装前のコード調査 | 
+| Q-1 | Homeの既存candidate workflowを変更せずにfirst viewportへ表示できるか | プロダクトUI・デザインシステム部 | 実装前のコード調査 |
 
 ## スコープ外
 
