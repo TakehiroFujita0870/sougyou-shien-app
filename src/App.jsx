@@ -81,7 +81,6 @@ export function App({ profileRepository }) {
   if (!profileRepositoryRef.current) profileRepositoryRef.current = profileRepository ?? createBrowserProfileRepository();
   const profileHydration = useHydratedResource(profileRepositoryRef.current);
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
-  const profileComplete = profileHydration.phase === 'ready' && profileHydration.value?.status === 'completed';
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
 
@@ -151,10 +150,8 @@ export function App({ profileRepository }) {
   return (
     <main className="kadode-shell">
       <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
-        <header className="kadode-header border-b"><div className="flex min-h-12 min-w-0 items-center justify-between gap-4 px-5 py-3"><strong className="shrink-0 text-lg tracking-tight">Kadode</strong><span className="rounded-full border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-600">local / fake モード</span></div></header>
-        <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
+        <div className="px-5 py-5 sm:py-7"><div className="mb-4 flex justify-end"><span className="rounded-full border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-600">local / fake</span></div>{workspaceContent()}</div>
       </WorkspaceShell>
-      {profileHydration.phase === 'ready' && <button type="button" onClick={() => { profileDialogDismissedRef.current = false; setProfileDialogDismissed(false); setProfileOpen(true); }} className="kadode-profile-button fixed bottom-5 right-5 rounded-full px-5 py-3 font-bold shadow-lg">あなたの情報を{profileComplete ? '更新' : '入力'}</button>}
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
   );
