@@ -81,7 +81,7 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(container.textContent).toContain('アイデア候補として保存');
+    expect(container.textContent).toContain('プロジェクトに採用');
     expect([...container.querySelectorAll('button')].some((button) => button.textContent.includes('発言を送信'))).toBe(true);
   });
 });

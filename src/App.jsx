@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { HomeSupervisor } from './components/HomeSupervisor';
-import { IdeaCandidateWorkspace } from './components/IdeaCandidateWorkspace';
 import { ModelSelector } from './components/ModelSelector';
 import { PlanSelection } from './components/PlanSelection';
 import { createLocalPlanRepository } from './components/planSubscriptionRepository';
@@ -47,7 +46,7 @@ function PlaceholderSurface({ name, description }) {
 }
 
 function IdeaWorkspace() {
-  return <div className="max-w-4xl space-y-6"><HomeSupervisor /><IdeaCandidateWorkspace /></div>;
+  return <div className="max-w-4xl"><HomeSupervisor /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
@@ -128,7 +127,7 @@ export function App({ profileRepository }) {
 
   return (
     <main className="kadode-shell">
-      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan} accountContent={<LocalGoogleSignIn />}>
+      <WorkspaceShell activePage={activeWorkspace} onSelect={setActiveWorkspace} currentPlan={subscription.plan}>
         <header className="kadode-header border-b"><div className="flex min-h-12 min-w-0 items-center justify-between gap-4 px-5 py-3"><strong className="shrink-0 text-lg tracking-tight">Kadode</strong></div></header>
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
