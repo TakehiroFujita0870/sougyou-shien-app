@@ -8,6 +8,41 @@ import { createHomeConversationRepository } from './homeConversationRepository';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('Home supervisor', () => {
+  it('keeps the composer unavailable until initial conversation and draft hydration finish', async () => {
+    let resolveConversation; let resolveDraft;
+    const conversation = new Promise((resolve) => { resolveConversation = resolve; });
+    const draft = new Promise((resolve) => { resolveDraft = resolve; });
+    const repository = { load: () => conversation, loadDraft: () => draft, save: vi.fn(async (value) => value), saveDraft: vi.fn(async (value) => value) };
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(<HomeSupervisor repository={repository} />));
+    const input = container.querySelector('#home-supervisor-message');
+    expect(input.disabled).toBe(true); expect(input.form.getAttribute('aria-busy')).toBe('true');
+    await act(async () => input.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(repository.save).not.toHaveBeenCalled();
+    await act(async () => { resolveConversation({ messages: [{ role: 'user', content: '保存済みの会話' }], proposals: [] }); resolveDraft('保存済みの下書き'); await Promise.resolve(); });
+    expect(input.disabled).toBe(false); expect(input.value).toBe('保存済みの下書き'); expect(container.textContent).toContain('保存済みの会話');
+    await act(() => root.unmount()); container.remove();
+  });
+
+  it('ignores an initial hydration that resolves after unmount', async () => {
+    let resolveConversation; const conversation = new Promise((resolve) => { resolveConversation = resolve; }); const onProjectAdopt = vi.fn();
+    const repository = { load: () => conversation, loadDraft: async () => '', save: async (value) => value, saveDraft: async (value) => value };
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(<HomeSupervisor repository={repository} onProjectAdopt={onProjectAdopt} />));
+    await act(() => root.unmount());
+    await act(async () => { resolveConversation({ messages: [], proposals: [{ id: 'late', status: 'adopted' }] }); await Promise.resolve(); });
+    expect(onProjectAdopt).not.toHaveBeenCalled(); container.remove();
+  });
+
+  it('keeps an optimistic turn visible and reports a conversation save rejection', async () => {
+    const repository = { load: async () => ({ messages: [], proposals: [] }), loadDraft: async () => '', saveDraft: async (value) => value, save: vi.fn(async () => { throw new Error('offline'); }) };
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(<HomeSupervisor repository={repository} />)); await act(async () => {});
+    const input = container.querySelector('#home-supervisor-message'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setter.call(input, '保存に失敗する相談'); input.dispatchEvent(new Event('input', { bubbles: true })); input.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await Promise.resolve(); await Promise.resolve(); });
+    expect(container.textContent).toContain('保存に失敗する相談'); expect(container.querySelector('[role="alert"]').textContent).toContain('会話を保存できませんでした');
+    await act(() => root.unmount()); container.remove();
+  });
   it('keeps conversation state when a pending draft write finishes after send', async () => {
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
     let releaseDraft;
