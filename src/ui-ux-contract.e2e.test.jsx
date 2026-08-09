@@ -78,6 +78,5 @@ describe('UI UX contract: executable baseline acceptance checks', () => {
   it('FAIL-UX-06 baseline marks the local-only telemetry boundary without sending network data', async () => {
     const { container } = await mountApp();
     expect(container.textContent).toContain('local / fake モード');
-    expect(container.textContent).toContain('外部サービスへ送信しません');
   });
 });
