@@ -47,11 +47,12 @@ function PlaceholderSurface({ name, description }) {
 
 function IdeaWorkspace() {
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-3xl">
       <section aria-labelledby="idea-heading">
-        <h1 id="idea-heading" className="page-title">Kadode AI</h1>
-        <p className="mt-2 max-w-2xl leading-7 text-stone-700">着想や経験を話しながら整理し、確認してから候補として保存します。</p>
-        <div className="mt-6"><IdeaCandidateWorkspace /></div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
+        <h1 id="idea-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">着想や経験を話しながら整理し、確認してから候補として保存します。</p>
+        <div className="mt-5"><IdeaCandidateWorkspace /></div>
       </section>
     </div>
   );
