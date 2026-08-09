@@ -100,7 +100,7 @@ describe('Issue #62 desktop current-main PII-free user journey', () => {
     await act(async () => { root.unmount(); container.remove(); });
     mounted.shift();
     const restored = await mount();
-    expect(restored.container.querySelector('[aria-current="page"]')?.textContent).toBe('Project');
+    expect(restored.container.querySelector('[aria-current="page"]')?.textContent).toBe('プロジェクト');
     expect(restored.container.querySelector('#project-surface-heading')).toBeTruthy();
     expect(restored.container.querySelectorAll('[data-project-question]')).toHaveLength(5);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -123,7 +123,7 @@ describe('Issue #62 desktop current-main PII-free user journey', () => {
 
   it('opens Knowledge from the same desktop journey with no axe violations', async () => {
     const { container } = await mount();
-    await click(container, 'Knowledge');
+    await click(container, 'ナレッジ');
     expect(container.querySelector('#knowledge-heading')).toBeTruthy();
     expect(container.querySelector('#knowledge-composer')).toBeTruthy();
     expect((await axe.run(container)).violations).toEqual([]);

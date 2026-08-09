@@ -8,9 +8,9 @@ import { SHELL_NAV, WorkspaceShell } from './components/WorkspaceShell';
 describe('T-IA-02-R runtime shell contract', () => {
   it('exposes only Home, Project, and Knowledge at the top level', () => {
     expect(WORKSPACE_NAV).toEqual([
-      { id: 'home', label: 'Home' },
-      { id: 'project', label: 'Project' },
-      { id: 'knowledge', label: 'Knowledge' },
+      { id: 'home', label: 'ホーム' },
+      { id: 'project', label: 'プロジェクト' },
+      { id: 'knowledge', label: 'ナレッジ' },
     ]);
     expect(SHELL_NAV).toEqual(WORKSPACE_NAV);
   });
@@ -39,9 +39,9 @@ describe('T-IA-02-R runtime shell contract', () => {
 
   it('keeps the shell nav accessible with a current page', () => {
     const html = renderToStaticMarkup(<WorkspaceShell activePage="home" onSelect={() => {}}><h1>Home</h1></WorkspaceShell>);
-    expect(html).toContain('Home');
-    expect(html).toContain('Project');
-    expect(html).toContain('Knowledge');
+    expect(html).toContain('ホーム');
+    expect(html).toContain('プロジェクト');
+    expect(html).toContain('ナレッジ');
     expect(html).toContain('aria-current="page"');
   });
 });

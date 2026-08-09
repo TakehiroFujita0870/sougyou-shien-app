@@ -45,13 +45,13 @@ async function mount({ projectRepository }) {
   await act(async () => { root.render(<App adoptedProjectRepository={projectRepository} homeConversationRepository={homeConversationRepository} profileRepository={completedProfileRepository()} />); });
   await act(async () => Promise.resolve());
   if (!container.querySelector('#home-supervisor-message')) {
-    await act(async () => [...container.querySelectorAll('.workspace-shell__nav-item')].find((item) => item.textContent === 'Home').click());
+    await act(async () => [...container.querySelectorAll('.workspace-shell__nav-item')].find((item) => item.textContent === 'ホーム').click());
   }
   return { container, unmount: () => act(() => { root.unmount(); container.remove(); }) };
 }
 
 function selectProject(container) {
-  const button = [...container.querySelectorAll('.workspace-shell__nav-item')].find((item) => item.textContent === 'Project');
+  const button = [...container.querySelectorAll('.workspace-shell__nav-item')].find((item) => item.textContent === 'プロジェクト');
   button.click();
 }
 
@@ -102,7 +102,7 @@ describe('adopted project hydration', () => {
       await Promise.resolve();
     });
 
-    expect(view.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(view.container.querySelector('[aria-current="page"]').textContent).toBe('プロジェクト');
     expect(view.container.querySelector('#project-surface-heading').textContent).toBe('遅延読込より新しい採用プロジェクト');
 
     await act(async () => pendingLoad.resolve(null));

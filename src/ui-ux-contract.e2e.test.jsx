@@ -40,21 +40,21 @@ describe('UI UX contract: executable baseline acceptance checks', () => {
   it('FAIL-UX-01 exposes three-surface navigation and an operable Home composer', async () => {
     const { container } = await mountApp();
     expect(container.querySelector('[aria-label="主要ページ"]')).not.toBeNull();
-    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['Home', 'Project', 'Knowledge']);
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
     expect(container.querySelector('#home-supervisor-message')).not.toBeNull();
   });
 
   it('FAIL-UX-02 exposes Project and Knowledge as distinct context destinations', async () => {
     const { container } = await mountApp();
-    await clickButton(container, 'Project');
-    expect(container.textContent).toContain('Project');
-    await clickButton(container, 'Knowledge');
-    expect(container.textContent).toContain('Knowledge');
+    await clickButton(container, 'プロジェクト');
+    expect(container.textContent).toContain('プロジェクト');
+    await clickButton(container, 'ナレッジ');
+    expect(container.textContent).toContain('ナレッジ');
   });
 
   it('FAIL-UX-03 does not expose obsolete navigation destinations', async () => {
     const { container } = await mountApp();
-    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['Home', 'Project', 'Knowledge']);
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
   });
 
   it('FAIL-UX-04 baseline keeps profile hydration observable while loading', async () => {

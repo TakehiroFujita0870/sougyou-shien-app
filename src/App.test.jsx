@@ -6,7 +6,7 @@ import { App, WORKSPACE_NAV } from './App';
 describe('Kadode three-surface workspace shell', () => {
   it('exposes Home, Project, and Knowledge as the only top-level surfaces', () => {
     const html = renderToStaticMarkup(<App />);
-    expect(WORKSPACE_NAV.map(({ label }) => label)).toEqual(['Home', 'Project', 'Knowledge']);
+    expect(WORKSPACE_NAV.map(({ label }) => label)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
     WORKSPACE_NAV.forEach(({ label }) => expect(html).toContain(label));
   });
 
