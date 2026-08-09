@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Badge } from './ui/Badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/DropdownMenu';
 
 export const SHELL_NAV = [
   { id: 'home', label: 'Home' },
@@ -20,7 +22,6 @@ function NavItems({ activePage, onSelect }) {
 export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialCollapsed = false, initialDrawerOpen = false }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
-  const [accountOpen, setAccountOpen] = useState(false);
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -29,12 +30,6 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, []);
-  useEffect(() => {
-    const closeAccount = (event) => { if (event.key === 'Escape') setAccountOpen(false); };
-    window.addEventListener('keydown', closeAccount);
-    return () => window.removeEventListener('keydown', closeAccount);
-  }, []);
-
   function choosePage(page) {
     onSelect(page);
     setDrawerOpen(false);
@@ -49,7 +44,29 @@ export function WorkspaceShell({ activePage, onSelect, currentPlan = 'Free', acc
         <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
         <footer className="workspace-shell__account">
           <div className="workspace-shell__avatar" aria-hidden="true">K</div>
-          {!collapsed && <div className="workspace-shell__account-copy relative"><button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left" aria-label={`アカウント ${PLAN_LABELS[currentPlan] ?? currentPlan}`} aria-expanded={accountOpen} onClick={() => setAccountOpen((value) => !value)}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-stone-200 text-sm font-bold">K</span><span className="min-w-0 flex-1"><strong className="block truncate">アカウント</strong><span className="mt-0.5 inline-flex rounded-full border border-stone-300 px-1.5 py-0.5 text-[11px] font-semibold text-stone-600">{PLAN_LABELS[currentPlan] ?? currentPlan}</span></span><span aria-hidden="true" className="text-stone-500">⌄</span></button>{accountOpen && <div role="menu" aria-label="アカウントメニュー" className="absolute bottom-14 left-0 z-20 grid min-w-56 gap-1 rounded-2xl border border-stone-200 bg-white p-2 shadow-lg max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3">{accountContent}<button type="button" role="menuitem" onClick={onOpenProfile}>あなたの情報</button><button type="button" role="menuitem" onClick={() => choosePage('settings')}>プランと利用状況</button><button type="button" role="menuitem" onClick={() => choosePage('settings')}>設定</button><button type="button" role="menuitem">ヘルプ・ショートカット</button><button type="button" role="menuitem">ログアウト</button></div>}</div>}
+          {!collapsed && <div className="workspace-shell__account-copy">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left hover:bg-[var(--color-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]" aria-label={`アカウント ${PLAN_LABELS[currentPlan] ?? currentPlan}`}>
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-stone-200 text-sm font-bold">K</span>
+                  <strong className="min-w-0 flex-1 truncate">アカウント</strong>
+                  <Badge variant="outline">{PLAN_LABELS[currentPlan] ?? currentPlan}</Badge>
+                  <span aria-hidden="true" className="text-stone-500">⌄</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent aria-label="アカウントメニュー" side="top" align="start">
+                {accountContent && <div className="workspace-shell__account-auth px-1 pb-1">{accountContent}</div>}
+                <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)]">アカウント</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={onOpenProfile} onClick={onOpenProfile}>あなたの情報</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>プランと利用状況</DropdownMenuItem>
+                <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
+                <DropdownMenuItem onSelect={() => choosePage('settings')} onClick={() => choosePage('settings')}>設定</DropdownMenuItem>
+                <DropdownMenuItem>ヘルプ・ショートカット</DropdownMenuItem>
+                <DropdownMenuSeparator className="my-1 h-px bg-[var(--color-border-subtle)]" />
+                <DropdownMenuItem>ログアウト</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>}
         </footer>
       </aside>
       <section className="workspace-shell__main">

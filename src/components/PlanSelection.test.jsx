@@ -22,6 +22,15 @@ function click(element) {
   return act(() => element.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 }
 
+function menuItem(label) {
+  return [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === label);
+}
+
+async function openAccount(container) {
+  const trigger = container.querySelector('.workspace-shell__account-copy > button');
+  await act(() => trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })));
+}
+
 describe('local/fake plan subscription repository', () => {
   it('starts deterministically and normalizes an invalid Standard choice when returning to Free', () => {
     const repository = createLocalPlanRepository();
@@ -69,8 +78,8 @@ describe('plan selection acceptance', () => {
   it('has no axe violations in the settings plan chooser', async () => {
     const { container, unmount } = await mount(<App />);
 
-    await click(container.querySelector('.workspace-shell__account-copy > button'));
-    await click([...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === '設定'));
+    await openAccount(container);
+    await click(menuItem('設定'));
     const results = await axe.run(container);
     expect(results.violations).toEqual([]);
     await unmount();
@@ -79,17 +88,17 @@ describe('plan selection acceptance', () => {
   it('compares Free and Standard, shows readable Pro content, and requires confirmation before applying a proposed change', async () => {
     const { container, unmount } = await mount(<App />);
 
-    await click(container.querySelector('.workspace-shell__account-copy > button'));
-    await click([...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === '設定'));
-    expect(container.textContent).toContain('軽量モデル');
-    expect(container.textContent).toContain('Thinkingなし');
+    await openAccount(container);
+    await click(menuItem('設定'));
+    expect(container.textContent).toContain('アイデア整理');
+    expect(container.textContent).toContain('小さな調査枠');
     expect(container.textContent).toContain('月額980円');
-    expect(container.textContent).toContain('複数モデル');
+    expect(container.textContent).toContain('事業検討の拡張機能');
     const proCard = container.querySelector('[aria-labelledby="pro-plan-heading"]');
     expect(proCard.textContent).toContain('Pro');
     expect(proCard.textContent).toContain('2,980');
     expect(proCard.textContent).toContain('準備中');
-    expect(proCard.textContent).toContain('現在は選択、申込み、決済できません。');
+    expect(proCard.textContent).toContain('提供開始に向けて準備中です。');
     expect(proCard.getAttribute('aria-describedby')).toBe('pro-plan-availability');
     const comparisonGrid = container.querySelector('fieldset');
     expect(comparisonGrid.className).toContain('sm:grid-cols-3');
@@ -99,7 +108,8 @@ describe('plan selection acceptance', () => {
     expect(proCard.querySelectorAll('button')).toHaveLength(1);
     expect(proButton.disabled).toBe(true);
     expect(proButton.getAttribute('aria-describedby')).toBe('pro-plan-availability');
-    expect(container.textContent).toContain('外部課金には接続していません');
+    expect(container.textContent).not.toContain('local / fake');
+    expect(container.textContent).not.toContain('AIモデルを選ぶ');
 
     const standard = container.querySelector('input[value="standard"]');
     await click(standard);
@@ -125,8 +135,8 @@ describe('plan selection acceptance', () => {
 
   it('supports keyboard plan confirmation without exposing model controls', async () => {
     const { container, unmount } = await mount(<App />);
-    await click(container.querySelector('.workspace-shell__account-copy > button'));
-    await click([...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === '設定'));
+    await openAccount(container);
+    await click(menuItem('設定'));
 
     const standard = container.querySelector('input[value="standard"]');
     standard.focus();

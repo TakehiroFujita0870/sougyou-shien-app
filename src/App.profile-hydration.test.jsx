@@ -33,6 +33,15 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+function openAccount(container) {
+  const trigger = container.querySelector('.workspace-shell__account-copy > button');
+  return act(async () => trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })));
+}
+
+function profileMenuItem() {
+  return [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報');
+}
+
 afterEach(() => document.body.replaceChildren());
 
 describe('profile hydration at the application boundary', () => {
@@ -44,8 +53,8 @@ describe('profile hydration at the application boundary', () => {
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
     expect(view.container.textContent).toContain('アカウント');
 
-    await act(async () => view.container.querySelector('.workspace-shell__account-copy > button').click());
-    await act(async () => [...view.container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報').click());
+    await openAccount(view.container);
+    await act(async () => profileMenuItem().click());
     expect(view.container.textContent).toContain('営業経験');
 
     await view.rerender();
@@ -59,8 +68,8 @@ describe('profile hydration at the application boundary', () => {
   ])('opens the interview after a successful %s load', async (_label, profile, expectedValue) => {
     const view = await mount({ load: vi.fn().mockResolvedValue(profile), save: vi.fn() });
 
-    await act(async () => view.container.querySelector('.workspace-shell__account-copy > button').click());
-    await act(async () => [...view.container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報').click());
+    await openAccount(view.container);
+    await act(async () => profileMenuItem().click());
     expect(view.container.querySelector('[role="dialog"]')).not.toBeNull();
     expect(view.container.querySelector('[role="dialog"] textarea')?.value).toBe(expectedValue);
     await view.unmount();

@@ -21,6 +21,11 @@
   --color-warning: #8c3c2d;
   --color-warning-surface: #fff1e9;
   --color-focus: #73453d;
+  --color-primary: var(--color-action);
+  --color-primary-hover: var(--color-action-hover);
+  --color-primary-foreground: var(--color-action-text);
+  --color-muted: #f3eadf;
+  --color-ring: var(--color-focus);
   --motion-feedback: 160ms;
   --motion-easing: ease-out;
 }
@@ -62,7 +67,7 @@ textarea {
 .workspace-shell__avatar { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; background: var(--color-action); color: white; font-weight: 800; }
 .workspace-shell__account-copy { display: grid; gap: .15rem; min-width: 0; font-size: .8rem; }
 .workspace-shell__account-copy span { color: var(--color-text-muted); }
-.workspace-shell__account-copy button { padding: 0; border: 0; background: none; color: var(--color-sakura-ink); text-align: left; text-decoration: underline; cursor: pointer; }
+.workspace-shell__account-copy > button { border: 0; background: transparent; color: var(--color-text); cursor: pointer; }
 .workspace-shell__main { min-width: 0; flex: 1; }
 .workspace-shell__breadcrumb { display: flex; gap: .5rem; align-items: center; min-height: 48px; padding: .75rem 1.25rem; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: .875rem; }
 .workspace-shell__mobile-trigger, .workspace-shell__scrim { display: none; }

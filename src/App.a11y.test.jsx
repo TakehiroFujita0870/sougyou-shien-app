@@ -10,6 +10,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const profileRepository = { load: async () => null, save: async (profile) => profile };
 
+function openAccount(trigger) {
+  return act(() => trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })));
+}
+
 async function mount() {
   sessionStorage.setItem('kadode:selected-surface', 'home');
   const container = document.createElement('div');
@@ -44,8 +48,8 @@ describe('App keyboard and accessibility quality', () => {
   it('closes the profile dialog with Escape and preserves tokenized visible focus styles and 44px navigation targets', async () => {
     const { container, unmount } = await mount();
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
-    await act(() => accountTrigger.click());
-    const profileEntry = [...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報');
+    await openAccount(accountTrigger);
+    const profileEntry = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === 'あなたの情報');
     await act(() => profileEntry.click());
     const dialog = container.querySelector('[role="dialog"]');
     await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));

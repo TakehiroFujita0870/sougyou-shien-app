@@ -9,6 +9,11 @@ import { createLocalGoogleAuthAdapter } from '../auth/localAuthAdapter';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+function openAccount(container) {
+  const trigger = container.querySelector('.workspace-shell__account-copy > button');
+  act(() => trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })));
+}
+
 function mount() {
   const container = document.createElement('div');
   document.body.append(container);
@@ -23,14 +28,14 @@ describe('WorkspaceShell', () => {
     const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);
     const render = () => act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} accountContent={<LocalGoogleSignIn authAdapter={createLocalGoogleAuthAdapter({ storage })} />}><h1>ページ</h1></WorkspaceShell>));
     render();
-    act(() => container.querySelector('.workspace-shell__account-copy > button').click());
+    openAccount(container);
     await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
-    expect(container.textContent).toContain('Googleで続ける');
-    await act(async () => container.querySelector('.workspace-shell__account-auth button').click());
-    expect(container.textContent).toContain('ローカル Google テスト利用者');
-    act(() => root.unmount()); root = createRoot(container); render(); act(() => container.querySelector('.workspace-shell__account-copy > button').click());
+    expect(document.body.textContent).toContain('Googleで続ける');
+    await act(async () => document.querySelector('.workspace-shell__account-auth button').click());
+    expect(document.body.textContent).toContain('ローカル Google テスト利用者');
+    act(() => root.unmount()); root = createRoot(container); render(); openAccount(container);
     await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
-    expect(container.querySelector('[role="menu"]')).toBeTruthy();
+    expect(document.querySelector('[role="menu"]')).toBeTruthy();
     const restoredAdapter = createLocalGoogleAuthAdapter({ storage });
     await expect(restoredAdapter.hydrate()).resolves.toEqual(expect.objectContaining({ id: 'local-google-user' }));
     act(() => { root.unmount(); container.remove(); });
@@ -69,12 +74,12 @@ describe('WorkspaceShell', () => {
     expect(container.textContent).toContain('アカウント');
     expect(container.textContent).toContain('Free');
     const accountTrigger = container.querySelector('.workspace-shell__account-copy > button');
-    expect(container.querySelector('[role="menu"]')).toBeNull();
-    act(() => accountTrigger.click());
-    expect(container.querySelector('[role="menu"]')).toBeTruthy();
-    expect(container.textContent).toContain('プランと利用状況');
-    act(() => accountTrigger.click());
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    openAccount(container);
+    expect(document.querySelector('[role="menu"]')).toBeTruthy();
+    expect(document.body.textContent).toContain('プランと利用状況');
+    openAccount(container);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     cleanup();
   });
 
