@@ -96,4 +96,13 @@ describe('adopted project repository', () => {
     await Promise.all([repository.load(), repository.load()]);
     expect(storage.getItem).toHaveBeenCalledTimes(1);
   });
+
+  it('clears only the current owner-space adopted project', async () => {
+    const storage = storageWith();
+    const repository = createAdoptedProjectRepository({ storage });
+    await repository.saveAdopted(candidate);
+    await expect(repository.clearAdopted()).resolves.toBeNull();
+    await expect(repository.load()).resolves.toBeNull();
+    expect(repository.list()).toEqual([]);
+  });
 });
