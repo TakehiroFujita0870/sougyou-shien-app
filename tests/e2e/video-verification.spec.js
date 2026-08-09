@@ -1,12 +1,60 @@
 import { test, expect } from '@playwright/test'
-import { HOME_FIXTURE } from './fixtures/home-fixture.js'
 
-test('records a PII-free Home conversation journey', async ({ page }) => {
-  await page.setContent(HOME_FIXTURE)
-  await expect(page.getByRole('heading', { name: '今日は何から始めますか？' })).toBeVisible()
-  await page.getByLabel('Kadode AIへのメッセージ').fill('今週の優先課題を整理したい')
-  await page.getByRole('button', { name: '送信' }).click()
-  await expect(page.getByRole('heading', { name: '提案' })).toBeVisible()
+const completedProfile = {
+  status: 'completed',
+  values: {
+    experience: '製造業の改善活動を担当しています。',
+    strengths: '現場の聞き取りと小さな実験です。',
+    interests: '地域の学びと親子支援です。',
+    time: '週末に4時間です。',
+    budget: 'まずは5万円以内です。',
+    avoidances: '在庫と大きな先行投資は避けます。',
+  },
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((profile) => {
+    localStorage.clear()
+    sessionStorage.clear()
+    localStorage.setItem('kadode:user-profile', JSON.stringify(profile))
+  }, completedProfile)
+})
+
+test('records the desktop PII-free Home, Project, and Knowledge happy path', async ({ page }) => {
+  const applicationRequests = []
+  page.on('request', (request) => {
+    if (['fetch', 'xhr'].includes(request.resourceType())) applicationRequests.push(request.url())
+  })
+
+  await page.goto('/')
+  await expect(page.getByRole('dialog', { name: 'あなたの情報' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Kadode AI' })).toBeVisible()
+
+  const account = page.getByRole('button', { name: /アカウント Free/ })
+  await account.click()
+  await expect(page.getByRole('menu', { name: 'アカウントメニュー' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'あなたの情報' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: /モデル:/ }).click()
+  await expect(page.getByRole('menu', { name: 'AIモデルを選択' })).toBeVisible()
+  await page.getByRole('menuitem', { name: /GPT-5.6 Terra/ }).click()
+
+  const composer = page.locator('#home-supervisor-message')
+  await composer.fill('工場の保全担当者が故障履歴を探せず、確認に時間がかかっています。')
+  await composer.press('Enter')
+  await expect(page.getByLabel('会話履歴')).toContainText('故障履歴')
+  await expect(page.getByText('推論:', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByLabel('会話履歴')).toContainText('故障履歴')
+  await expect(page.getByRole('button', { name: 'プロジェクトに採用' })).toBeVisible()
   await page.getByRole('button', { name: 'プロジェクトに採用' }).click()
-  await expect(page.getByTestId('fixture-status')).toHaveText('プロジェクトに採用しました。')
+
+  await expect(page.locator('#project-surface-heading')).toBeVisible()
+  await expect(page.locator('[data-project-question]')).toHaveCount(5)
+  await page.getByRole('button', { name: 'Knowledge' }).click()
+  await expect(page.locator('#knowledge-heading')).toBeVisible()
+  await expect(page.getByLabel('KnowledgeにてKadode AIに送信')).toBeVisible()
+  expect(applicationRequests).toEqual([])
 })

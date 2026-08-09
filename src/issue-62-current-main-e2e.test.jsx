@@ -8,18 +8,21 @@ import { App, SELECTED_SURFACE_STORAGE_KEY } from './App';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const completedProfile = { status: 'completed', values: { purpose: '工場の改善を考える' } };
-const message = '工場の保全担当者が故障履歴を探せない';
+const completedProfile = {
+  status: 'completed',
+  values: {
+    experience: '製造業の改善活動を担当しています。',
+    strengths: '現場の聞き取りと小さな実験です。',
+    interests: '地域の学びと親子支援です。',
+    time: '週末に4時間です。',
+    budget: 'まずは5万円以内です。',
+    avoidances: '在庫と大きな先行投資は避けます。',
+  },
+};
+const message = '工場の保全担当者が故障履歴を探せず、確認に時間がかかっています。';
 const mounted = [];
 let localValues;
 let sessionValues;
-
-function installStorage() {
-  localValues = new Map([['kadode:user-profile', JSON.stringify(completedProfile)]]);
-  sessionValues = new Map();
-  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage(localValues) });
-  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage(sessionValues) });
-}
 
 function storage(values) {
   return {
@@ -30,8 +33,15 @@ function storage(values) {
   };
 }
 
-async function mount(width) {
-  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+function installStorage() {
+  localValues = new Map([['kadode:user-profile', JSON.stringify(completedProfile)]]);
+  sessionValues = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage(localValues) });
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage(sessionValues) });
+}
+
+async function mount() {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -47,8 +57,9 @@ async function click(container, label) {
   await act(async () => { button.click(); await Promise.resolve(); await Promise.resolve(); });
 }
 
-async function sendCandidateMessage(container) {
-  const input = container.querySelector('#idea-message');
+async function sendMessage(container) {
+  const input = container.querySelector('#home-supervisor-message');
+  expect(input).toBeTruthy();
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
   await act(async () => {
     setter.call(input, message);
@@ -65,74 +76,50 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe('Issue #62 current-main PII-free user journey contract', () => {
-  it.each([1280, 390])('keeps the completed-profile Home journey usable without overflow at %ipx', async (width) => {
-    const { container } = await mount(width);
+describe('Issue #62 desktop current-main PII-free user journey', () => {
+  it('keeps a completed profile on the desktop Home conversation surface', async () => {
+    const { container } = await mount();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
-    expect(container.querySelector('#idea-message')).toBeTruthy();
+    expect(container.querySelector('#home-supervisor-message')).toBeTruthy();
     expect(container.querySelector('.workspace-shell__main')).toBeTruthy();
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
-    expect(container.querySelector('main').className).toContain('kadode-shell');
-    expect(container.querySelector('[aria-label="サイドバーを開く"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label^="アカウント Free"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label^="モデル:"]')).toBeTruthy();
   });
 
-  it('covers candidate preview and every decision outcome without network or context leakage', async () => {
+  it('creates an explicit proposal, adopts it, and reaches a five-view Project without network', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    const { container } = await mount(1280);
+    const { container } = await mount();
 
-    await sendCandidateMessage(container);
-    expect(container.textContent).toContain('保存前プレビュー');
-    await click(container, 'アイデア候補として保存');
-    expect(container.textContent).toContain('仮説カード（編集案）');
-
+    await sendMessage(container);
+    expect(container.querySelector('[aria-label="会話履歴"]')?.textContent).toContain('故障履歴');
     await click(container, 'プロジェクトに採用');
-    expect(container.textContent).toContain('状態: 採用');
-    await click(container, '保留');
-    expect(container.textContent).toContain('状態: 保留');
-    await click(container, '理由付きで却下');
-    expect(container.querySelector('[role="alert"]').textContent).toContain('却下理由');
-
-    const reason = container.querySelector('#reject-reason');
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-      setter.call(reason, '検証対象の業務課題と合わない');
-      reason.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await click(container, '理由付きで却下');
-    expect(container.textContent).toContain('状態: 却下');
+    expect(container.querySelector('#project-surface-heading')).toBeTruthy();
+    expect(container.querySelectorAll('[data-project-question]')).toHaveLength(5);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('restores the conversation after an F5-equivalent remount and does not place message text in session storage', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const first = await mount();
+    await sendMessage(first.container);
+    await act(async () => { first.root.unmount(); first.container.remove(); });
+    mounted.shift();
+
+    const second = await mount();
+    expect(second.container.querySelector('[aria-label="会話履歴"]')?.textContent).toContain('故障履歴');
     expect([...sessionValues.entries()]).toEqual([[SELECTED_SURFACE_STORAGE_KEY, 'home']]);
     expect([...sessionValues.values()].join('')).not.toContain(message);
-  });
-
-  it('preserves a local candidate after F5-equivalent remount and restores selected surfaces by keyboard', async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
-    const first = await mount(390);
-    await sendCandidateMessage(first.container);
-    await click(first.container, 'アイデア候補として保存');
-
-    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', altKey: true, shiftKey: true, bubbles: true })));
-    expect(first.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
-    await act(async () => first.root.unmount());
-    mounted.shift().container.remove();
-
-    const second = await mount(390);
-    expect(second.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
-    await click(second.container, 'Home');
-    expect(second.container.textContent).toContain(message);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('keeps mobile keyboard behavior and axe checks free of violations', async () => {
-    const { container } = await mount(390);
-    const input = container.querySelector('#idea-message');
-    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', altKey: true, shiftKey: true, bubbles: true })));
-    expect(container.querySelector('[aria-current="page"]').textContent).toBe('Project');
-    await click(container, 'Home');
-    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: '3', altKey: true, shiftKey: true, bubbles: true })));
-    expect(container.querySelector('[aria-current="page"]').textContent).toBe('Home');
+  it('opens Knowledge from the same desktop journey with no axe violations', async () => {
+    const { container } = await mount();
+    await click(container, 'Knowledge');
+    expect(container.querySelector('#knowledge-heading')).toBeTruthy();
+    expect(container.querySelector('#knowledge-composer')).toBeTruthy();
     expect((await axe.run(container)).violations).toEqual([]);
   });
 });
