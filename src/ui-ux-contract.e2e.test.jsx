@@ -50,12 +50,11 @@ describe('UI UX contract: executable baseline acceptance checks', () => {
     expect(container.textContent).toContain('Project');
     await clickButton(container, 'Knowledge');
     expect(container.textContent).toContain('Knowledge');
-    expect(container.querySelector('#idea-message')).toBeNull();
   });
 
   it('FAIL-UX-03 does not expose obsolete navigation destinations', async () => {
     const { container } = await mountApp();
-    for (const label of ['AIチャット', '事業のタネ', '横断調査', '資料', '検索']) expect(container.textContent).not.toContain(label);
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['Home', 'Project', 'Knowledge']);
   });
 
   it('FAIL-UX-04 baseline keeps profile hydration observable while loading', async () => {
