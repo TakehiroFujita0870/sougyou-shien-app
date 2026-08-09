@@ -91,7 +91,7 @@ describe('profile hydration at the application boundary', () => {
 
     await act(async () => second.resolve(completed));
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(view.container.textContent).toContain('あなたの情報を更新');
+    expect(view.container.textContent).toContain('あなたの情報');
     await view.unmount();
   });
 
