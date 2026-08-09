@@ -55,4 +55,17 @@ describe('knowledge metadata repository', () => {
     await repository.delete('fixture-1', { id: 'fixture-1', name: 'fixture.pdf', state: 'searchable' });
     expect(repository.find('fixture-1')).toMatchObject({ state: 'deleted', ownerId: 'a', spaceId: 's' });
   });
+
+  it('uses the composite id, owner, and space key when replacing or tombstoning metadata', async () => {
+    const store = storage({ schemaVersion: 1, documents: [{ ...doc, ownerId: 'other-owner', spaceId: 'other-space' }] });
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    await repository.load();
+    await repository.add(doc);
+    await repository.delete(doc.id);
+    const persisted = JSON.parse(store.setItem.mock.calls.at(-1)[1]).documents;
+    expect(persisted).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: doc.id, ownerId: 'other-owner', spaceId: 'other-space', state: 'searchable' }),
+      expect.objectContaining({ id: doc.id, ownerId: 'a', spaceId: 's', state: 'deleted' }),
+    ]));
+  });
 });

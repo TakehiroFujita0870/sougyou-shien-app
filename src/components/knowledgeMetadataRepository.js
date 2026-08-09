@@ -34,7 +34,7 @@ export function createKnowledgeMetadataRepository({ ownerId, spaceId, storage = 
   async function add(metadata) {
     const document = normalizeDocument({ ...metadata, ownerId, spaceId });
     if (!document) throw new Error('Invalid metadata');
-    const nextDocuments = [...documents.filter((item) => item.id !== document.id), document];
+    const nextDocuments = [...documents.filter((item) => item.id !== document.id || item.ownerId !== ownerId || item.spaceId !== spaceId), document];
     try {
       writeDocuments(nextDocuments);
       documents = nextDocuments;
@@ -49,7 +49,7 @@ export function createKnowledgeMetadataRepository({ ownerId, spaceId, storage = 
     const current = find(id) ?? normalizeDocument({ ...fallbackMetadata, id, ownerId, spaceId });
     if (!current) return null;
     const deleted = { ...current, state: 'deleted', deletedAt: new Date().toISOString() };
-    const nextDocuments = [...documents.filter((item) => item.id !== id), deleted];
+    const nextDocuments = [...documents.filter((item) => item.id !== id || item.ownerId !== ownerId || item.spaceId !== spaceId), deleted];
     try {
       writeDocuments(nextDocuments);
       documents = nextDocuments;
