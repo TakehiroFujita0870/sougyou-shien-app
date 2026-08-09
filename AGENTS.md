@@ -42,6 +42,12 @@
 - PR時点でCEO室へ `BLOCKED` または `DECISION_REQUIRED` を送るのは、外部公開、支出、契約、法務、個人情報送信、実外部サービス初期接続、破壊的API/データ移行、部門間仕様衝突、P0セキュリティ/データ損失、main回帰/revert判断、500行超または複数目的で分割判断が必要な場合に限る。
 - CI失敗と通常のP1/P2は担当部と統合部だけで解決し、CEO室へ送らない。
 
+### 依存契約のhandoff
+
+- 統合部は `MERGED` 時にnext_dependenciesが空でなければ、CEO室への報告と同時に次担当部へ `DEPENDENCY_READY` を送る。送信成功までmerge後handoffは完了ではない。
+- 次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。
+- 統合・リリース管理部の実行プロファイルは `gpt-5.6-terra / medium` とする。利用不能時だけ管理タスクへ `BLOCKED` を送り、無断で別プロファイルへ変更しない。
+
 ## Windows / PowerShell の実行規約
 
 - Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。

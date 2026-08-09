@@ -49,6 +49,27 @@ next_action: receiver's observable action
 
 値が存在しない項目は `none` と書く。APIキー、token、email、ユーザー入力、アップロード内容をpayloadへ入れない。
 
+### DEPENDENCY_READY payload
+
+`DEPENDENCY_READY` は、次の部門がmerge済み契約を実装・設計へ使える状態になったことを伝える。必須項目は次のとおり。
+
+```text
+event: DEPENDENCY_READY
+repository: owner/name
+source_pr: #number + URL
+source_merge_sha: full SHA
+provided_contract: reusable contract summary
+next_issue_or_goal: next issue or observable goal
+acceptance_criteria: observable acceptance criteria
+change_prohibitions: prohibited scope and boundaries
+checks: merge and verification summary
+owner_task: receiving department task
+idempotency_key: source merge SHA + target department
+next_action: receiver's observable action
+```
+
+同じ `source_merge_sha + target department` は冪等キーとし、受信側は同じhandoffを二重に開始しない。
+
 ## 状態遷移
 
 ```mermaid
@@ -99,6 +120,10 @@ flowchart LR
 - 受信者: 実装部門と管理タスク
 - 受信者の行動: 依存PRの開始、Issue状態とプレビューURLの確認を行う
 
+`next_dependencies` が空でない場合、統合部はCEO室への `MERGED` 報告と同時に、次担当部を直接起動する `DEPENDENCY_READY` を送る。送信成功の確認までmerge後handoffは未完了とする。
+
+次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。CI失敗と通常P1/P2はこの例外に含めない。
+
 ### BLOCKED
 
 - 発火: CEO決裁、部門間仕様衝突、送信不能、外部状態待ちを検出した直後
@@ -131,3 +156,9 @@ flowchart LR
 3. 管理タスクから現在の部門タスク宛先を受け取る。
 4. 自分が所有するIssue、branch、PR、最新head SHAを確認する。
 5. 未送信イベントがあれば、実装を始める前に送信する。
+
+## 統合・リリース管理部の実行プロファイル
+
+- 標準プロファイルは `gpt-5.6-terra / medium` とする。
+- プロファイルが利用不能な場合だけ、管理タスクへ `BLOCKED` を送る。
+- 代替モデル・推論強度への無断変更はしない。管理タスクの明示判断を受けてから変更する。
