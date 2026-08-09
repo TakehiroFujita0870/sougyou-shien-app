@@ -85,6 +85,8 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const trackedHomeConversationRepositoryRef = useRef(null);
   if (!trackedHomeConversationRepositoryRef.current) trackedHomeConversationRepositoryRef.current = {
     load: () => rawHomeConversationRepositoryRef.current.load(),
+    loadDraft: () => rawHomeConversationRepositoryRef.current.loadDraft?.() ?? Promise.resolve(''),
+    saveDraft: (value) => rawHomeConversationRepositoryRef.current.saveDraft?.(value) ?? Promise.resolve(value),
     save: async (value) => {
       const saved = await rawHomeConversationRepositoryRef.current.save(value);
       const userMessages = saved.messages?.filter((entry) => entry.role === 'user') ?? [];

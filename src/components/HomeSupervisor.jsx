@@ -1,30 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Mic, SendHorizontal } from 'lucide-react';
 
 import { createLocalContextSnapshot } from '../context/contextSnapshot';
+import { createHomeConversationRepository, EMPTY_HOME_CONVERSATION_STATE } from './homeConversationRepository';
 import { Button } from './ui/Button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from './ui/DropdownMenu';
 
-const storageKey = 'kadode:home-conversation';
 const initialSnapshot = createLocalContextSnapshot({ ownerId: 'local-owner', surface: { name: 'Home', route: '/home' } });
-const emptyState = { messages: [], proposals: [], input: '' };
+const emptyState = EMPTY_HOME_CONVERSATION_STATE;
 const promptPresets = [
   'これまでの経験から、誰かの役に立てそうなことを一緒に考えたい',
   '仕事の中で何度も感じる不便を、事業にできるか相談したい',
   '今の暮らしと両立できる、小さな一歩から考えたい',
 ];
+const ephemeralDraftRepository = { loadDraft: async () => '', saveDraft: async (value) => value };
 
-export function createHomeConversationRepository(storage = globalThis.localStorage) {
-  return {
-    load: async () => {
-      try {
-        const value = JSON.parse(storage?.getItem(storageKey) || 'null');
-        return value && Array.isArray(value.messages) && Array.isArray(value.proposals) ? { ...emptyState, ...value } : emptyState;
-      } catch { return emptyState; }
-    },
-    save: async (value) => { storage?.setItem(storageKey, JSON.stringify(value)); return value; },
-  };
-}
+export { createHomeConversationRepository } from './homeConversationRepository';
 
 export function proposeHomeAction(input, snapshot = initialSnapshot) {
   const action = /プロジェクト.*(一覧|確認)|一覧.*確認/.test(input) ? 'inspect_projects' : 'ideate';
@@ -50,56 +41,78 @@ function nextQuestion(messages) {
 export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProjectAdopt, modelKey, models = [], onModelChange }) {
   const [browserRepository] = useState(() => createHomeConversationRepository());
   const activeRepository = repository ?? browserRepository;
+  const draftRepository = typeof activeRepository.loadDraft === 'function' && typeof activeRepository.saveDraft === 'function' ? activeRepository : ephemeralDraftRepository;
   const [state, setState] = useState(emptyState);
   const [input, setInput] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [error, setError] = useState('');
+  const stateRef = useRef(emptyState);
+  const inputRef = useRef('');
+  const mutationQueueRef = useRef(Promise.resolve());
+  const mutationRevisionRef = useRef(0);
+  const draftQueueRef = useRef(Promise.resolve());
+  const loadGenerationRef = useRef(0);
 
   useEffect(() => {
-    activeRepository.load().then((value) => {
-      setState({ ...value, input: '' }); setInput('');
+    const generation = ++loadGenerationRef.current;
+    Promise.all([activeRepository.load(), draftRepository.loadDraft()]).then(([value, draft]) => {
+      if (generation !== loadGenerationRef.current) return;
+      stateRef.current = value; inputRef.current = draft;
+      setState(value); setInput(draft);
       const adopted = value.proposals.find(({ status }) => status === 'adopted');
       if (adopted) onProjectAdopt?.(adopted);
     }).catch(() => setError('会話を読み込めませんでした。'));
-  }, [activeRepository, onProjectAdopt]);
+  }, [activeRepository, draftRepository, onProjectAdopt]);
 
   const messages = useMemo(() => state.messages, [state.messages]);
-  async function persist(next) { await activeRepository.save(next); setState(next); }
-  async function updateInput(value) {
-    setInput(value);
-    try { await activeRepository.save({ ...state, input: value }); } catch { setError('下書きを保存できませんでした。'); }
+  function updateInput(value) {
+    inputRef.current = value; setInput(value);
+    draftQueueRef.current = draftQueueRef.current.catch(() => undefined).then(() => draftRepository.saveDraft(value)).catch(() => setError('下書きを保存できませんでした。'));
+  }
+  function mutateConversation(update, failureMessage = '会話を保存できませんでした。再試行してください。') {
+    const next = update(stateRef.current);
+    const revision = ++mutationRevisionRef.current;
+    stateRef.current = next; setState(next);
+    const persisted = mutationQueueRef.current.catch(() => undefined).then(() => activeRepository.save(next));
+    mutationQueueRef.current = persisted.catch(() => undefined);
+    persisted.then((saved) => {
+      if (revision !== mutationRevisionRef.current) return;
+      stateRef.current = saved; setState(saved); setError('');
+    }).catch(() => setError(failureMessage));
+    return { next, persisted };
   }
   async function send(event) {
     event?.preventDefault();
-    const content = input.trim();
+    const content = inputRef.current.trim();
     if (!content) { setError('発言を入力してください。'); return; }
-    const user = { role: 'user', content };
-    const nextMessages = [...messages, user];
-    const proposal = proposeHomeAction(content, snapshot);
-    const next = { messages: [...nextMessages, { role: 'assistant', content: nextQuestion(nextMessages) }], proposals: [proposal, ...state.proposals], input: '' };
-    try { await persist(next); setInput(''); setError(''); } catch { setError('会話を保存できませんでした。再試行してください。'); }
+    updateInput('');
+    mutateConversation((current) => {
+      const nextMessages = [...current.messages, { role: 'user', content }];
+      return { messages: [...nextMessages, { role: 'assistant', content: nextQuestion(nextMessages) }], proposals: [proposeHomeAction(content, snapshot), ...current.proposals] };
+    });
   }
   async function decide(id, status) {
     if (status === 'rejected' && !rejectReason.trim()) { setError('却下理由を入力してください。'); return; }
-    const proposals = state.proposals.map((proposal) => proposal.id === id ? { ...proposal, status, confirmed: status === 'adopted', ...(status === 'rejected' ? { rejectionReason: rejectReason.trim() } : {}) } : proposal);
-    try {
-      await persist({ ...state, proposals }); setRejectReason(''); setError('');
-      if (status === 'adopted') onProjectAdopt?.(proposals.find((proposal) => proposal.id === id));
-    } catch { setError('判断を保存できませんでした。再試行してください。'); }
+    const reason = rejectReason.trim();
+    const { next, persisted } = mutateConversation((current) => ({ ...current, proposals: current.proposals.map((proposal) => proposal.id === id ? { ...proposal, status, confirmed: status === 'adopted', ...(status === 'rejected' ? { rejectionReason: reason } : {}) } : proposal) }), '判断を保存できませんでした。再試行してください。');
+    setRejectReason('');
+    if (status === 'adopted') {
+      try { await persisted; onProjectAdopt?.(next.proposals.find((proposal) => proposal.id === id)); } catch { /* visible persistence error is set by the queue */ }
+    }
   }
   const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
   const isEmpty = messages.length === 0 && state.proposals.length === 0;
-  return <section aria-labelledby="home-supervisor-heading" data-home-state={isEmpty ? 'empty' : 'populated'} className={`mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-[900px] flex-col ${isEmpty ? 'justify-center pb-[10vh]' : ''}`}>
-    <div className={`px-1 ${isEmpty ? 'mx-auto w-full max-w-[840px] text-center' : 'pt-2'}`}><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Home</p><h1 id="home-supervisor-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">アイディエーションからプロジェクト管理まで、あらゆる相談役</p></div>
-    <ol className={`grid gap-4 ${isEmpty ? 'sr-only' : 'mt-7 flex-1 content-start pb-6'}`} aria-label="会話履歴">
+  return <section aria-labelledby="home-supervisor-heading" data-home-state={isEmpty ? 'empty' : 'populated'} className={`mx-auto flex h-[calc(100dvh-4rem)] min-h-0 w-full max-w-[900px] flex-col overflow-hidden ${isEmpty ? 'justify-center pb-[10vh]' : ''}`}>
+    <div className={`shrink-0 px-1 ${isEmpty ? 'mx-auto w-full max-w-[840px] text-center' : 'pt-2'}`}><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Home</p><h1 id="home-supervisor-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">アイディエーションからプロジェクト管理まで、あらゆる相談役</p></div>
+    <ol data-home-scroll-region="true" className={`grid min-h-0 gap-4 overflow-y-auto overscroll-contain pr-2 ${isEmpty ? 'sr-only' : 'mt-5 flex-1 content-start pb-4'}`} aria-label="会話履歴">
       {messages.map((message, index) => <li key={`${message.role}-${index}`} className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'ml-auto bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-text)]'}`}><strong className="block text-xs opacity-70">{message.role === 'user' ? 'あなた' : 'Kadode'}</strong><p>{message.content}</p></li>)}
       {state.proposals.map((proposal) => <li key={proposal.id} className="border-l-2 border-[var(--color-border)] py-1 pl-4"><p className="text-sm"><strong>推論:</strong> {proposal.inference}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]"><strong>事実:</strong> {proposal.fact} · <strong>操作:</strong> {proposal.action}</p>{proposal.status === 'adopted' ? <p role="status" className="mt-2 text-sm font-bold text-emerald-800">Projectへ採用済み</p> : proposal.status === 'held' ? <p role="status" className="mt-2 text-sm font-bold">保留中</p> : proposal.status === 'rejected' ? <p role="status" className="mt-2 text-sm text-red-800">却下: {proposal.rejectionReason}</p> : <><label className="mt-3 block text-sm" htmlFor={`reject-${proposal.id}`}>却下理由（却下時は必須）</label><textarea id={`reject-${proposal.id}`} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} rows={2} className="mt-1 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-sm" /><div className="mt-3 flex flex-wrap gap-2"><Button type="button" onClick={() => void decide(proposal.id, 'adopted')} className="min-h-9 px-3">プロジェクトに採用</Button><Button type="button" variant="secondary" onClick={() => void decide(proposal.id, 'held')} className="min-h-9 px-3">保留</Button><Button type="button" variant="ghost" onClick={() => void decide(proposal.id, 'rejected')} className="min-h-9 px-3 text-red-800">理由付きで却下</Button></div></>}</li>)}
     </ol>
-    <form onSubmit={send} className={`${isEmpty ? 'static mx-auto mt-6 w-full max-w-[840px] sticky bottom-0' : 'sticky bottom-0 mt-auto bg-[var(--color-background)] pb-6 pt-3'}`}>
+    <form data-home-composer="true" onSubmit={send} className={`shrink-0 ${isEmpty ? 'mx-auto mt-6 w-full max-w-[840px]' : 'mt-auto bg-[var(--color-background)] pt-3'}`}>
       <div className="kadode-composer">
         <label htmlFor="home-supervisor-message" className="sr-only">Kadode AIへのメッセージ</label>
-        <textarea id="home-supervisor-message" value={input} onChange={(event) => { void updateInput(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={5} maxLength={1000} className="kadode-composer__textarea min-h-36 resize-none" placeholder="誰の、どんな困りごとを解決したいか、思いつくことを何でも教えてください。" />
-        <div className="mt-2 flex flex-wrap gap-2" aria-label="会話のきっかけ">{promptPresets.map((preset) => <Button key={preset} type="button" variant="secondary" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={() => void updateInput(preset)}>{preset}</Button>)}</div>
+        <textarea id="home-supervisor-message" value={input} onChange={(event) => updateInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={5} maxLength={1000} className="kadode-composer__textarea min-h-36 resize-none" placeholder="誰の、どんな困りごとを解決したいか、思いつくことを何でも教えてください。" />
+        <div className="mt-2 flex flex-wrap gap-2" aria-label="会話のきっかけ">{promptPresets.map((preset) => <Button key={preset} type="button" variant="secondary" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={() => updateInput(preset)}>{preset}</Button>)}</div>
         <div className="kadode-composer__actions mt-2"><Button type="button" variant="ghost" className="min-h-9 min-w-9 px-2" aria-label="音声入力（準備中）" title="音声入力（準備中）" disabled><Mic size={17} aria-hidden="true" /></Button><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" className="min-h-9 px-2 text-xs" aria-label={`モデル: ${modelLabel}`}>{modelLabel}</Button></DropdownMenuTrigger><DropdownMenuContent align="end" aria-label="AIモデルを選択"><DropdownMenuLabel>AIモデル</DropdownMenuLabel>{models.map((model) => <DropdownMenuItem key={model.logicalKey} onSelect={() => onModelChange?.(model.logicalKey)}>{model.displayName}{model.logicalKey === modelKey ? ' ✓' : ''}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu><Button type="submit" aria-label="発言を送信" className="min-h-9 min-w-9 px-2"><SendHorizontal size={17} aria-hidden="true" /><span className="sr-only">発言を送信</span></Button></div>
       </div>
     </form>
