@@ -18,6 +18,8 @@ jobs:
         run: npm run test:storybook-visual
       - name: Record desktop happy-path E2E
         run: npm run test:video
+      - name: Verify desktop sidebar portfolio E2E
+        run: npx playwright test tests/e2e/sidebar-portfolio.spec.js
       - name: Verify recorded WebM
         run: test -n "$(find test-results -type f -name '*.webm' -size +0c -print -quit)"
       - name: Upload desktop E2E video
@@ -26,6 +28,13 @@ jobs:
         with:
           name: kadode-desktop-e2e-video
           path: test-results/**/*.webm
+          if-no-files-found: error
+      - name: Upload desktop sidebar screenshot
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-sidebar-1440-screenshot
+          path: test-results/sidebar-portfolio-1440x900.png
           if-no-files-found: error
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups

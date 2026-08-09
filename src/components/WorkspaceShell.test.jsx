@@ -23,6 +23,48 @@ function mount() {
 }
 
 describe('WorkspaceShell', () => {
+  it('keeps the account trigger outside the independently scrollable recent list and exposes all recent items in a dialog', async () => {
+    const entries = Array.from({ length: 11 }, (_, index) => ({ id: `thread-${index}`, title: `会話 ${index}` }));
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} portfolio={{ home: entries }}><div className="min-h-[2000px]">長い本文</div></WorkspaceShell>));
+    expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar');
+    expect(container.querySelector('[aria-label="最近の項目"]').className).toContain('overflow-y-auto');
+    expect(container.querySelector('.workspace-shell__account')).toBeTruthy();
+    expect(container.textContent).toContain('すべて表示');
+    act(() => [...container.querySelectorAll('button')].find((button) => button.textContent === 'すべて表示').click());
+    expect(document.body.textContent).toContain('ホームの履歴');
+    expect(document.querySelector('[aria-label="すべての履歴"]')).toBeTruthy();
+    act(() => { root.unmount(); container.remove(); });
+  });
+
+  it('shows five Knowledge recents with an accessible unread dot and keeps the rest in all-items', () => {
+    const entries = Array.from({ length: 6 }, (_, index) => ({ id: `knowledge-${index}`, title: `資料 ${index}`, unread: index === 0 }));
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="knowledge" onSelect={() => {}} portfolio={{ knowledge: entries }}><h1>Knowledge</h1></WorkspaceShell>));
+    expect(container.querySelector('[aria-label="最近の項目"]').textContent).not.toContain('資料 5');
+    expect(container.querySelector('[aria-label="新着"]')).toBeTruthy();
+    expect([...container.querySelectorAll('button')].some((button) => button.textContent === 'すべて表示')).toBe(true);
+    act(() => { root.unmount(); container.remove(); });
+  });
+
+  it('disables archive while persistence is pending and keeps the item when it fails', async () => {
+    let resolveArchive;
+    const pending = new Promise((resolve) => { resolveArchive = resolve; });
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} portfolio={{ home: [{ id: 'home:1', title: '保存中の会話' }] }} onArchive={() => pending}><h1>Home</h1></WorkspaceShell>));
+    const archive = container.querySelector('[aria-label="保存中の会話をアーカイブ"]');
+    act(() => archive.click());
+    expect(archive.disabled).toBe(true);
+    expect(archive.textContent).toBe('処理中…');
+    await act(async () => { resolveArchive(false); await pending; });
+    expect(container.textContent).toContain('保存中の会話');
+    expect(archive.disabled).toBe(false);
+    act(() => { root.unmount(); container.remove(); });
+  });
+
   it('hydrates and restores a signed-in principal through the explicit account menu', async () => {
     const storage = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
     const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);

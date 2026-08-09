@@ -39,7 +39,7 @@ function formatFileSize(sizeBytes) {
   return `${Math.max(1, Math.ceil(sizeBytes / 1024))} KB`;
 }
 
-export function KnowledgeSurface({ fixture, repository, conversationRepository, ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
+export function KnowledgeSurface({ fixture, repository, conversationRepository, archiveHistory = [], ownerId = 'admin-demo-owner', spaceId = 'admin-demo-space', onSend = () => {}, onAssetAdded = () => {}, modelKey = 'gpt-5.6-terra', models = [], onModelChange }) {
   const [message, setMessage] = useState('');
   const [removeRequested, setRemoveRequested] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -97,6 +97,7 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
       const existing = repositoryRef.current.find(metadata.id);
       await repositoryRef.current.add(metadata);
       setDocuments(repositoryRef.current.list());
+      await onAssetAdded(metadata);
       setPersistenceError(false);
       setNotice(existing ? 'この資料はすでに追加されています。' : '資料名とメタデータを端末内に追加しました。本文は保存・送信していません。');
     } catch (error) {
@@ -131,6 +132,8 @@ export function KnowledgeSurface({ fixture, repository, conversationRepository, 
     </header>
 
     {(notice || persistenceError) && <p role={persistenceError ? 'alert' : 'status'} className={`text-sm ${persistenceError ? 'text-[var(--color-destructive)]' : 'text-[var(--color-text-muted)]'}`}>{notice || '保存状態を確認できません。ページを再読み込みしてから、もう一度お試しください。'}</p>}
+
+    {archiveHistory.length > 0 && <Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">History</p><h2 className="mt-2 text-lg font-semibold">アーカイブ履歴</h2><p className="mt-1 text-sm text-[var(--color-text-muted)]">保管済みの会話とプロジェクトです。ここでは読み取り専用です。</p><ul className="mt-4 grid gap-2" aria-label="アーカイブ履歴">{archiveHistory.map((entry) => <li key={`${entry.id}-${entry.archivedAt ?? ''}`} className="rounded-lg bg-[var(--color-muted)] px-3 py-2 text-sm"><span className="mr-2 text-xs text-[var(--color-text-muted)]">{entry.id.startsWith('home:') ? 'ホーム' : 'プロジェクト'}</span>{entry.title}</li>)}</ul></Card>}
 
     {visibleDocuments.length === 0 ? <Card className="p-6"><h2 className="text-lg font-semibold">まだ資料はありません</h2><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">資料を追加すると、ファイル名と端末内メタデータをここで確認できます。</p></Card> : <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,.85fr)]">
       <div className="grid gap-4">{visibleDocuments.map((document) => <Card key={document.id} className="p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-semibold">{document.name}</h2><Badge variant="outline">{stateLabel[document.state] ?? document.state}</Badge></div><p className="mt-2 text-sm text-[var(--color-text-muted)]">{document.kind === 'local' ? `${document.mediaType?.toUpperCase() ?? '資料'} · ${formatFileSize(document.sizeBytes)} · 本文は未保存` : `バージョン ${document.version} · このspaceで参照可能`}</p></div><Button variant="secondary" onClick={() => setRemoveRequested(document)}>削除</Button></div>{document.references.length > 0 && <div className="mt-6 border-t border-[var(--color-border-subtle)] pt-5"><h3 className="text-sm font-semibold">参照元</h3><ul aria-label={`${document.name}の利用可能な出典`} className="mt-3 grid gap-2 text-sm text-[var(--color-text-muted)]">{document.references.map((reference) => <li key={`${reference.kind}-${reference.sourceId}-${reference.locator}`} className="rounded-lg bg-[var(--color-muted)] px-3 py-2"><span className="font-medium text-[var(--color-text)]">{reference.kind}</span> · {reference.locator}</li>)}</ul></div>}</Card>)}</div>
