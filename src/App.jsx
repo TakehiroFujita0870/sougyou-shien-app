@@ -81,7 +81,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const [homeConversationRevision, setHomeConversationRevision] = useState(0);
   const [activeHomeConversationId, setActiveHomeConversationId] = useState('');
   const rawHomeConversationRepositoryRef = useRef(null);
-  if (!rawHomeConversationRepositoryRef.current) rawHomeConversationRepositoryRef.current = homeConversationRepository ?? createHomeConversationRepository();
+  if (!rawHomeConversationRepositoryRef.current) rawHomeConversationRepositoryRef.current = homeConversationRepository ?? createHomeConversationRepository({ ownerId: 'local-owner', spaceId: 'local-space' });
   const trackedHomeConversationRepositoryRef = useRef(null);
   if (!trackedHomeConversationRepositoryRef.current) trackedHomeConversationRepositoryRef.current = {
     load: () => rawHomeConversationRepositoryRef.current.load(),
