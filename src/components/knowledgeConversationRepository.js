@@ -16,7 +16,7 @@ function normalizeEntry(value) {
   const createdAt = validDate(value.createdAt);
   const sourceType = ['synthetic', 'local', 'unknown'].includes(value.sourceType) ? value.sourceType : 'unknown';
   const confidence = ['high', 'medium', 'unknown'].includes(value.confidence) ? value.confidence : 'unknown';
-  return { id: value.id, category, title: value.title.slice(0, 100), content: value.content.slice(0, 4000), createdAt, updatedAt: validDate(value.updatedAt, createdAt), sourceType, projectId: typeof value.projectId === 'string' ? value.projectId.slice(0, 100) : '', evaluationView: typeof value.evaluationView === 'string' ? value.evaluationView.slice(0, 100) : '', confidence, unknowns: Array.isArray(value.unknowns) ? value.unknowns.filter((item) => typeof item === 'string').slice(0, 8).map((item) => item.slice(0, 200)) : ['未確認'] };
+  return { id: value.id, category, title: value.title.slice(0, 100), content: value.content.slice(0, 4000), createdAt, updatedAt: validDate(value.updatedAt, createdAt), sourceType, projectId: typeof value.projectId === 'string' ? value.projectId.slice(0, 100) : '', evaluationView: typeof value.evaluationView === 'string' ? value.evaluationView.slice(0, 100) : '', confidence, unknowns: Array.isArray(value.unknowns) ? value.unknowns.filter((item) => typeof item === 'string').slice(0, 8).map((item) => item.slice(0, 200)) : [] };
 }
 
 export function createKnowledgeConversationRepository({ ownerId, spaceId, storage = globalThis.localStorage } = {}) {
@@ -41,7 +41,7 @@ export function proposeKnowledgeEntry(content) {
   const category = /(決定|採用|却下|保留)/.test(trimmed) ? 'decision' : /(顧客|経験|強み|プロフィール)/.test(trimmed) ? 'profile' : 'note';
   const label = { profile: 'プロフィール', decision: '意思決定', note: 'メモ' }[category];
   const createdAt = new Date().toISOString();
-  return { id: `knowledge:${Date.now()}`, category, title: `${label}: ${trimmed.replace(/\s+/g, ' ').slice(0, 36)}`, content: trimmed, createdAt, updatedAt: createdAt, sourceType: 'local', confidence: 'unknown', unknowns: ['未確認'] };
+  return { id: `knowledge:${Date.now()}`, category, title: `${label}: ${trimmed.replace(/\s+/g, ' ').slice(0, 36)}`, content: trimmed, createdAt, updatedAt: createdAt, sourceType: 'local', confidence: 'unknown', unknowns: [] };
 }
 
 export function respondToKnowledge(message, fixture) {
