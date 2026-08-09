@@ -88,7 +88,7 @@ export function HomeSupervisor({ repository, snapshot = initialSnapshot, onProje
   }
 
   const modelLabel = models.find((model) => model.logicalKey === modelKey)?.displayName ?? 'GPT-5.6 Terra';
-  return <section aria-labelledby="home-supervisor-heading" className="mx-auto flex min-h-[calc(100vh-16rem)] w-full max-w-[900px] flex-col">
+  return <section aria-labelledby="home-supervisor-heading" className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-[900px] flex-col">
     <div className="px-1 pt-2"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Home</p><h1 id="home-supervisor-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1><p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">アイデアを会話でほどき、判断する前に提案として確認します。</p></div>
     <ol className="mt-7 grid flex-1 content-start gap-4 pb-6" aria-label="会話履歴">
       {messages.length === 0 && <li className="py-12 text-center text-sm leading-6 text-[var(--color-text-muted)]">誰のどんな困りごとを解決したいか、自由に話してください。</li>}

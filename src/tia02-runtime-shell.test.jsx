@@ -24,6 +24,7 @@ describe('T-IA-02-R runtime shell contract', () => {
     expect(html).not.toMatch(/local|fake|mock/i);
     expect(html).toContain('sticky bottom-0');
     expect(html).toContain('max-w-[900px]');
+    expect(html).toContain('min-h-[calc(100vh-3rem)]');
     expect(html).toContain('text-2xl font-semibold tracking-tight');
     expect(html).not.toContain('class="page-title"');
     expect(html).not.toContain('始める前に、');
