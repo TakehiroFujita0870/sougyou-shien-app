@@ -12,6 +12,7 @@ from .decision_memory import (
 )
 from .account_privacy import InMemoryAccountPrivacyRepository
 from .market_report import InMemoryMarketReportRepository, MarketReportRequest, MarketReportResponse
+from .project_dossier import DossierRequest, ProjectDossier, assemble_dossier
 from .project_knowledge import (
     InMemoryProjectKnowledgeRepository,
     KnowledgeCandidatesResponse,
@@ -160,6 +161,17 @@ def create_app(
         if report is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "market_report_not_found"})
         return report
+
+    @app.post("/v1/projects/{project_id}/dossier", response_model=ProjectDossier)
+    def project_dossier(
+        project_id: str, request: DossierRequest, owner_id: Annotated[str, Depends(local_owner_context)]
+    ) -> ProjectDossier:
+        if request.project_id != project_id:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": "project_id_mismatch"})
+        report = report_repository.get(owner_id, request.market_report_id) if request.market_report_id else None
+        if request.market_report_id and (report is None or report.idea_id != project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "market_report_not_found"})
+        return assemble_dossier(request, report)
 
     @app.post("/v1/project-knowledge", response_model=ProjectKnowledgeResponse, status_code=status.HTTP_201_CREATED)
     def create_project_knowledge(
