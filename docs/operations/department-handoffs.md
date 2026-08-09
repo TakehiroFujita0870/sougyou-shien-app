@@ -74,6 +74,7 @@ CEO室は全社ポートフォリオ管理・要件決定を所有する。CEO�
 
 統合部は次の状態変化の直後に限り、CEO室へ `ORG_HEALTH` を送る。定期ポーリングは追加しない。payloadの正規化した内容をstate fingerprintとし、同じfingerprintは二重送信しない。
 
+- PR mergeとmain smoke成功。
 - merge後にnext_dependenciesが空で、idle部門と未割当ready Issueが同時にある。
 - 部門のWIPが0または上限超になった。
 - P0 BLOCKED、同一ファイル所有権競合、依存先未割当、またはCEO決裁境界が発生した。
@@ -82,14 +83,22 @@ CEO室は全社ポートフォリオ管理・要件決定を所有する。CEO�
 event: ORG_HEALTH
 repository: owner/name
 state_fingerprint: deterministic digest of the fields below
-trigger: merged_idle_unassigned | wip_zero_or_over_limit | p0_blocked | file_ownership_conflict | dependency_unassigned | ceo_boundary
+trigger: merge_smoke | merged_idle_unassigned | wip_zero_or_over_limit | p0_blocked | file_ownership_conflict | dependency_unassigned | ceo_boundary
+main_sha: full SHA
+merge_source: PR and merge SHA or none
 departments: active/idle and WIP by department
 review_queue: open review PRs and owner
 unassigned_ready_issues: ready Issue numbers or none
 dependency_blocks: source -> target or none
+ownership_conflicts: files/scopes or none
+next_allocation_candidates: ready work and owner
+model_availability: profile availability by affected department
+released_capacity: work unlocked by merge or none
 next_24h_risks: likely stop points or none
 next_action: CEO portfolio decision or acknowledge
 ```
+
+idle部門とready/unassigned workが同じ`ORG_HEALTH`にある場合、CEO室は同じ因果連鎖で`PORTFOLIO_DIRECTIVE`を返す。統合部は同一turnで`ASSIGNMENT`または`DEPENDENCY_READY`へ翻訳し、delivery成功と受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。
 
 通常のCI詳細やP1/P2詳細は `ORG_HEALTH` に含めない。
 
@@ -220,6 +229,15 @@ flowchart LR
 - 受信者の行動: 依存PRの開始、Issue状態とプレビューURLの確認を行う
 
 `next_dependencies` が空でない場合、統合部はCEO室への `MERGED` 報告と同時に、次担当部を直接起動する `DEPENDENCY_READY` を送る。送信成功の確認までmerge後handoffは未完了とする。
+
+merge後handoffは次の順序をすべて満たすまで未完了とする。
+
+1. main smoke成功後に担当部とCEO室へ`MERGED`を送る。
+2. `next_dependencies`があれば`DEPENDENCY_READY`を送りdelivery成功を確認する。
+3. `ORG_HEALTH`を再計算してCEO室へ送る。
+4. CEO室が返した`PORTFOLIO_DIRECTIVE`を`ASSIGNMENT`へ翻訳し、受信部のactiveまたは`BLOCKED(model_unavailable)`を確認する。
+
+回帰ケース: PR #112の計画merge後に初期assignmentが同一turnで配信されなかった。以後、merge後handoffのreview checklistは`MERGED`、dependency delivery、`ORG_HEALTH`、directive、assignment delivery、receiver stateをすべて検査する。
 
 次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。CI失敗と通常P1/P2はこの例外に含めない。
 
