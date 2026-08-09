@@ -48,6 +48,14 @@
 - 次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。
 - 統合・リリース管理部の実行プロファイルは `gpt-5.6-terra / medium` とする。利用不能時だけ管理タスクへ `BLOCKED` を送り、無断で別プロファイルへ変更しない。
 
+### Issue・PRリソース管理
+
+- 統合・リリース管理部がIssue assignment、WIP制限、依存順、変更ファイル所有権を決める。未割当Issueを実装部が独自に着手しない。
+- 実装部の開始条件は統合部からの `ASSIGNMENT` または `DEPENDENCY_READY` である。
+- 会話体験・プロジェクト部はchat/project workflow/data-context、プロダクトUI・デザインシステム部はsurface/layout/nav/tokens/a11y primitives、品質・プロダクト運用部は独立検証、基盤・認証部はauth/runtime、事業設計・調査部はdomain/API contractsを所有する。
+- `App.jsx` とshared styleの同時変更は禁止する。両方が必要な場合、統合部が先にファイル所有権と時分割を明記する。
+- 各実装部のWIP上限はレビュー待ち1PRと実装中1件である。統合部はレビューキューを優先して空にする。
+
 ## Windows / PowerShell の実行規約
 
 - Windows版Codexでは PowerShell を標準シェルとし、Git Bash は bash 前提の限定検査にだけ使う。詳細な安全例、禁止例、診断手順、Ubuntu CIとの差分は [`docs/operations/windows-powershell.md`](docs/operations/windows-powershell.md) を正本とする。
