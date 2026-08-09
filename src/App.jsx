@@ -133,6 +133,8 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
     try {
       const project = await adoptedProjectRepositoryRef.current.saveAdopted(candidate);
       adoptedProjectHydration.replaceReady(project);
+      const nextPortfolio = await portfolioRepositoryRef.current.upsert('project', { id: project.id, title: project.title, updatedAt: Date.now() });
+      setPortfolio(nextPortfolio);
       setActiveWorkspace('project');
     } catch {
       // Home retains its own decision state if the Project mirror cannot be persisted.
