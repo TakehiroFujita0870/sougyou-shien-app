@@ -59,8 +59,14 @@ export function createLocalGoogleAuthAdapter({
     if (profile !== 'local' && profile !== 'test') {
       throw new Error('外部認証は設定されていません。');
     }
+    try {
+      store?.setItem(storageKey, JSON.stringify({ version: STORAGE_VERSION, principal }));
+    } catch {
+      current = null;
+      status = 'error';
+      throw new Error('認証状態を端末に保存できません。');
+    }
     current = principal;
-    try { store?.setItem(storageKey, JSON.stringify({ version: STORAGE_VERSION, principal })); } catch { status = 'error'; }
     status = 'ready';
     return current;
   }
