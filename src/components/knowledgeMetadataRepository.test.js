@@ -20,7 +20,7 @@ describe('knowledge metadata repository', () => {
   });
 
   it('isolates owner and space and quarantines corrupt records', async () => {
-    const store = storage({ schemaVersion: 1, documents: [doc, { ...doc, id: 'other', ownerId: 'b', spaceId: 's' }, { id: 'bad' }] });
+    const store = storage({ schemaVersion: 1, documents: [{ ...doc, ownerId: 'a', spaceId: 's' }, { ...doc, id: 'other', ownerId: 'b', spaceId: 's' }, { id: 'bad' }] });
     const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
     await repository.load();
     expect(repository.list().map(({ id }) => id)).toEqual(['doc-1']);
