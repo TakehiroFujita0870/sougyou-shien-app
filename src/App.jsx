@@ -24,29 +24,13 @@ function persistSelectedSurface(surface, storage = globalThis.sessionStorage) {
   try { storage?.setItem(SELECTED_SURFACE_STORAGE_KEY, surface); } catch { /* session storage is optional */ }
 }
 
-function HomeConversationSurface() {
-  return (
-    <section aria-labelledby="home-heading" className="max-w-3xl">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Home</p>
-      <h1 id="home-heading" className="mt-2 text-2xl font-semibold tracking-tight">Kadode AI</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">着想や経験を話しながら整理し、確認してから次の検討へ進めます。</p>
-      <form className="mt-6 rounded-2xl border border-stone-300 bg-white p-3">
-        <label htmlFor="home-composer" className="sr-only">AIへのメッセージ</label>
-        <textarea id="home-composer" aria-describedby="home-composer-hint" className="min-h-24 w-full resize-y p-2 text-base leading-6 outline-none" placeholder="アイデアを話してみる" />
-        <p id="home-composer-hint" className="mt-2 text-xs text-stone-500">Enterで送信、Shift+Enterで改行</p>
-        <div className="mt-2 flex justify-end"><button type="button" className="min-h-11 rounded-full bg-stone-900 px-5 py-2 text-sm font-bold text-white">送信</button></div>
-      </form>
-    </section>
-  );
-}
-
 function PlaceholderSurface({ name, description, project }) {
   if (name === 'Project' && project) return <section aria-labelledby="project-heading" className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">Project</p><h1 id="project-heading" className="mt-2 text-2xl font-semibold tracking-tight">採用したプロジェクト</h1><article className="mt-6 rounded-2xl border border-stone-300 bg-white p-4"><p><strong>事実:</strong> {project.fact}</p><p><strong>推論:</strong> {project.inference}</p><p><strong>状態:</strong> 採用済み</p></article></section>;
   return <section aria-labelledby={`${name.toLowerCase()}-heading`} className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">{name}</p><h1 id={`${name.toLowerCase()}-heading`} className="mt-2 text-2xl font-semibold tracking-tight">{name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{description}</p></section>;
 }
 
-function IdeaWorkspace({ onProjectAdopt }) {
-  return <div className="max-w-4xl"><HomeSupervisor onProjectAdopt={onProjectAdopt} /></div>;
+function IdeaWorkspace({ onProjectAdopt, modelKey }) {
+  return <div className="max-w-6xl"><HomeSupervisor onProjectAdopt={onProjectAdopt} modelKey={modelKey} /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
@@ -74,6 +58,7 @@ export function App({ profileRepository }) {
   const [subscription, setSubscription] = useState(() => repositoryRef.current.getSubscription());
 
   useEffect(() => { persistSelectedSurface(activeWorkspace); }, [activeWorkspace]);
+  useEffect(() => { repositoryRef.current.load().then(setSubscription); }, []);
 
   useEffect(() => {
     if (profileHydration.phase === 'ready') {
@@ -103,7 +88,9 @@ export function App({ profileRepository }) {
   }, []);
 
   function updatePlan(plan) {
-    setSubscription(repositoryRef.current.applyPlan(plan, subscription));
+    const next = repositoryRef.current.applyPlan(plan, subscription);
+    setSubscription(next);
+    void repositoryRef.current.save(next);
   }
 
   function retryProfileLoad() {
@@ -119,11 +106,11 @@ export function App({ profileRepository }) {
   }
 
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace modelKey={subscription.modelKey} onProjectAdopt={(project) => { setAdoptedProject(project); setActiveWorkspace('project'); }} />;
     if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" project={adoptedProject} description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
-    return <IdeaWorkspace />;
+    return <IdeaWorkspace modelKey={subscription.modelKey} />;
   }
 
   return (
