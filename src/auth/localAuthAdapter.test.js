@@ -24,6 +24,14 @@ describe('local Google auth adapter', () => {
     expect(adapter.currentPrincipal()).toBeNull();
   });
 
+  it('fails closed when storage cannot persist a sign-in', async () => {
+    const storage = { getItem: () => null, setItem: () => { throw new Error('quota'); }, removeItem: () => {} };
+    const adapter = createLocalGoogleAuthAdapter({ storage });
+    await expect(adapter.signIn()).rejects.toThrow('保存できません');
+    expect(adapter.currentPrincipal()).toBeNull();
+    expect(adapter.currentStatus()).toBe('error');
+  });
+
   it('fails closed outside local profiles and isolates owner state', async () => {
     await expect(createLocalGoogleAuthAdapter({ profile: 'production' }).signIn()).rejects.toThrow('設定');
     const state = createOwnerScopedLocalState();
