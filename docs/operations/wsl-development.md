@@ -2,6 +2,14 @@
 
 最終検証日: 2026-08-09
 
+## ローカル接続先
+
+- Kadodeアプリ: `http://localhost:5174/`
+- Storybook: `http://localhost:6006/`
+- ローカルAPIヘルスチェック: `http://localhost:8000/health`
+
+画面確認、スクリーンショット、引き継ぎではこのポートを共通で使う。変更比較時は、アプリとStorybookを同じ最新`main`、または同じfeature worktreeから起動する。
+
 ## 役割
 
 Windows版Codexでは、PowerShellをWindows制御面、Ubuntu WSL2をアプリケーション実行面として使う。PowerShellの文字コード、外部CLI、GitHub本文の規約は[Windows / PowerShell の安全なエージェント運用](windows-powershell.md)に従う。
