@@ -93,7 +93,8 @@ describe('plan selection acceptance', () => {
 
   it('supports keyboard plan confirmation without exposing model controls', async () => {
     const { container, unmount } = await mount(<App />);
-    await click([...container.querySelectorAll('button')].find((button) => button.textContent === '設定'));
+    await click(container.querySelector('.workspace-shell__account-copy > button'));
+    await click([...container.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent === '設定'));
 
     const standard = container.querySelector('input[value="standard"]');
     standard.focus();
