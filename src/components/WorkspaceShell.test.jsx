@@ -126,7 +126,7 @@ describe('WorkspaceShell', () => {
       'プランと利用状況',
       '設定',
       'ヘルプ・ショートカット',
-      'ログアウト',
+      'ログアウト（認証連携前）',
     ]);
     await act(async () => {
       document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
