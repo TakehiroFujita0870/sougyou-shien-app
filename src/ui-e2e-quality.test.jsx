@@ -48,8 +48,8 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
   it.each([1280, 390])('keeps Home AI composer as the only input entry at %ipx', async (width) => {
     const { container } = await mountApp(width);
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
-    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
-    expect(container.querySelector('#idea-message')).toBeTruthy();
+    expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
+    expect(container.querySelector('#home-supervisor-message')).toBeTruthy();
   });
 
   it('keeps surface context and selected surface after an F5-equivalent remount without network', async () => {
@@ -69,9 +69,9 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
 
   it('exposes candidate decision controls from the Home composer', async () => {
     const { container } = await mountApp(1280);
-    const composer = container.querySelector('#idea-message');
+    const composer = container.querySelector('#home-supervisor-message');
     expect(composer).toBeTruthy();
-    expect(container.querySelector('label[for="idea-message"]')).toBeTruthy();
+    expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
     expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;

@@ -41,7 +41,7 @@ describe('UI UX contract: executable baseline acceptance checks', () => {
     const { container } = await mountApp();
     expect(container.querySelector('[aria-label="主要ページ"]')).not.toBeNull();
     expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['Home', 'Project', 'Knowledge']);
-    expect(container.querySelector('#idea-message')).not.toBeNull();
+    expect(container.querySelector('#home-supervisor-message')).not.toBeNull();
   });
 
   it('FAIL-UX-02 exposes Project and Knowledge as distinct context destinations', async () => {
