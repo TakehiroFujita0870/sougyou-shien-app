@@ -45,8 +45,8 @@ function PlaceholderSurface({ name, description }) {
   return <section aria-labelledby={`${name.toLowerCase()}-heading`} className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-500">{name}</p><h1 id={`${name.toLowerCase()}-heading`} className="mt-2 text-2xl font-semibold tracking-tight">{name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{description}</p></section>;
 }
 
-function IdeaWorkspace() {
-  return <div className="max-w-4xl"><HomeSupervisor /></div>;
+function IdeaWorkspace({ onProjectAdopt }) {
+  return <div className="max-w-4xl"><HomeSupervisor onProjectAdopt={onProjectAdopt} /></div>;
 }
 
 function ProfileLoadFailure({ onRetry }) {
@@ -118,7 +118,7 @@ export function App({ profileRepository }) {
   }
 
   function workspaceContent() {
-    if (activeWorkspace === 'home') return <IdeaWorkspace />;
+    if (activeWorkspace === 'home') return <IdeaWorkspace onProjectAdopt={() => setActiveWorkspace('project')} />;
     if (activeWorkspace === 'project') return <PlaceholderSurface name="Project" description="プロジェクトの作業面は、次の実装で接続します。" />;
     if (activeWorkspace === 'knowledge') return <PlaceholderSurface name="Knowledge" description="Knowledgeの参照面は、次の実装で接続します。" />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;

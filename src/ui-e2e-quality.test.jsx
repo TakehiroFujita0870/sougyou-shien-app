@@ -84,4 +84,19 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
     expect(container.textContent).toContain('プロジェクトに採用');
     expect([...container.querySelectorAll('button')].some((button) => button.textContent.includes('発言を送信'))).toBe(true);
   });
+
+  it('promotes an adopted inline candidate to the Project surface', async () => {
+    const { container } = await mountApp(1280);
+    const composer = container.querySelector('#home-supervisor-message');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(composer, 'プロジェクトを一覧で確認');
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクトに採用').click());
+    expect(container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(container.textContent).toContain('プロジェクト');
+  });
 });
