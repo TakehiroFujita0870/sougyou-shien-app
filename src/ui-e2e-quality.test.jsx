@@ -4,92 +4,79 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
-import { PROFILE_STEPS } from './components/UserProfileInterview';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-let storageValues;
+const mounted = [];
+const completedProfile = JSON.stringify({ status: 'completed', values: {} });
 
-beforeEach(() => {
-  storageValues = new Map();
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key) => storageValues.get(key) ?? null,
-      setItem: (key, value) => storageValues.set(key, String(value)),
-      removeItem: (key) => storageValues.delete(key),
-      clear: () => storageValues.clear(),
-    },
-  });
-});
-
-const setValue = (element, value) => {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-  setter.call(element, value);
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-};
-
-async function settle() {
-  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+function installStorage() {
+  const values = new Map([['kadode:user-profile', completedProfile]]);
+  const session = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+    clear: () => values.clear(),
+  } });
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: {
+    getItem: (key) => session.get(key) ?? null,
+    setItem: (key, value) => session.set(key, String(value)),
+    removeItem: (key) => session.delete(key),
+    clear: () => session.clear(),
+  } });
 }
 
-async function mountApp(width, { reset = true } = {}) {
-  window.innerWidth = width;
-  if (reset) localStorage.clear();
+async function mountApp(width) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(<App />));
-  await settle();
+  await act(async () => { root.render(<App />); await Promise.resolve(); await Promise.resolve(); });
+  mounted.push({ container, root });
   return { container, root };
 }
 
-async function completeProfile(container) {
-  for (const [index] of PROFILE_STEPS.entries()) {
-    const textarea = container.querySelector('textarea[aria-labelledby="profile-question"]');
-    setValue(textarea, `回答${index + 1}`);
-    await act(async () => { textarea.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await Promise.resolve(); });
-    await settle();
-  }
-}
+beforeEach(installStorage);
+afterEach(async () => {
+  await Promise.all(mounted.splice(0).map(({ container, root }) => act(async () => { root.unmount(); container.remove(); })));
+  document.body.replaceChildren();
+  vi.unstubAllGlobals();
+});
 
-async function runHappyPath(width) {
-  const { container, root } = await mountApp(width);
-  expect(container.querySelector('[role="dialog"]')).toBeTruthy();
-  await completeProfile(container);
-  expect(container.querySelector('[role="dialog"]')).toBeNull();
-
-  const message = '工場の保全担当者が故障履歴を探せない';
-  const input = container.querySelector('#idea-message');
-  setValue(input, message);
-  await act(async () => { input.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await Promise.resolve(); });
-  await settle();
-  expect(container.textContent).toContain(message);
-  const saveButton = [...container.querySelectorAll('button')].find((button) => button.textContent === 'アイデア候補として保存');
-  expect(saveButton).toBeTruthy();
-  await act(async () => { saveButton.click(); await Promise.resolve(); });
-  await settle();
-  expect(container.textContent).toContain('仮説カード（編集案）');
-
-  await act(async () => root.unmount());
-  container.remove();
-  const reloaded = await mountApp(width, { reset: false });
-  await settle();
-  expect(reloaded.container.textContent).toContain(message.slice(0, 40));
-  await act(async () => reloaded.root.unmount());
-  reloaded.container.remove();
-}
-
-describe('UI E2E quality loop', () => {
-  afterEach(() => {
-    localStorage.clear();
-    vi.unstubAllGlobals();
+describe('UI E2E quality loop: Home / Project / Knowledge', () => {
+  it.each([1280, 390])('keeps Home AI composer as the only input entry at %ipx', async (width) => {
+    const { container } = await mountApp(width);
+    expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
+    expect(container.querySelector('#home-composer')).toBeTruthy();
+    expect(container.querySelectorAll('textarea')).toHaveLength(1);
+    expect(container.querySelector('#idea-message')).toBeNull();
+    expect(container.textContent).not.toContain('アイデア候補として保存');
+    expect(container.textContent).not.toContain('アイデアを登録する');
   });
 
-  it.each([1280, 390])('completes profile, local AI conversation, candidate save, and reload at %ipx without network', async (width) => {
+  it('keeps surface context and selected surface after an F5-equivalent remount without network', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    await runHappyPath(width);
+    const first = await mountApp(390);
+    const project = [...first.container.querySelectorAll('nav button')].find((button) => button.textContent.trim() === 'Project');
+    await act(async () => project.click());
+    expect(first.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    await act(async () => first.root.unmount());
+    mounted.shift().container.remove();
+    const second = await mountApp(390);
+    expect(second.container.querySelector('[aria-current="page"]').textContent).toBe('Project');
+    expect(second.container.textContent).toContain('プロジェクト');
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('exposes composer semantics without legacy candidate decision workflow', async () => {
+    const { container } = await mountApp(1280);
+    const composer = container.querySelector('#home-composer');
+    expect(composer.getAttribute('aria-describedby')).toBe('home-composer-hint');
+    expect(container.querySelector('label[for="home-composer"]')).toBeTruthy();
+    expect(container.textContent).toContain('Enterで送信、Shift+Enterで改行');
+    expect(container.querySelector('[data-testid="assist-request"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assist-adopt"]')).toBeNull();
   });
 });
