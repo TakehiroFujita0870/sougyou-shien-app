@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 EvidenceClassification = Literal["supporting", "counter", "unverified"]
 DecisionStatus = Literal["active", "expired"]
 CardUpdateStatus = Literal["proposed", "approved"]
+CompetitorCategory = Literal["direct", "indirect", "alternative"]
+JudgmentKind = Literal["winning_move", "opportunity"]
 
 
 class ReportEvidence(BaseModel):
@@ -26,11 +28,33 @@ class PastDecision(BaseModel):
     status: DecisionStatus
 
 
+class CompetitorEntry(BaseModel):
+    id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    category: CompetitorCategory
+    comparison_axis: str = Field(min_length=1, max_length=500)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class PotentialEntrantRisk(BaseModel):
+    description: str = Field(min_length=1, max_length=2000)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class OwnerJudgment(BaseModel):
+    kind: JudgmentKind
+    statement: str = Field(min_length=1, max_length=2000)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
 class MarketReportRequest(BaseModel):
     idea_id: str = Field(min_length=1, max_length=200)
     idea_title: str = Field(min_length=1, max_length=200)
     evidence: list[ReportEvidence] = Field(default_factory=list, max_length=100)
     past_decisions: list[PastDecision] = Field(default_factory=list, max_length=100)
+    competitors: list[CompetitorEntry] = Field(default_factory=list, max_length=100)
+    potential_entrant_risks: list[PotentialEntrantRisk] = Field(default_factory=list, max_length=100)
+    owner_judgments: list[OwnerJudgment] = Field(default_factory=list, max_length=100)
 
 
 class ReportSection(BaseModel):
@@ -54,6 +78,11 @@ class MarketReportResponse(BaseModel):
     counter_evidence: list[ReportEvidence]
     unverified_items: list[str]
     card_update: CardUpdate
+    competitors: list[CompetitorEntry]
+    potential_entrant_risks: list[PotentialEntrantRisk]
+    owner_judgments: list[OwnerJudgment]
+    evidence: list[ReportEvidence]
+    ai_inference: list[str]
 
 
 @dataclass
@@ -69,6 +98,10 @@ class InMemoryMarketReportRepository:
         self._reports: dict[str, StoredMarketReport] = {}
 
     def create(self, owner_id: str, request: MarketReportRequest) -> MarketReportResponse:
+        evidence_by_id = {item.id: item for item in request.evidence}
+        references = [evidence_id for item in (*request.competitors, *request.potential_entrant_risks, *request.owner_judgments) for evidence_id in item.evidence_ids]
+        if any(evidence_id not in evidence_by_id for evidence_id in references):
+            raise ValueError("evidence reference not found")
         supporting = [item for item in request.evidence if item.classification == "supporting"]
         counter = [item for item in request.evidence if item.classification == "counter"]
         unverified = [item.excerpt for item in request.evidence if item.classification == "unverified"]
@@ -91,6 +124,15 @@ class InMemoryMarketReportRepository:
             counter_evidence=counter,
             unverified_items=unverified,
             card_update=CardUpdate(status="proposed", proposal=_proposal(request.idea_title, supporting, counter)),
+            competitors=request.competitors,
+            potential_entrant_risks=request.potential_entrant_risks,
+            owner_judgments=request.owner_judgments,
+            evidence=request.evidence,
+            ai_inference=[
+                _market_conclusion(len(supporting), len(counter), len(unverified)),
+                _difference_conclusion(request.past_decisions),
+                _opportunity_conclusion(request.idea_title, supporting, unverified),
+            ],
         )
         self._reports[response.id] = StoredMarketReport(owner_id=owner_id, response=response)
         return response
