@@ -91,5 +91,16 @@ export function createAdoptedProjectRepository({ ownerId = 'local-owner', spaceI
     return null;
   }
 
-  return { load, list, current, saveAdopted, clearAdopted };
+  async function selectCurrent(id) {
+    await load();
+    if (writeBlocked) throw new Error('Stored adopted projects require recovery before writing');
+    const selected = list().find((record) => record.id === id);
+    if (!selected) return null;
+    const next = [selected, ...records.filter((record) => record !== selected)];
+    storage?.setItem(ADOPTED_PROJECT_STORAGE_KEY, JSON.stringify({ schemaVersion: ADOPTED_PROJECT_SCHEMA_VERSION, projects: next }));
+    records = next;
+    return selected;
+  }
+
+  return { load, list, current, saveAdopted, clearAdopted, selectCurrent };
 }

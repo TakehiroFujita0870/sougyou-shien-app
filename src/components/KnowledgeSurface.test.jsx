@@ -47,7 +47,7 @@ describe("KnowledgeSurface library", () => {
     const onOpenProject = vi.fn();
     const project = { id: 'project-a', ownerId: 'local-owner', spaceId: 'local-space' };
     const conversationRepository = { load: async () => ({ messages: [], entries: [{ id: 'evidence', category: 'decision', title: '採用判断', content: '根拠', createdAt: '2026-08-11T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z', sourceType: 'local', confidence: 'unknown', unknowns: [], projectId: 'project-a', evaluationView: '市場はある？' }] }), save: async (value) => value };
-    const { container, unmount } = await mount({ ownerId: 'local-owner', spaceId: 'local-space', availableProjects: [project], conversationRepository, onOpenProject });
+    const { container, unmount } = await mount({ ownerId: 'local-owner', spaceId: 'local-space', availableProjects: [project], allowedEvaluationViews: ['市場はある？'], conversationRepository, onOpenProject });
     await act(async () => Promise.resolve());
     const button = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Projectを開く');
     expect(button).toBeTruthy();
