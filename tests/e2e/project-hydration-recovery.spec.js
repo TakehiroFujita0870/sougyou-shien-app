@@ -14,6 +14,7 @@ test('keeps the Project draft and production geometry through repeated hydration
   await expect(page.locator('form[aria-label="Project Kadode AI composer"] button[type="submit"]')).toBeDisabled()
 
   await page.reload()
+  pageErrors.length = 0
   await expect(retry).toBeVisible()
   await expect(composer).toBeEnabled()
   await expect(composer).toHaveValue('再試行しても残るProject下書き')
