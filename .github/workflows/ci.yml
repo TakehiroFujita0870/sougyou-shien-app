@@ -129,6 +129,15 @@ jobs:
           name: kadode-knowledge-hydration-recovery-1440
           path: test-results/knowledge-hydration-recovery-1440.png
           if-no-files-found: error
+      - name: Verify Project hydration recovery
+        run: npx playwright test tests/e2e/project-hydration-recovery.spec.js
+      - name: Upload Project hydration recovery evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-project-hydration-recovery-1440
+          path: test-results/project-hydration-recovery-1440.png
+          if-no-files-found: error
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups
       - name: Install LibreOffice for DOCX visual QA

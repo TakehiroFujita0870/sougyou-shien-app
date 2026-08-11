@@ -26,4 +26,21 @@ describe('project conversation repository', () => {
     await expect(repository.save([{ role: 'user', content: 'do not overwrite' }])).rejects.toThrow('recovery');
     expect(storage.getItem(PROJECT_CONVERSATION_STORAGE_KEY)).toBe('{broken');
   });
+
+  it('reports a failed read and retries only after the source is repaired', async () => {
+    let failRead = true;
+    const storage = memoryStorage({ [PROJECT_CONVERSATION_STORAGE_KEY]: JSON.stringify({ schemaVersion: 1, records: [] }) });
+    const originalGet = storage.getItem;
+    storage.getItem = (key) => { if (failRead && key === PROJECT_CONVERSATION_STORAGE_KEY) throw new Error('blocked'); return originalGet(key); };
+    const repository = createProjectConversationRepository({ storage });
+    expect(await repository.load()).toEqual([]);
+    expect(repository.getLastError()).toBeInstanceOf(Error);
+    await expect(repository.save([{ role: 'user', content: 'do not overwrite' }])).rejects.toThrow('recovery');
+    failRead = false;
+    expect(await repository.retryLoad()).toEqual([]);
+    expect(repository.getLastError()).toBeNull();
+    await expect(repository.save([{ role: 'user', content: 'recovered' }])).resolves.toHaveLength(1);
+    const remounted = createProjectConversationRepository({ storage });
+    await expect(remounted.load()).resolves.toEqual([expect.objectContaining({ content: 'recovered' })]);
+  });
 });

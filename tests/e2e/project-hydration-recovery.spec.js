@@ -1,0 +1,36 @@
+import { expect, test } from '@playwright/test'
+
+test.use({ viewport: { width: 1440, height: 900 } })
+
+test('keeps the Project draft and production geometry through repeated hydration retries', async ({ page }) => {
+  const pageErrors = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-projectsurface--hydration-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
+  const composer = page.locator('#project-composer')
+  const retry = page.getByRole('button', { name: '会話を再試行' })
+  await expect(retry).toBeVisible()
+  await composer.fill('再試行しても残るProject下書き')
+
+  await retry.click()
+  await expect(retry).toBeVisible()
+  await expect(composer).toHaveValue('再試行しても残るProject下書き')
+  await retry.click()
+  await expect(composer).toBeDisabled()
+  await expect(composer).toHaveValue('再試行しても残るProject下書き')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(composer).toBeEnabled()
+  await expect(composer).toHaveValue('再試行しても残るProject下書き')
+  await expect(page.getByLabel('Project conversation')).toContainText('復元したProject会話')
+
+  const composerBox = await page.getByLabel('Project Kadode AI composer').boundingBox()
+  const sidebarBox = await page.locator('#workspace-sidebar').boundingBox()
+  const mainBox = await page.locator('.workspace-shell__main').boundingBox()
+  expect(sidebarBox?.width).toBe(168)
+  expect(composerBox?.width).toBeGreaterThanOrEqual(760)
+  expect(composerBox?.width).toBeLessThanOrEqual(960)
+  expect(composerBox?.x).toBeGreaterThanOrEqual((sidebarBox?.x ?? 0) + (sidebarBox?.width ?? 0))
+  expect(Math.abs(((composerBox?.x ?? 0) + (composerBox?.width ?? 0) / 2) - ((mainBox?.x ?? 0) + (mainBox?.width ?? 0) / 2))).toBeLessThanOrEqual(2)
+  expect((composerBox?.y ?? 0) + (composerBox?.height ?? 0)).toBeLessThanOrEqual(900)
+  expect(pageErrors).toEqual([])
+  await page.screenshot({ path: 'test-results/project-hydration-recovery-1440.png', fullPage: false })
+})
