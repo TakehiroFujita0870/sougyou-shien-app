@@ -14,8 +14,8 @@ async function seed(page, evaluationView, projectId = project.id) {
   await page.addInitScript(({ seededProject, seededEntry, key }) => {
     localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
     localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [seededProject.other, seededProject.current] }))
-    localStorage.setItem(key, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.ownerId, spaceId: seededProject.spaceId, state: { messages: [], entries: [seededEntry] } }))
-    sessionStorage.setItem('kadode:selected-surface', 'knowledge')
+    localStorage.setItem(key, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.current.ownerId, spaceId: seededProject.current.spaceId, state: { messages: [], entries: [seededEntry] } }))
+    if (!sessionStorage.getItem('kadode:selected-surface')) sessionStorage.setItem('kadode:selected-surface', 'knowledge')
   }, { seededProject: { current: project, other: otherProject }, seededEntry: entry(evaluationView, projectId), key: scopedKey })
 }
 
