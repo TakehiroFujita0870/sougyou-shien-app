@@ -2,6 +2,11 @@ export const PROJECT_CONVERSATION_SCHEMA_VERSION = 1;
 export const PROJECT_CONVERSATION_STORAGE_KEY = 'kadode:project-conversations';
 export const PROJECT_CONVERSATION_QUARANTINE_KEY = 'kadode:project-conversations:quarantine';
 
+function scopedDraftKey(ownerId, spaceId, projectId) {
+  const segment = (value) => `${String(value).length}:${value}`;
+  return `kadode:project-conversation-draft:v1:${segment(ownerId)}:${segment(spaceId)}:${segment(projectId)}`;
+}
+
 const roles = new Set(['user', 'assistant']);
 
 function nonEmpty(value) {
@@ -31,6 +36,7 @@ export function createProjectConversationRepository({ ownerId = 'local-owner', s
   let loaded;
   let writeBlocked = false;
   let lastError = null;
+  const draftKey = scopedDraftKey(ownerId, spaceId, projectId);
 
   const current = () => records.find((record) => record.ownerId === ownerId && record.spaceId === spaceId && record.projectId === projectId)?.messages ?? [];
 
@@ -91,5 +97,22 @@ export function createProjectConversationRepository({ ownerId = 'local-owner', s
     return load();
   }
 
-  return { load, save, retryLoad, getLastError: () => lastError };
+  async function loadDraft() {
+    try {
+      const raw = storage?.getItem(draftKey);
+      if (raw == null) return '';
+      const parsed = JSON.parse(raw);
+      return parsed?.schemaVersion === 1 && typeof parsed.value === 'string' ? parsed.value : '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function saveDraft(value) {
+    if (typeof value !== 'string') throw new Error('Project draft must be a string');
+    storage?.setItem(draftKey, JSON.stringify({ schemaVersion: 1, value }));
+    return value;
+  }
+
+  return { load, save, loadDraft, saveDraft, retryLoad, getLastError: () => lastError };
 }

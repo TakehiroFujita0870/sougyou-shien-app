@@ -18,6 +18,16 @@ describe('project conversation repository', () => {
     expect(await otherOwner.load()).toEqual([]);
   });
 
+  it('restores drafts after remount without crossing owner, space, or project boundaries', async () => {
+    const storage = memoryStorage();
+    const scoped = { ownerId: 'owner:a', spaceId: 'space:a', projectId: 'project:a', storage };
+    await createProjectConversationRepository(scoped).saveDraft('F5後も残る下書き');
+    expect(await createProjectConversationRepository(scoped).loadDraft()).toBe('F5後も残る下書き');
+    expect(await createProjectConversationRepository({ ...scoped, ownerId: 'owner' }).loadDraft()).toBe('');
+    expect(await createProjectConversationRepository({ ...scoped, ownerId: 'owner:a:7' }).loadDraft()).toBe('');
+    expect(await createProjectConversationRepository({ ...scoped, projectId: 'project:b' }).loadDraft()).toBe('');
+  });
+
   it('quarantines corrupt storage and refuses a replacement write', async () => {
     const storage = memoryStorage({ [PROJECT_CONVERSATION_STORAGE_KEY]: '{broken' });
     const repository = createProjectConversationRepository({ storage });

@@ -77,6 +77,7 @@ export function ProjectSurface({
 }) {
   const [draftStarted, setDraftStarted] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [composerDraft, setComposerDraft] = useState("");
   const [phase, setPhase] = useState("loading");
   const [conversationError, setConversationError] = useState("");
   const [exportStatus, setExportStatus] = useState("idle");
@@ -129,6 +130,18 @@ export function ProjectSurface({
   const persistQueueRef = useRef(Promise.resolve());
   const messageSequenceRef = useRef(0);
   const messageRevisionRef = useRef(0);
+  const draftRevisionRef = useRef(0);
+  const draftPersistQueueRef = useRef(Promise.resolve());
+
+  function updateComposerDraft(value) {
+    const revision = ++draftRevisionRef.current;
+    setComposerDraft(value);
+    draftPersistQueueRef.current = draftPersistQueueRef.current
+      .catch(() => undefined)
+      .then(() => repository.saveDraft?.(value))
+      .catch(() => undefined);
+    return revision;
+  }
 
   async function loadConversation(retry = false) {
     const request = ++loadId.current;
@@ -151,6 +164,10 @@ export function ProjectSurface({
 
   useEffect(() => {
     void loadConversation();
+    const draftRevision = draftRevisionRef.current;
+    void repository.loadDraft?.().then((savedDraft) => {
+      if (draftRevision === draftRevisionRef.current && typeof savedDraft === "string") setComposerDraft(savedDraft);
+    });
     return () => {
       loadId.current += 1;
     };
@@ -245,6 +262,9 @@ export function ProjectSurface({
         {phase === "error" && <div role="alert" className="mt-4 flex items-center gap-2 text-sm text-red-700"><span>{conversationError}</span><Button type="button" variant="secondary" onClick={() => void loadConversation(true)}>会話を再試行</Button></div>}
         <ProjectComposer
           disabled={phase !== "ready"}
+          loading={phase === "loading"}
+          value={composerDraft}
+          onValueChange={updateComposerDraft}
           onCompleteDraft={completeProjectDraft}
           onSubmit={send}
           modelKey={modelKey}
@@ -348,6 +368,9 @@ export function ProjectSurface({
             )}
             <ProjectComposer
               disabled={phase !== "ready"}
+              loading={phase === "loading"}
+              value={composerDraft}
+              onValueChange={updateComposerDraft}
               onCompleteDraft={completeProjectDraft}
               onSubmit={send}
               modelKey={modelKey}

@@ -4,10 +4,13 @@ import { demoProjectFixture } from './projectDemoFixtureAdapter';
 
 function retryableConversationRepository() {
   let retries = 0;
+  const draftKey = 'kadode:storybook:project-hydration-draft';
   return {
     async load() { throw new Error('Injected Project hydration failure'); },
     async retryLoad() { retries += 1; if (retries === 1) throw new Error('Still offline'); await new Promise((resolve) => setTimeout(resolve, 600)); return [{ id: 'restored', role: 'assistant', content: '復元したProject会話' }]; },
     async save(messages) { return messages; },
+    async loadDraft() { return localStorage.getItem(draftKey) ?? ''; },
+    async saveDraft(value) { localStorage.setItem(draftKey, value); return value; },
   };
 }
 

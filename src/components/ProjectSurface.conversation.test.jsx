@@ -67,6 +67,7 @@ describe('ProjectSurface conversation parity', () => {
     await mount({ conversationRepository: repository });
     await act(async () => Promise.resolve());
     const input = container.querySelector('#project-composer');
+    expect(input.disabled).toBe(false);
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
     await act(async () => { setValue.call(input, '再試行しても残す下書き'); input.dispatchEvent(new Event('input', { bubbles: true })); });
     const retry = () => [...container.querySelectorAll('button')].find((button) => button.textContent === '会話を再試行');

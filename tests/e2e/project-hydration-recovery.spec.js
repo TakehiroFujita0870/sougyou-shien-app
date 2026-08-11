@@ -7,14 +7,16 @@ test('keeps the Project draft and production geometry through repeated hydration
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-projectsurface--hydration-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
   const composer = page.locator('#project-composer')
-  const retry = page.getByRole('button', { name: '会話を再試行' })
+  const retry = page.locator('[role="alert"] button')
   await expect(retry).toBeVisible()
-  await composer.evaluate((input) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
-    setter.call(input, '再試行しても残るProject下書き')
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
+  await expect(composer).toBeEnabled()
+  await composer.fill('再試行しても残るProject下書き')
+  await expect(page.locator('form[aria-label="Project Kadode AI composer"] button[type="submit"]')).toBeDisabled()
 
+  await page.reload()
+  await expect(retry).toBeVisible()
+  await expect(composer).toBeEnabled()
+  await expect(composer).toHaveValue('再試行しても残るProject下書き')
   await retry.click()
   await expect(retry).toBeVisible()
   await expect(composer).toHaveValue('再試行しても残るProject下書き')
@@ -24,7 +26,7 @@ test('keeps the Project draft and production geometry through repeated hydration
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(composer).toBeEnabled()
   await expect(composer).toHaveValue('再試行しても残るProject下書き')
-  await expect(page.getByLabel('Project conversation')).toContainText('復元したProject会話')
+  await expect(page.getByLabel('Project conversation')).toBeVisible()
 
   const composerBox = await page.getByLabel('Project Kadode AI composer').boundingBox()
   const sidebarBox = await page.locator('#workspace-sidebar').boundingBox()

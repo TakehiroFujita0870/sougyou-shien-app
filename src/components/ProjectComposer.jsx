@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ArrowUp, Sparkles } from "lucide-react";
 import { AiComposer } from "./AiComposer";
 import { Button } from "./ui/Button";
@@ -9,33 +8,36 @@ import { Button } from "./ui/Button";
  */
 export function ProjectComposer({
   disabled,
+  loading = false,
+  value = "",
+  onValueChange = () => {},
   onCompleteDraft,
   onSubmit,
   modelKey,
   models,
   onModelChange,
 }) {
-  const [message, setMessage] = useState("");
   const submit = () => {
-    const next = message.trim();
+    const next = value.trim();
     if (!next || disabled) return;
     onSubmit(next);
-    setMessage("");
+    onValueChange("");
   };
 
   return (
     <AiComposer
       id="project-composer"
       label="このプロジェクトについて Kadode AI に尋ねる"
-      value={message}
-      onValueChange={setMessage}
+      value={value}
+      onValueChange={onValueChange}
       onSubmit={submit}
       disabled={disabled}
+      textareaDisabled={loading}
       mode="anchored"
       formAriaLabel="Project Kadode AI composer"
       textareaClassName="kadode-composer__textarea--compact resize-none placeholder:text-[var(--color-text-muted)] disabled:cursor-wait"
       placeholder={
-          disabled
+          loading
             ? "会話を読み込んでいます…"
             : "検討したい事業案を簡単に教えてください"
         }
@@ -51,7 +53,7 @@ export function ProjectComposer({
       leadingActions={<Button
           type="button"
           variant="ghost"
-          onClick={() => setMessage((value) => onCompleteDraft(value))}
+          onClick={() => onValueChange(onCompleteDraft(value))}
           className="min-h-9 gap-1 px-2 text-xs"
           disabled={disabled}
         >
