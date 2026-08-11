@@ -32,7 +32,12 @@ test('opens a same-owner evidence link at its exact Project view and survives F5
   await page.screenshot({ path: 'test-results/knowledge-project-navigation-1440.png', fullPage: false })
   await page.reload()
   await expect(page.getByRole('heading', { name: project.title })).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'どんな事業？' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('complementary', { name: '今回の根拠' })).toContainText('Projectで確認する根拠')
+  await expect(page.getByRole('tab', { name: '市場はある？' })).toHaveAttribute('aria-selected', 'true')
+  await page.evaluate((replacement) => localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: replacement })), [otherProject, project])
+  await page.reload()
+  await expect(page.getByRole('heading', { name: otherProject.title })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: '今回の根拠' })).toHaveCount(0)
 })
 
 test('does not render a stale or cross-project evidence action', async ({ page }) => {
