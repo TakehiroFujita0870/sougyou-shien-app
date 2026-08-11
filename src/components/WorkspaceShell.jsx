@@ -17,7 +17,8 @@ const ACCOUNT_DISPLAY_NAME = 'タケヒロ';
 function HistoryAction({ label, pending, restore = false, reveal = true, onClick }) {
   const Icon = restore ? RotateCcw : Archive;
   const pendingLabel = restore ? '復元中…' : '処理中…';
-  return <button type="button" disabled={pending} aria-label={label} title={label} className={`workspace-shell__history-action${reveal ? ' workspace-shell__history-action--reveal' : ''}`} onClick={onClick}><Icon size={16} aria-hidden="true" /><span className="sr-only">{pending ? pendingLabel : label}</span></button>;
+  const accessibleLabel = pending ? pendingLabel : label;
+  return <button type="button" disabled={pending} aria-label={accessibleLabel} title={accessibleLabel} aria-live="polite" className={`workspace-shell__history-action${reveal ? ' workspace-shell__history-action--reveal' : ''}`} onClick={onClick}><Icon size={16} aria-hidden="true" /><span className="sr-only">{accessibleLabel}</span></button>;
 }
 
 function NavItems({ activePage, onSelect }) {

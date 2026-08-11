@@ -66,9 +66,29 @@ describe('WorkspaceShell', () => {
     act(() => archive.click());
     expect(archive.disabled).toBe(true);
     expect(archive.textContent).toBe('処理中…');
+    expect(archive.getAttribute('aria-label')).toBe('処理中…');
+    expect(archive.getAttribute('title')).toBe('処理中…');
     await act(async () => { resolveArchive(false); await pending; });
     expect(container.textContent).toContain('保存中の会話');
     expect(archive.disabled).toBe(false);
+    act(() => { root.unmount(); container.remove(); });
+  });
+
+  it('announces restore persistence as pending and restores its accessible name afterward', async () => {
+    let resolveRestore;
+    const pending = new Promise((resolve) => { resolveRestore = resolve; });
+    const entry = { id: 'home:archived', title: '再開する会話', archived: true };
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} portfolio={{ home: [entry] }} onRestore={() => pending}><h1>Home</h1></WorkspaceShell>));
+    const restore = container.querySelector('[aria-label="再開する会話を再開"]');
+    act(() => restore.click());
+    expect(restore.disabled).toBe(true);
+    expect(restore.getAttribute('aria-label')).toBe('復元中…');
+    expect(restore.getAttribute('title')).toBe('復元中…');
+    await act(async () => { resolveRestore(true); await pending; });
+    expect(restore.disabled).toBe(false);
+    expect(restore.getAttribute('aria-label')).toBe('再開する会話を再開');
     act(() => { root.unmount(); container.remove(); });
   });
 
