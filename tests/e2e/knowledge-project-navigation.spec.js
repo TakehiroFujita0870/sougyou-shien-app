@@ -38,6 +38,37 @@ test('does not render a stale or cross-project evidence action', async ({ page }
   await expect(page.getByRole('button', { name: 'Projectを開く' })).toHaveCount(0)
 })
 
+test('keeps Knowledge actionable when selecting a Project cannot persist, then retries without an unhandled error', async ({ page }) => {
+  const pageErrors = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await seed(page, '市場はある？')
+  await page.goto('/')
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem
+    let failOnce = true
+    Storage.prototype.setItem = function setItem(key, value) {
+      if (failOnce && key === 'kadode:adopted-projects') {
+        failOnce = false
+        throw new DOMException('Storage quota exceeded', 'QuotaExceededError')
+      }
+      return original.call(this, key, value)
+    }
+  })
+
+  const openProject = page.getByRole('button', { name: 'Projectを開く' })
+  await openProject.click()
+  await expect(page.getByRole('alert')).toContainText('Projectを開けませんでした。もう一度お試しください。')
+  await expect(page.locator('#knowledge-heading')).toBeVisible()
+  await expect(openProject).toBeVisible()
+  await page.screenshot({ path: 'test-results/knowledge-project-navigation-error-1440.png', fullPage: false })
+
+  await openProject.click()
+  await expect(page.getByRole('tab', { name: '市場はある？' })).toBeFocused()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect(pageErrors).toEqual([])
+  await page.screenshot({ path: 'test-results/knowledge-project-navigation-recovery-1440.png', fullPage: false })
+})
+
 for (const evaluationView of ['どんな事業？', '市場はある？', '競合は誰？', '利益は出る？', '実現できる？']) {
   test(`opens ${evaluationView} by keyboard`, async ({ page }) => {
     await seed(page, evaluationView)
