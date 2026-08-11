@@ -9,7 +9,11 @@ test('keeps the Project draft and production geometry through repeated hydration
   const composer = page.locator('#project-composer')
   const retry = page.getByRole('button', { name: '会話を再試行' })
   await expect(retry).toBeVisible()
-  await composer.fill('再試行しても残るProject下書き')
+  await composer.evaluate((input) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+    setter.call(input, '再試行しても残るProject下書き')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 
   await retry.click()
   await expect(retry).toBeVisible()
