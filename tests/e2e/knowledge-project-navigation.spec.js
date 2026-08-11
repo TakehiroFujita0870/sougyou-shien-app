@@ -28,6 +28,7 @@ test('opens a same-owner evidence link at its exact Project view and survives F5
   const market = page.getByRole('tab', { name: '市場はある？' })
   await expect(market).toHaveAttribute('aria-selected', 'true')
   await expect(market).toBeFocused()
+  await expect(page.getByRole('complementary', { name: '今回の根拠' })).toContainText('Projectで確認する根拠')
   await page.screenshot({ path: 'test-results/knowledge-project-navigation-1440.png', fullPage: false })
   await page.reload()
   await expect(page.getByRole('heading', { name: project.title })).toBeVisible()
@@ -62,6 +63,7 @@ test('creates a same-owner decision evidence link only after an explicit view ch
   await page.keyboard.press('Enter')
   const market = page.getByRole('tab', { name: '市場はある？' })
   await expect(market).toBeFocused()
+  await expect(page.getByRole('complementary', { name: '今回の根拠' })).toContainText('顧客ヒアリングを始める')
   await page.screenshot({ path: 'test-results/knowledge-confirm-evidence-link-1440.png', fullPage: false })
 })
 

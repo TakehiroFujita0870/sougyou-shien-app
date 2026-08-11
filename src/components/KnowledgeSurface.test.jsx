@@ -57,7 +57,7 @@ describe("KnowledgeSurface library", () => {
     const button = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Projectを開く');
     expect(button).toBeTruthy();
     await act(async () => button.click());
-    expect(onOpenProject).toHaveBeenCalledWith('project-a', '市場はある？');
+    expect(onOpenProject).toHaveBeenCalledWith('project-a', '市場はある？', expect.objectContaining({ id: 'evidence', sourceType: 'local', confidence: 'unknown' }));
     await unmount();
   });
   it("shows a compact searchable, category-filterable library without network calls", async () => {
