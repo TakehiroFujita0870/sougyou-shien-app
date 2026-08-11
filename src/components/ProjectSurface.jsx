@@ -73,6 +73,7 @@ export function ProjectSurface({
   models = MODEL_CATALOG,
   initialModelKey = DEFAULT_PROJECT_MODEL_KEY,
   targetView,
+  targetEvidence,
   onTargetViewHandled,
 }) {
   const [draftStarted, setDraftStarted] = useState(false);
@@ -383,6 +384,7 @@ export function ProjectSurface({
             fallbackSections={createDraftProject().sections}
             project={project}
             targetView={targetView}
+            targetEvidence={targetEvidence}
             onTargetViewHandled={onTargetViewHandled}
           />
         </div>

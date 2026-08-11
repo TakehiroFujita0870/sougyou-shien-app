@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Badge } from "./ui/Badge";
 import { Card } from "./ui/Card";
 
-export function ProjectEvaluationTabs({ definitions, fallbackSections, project, targetView, onTargetViewHandled }) {
+const sourceLabel = { local: 'この端末', synthetic: '画面生成', unknown: '出典未確認' };
+const confidenceLabel = { high: '高', medium: '中', unknown: '未確認' };
+
+export function ProjectEvaluationTabs({ definitions, fallbackSections, project, targetView, targetEvidence, onTargetViewHandled }) {
   const [activeIndex, setActiveIndex] = useState(0);
   useEffect(() => {
     if (!targetView) return;
@@ -19,6 +22,7 @@ export function ProjectEvaluationTabs({ definitions, fallbackSections, project, 
     project.sections?.[activeTab.key] ??
     project.sections?.[activeTab.label] ??
     fallbackSections[activeTab.key];
+  const evidenceMatchesActiveView = targetEvidence && (targetEvidence.evaluationView === activeTab.key || targetEvidence.evaluationView === activeTab.label);
 
   function selectFromKeyboard(event, index) {
     let nextIndex = index;
@@ -52,6 +56,7 @@ export function ProjectEvaluationTabs({ definitions, fallbackSections, project, 
       <Card id={`project-evaluation-panel-${activeIndex}`} role="tabpanel" aria-labelledby={`project-evaluation-tab-${activeIndex}`} className="mt-4 p-5">
         <div className="flex items-center justify-between gap-3"><h3 className="text-base font-semibold">{activeTab.label}</h3><Badge variant="secondary">{activeSection.status}</Badge></div>
         <p className="mt-3 text-sm leading-6">{activeSection.summary}</p>
+        {evidenceMatchesActiveView && <aside aria-label="今回の根拠" className="mt-5 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-muted)] p-4"><h4 className="text-sm font-semibold">今回の根拠</h4><p className="mt-2 text-sm font-medium">{targetEvidence.title}</p><p className="mt-1 text-sm leading-6">{targetEvidence.content}</p><div className="mt-3 flex flex-wrap gap-1 text-xs text-[var(--color-text-muted)]"><Badge variant="outline">{sourceLabel[targetEvidence.sourceType] ?? sourceLabel.unknown}</Badge><Badge variant="outline">確度: {confidenceLabel[targetEvidence.confidence] ?? confidenceLabel.unknown}</Badge>{targetEvidence.unknowns.length > 0 ? <Badge variant="outline">未確認: {targetEvidence.unknowns.join(' / ')}</Badge> : <Badge variant="outline">未確認: 記録なし</Badge>}</div></aside>}
         <dl className="mt-5 grid gap-4 border-t border-[var(--color-border-subtle)] pt-4 text-sm leading-6 sm:grid-cols-2">
           <div><dt className="font-semibold text-[var(--color-text-muted)]">根拠</dt><dd className="mt-1">{activeSection.evidence}</dd></div>
           <div><dt className="font-semibold text-[var(--color-text-muted)]">未確認</dt><dd className="mt-1">{activeSection.unknown}</dd></div>

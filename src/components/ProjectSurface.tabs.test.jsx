@@ -98,6 +98,20 @@ describe('ProjectSurface evaluation tabs', () => {
     expect(document.activeElement).toBe(tab);
   });
 
+  it('shows selected Knowledge evidence only on its matching evaluation view', async () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    const targetView = projectEvaluationTabs[1];
+    await act(async () => { root.render(<ProjectSurface project={project} targetView={targetView} targetEvidence={{ title: '顧客ヒアリング要約', content: '3社が導入費用を確認したい。', evaluationView: targetView, sourceType: 'local', confidence: 'unknown', unknowns: ['価格帯'] }} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />); await new Promise((resolve) => requestAnimationFrame(resolve)); });
+    expect(container.querySelector('[aria-label="今回の根拠"]').textContent).toContain('顧客ヒアリング要約');
+    expect(container.textContent).toContain('この端末');
+    expect(container.textContent).toContain('未確認: 価格帯');
+    const firstTab = container.querySelector('[role="tab"]');
+    await act(async () => { firstTab.click(); });
+    expect(container.querySelector('[aria-label="今回の根拠"]')).toBeNull();
+  });
+
   it('does not expose a misleading Project-only context notice', async () => {
     container = document.createElement('div');
     document.body.append(container);
