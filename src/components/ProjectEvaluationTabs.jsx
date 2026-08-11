@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "./ui/Badge";
 import { Card } from "./ui/Card";
 
-export function ProjectEvaluationTabs({ definitions, fallbackSections, project }) {
+export function ProjectEvaluationTabs({ definitions, fallbackSections, project, targetView, onTargetViewHandled }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  useEffect(() => {
+    if (!targetView) return;
+    const index = definitions.findIndex(({ key, label }) => key === targetView || label === targetView);
+    if (index < 0) { onTargetViewHandled?.(); return; }
+    setActiveIndex(index);
+    requestAnimationFrame(() => {
+      document.getElementById(`project-evaluation-tab-${index}`)?.focus();
+      onTargetViewHandled?.();
+    });
+  }, [definitions, onTargetViewHandled, targetView]);
   const activeTab = definitions[activeIndex];
   const activeSection =
     project.sections?.[activeTab.key] ??
