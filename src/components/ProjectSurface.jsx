@@ -77,6 +77,7 @@ export function ProjectSurface({
 }) {
   const [draftStarted, setDraftStarted] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [composerDraft, setComposerDraft] = useState("");
   const [phase, setPhase] = useState("loading");
   const [conversationError, setConversationError] = useState("");
   const [exportStatus, setExportStatus] = useState("idle");
@@ -129,26 +130,44 @@ export function ProjectSurface({
   const persistQueueRef = useRef(Promise.resolve());
   const messageSequenceRef = useRef(0);
   const messageRevisionRef = useRef(0);
+  const draftRevisionRef = useRef(0);
+  const draftPersistQueueRef = useRef(Promise.resolve());
 
-  useEffect(() => {
+  function updateComposerDraft(value) {
+    const revision = ++draftRevisionRef.current;
+    setComposerDraft(value);
+    draftPersistQueueRef.current = draftPersistQueueRef.current
+      .catch(() => undefined)
+      .then(() => repository.saveDraft?.(value))
+      .catch(() => undefined);
+    return revision;
+  }
+
+  async function loadConversation(retry = false) {
     const request = ++loadId.current;
     setPhase("loading");
     setConversationError("");
-    Promise.resolve(repository.load())
-      .then((saved) => {
-        if (request !== loadId.current) return;
-        const next = Array.isArray(saved) ? saved : [];
-        messagesRef.current = next;
-        setMessages(next);
-        setPhase("ready");
-      })
-      .catch(() => {
-        if (request !== loadId.current) return;
-        setConversationError(
-          "会話を読み込めませんでした。ページを再読み込みしてください。",
-        );
-        setPhase("error");
-      });
+    try {
+      const saved = await (retry && repository.retryLoad ? repository.retryLoad() : repository.load());
+      if (request !== loadId.current) return;
+      if (repository.getLastError?.()) throw repository.getLastError();
+      const next = Array.isArray(saved) ? saved : [];
+      messagesRef.current = next;
+      setMessages(next);
+      setPhase("ready");
+    } catch {
+      if (request !== loadId.current) return;
+      setConversationError("会話を読み込めませんでした。保存済みデータは変更していません。");
+      setPhase("error");
+    }
+  }
+
+  useEffect(() => {
+    void loadConversation();
+    const draftRevision = draftRevisionRef.current;
+    void repository.loadDraft?.().then((savedDraft) => {
+      if (draftRevision === draftRevisionRef.current && typeof savedDraft === "string") setComposerDraft(savedDraft);
+    });
     return () => {
       loadId.current += 1;
     };
@@ -215,6 +234,7 @@ export function ProjectSurface({
     return (
       <section
         aria-labelledby="project-surface-heading"
+        aria-busy={phase === "loading"}
         className="kadode-composer-layout mx-auto min-h-[calc(100vh-3rem)] w-full max-w-5xl py-4"
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
@@ -239,8 +259,12 @@ export function ProjectSurface({
             入力すると一時的な下書きとして始まります。
           </p>
         </Card>
+        {phase === "error" && <div role="alert" className="mt-4 flex items-center gap-2 text-sm text-red-700"><span>{conversationError}</span><Button type="button" variant="secondary" onClick={() => void loadConversation(true)}>会話を再試行</Button></div>}
         <ProjectComposer
           disabled={phase !== "ready"}
+          loading={phase === "loading"}
+          value={composerDraft}
+          onValueChange={updateComposerDraft}
           onCompleteDraft={completeProjectDraft}
           onSubmit={send}
           modelKey={modelKey}
@@ -259,6 +283,7 @@ export function ProjectSurface({
   return (
     <section
       aria-labelledby="project-surface-heading"
+      aria-busy={phase === "loading"}
       className="kadode-composer-layout mx-auto min-h-[calc(100vh-3rem)] w-full max-w-6xl pb-12"
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] pb-5">
@@ -327,11 +352,7 @@ export function ProjectSurface({
             <h2 className="mb-3 text-base font-semibold">
               Kadode AI と検討する
             </h2>
-            {conversationError && (
-              <p role="alert" className="mb-3 text-sm text-red-700">
-                {conversationError}
-              </p>
-            )}
+            {conversationError && <div role="alert" className="mb-3 flex items-center gap-2 text-sm text-red-700"><span>{conversationError}</span>{phase === "error" && <Button type="button" variant="secondary" onClick={() => void loadConversation(true)}>会話を再試行</Button>}</div>}
             {messages.length > 0 && (
               <ol className="mb-4 space-y-3" aria-label="Project conversation">
                 {messages.map((message) => (
@@ -347,6 +368,9 @@ export function ProjectSurface({
             )}
             <ProjectComposer
               disabled={phase !== "ready"}
+              loading={phase === "loading"}
+              value={composerDraft}
+              onValueChange={updateComposerDraft}
               onCompleteDraft={completeProjectDraft}
               onSubmit={send}
               modelKey={modelKey}

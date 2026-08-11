@@ -57,6 +57,33 @@ describe('ProjectSurface conversation parity', () => {
     expect(container.textContent).toContain('以前の会話');
   });
 
+  it('preserves the draft through repeated hydration failures and ignores a stale retry result', async () => {
+    const stale = deferred();
+    const repository = {
+      load: vi.fn(async () => { throw new Error('offline'); }),
+      retryLoad: vi.fn().mockRejectedValueOnce(new Error('still offline')).mockImplementationOnce(() => stale.promise),
+      save: vi.fn(async (messages) => messages),
+    };
+    await mount({ conversationRepository: repository });
+    await act(async () => Promise.resolve());
+    const input = container.querySelector('#project-composer');
+    expect(input.disabled).toBe(false);
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setValue.call(input, '再試行しても残す下書き'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    const retry = () => [...container.querySelectorAll('button')].find((button) => button.textContent === '会話を再試行');
+    await act(async () => { retry().click(); await Promise.resolve(); });
+    expect(input.value).toBe('再試行しても残す下書き');
+    await act(async () => { retry().click(); await Promise.resolve(); });
+    expect(input.disabled).toBe(true);
+    const freshRepository = { load: async () => [{ id: 'fresh', role: 'assistant', content: '復元した会話' }], save: async (messages) => messages };
+    await act(async () => { root.render(<ProjectSurface project={demoProjectFixture} conversationRepository={freshRepository} />); await Promise.resolve(); });
+    expect(container.textContent).toContain('復元した会話');
+    expect(input.disabled).toBe(false);
+    await act(async () => { stale.resolve([{ id: 'stale', role: 'assistant', content: '古い結果' }]); await stale.promise; });
+    expect(container.textContent).not.toContain('古い結果');
+    expect(input.value).toBe('再試行しても残す下書き');
+  });
+
   it('serializes rapid Enter sends so every message pair is persisted', async () => {
     let saved = [];
     const save = vi.fn(async (messages) => { await Promise.resolve(); saved = messages; return messages; });

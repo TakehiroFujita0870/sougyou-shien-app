@@ -18,6 +18,16 @@ describe('project conversation repository', () => {
     expect(await otherOwner.load()).toEqual([]);
   });
 
+  it('restores drafts after remount without crossing owner, space, or project boundaries', async () => {
+    const storage = memoryStorage();
+    const scoped = { ownerId: 'owner:a', spaceId: 'space:a', projectId: 'project:a', storage };
+    await createProjectConversationRepository(scoped).saveDraft('F5後も残る下書き');
+    expect(await createProjectConversationRepository(scoped).loadDraft()).toBe('F5後も残る下書き');
+    expect(await createProjectConversationRepository({ ...scoped, ownerId: 'owner' }).loadDraft()).toBe('');
+    expect(await createProjectConversationRepository({ ...scoped, ownerId: 'owner:a:7' }).loadDraft()).toBe('');
+    expect(await createProjectConversationRepository({ ...scoped, projectId: 'project:b' }).loadDraft()).toBe('');
+  });
+
   it('quarantines corrupt storage and refuses a replacement write', async () => {
     const storage = memoryStorage({ [PROJECT_CONVERSATION_STORAGE_KEY]: '{broken' });
     const repository = createProjectConversationRepository({ storage });
@@ -25,5 +35,22 @@ describe('project conversation repository', () => {
     expect(storage.getItem(PROJECT_CONVERSATION_QUARANTINE_KEY)).toBe('{broken');
     await expect(repository.save([{ role: 'user', content: 'do not overwrite' }])).rejects.toThrow('recovery');
     expect(storage.getItem(PROJECT_CONVERSATION_STORAGE_KEY)).toBe('{broken');
+  });
+
+  it('reports a failed read and retries only after the source is repaired', async () => {
+    let failRead = true;
+    const storage = memoryStorage({ [PROJECT_CONVERSATION_STORAGE_KEY]: JSON.stringify({ schemaVersion: 1, records: [] }) });
+    const originalGet = storage.getItem;
+    storage.getItem = (key) => { if (failRead && key === PROJECT_CONVERSATION_STORAGE_KEY) throw new Error('blocked'); return originalGet(key); };
+    const repository = createProjectConversationRepository({ storage });
+    expect(await repository.load()).toEqual([]);
+    expect(repository.getLastError()).toBeInstanceOf(Error);
+    await expect(repository.save([{ role: 'user', content: 'do not overwrite' }])).rejects.toThrow('recovery');
+    failRead = false;
+    expect(await repository.retryLoad()).toEqual([]);
+    expect(repository.getLastError()).toBeNull();
+    await expect(repository.save([{ role: 'user', content: 'recovered' }])).resolves.toHaveLength(1);
+    const remounted = createProjectConversationRepository({ storage });
+    await expect(remounted.load()).resolves.toEqual([expect.objectContaining({ content: 'recovered' })]);
   });
 });

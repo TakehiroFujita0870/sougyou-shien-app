@@ -2,6 +2,11 @@ export const PROJECT_CONVERSATION_SCHEMA_VERSION = 1;
 export const PROJECT_CONVERSATION_STORAGE_KEY = 'kadode:project-conversations';
 export const PROJECT_CONVERSATION_QUARANTINE_KEY = 'kadode:project-conversations:quarantine';
 
+function scopedDraftKey(ownerId, spaceId, projectId) {
+  const segment = (value) => `${String(value).length}:${value}`;
+  return `kadode:project-conversation-draft:v1:${segment(ownerId)}:${segment(spaceId)}:${segment(projectId)}`;
+}
+
 const roles = new Set(['user', 'assistant']);
 
 function nonEmpty(value) {
@@ -30,6 +35,8 @@ export function createProjectConversationRepository({ ownerId = 'local-owner', s
   let records = [];
   let loaded;
   let writeBlocked = false;
+  let lastError = null;
+  const draftKey = scopedDraftKey(ownerId, spaceId, projectId);
 
   const current = () => records.find((record) => record.ownerId === ownerId && record.spaceId === spaceId && record.projectId === projectId)?.messages ?? [];
 
@@ -44,7 +51,12 @@ export function createProjectConversationRepository({ ownerId = 'local-owner', s
   async function load() {
     if (loaded) return loaded;
     loaded = Promise.resolve().then(async () => {
-      const raw = storage?.getItem(PROJECT_CONVERSATION_STORAGE_KEY);
+      let raw;
+      try { raw = storage?.getItem(PROJECT_CONVERSATION_STORAGE_KEY); } catch (error) {
+        lastError = error;
+        writeBlocked = true;
+        return current();
+      }
       if (raw == null) return current();
       try {
         const parsed = JSON.parse(raw);
@@ -52,7 +64,9 @@ export function createProjectConversationRepository({ ownerId = 'local-owner', s
         const normalized = parsed.records.map(normalizeRecord);
         if (normalized.some((record) => record === null)) throw new Error('invalid record');
         records = normalized;
-      } catch {
+        lastError = null;
+      } catch (error) {
+        lastError = error;
         writeBlocked = true;
         await quarantine(raw);
         records = [];
@@ -71,8 +85,34 @@ export function createProjectConversationRepository({ ownerId = 'local-owner', s
     const record = { ownerId, spaceId, projectId, messages: normalizedMessages };
     records = [record, ...records.filter((item) => !(item.ownerId === ownerId && item.spaceId === spaceId && item.projectId === projectId))];
     storage?.setItem(PROJECT_CONVERSATION_STORAGE_KEY, JSON.stringify({ schemaVersion: PROJECT_CONVERSATION_SCHEMA_VERSION, records }));
+    loaded = Promise.resolve(normalizedMessages);
+    lastError = null;
     return normalizedMessages;
   }
 
-  return { load, save };
+  function retryLoad() {
+    loaded = undefined;
+    writeBlocked = false;
+    lastError = null;
+    return load();
+  }
+
+  async function loadDraft() {
+    try {
+      const raw = storage?.getItem(draftKey);
+      if (raw == null) return '';
+      const parsed = JSON.parse(raw);
+      return parsed?.schemaVersion === 1 && typeof parsed.value === 'string' ? parsed.value : '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function saveDraft(value) {
+    if (typeof value !== 'string') throw new Error('Project draft must be a string');
+    storage?.setItem(draftKey, JSON.stringify({ schemaVersion: 1, value }));
+    return value;
+  }
+
+  return { load, save, loadDraft, saveDraft, retryLoad, getLastError: () => lastError };
 }
