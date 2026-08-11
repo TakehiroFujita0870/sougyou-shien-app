@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 const ownerId = 'local-owner'
 const spaceId = 'local-space'
 const project = { id: 'evidence-project', ownerId, spaceId, title: '根拠から開く事業', fact: '顧客ヒアリング', inference: '市場検証を進める', reason: '採用判断', status: 'adopted' }
+const otherProject = { ...project, id: 'other-project', title: '先にある事業' }
 const scopedKey = 'kadode:knowledge-conversation:11:local-owner:11:local-space:v1'
 
 function entry(evaluationView, projectId = project.id) {
@@ -12,10 +13,10 @@ function entry(evaluationView, projectId = project.id) {
 async function seed(page, evaluationView, projectId = project.id) {
   await page.addInitScript(({ seededProject, seededEntry, key }) => {
     localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
-    localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [seededProject] }))
+    localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [seededProject.other, seededProject.current] }))
     localStorage.setItem(key, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.ownerId, spaceId: seededProject.spaceId, state: { messages: [], entries: [seededEntry] } }))
     sessionStorage.setItem('kadode:selected-surface', 'knowledge')
-  }, { seededProject: project, seededEntry: entry(evaluationView, projectId), key: scopedKey })
+  }, { seededProject: { current: project, other: otherProject }, seededEntry: entry(evaluationView, projectId), key: scopedKey })
 }
 
 test('opens a same-owner evidence link at its exact Project view and survives F5', async ({ page }) => {

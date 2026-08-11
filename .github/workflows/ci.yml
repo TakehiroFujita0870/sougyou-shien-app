@@ -102,6 +102,15 @@ jobs:
           if-no-files-found: error
       - name: Verify Knowledge write failure recovery
         run: npx playwright test tests/e2e/knowledge-write-failure.spec.js
+      - name: Verify Knowledge evidence Project navigation
+        run: npx playwright test tests/e2e/knowledge-project-navigation.spec.js
+      - name: Upload Knowledge evidence Project navigation
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadode-knowledge-project-navigation-1440
+          path: test-results/knowledge-project-navigation-1440.png
+          if-no-files-found: error
       - name: Upload Knowledge write failure evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
