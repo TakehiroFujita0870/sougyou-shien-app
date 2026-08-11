@@ -105,4 +105,21 @@ describe('adopted project repository', () => {
     await expect(repository.load()).resolves.toBeNull();
     expect(repository.list()).toEqual([]);
   });
+
+  it('keeps every project and its current ordering when selecting a project cannot persist, then retries', async () => {
+    const other = { ...candidate, id: 'candidate-2', title: '先にある事業', ownerId: 'local-owner', spaceId: 'local-space' };
+    const stored = JSON.stringify({ schemaVersion: 1, projects: [other, { ...candidate, ownerId: 'local-owner', spaceId: 'local-space' }] });
+    const storage = storageWith(stored);
+    const originalSetItem = storage.setItem;
+    originalSetItem.mockImplementationOnce(() => { throw new Error('quota'); });
+    const repository = createAdoptedProjectRepository({ storage });
+
+    await expect(repository.selectCurrent(candidate.id)).rejects.toThrow('quota');
+    expect(repository.current()).toMatchObject({ id: other.id });
+    expect(storage.getItem(ADOPTED_PROJECT_STORAGE_KEY)).toBe(stored);
+
+    await expect(repository.selectCurrent(candidate.id)).resolves.toMatchObject({ id: candidate.id });
+    expect(repository.current()).toMatchObject({ id: candidate.id });
+    expect(JSON.parse(storage.getItem(ADOPTED_PROJECT_STORAGE_KEY)).projects).toHaveLength(2);
+  });
 });
