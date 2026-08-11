@@ -72,6 +72,8 @@ export function ProjectSurface({
   downloadPdf = downloadFormalPlanPdf,
   models = MODEL_CATALOG,
   initialModelKey = DEFAULT_PROJECT_MODEL_KEY,
+  targetView,
+  onTargetViewHandled,
 }) {
   const [draftStarted, setDraftStarted] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -356,6 +358,8 @@ export function ProjectSurface({
             definitions={evaluationDefinitions}
             fallbackSections={createDraftProject().sections}
             project={project}
+            targetView={targetView}
+            onTargetViewHandled={onTargetViewHandled}
           />
         </div>
       </div>

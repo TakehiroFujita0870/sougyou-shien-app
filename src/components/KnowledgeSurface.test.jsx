@@ -43,6 +43,18 @@ async function mount(props = {}) {
 }
 
 describe("KnowledgeSurface library", () => {
+  it("opens only a resolvable same-owner Project evidence target", async () => {
+    const onOpenProject = vi.fn();
+    const project = { id: 'project-a', ownerId: 'local-owner', spaceId: 'local-space' };
+    const conversationRepository = { load: async () => ({ messages: [], entries: [{ id: 'evidence', category: 'decision', title: '採用判断', content: '根拠', createdAt: '2026-08-11T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z', sourceType: 'local', confidence: 'unknown', unknowns: [], projectId: 'project-a', evaluationView: '市場はある？' }] }), save: async (value) => value };
+    const { container, unmount } = await mount({ ownerId: 'local-owner', spaceId: 'local-space', availableProjects: [project], conversationRepository, onOpenProject });
+    await act(async () => Promise.resolve());
+    const button = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Projectを開く');
+    expect(button).toBeTruthy();
+    await act(async () => button.click());
+    expect(onOpenProject).toHaveBeenCalledWith('project-a', '市場はある？');
+    await unmount();
+  });
   it("shows a compact searchable, category-filterable library without network calls", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const { container, unmount } = await mount();

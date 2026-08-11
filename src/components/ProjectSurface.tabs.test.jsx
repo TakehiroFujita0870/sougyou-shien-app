@@ -88,6 +88,16 @@ describe('ProjectSurface evaluation tabs', () => {
     expect(container.textContent).toContain('既存の利益未確認を表示する');
   });
 
+  it.each(projectEvaluationTabs)('opens and focuses the requested %s view', async (targetView) => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => { root.render(<ProjectSurface project={project} targetView={targetView} conversationRepository={{ load: async () => [], save: async (messages) => messages }} />); await new Promise((resolve) => requestAnimationFrame(resolve)); });
+    const tab = [...container.querySelectorAll('[role="tab"]')].find((item) => item.textContent === targetView);
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(tab);
+  });
+
   it('does not expose a misleading Project-only context notice', async () => {
     container = document.createElement('div');
     document.body.append(container);

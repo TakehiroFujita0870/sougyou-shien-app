@@ -7,7 +7,7 @@ import { createLocalPlanRepository } from './components/planSubscriptionReposito
 import { createBrowserProfileRepository, UserProfileInterview } from './components/UserProfileInterview';
 import { WorkspaceShell } from './components/WorkspaceShell';
 import { createHomeModelRepository, getHomeModels } from './components/homeModelRepository';
-import { ProjectSurface } from './components/ProjectSurface';
+import { ProjectSurface, projectEvaluationTabs } from './components/ProjectSurface';
 import { createAdoptedProjectRepository } from './components/adoptedProjectRepository';
 import { useHydratedResource } from './runtime/useHydratedResource';
 import { createSidebarPortfolioRepository } from './components/sidebarPortfolioRepository';
@@ -80,6 +80,7 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const [portfolioError, setPortfolioError] = useState('');
   const [homeConversationRevision, setHomeConversationRevision] = useState(0);
   const [activeHomeConversationId, setActiveHomeConversationId] = useState('');
+  const [projectTargetView, setProjectTargetView] = useState('');
   const rawHomeConversationRepositoryRef = useRef(null);
   if (!rawHomeConversationRepositoryRef.current) rawHomeConversationRepositoryRef.current = homeConversationRepository ?? createHomeConversationRepository({ ownerId: 'local-owner', spaceId: 'local-space' });
   const trackedHomeConversationRepositoryRef = useRef(null);
@@ -222,9 +223,9 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
     if (activeWorkspace === 'home') return <IdeaWorkspace key={homeConversationRevision} repository={trackedHomeConversationRepositoryRef.current} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} onProjectAdopt={adoptProject} />;
     if (activeWorkspace === 'project') {
       if (adoptedProjectHydration.phase === 'loading') return <section aria-live="polite" className="max-w-3xl py-10 text-sm text-[var(--color-text-muted)]">プロジェクトを読み込んでいます…</section>;
-      return <ProjectSurface adoptedProject={adoptedProjectHydration.value} />;
+      return <ProjectSurface adoptedProject={adoptedProjectHydration.value} targetView={projectTargetView} onTargetViewHandled={() => setProjectTargetView('')} />;
     }
-    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeDemoFixture} profile={profileHydration.value} archiveHistory={[...portfolio.home, ...portfolio.project].filter((item) => item.archived)} onOpenProject={(projectId, evaluationView) => { void projectId; void evaluationView; setActiveWorkspace('project'); }} onAssetAdded={async (asset) => { const next = await portfolioRepositoryRef.current.ensure('knowledge', { id: asset.id, title: asset.name, unread: true, updatedAt: Date.now() }); setPortfolio(next); setPortfolioError(''); }} onSend={(value) => { void portfolioRepositoryRef.current.ensure('knowledge', { id: portfolioMessageId('knowledge:conversation', value), title: value.slice(0, 80), unread: true, updatedAt: Date.now() }).then((next) => { setPortfolio(next); setPortfolioError(''); }).catch(() => setPortfolioError('履歴を保存できませんでした。もう一度お試しください。')); }} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
+    if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeDemoFixture} profile={profileHydration.value} ownerId="local-owner" spaceId="local-space" availableProjects={adoptedProjectRepositoryRef.current.list()} archiveHistory={[...portfolio.home, ...portfolio.project].filter((item) => item.archived)} onOpenProject={async (projectId, evaluationView) => { const project = adoptedProjectRepositoryRef.current.list().find((item) => item.id === projectId && item.ownerId === 'local-owner' && item.spaceId === 'local-space'); if (!project || !projectEvaluationTabs.includes(evaluationView)) return; adoptedProjectHydration.replaceReady(project); setProjectTargetView(evaluationView); setActiveWorkspace('project'); }} onAssetAdded={async (asset) => { const next = await portfolioRepositoryRef.current.ensure('knowledge', { id: asset.id, title: asset.name, unread: true, updatedAt: Date.now() }); setPortfolio(next); setPortfolioError(''); }} onSend={(value) => { void portfolioRepositoryRef.current.ensure('knowledge', { id: portfolioMessageId('knowledge:conversation', value), title: value.slice(0, 80), unread: true, updatedAt: Date.now() }).then((next) => { setPortfolio(next); setPortfolioError(''); }).catch(() => setPortfolioError('履歴を保存できませんでした。もう一度お試しください。')); }} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace key={homeConversationRevision} repository={trackedHomeConversationRepositoryRef.current} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }
