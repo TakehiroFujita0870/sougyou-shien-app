@@ -107,7 +107,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kadode-knowledge-project-navigation-1440
-          path: test-results/knowledge-project-navigation*-1440.png
+          path: |
+            test-results/knowledge-project-navigation*-1440.png
+            test-results/knowledge-confirm-evidence-link-1440.png
           if-no-files-found: error
       - name: Verify Knowledge write failure recovery
         run: npx playwright test tests/e2e/knowledge-write-failure.spec.js

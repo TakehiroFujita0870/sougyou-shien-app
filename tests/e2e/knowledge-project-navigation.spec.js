@@ -38,6 +38,31 @@ test('does not render a stale or cross-project evidence action', async ({ page }
   await expect(page.getByRole('button', { name: 'Projectを開く' })).toHaveCount(0)
 })
 
+test('creates a same-owner decision evidence link only after an explicit view choice and survives F5', async ({ page }) => {
+  await page.addInitScript(({ seededProject, key }) => {
+    if (!localStorage.getItem('kadode:user-profile')) localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
+    if (!localStorage.getItem('kadode:adopted-projects')) localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [seededProject] }))
+    if (!sessionStorage.getItem('kadode:selected-surface')) sessionStorage.setItem('kadode:selected-surface', 'knowledge')
+  }, { seededProject: project, key: scopedKey })
+  await page.goto('/')
+  const composer = page.locator('#knowledge-composer')
+  await composer.fill('採用判断: 顧客ヒアリングを始める')
+  await composer.press('Enter')
+  const marketChoice = page.getByRole('button', { name: '市場はある？' })
+  await expect(marketChoice).toBeVisible()
+  await marketChoice.click()
+  await page.getByRole('button', { name: 'ナレッジに追加', exact: true }).click()
+  const openProject = page.getByRole('button', { name: 'Projectを開く' })
+  await expect(openProject).toBeVisible()
+  await page.reload()
+  await expect(openProject).toBeVisible()
+  await openProject.focus()
+  await page.keyboard.press('Enter')
+  const market = page.getByRole('tab', { name: '市場はある？' })
+  await expect(market).toBeFocused()
+  await page.screenshot({ path: 'test-results/knowledge-confirm-evidence-link-1440.png', fullPage: false })
+})
+
 test('keeps Knowledge actionable when selecting a Project cannot persist, then retries without an unhandled error', async ({ page }) => {
   const pageErrors = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
