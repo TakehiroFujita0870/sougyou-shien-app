@@ -32,6 +32,13 @@ describe('WorkspaceShell', () => {
     expect(container.querySelector('[aria-label="最近の項目"]').className).toContain('overflow-y-auto');
     expect(container.querySelector('.workspace-shell__account')).toBeTruthy();
     expect(container.textContent).toContain('すべて表示');
+    const firstTitle = container.querySelector('[aria-label="会話 0"]');
+    expect(firstTitle.getAttribute('title')).toBe('会話 0');
+    const archive = container.querySelector('[aria-label="会話 0をアーカイブ"]');
+    expect(archive.className).toContain('workspace-shell__history-action--reveal');
+    archive.focus();
+    expect(document.activeElement).toBe(archive);
+    expect(archive.getAttribute('title')).toBe('会話 0をアーカイブ');
     act(() => [...container.querySelectorAll('button')].find((button) => button.textContent === 'すべて表示').click());
     expect(document.body.textContent).toContain('ホームの履歴');
     expect(document.querySelector('[aria-label="すべての履歴"]')).toBeTruthy();
