@@ -20,6 +20,19 @@ const entry = { id: 'entry-1', category: 'note', title: 'メモ', content: '本�
 const state = { messages: [message], entries: [entry] };
 
 describe('knowledge conversation repository', () => {
+  it('reports a corrupt read and recovers only after retrying a repaired source', async () => {
+    const key = knowledgeConversationStorageKey('owner-a', 'space-a');
+    let raw = '{broken';
+    const storage = { getItem: (name) => name === key ? raw : null, setItem: (name, value) => { if (name === key) raw = String(value); } };
+    const repository = createKnowledgeConversationRepository({ ownerId: 'owner-a', spaceId: 'space-a', storage });
+    expect(await repository.load()).toEqual({ messages: [], entries: [] });
+    expect(repository.getLastError()).toBeInstanceOf(Error);
+    raw = JSON.stringify({ schemaVersion: KNOWLEDGE_CONVERSATION_SCHEMA_VERSION, ownerId: 'owner-a', spaceId: 'space-a', state });
+    expect(await repository.retryLoad()).toEqual(state);
+    expect(repository.getLastError()).toBeNull();
+    expect(await repository.save(state)).toEqual(state);
+  });
+
   it('isolates owner-space state and persists it across an F5-equivalent repository remount', async () => {
     const storage = memoryStorage();
     const a = createKnowledgeConversationRepository({ ownerId: 'owner-a', spaceId: 'space-a', storage });

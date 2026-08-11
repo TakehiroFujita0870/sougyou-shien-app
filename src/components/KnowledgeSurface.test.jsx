@@ -28,6 +28,11 @@ async function mount(props = {}) {
           spaceId: "s",
           storage: memoryStorage(),
         })}
+        conversationRepository={createKnowledgeConversationRepository({
+          ownerId: "a",
+          spaceId: "s",
+          storage: memoryStorage(),
+        })}
         {...props}
       />,
     ),
@@ -165,7 +170,7 @@ describe("KnowledgeSurface library", () => {
     ).toBeNull();
     await unmount();
   });
-  it("keeps a confirmed entry when the initial hydration resolves late", async () => {
+  it("keeps the composer disabled until a deferred initial hydration resolves", async () => {
     let resolveLoad;
     const pending = new Promise((resolve) => {
       resolveLoad = resolve;
@@ -176,6 +181,9 @@ describe("KnowledgeSurface library", () => {
     };
     const { container, unmount } = await mount({ conversationRepository });
     const input = container.querySelector("#knowledge-composer");
+    expect(input.disabled).toBe(true);
+    await act(async () => resolveLoad({ messages: [], entries: [] }));
+    expect(input.disabled).toBe(false);
     const setter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       "value",
@@ -196,7 +204,6 @@ describe("KnowledgeSurface library", () => {
         .find((button) => button.textContent === "ナレッジに追加")
         .click(),
     );
-    await act(async () => resolveLoad({ messages: [], entries: [] }));
     expect(container.textContent).toContain("採用する検証計画");
     expect(conversationRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -205,7 +212,7 @@ describe("KnowledgeSurface library", () => {
     );
     await unmount();
   });
-  it("keeps the add confirmation open with a retryable alert after a rejected save and ignores a late hydration result", async () => {
+  it("keeps the add confirmation open with a retryable alert after a rejected save", async () => {
     let resolveLoad;
     const pendingLoad = new Promise((resolve) => {
       resolveLoad = resolve;
@@ -217,6 +224,7 @@ describe("KnowledgeSurface library", () => {
       }),
     };
     const { container, unmount } = await mount({ conversationRepository });
+    await act(async () => resolveLoad({ messages: [], entries: [] }));
     const input = container.querySelector("#knowledge-composer");
     const setter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
@@ -241,7 +249,6 @@ describe("KnowledgeSurface library", () => {
       confirm.click();
       await Promise.resolve();
     });
-    await act(async () => resolveLoad({ messages: [], entries: [] }));
     expect(conversationRepository.save).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[role="dialog"]')).toBeTruthy();
     expect(document.querySelector('[role="alert"]').textContent).toContain(
@@ -345,6 +352,39 @@ describe("KnowledgeSurface library", () => {
       "ファイルを削除できませんでした",
     );
     expect(container.textContent).toContain("failure.pdf");
+    await unmount();
+  });
+
+  it("keeps successful metadata visible and preserves the draft across repeated conversation retries", async () => {
+    let resolveRetry;
+    const retry = new Promise((resolve) => { resolveRetry = resolve; });
+    const documentRecord = { id: "local-file:loaded.pdf", name: "loaded.pdf", state: "metadata_only", mediaType: "pdf", sizeBytes: 10, lastModified: 1 };
+    const repository = { load: async () => [documentRecord], list: () => [documentRecord], getLastError: () => null };
+    const conversationRepository = {
+      load: vi.fn(async () => { throw new Error("offline"); }),
+      retryLoad: vi.fn().mockRejectedValueOnce(new Error("still offline")).mockImplementationOnce(() => retry),
+      save: vi.fn(async (value) => value),
+      getLastError: () => null,
+    };
+    const { container, unmount } = await mount({ repository, conversationRepository });
+    await act(async () => Promise.resolve());
+    expect(container.textContent).toContain("loaded.pdf");
+    expect(container.querySelector('[role="alert"]').textContent).toContain("会話とナレッジを読み込めませんでした");
+    const input = container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+    await act(async () => { setter.call(input, "再試行しても残す下書き"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    const retryButton = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "会話履歴を再試行");
+    await act(async () => { retryButton().click(); await Promise.resolve(); });
+    expect(input.value).toBe("再試行しても残す下書き");
+    expect(retryButton()).toBeTruthy();
+    await act(async () => { retryButton().click(); await Promise.resolve(); });
+    expect(input.disabled).toBe(true);
+    expect(input.value).toBe("再試行しても残す下書き");
+    await act(async () => resolveRetry({ messages: [{ role: "user", content: "復元済み", createdAt: null }], entries: [] }));
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe("再試行しても残す下書き");
+    expect(container.textContent).toContain("復元済み");
+    expect(container.textContent).toContain("loaded.pdf");
     await unmount();
   });
 });

@@ -14,6 +14,19 @@ const scoped = (value, ownerId = 'a', spaceId = 's') => ({ ...value, ownerId, sp
 const currentEnvelope = (documents) => JSON.stringify({ schemaVersion: KNOWLEDGE_SCHEMA_VERSION, ownerId: 'a', spaceId: 's', documents });
 
 describe('knowledge metadata repository', () => {
+  it('reports a read exception and recovers on a new-generation retry without overwriting data', async () => {
+    let failRead = true;
+    const raw = currentEnvelope([currentDoc]);
+    const store = { getItem: vi.fn((key) => { if (failRead) throw new Error('blocked'); return key === currentKey ? raw : null; }), setItem: vi.fn() };
+    const repository = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });
+    expect(await repository.load()).toEqual([]);
+    expect(repository.getLastError()).toBeInstanceOf(Error);
+    expect(store.setItem).not.toHaveBeenCalled();
+    failRead = false;
+    expect(await repository.retryLoad()).toEqual([currentDoc]);
+    expect(repository.getLastError()).toBeNull();
+  });
+
   it('adds, reloads, lists, and tombstones metadata through a collision-safe scoped envelope', async () => {
     const store = storage();
     const first = createKnowledgeMetadataRepository({ ownerId: 'a', spaceId: 's', storage: store });

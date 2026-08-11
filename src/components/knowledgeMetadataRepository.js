@@ -185,5 +185,12 @@ export function createKnowledgeMetadataRepository({ ownerId, spaceId, storage = 
     }
   }
 
-  return { load, list, find, add, delete: remove, getLastError: () => lastError };
+  function retryLoad() {
+    loadPromise = undefined;
+    writeBlocked = false;
+    lastError = null;
+    return load();
+  }
+
+  return { load, list, find, add, delete: remove, retryLoad, getLastError: () => lastError };
 }

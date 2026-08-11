@@ -83,6 +83,7 @@ export function createKnowledgeConversationRepository({ ownerId, spaceId, storag
   const legacyKey = legacyKnowledgeConversationStorageKey(ownerId, spaceId);
   let cachedLoad;
   let writeBlocked = false;
+  let lastError = null;
 
   function quarantine(sourceKey, raw) {
     try {
@@ -101,12 +102,14 @@ export function createKnowledgeConversationRepository({ ownerId, spaceId, storag
     if (cachedLoad) return cachedLoad;
     cachedLoad = Promise.resolve().then(() => {
       let raw;
-      try { raw = storage?.getItem(key) ?? null; } catch {
+      try { raw = storage?.getItem(key) ?? null; } catch (error) {
+        lastError = error;
         writeBlocked = true;
         return emptyState;
       }
       if (raw == null) {
-        try { raw = storage?.getItem(legacyKey) ?? null; } catch {
+        try { raw = storage?.getItem(legacyKey) ?? null; } catch (error) {
+          lastError = error;
           writeBlocked = true;
           return emptyState;
         }
@@ -115,8 +118,10 @@ export function createKnowledgeConversationRepository({ ownerId, spaceId, storag
           const legacy = normalizeLegacyState(JSON.parse(raw));
           if (!legacy) throw new Error('invalid legacy Knowledge conversation');
           try { storage?.setItem(key, JSON.stringify(envelope(legacy))); } catch { /* the legacy source remains unchanged */ }
+          lastError = null;
           return legacy;
-        } catch {
+        } catch (error) {
+          lastError = error;
           writeBlocked = true;
           quarantine(legacyKey, raw);
           return emptyState;
@@ -127,8 +132,10 @@ export function createKnowledgeConversationRepository({ ownerId, spaceId, storag
         if (parsed.schemaVersion !== KNOWLEDGE_CONVERSATION_SCHEMA_VERSION || parsed.ownerId !== ownerId || parsed.spaceId !== spaceId) throw new Error('invalid Knowledge conversation envelope');
         const state = normalizeStrictState(parsed.state);
         if (!state) throw new Error('invalid Knowledge conversation state');
+        lastError = null;
         return state;
-      } catch {
+      } catch (error) {
+        lastError = error;
         writeBlocked = true;
         quarantine(key, raw);
         return emptyState;
@@ -144,10 +151,18 @@ export function createKnowledgeConversationRepository({ ownerId, spaceId, storag
     if (!next) throw new Error('Invalid Knowledge conversation');
     storage?.setItem(key, JSON.stringify(envelope(next)));
     cachedLoad = Promise.resolve(next);
+    lastError = null;
     return next;
   }
 
-  return { load, save };
+  function retryLoad() {
+    cachedLoad = undefined;
+    writeBlocked = false;
+    lastError = null;
+    return load();
+  }
+
+  return { load, save, retryLoad, getLastError: () => lastError };
 }
 
 export function proposeKnowledgeEntry(content) {
