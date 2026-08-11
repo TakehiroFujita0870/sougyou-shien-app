@@ -1,5 +1,6 @@
 import fixture from '../fixtures/knowledge-admin-demo.json';
 import { KnowledgeSurface } from './KnowledgeSurface';
+import { WorkspaceShell } from './WorkspaceShell';
 import { createKnowledgeMetadataRepository, KNOWLEDGE_STORAGE_KEY } from './knowledgeMetadataRepository';
 
 const localMetadataStorage = {
@@ -32,6 +33,14 @@ const writeFailureMetadataRepository = {
     }
   },
 };
+const hydrationMetadata = { id: 'local-file:hydration.pdf', name: 'hydration.pdf', state: 'metadata_only', mediaType: 'pdf', sizeBytes: 1024, lastModified: 1 };
+const hydrationMetadataRepository = { async load() { return [hydrationMetadata]; }, list() { return [hydrationMetadata]; }, getLastError() { return null; } };
+const hydrationConversationRepository = {
+  async load() { throw new Error('Injected Knowledge hydration failure'); },
+  async retryLoad() { await new Promise((resolve) => setTimeout(resolve, 600)); return { messages: [{ role: 'user', content: '復元した会話', createdAt: null }], entries: [] }; },
+  async save(value) { return value; },
+  getLastError() { return null; },
+};
 
 export default { title: 'Kadode/KnowledgeSurface', component: KnowledgeSurface, parameters: { layout: 'centered', a11y: { test: 'error' } } };
 export const Desktop = { args: { fixture } };
@@ -40,5 +49,6 @@ export const Empty = { args: { fixture: null } };
 export const LocalMetadata = { args: { fixture, repository: localMetadataRepository } };
 export const WriteFailureRecovery = { render: () => <KnowledgeSurface fixture={fixture} conversationRepository={writeFailureConversationRepository} /> };
 export const WriteFailureRemoval = { render: () => <KnowledgeSurface fixture={fixture} repository={writeFailureMetadataRepository} /> };
+export const HydrationRecovery = { render: () => <WorkspaceShell activePage="knowledge" onSelect={() => {}}><div className="px-5 py-8"><KnowledgeSurface fixture={fixture} repository={hydrationMetadataRepository} conversationRepository={hydrationConversationRepository} /></div></WorkspaceShell>, parameters: { layout: 'fullscreen' } };
 export const Loading = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'processing' } } } };
 export const Error = { args: { fixture: { ...fixture, asset: { ...fixture.asset, state: 'failed' } } } };
