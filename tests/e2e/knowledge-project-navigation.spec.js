@@ -13,12 +13,12 @@ function entry(evaluationView, projectId = project.id) {
 }
 
 async function seed(page, evaluationView, projectId = project.id) {
-  await page.addInitScript(({ seededProject, seededEntry, key }) => {
+  await page.addInitScript(({ seededProject, seededEntry, key, projectKey }) => {
     if (!localStorage.getItem('kadode:user-profile')) localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
-    if (!localStorage.getItem('kadode:adopted-projects')) localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [seededProject.other, seededProject.current] }))
+    if (!localStorage.getItem(projectKey)) localStorage.setItem(projectKey, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.current.ownerId, spaceId: seededProject.current.spaceId, projects: [seededProject.other, seededProject.current] }))
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.current.ownerId, spaceId: seededProject.current.spaceId, state: { messages: [], entries: [seededEntry] } }))
     if (!sessionStorage.getItem('kadode:selected-surface')) sessionStorage.setItem('kadode:selected-surface', 'knowledge')
-  }, { seededProject: { current: project, other: otherProject }, seededEntry: entry(evaluationView, projectId), key: scopedKey })
+  }, { seededProject: { current: project, other: otherProject }, seededEntry: entry(evaluationView, projectId), key: scopedKey, projectKey: adoptedProjectKey })
 }
 
 test('opens a same-owner evidence link at its exact Project view and survives F5', async ({ page }) => {
@@ -34,7 +34,7 @@ test('opens a same-owner evidence link at its exact Project view and survives F5
   await expect(page.getByRole('heading', { name: project.title })).toBeVisible()
   await expect(page.getByRole('complementary', { name: '今回の根拠' })).toContainText('Projectで確認する根拠')
   await expect(page.getByRole('tab', { name: '市場はある？' })).toHaveAttribute('aria-selected', 'true')
-  await page.evaluate((replacement) => localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: replacement })), [otherProject, project])
+  await page.evaluate(({ projectKey, replacement, ownerId: scopedOwnerId, spaceId: scopedSpaceId }) => localStorage.setItem(projectKey, JSON.stringify({ schemaVersion: 1, ownerId: scopedOwnerId, spaceId: scopedSpaceId, projects: replacement })), { projectKey: adoptedProjectKey, replacement: [otherProject, project], ownerId, spaceId })
   await page.reload()
   await expect(page.getByRole('heading', { name: otherProject.title })).toBeVisible()
   await expect(page.getByRole('complementary', { name: '今回の根拠' })).toHaveCount(0)
@@ -47,11 +47,11 @@ test('does not render a stale or cross-project evidence action', async ({ page }
 })
 
 test('creates a same-owner decision evidence link only after an explicit view choice and survives F5', async ({ page }) => {
-  await page.addInitScript(({ seededProject, key }) => {
+  await page.addInitScript(({ seededProject, projectKey }) => {
     if (!localStorage.getItem('kadode:user-profile')) localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
-    if (!localStorage.getItem('kadode:adopted-projects')) localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [seededProject] }))
+    if (!localStorage.getItem(projectKey)) localStorage.setItem(projectKey, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.ownerId, spaceId: seededProject.spaceId, projects: [seededProject] }))
     if (!sessionStorage.getItem('kadode:selected-surface')) sessionStorage.setItem('kadode:selected-surface', 'knowledge')
-  }, { seededProject: project, key: scopedKey })
+  }, { seededProject: project, projectKey: adoptedProjectKey })
   await page.goto('/')
   const composer = page.locator('#knowledge-composer')
   await composer.fill('採用判断: 顧客ヒアリングを始める')
