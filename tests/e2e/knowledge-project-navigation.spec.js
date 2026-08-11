@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { adoptedProjectStorageKey } from '../../src/components/adoptedProjectRepository.js'
 
 const ownerId = 'local-owner'
 const spaceId = 'local-space'
 const project = { id: 'evidence-project', ownerId, spaceId, title: '根拠から開く事業', fact: '顧客ヒアリング', inference: '市場検証を進める', reason: '採用判断', status: 'adopted' }
 const otherProject = { ...project, id: 'other-project', title: '先にある事業' }
 const scopedKey = 'kadode:knowledge-conversation:11:local-owner:11:local-space:v1'
+const adoptedProjectKey = adoptedProjectStorageKey(ownerId, spaceId)
 
 function entry(evaluationView, projectId = project.id) {
   return { id: `evidence:${evaluationView}`, category: 'decision', title: '採用判断の根拠', content: 'Projectで確認する根拠', createdAt: '2026-08-11T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z', sourceType: 'local', confidence: 'unknown', unknowns: [], projectId, evaluationView }
@@ -68,17 +70,17 @@ test('keeps Knowledge actionable when selecting a Project cannot persist, then r
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await seed(page, '市場はある？')
   await page.goto('/')
-  await page.evaluate(() => {
+  await page.evaluate((projectKey) => {
     const original = Storage.prototype.setItem
     let failOnce = true
     Storage.prototype.setItem = function setItem(key, value) {
-      if (failOnce && key === 'kadode:adopted-projects') {
+      if (failOnce && key === projectKey) {
         failOnce = false
         throw new DOMException('Storage quota exceeded', 'QuotaExceededError')
       }
       return original.call(this, key, value)
     }
-  })
+  }, adoptedProjectKey)
 
   const openProject = page.getByRole('button', { name: 'Projectを開く' })
   await openProject.click()
