@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test'
+import { sidebarPortfolioStorageKey } from '../../src/components/sidebarPortfolioRepository.js'
+
+const portfolioStorageKey = sidebarPortfolioStorageKey('local-owner', 'local-space')
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -154,7 +157,7 @@ test('restores an archived Home snapshot with the keyboard and keeps its active 
   await restart.focus()
   await page.keyboard.press('Enter')
   await expect(page.locator('[aria-label="会話履歴"]')).toContainText(message)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key))?.portfolio, portfolioStorageKey)).toMatchObject({
     activeHomeId: expect.any(String),
     home: [expect.objectContaining({ title: message, archived: false })],
   })
@@ -162,7 +165,7 @@ test('restores an archived Home snapshot with the keyboard and keeps its active 
 
   await page.reload()
   await expect(page.locator('[aria-label="会話履歴"]')).toContainText(message)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key))?.portfolio, portfolioStorageKey)).toMatchObject({
     activeHomeId: expect.any(String),
     home: [expect.objectContaining({ title: message, archived: false })],
   })
@@ -189,14 +192,14 @@ test('restores an archived Project snapshot by click and keeps the Project state
 
   await restart.click()
   await expect(page.locator('#project-surface-heading')).toHaveText(project.title)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key))?.portfolio, portfolioStorageKey)).toMatchObject({
     project: [expect.objectContaining({ id: project.id, archived: false, snapshot: expect.objectContaining({ title: project.title }) })],
   })
   await page.screenshot({ path: 'test-results/sidebar-restored-project-1440.png', fullPage: false })
 
   await page.reload()
   await expect(page.locator('#project-surface-heading')).toHaveText(project.title)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kadode:sidebar-portfolio:local-owner:local-space')))).toMatchObject({
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key))?.portfolio, portfolioStorageKey)).toMatchObject({
     project: [expect.objectContaining({ id: project.id, archived: false, snapshot: expect.objectContaining({ title: project.title }) })],
   })
 })
