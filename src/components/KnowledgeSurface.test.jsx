@@ -120,6 +120,8 @@ describe("KnowledgeSurface library", () => {
     );
     expect((await conversationRepository.load()).entries[0]).toMatchObject({
       category: "decision",
+      projectId: "",
+      evaluationView: "",
     });
     await first.unmount();
     const second = await mount({
@@ -133,6 +135,28 @@ describe("KnowledgeSurface library", () => {
     await act(async () => Promise.resolve());
     expect(second.container.textContent).toContain("採用する市場調査");
     await second.unmount();
+  });
+  it("persists an explicitly selected Project view only for a same-owner current decision", async () => {
+    const store = memoryStorage();
+    const conversationRepository = createKnowledgeConversationRepository({ ownerId: "local-owner", spaceId: "local-space", storage: store });
+    const project = { id: "project-a", ownerId: "local-owner", spaceId: "local-space" };
+    const { container, unmount } = await mount({
+      ownerId: "local-owner", spaceId: "local-space", conversationRepository, currentProject: project, availableProjects: [project], allowedEvaluationViews: ["市場はある？", "競合は誰？"],
+    });
+    await act(async () => Promise.resolve());
+    const input = container.querySelector("#knowledge-composer");
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+    await act(async () => {
+      setter.call(input, "採用判断: 顧客ヒアリングを始める");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    const view = [...document.querySelectorAll("button")].find((button) => button.textContent === "市場はある？");
+    expect(view).toBeTruthy();
+    await act(async () => view.click());
+    await act(async () => [...document.querySelectorAll("button")].find((button) => button.textContent === "ナレッジに追加").click());
+    await vi.waitFor(async () => expect((await conversationRepository.load()).entries[0]).toMatchObject({ projectId: "project-a", evaluationView: "市場はある？", sourceType: "local", confidence: "unknown" }));
+    await unmount();
   });
   it("cancels a preview without persistence and has no AI assist widget", async () => {
     const repository = createKnowledgeConversationRepository({
