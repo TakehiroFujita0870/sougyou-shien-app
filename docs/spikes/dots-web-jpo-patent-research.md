@@ -1,4 +1,4 @@
-# Kadode Web検索・JPO特許情報取得API スパイク計画
+# Dots. Web検索・JPO特許情報取得API スパイク計画
 
 最終検証日: 2026-08-09
 

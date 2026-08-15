@@ -3,7 +3,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: #136でmerge済みのKnowledge metadata契約を使い、Knowledge surfaceのpresentationを1PRで実装する。初回登録asset、背景とProject概要付き意思決定、資料の確認・追加・削除、Knowledge Kadode AI composerを表示する。admin/demo fixtureはproductionデータから分離する。
+要望: #136でmerge済みのKnowledge metadata契約を使い、Knowledge surfaceのpresentationを1PRで実装する。初回登録asset、背景とProject概要付き意思決定、資料の確認・追加・削除、Knowledge Dots. AI composerを表示する。admin/demo fixtureはproductionデータから分離する。
 
 ゴール: desktopと390pxで、本人所有のKnowledge metadataを起点に、assetの状態・出典・Project文脈・意思決定・composerを確認できるpresentation surfaceを提供する。
 
@@ -29,7 +29,7 @@ Given: decision recordに背景、Project概要、理由、状態がある。
 When: decisionを開く。
 Then: 背景、Project概要、本人判断、理由が区別されて表示される。
 
-### US-136-4 Kadode AIへ相談する
+### US-136-4 Dots. AIへ相談する
 As a 利用者, I want Knowledge context付きcomposerを使いたい, so that 資料と判断を起点に次の問いを入力できる。
 Given: desktopまたは390pxのKnowledge surfaceを表示している。
 When: keyboardでcomposerへ移動し入力する。

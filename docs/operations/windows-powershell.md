@@ -116,16 +116,16 @@ node -e "const{spawnSync}=require('node:child_process');const input=Buffer.from(
 IssueまたはPR本文を更新した直後に、APIから本文をread-backする。連続する`???`、置換文字U+FFFD、日本語文字数、必須見出しに加え、送信元UTF-8ファイルとの完全一致を検査する。これにより、文字化けだけでなく本文末尾や指示の欠損も検出する。いずれかが不正なら更新を完了扱いにせず、以後のIssue/PR更新、コミット、pushを停止する。
 
 ```powershell
-node -e "const{spawnSync}=require('node:child_process');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/sougyou-shien-app/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const body=JSON.parse(r.stdout.toString('utf8')).body??'';const ja=(body.match(/[\u3040-\u30ff\u3400-\u9fff]/g)||[]).length;const required=['## 目的','## 受入条件'];if(/\?{3,}|\uFFFD/.test(body)||ja===0||required.some(x=>!body.includes(x)))throw Error('Issue本文のread-back検査に失敗');"
+node -e "const{spawnSync}=require('node:child_process');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/dots/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const body=JSON.parse(r.stdout.toString('utf8')).body??'';const ja=(body.match(/[\u3040-\u30ff\u3400-\u9fff]/g)||[]).length;const required=['## 目的','## 受入条件'];if(/\?{3,}|\uFFFD/.test(body)||ja===0||required.some(x=>!body.includes(x)))throw Error('Issue本文のread-back検査に失敗');"
 ```
 
 送信元のUTF-8ファイルを`body.md`として保存した場合は、次の完全一致検査を続けて実行する。Node.jsのプログラム本体はASCIIだけであり、本文はファイルからUTF-8で読む。改行コードの差だけは正規化する。
 
 ```powershell
-node -e "const{readFileSync}=require('node:fs');const{spawnSync}=require('node:child_process');const expected=readFileSync('body.md','utf8').replace(/\r\n/g,'\n');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/sougyou-shien-app/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const actual=(JSON.parse(r.stdout.toString('utf8')).body??'').replace(/\r\n/g,'\n');if(actual!==expected)throw Error('Issue本文が送信元と一致しない');"
+node -e "const{readFileSync}=require('node:fs');const{spawnSync}=require('node:child_process');const expected=readFileSync('body.md','utf8').replace(/\r\n/g,'\n');const r=spawnSync('gh',['api','repos/TakehiroFujita0870/dots/issues/33'],{encoding:'buffer'});if(r.status)process.exit(r.status);const actual=(JSON.parse(r.stdout.toString('utf8')).body??'').replace(/\r\n/g,'\n');if(actual!==expected)throw Error('Issue本文が送信元と一致しない');"
 ```
 
-PRではAPIパスを`repos/TakehiroFujita0870/sougyou-shien-app/pulls/<PR番号>`へ替え、PRで必要な見出しと`Closes #33`を`required`へ加える。本文の更新に成功したというCLIの終了コードだけを、文字化けしていない根拠にしない。
+PRではAPIパスを`repos/TakehiroFujita0870/dots/pulls/<PR番号>`へ替え、PRで必要な見出しと`Closes #33`を`required`へ加える。本文の更新に成功したというCLIの終了コードだけを、文字化けしていない根拠にしない。
 
 ### 再発防止の確認例
 

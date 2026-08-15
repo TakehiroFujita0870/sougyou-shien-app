@@ -53,7 +53,7 @@ function ContractPreview({ state = 'empty', activeSurface = 'Home' }) {
             {isError && <p role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900">読み込みに失敗しました。再試行できます。</p>}
             {state === 'populated' && <ul className="mb-4 grid gap-2 text-sm text-stone-700"><li>現在の文脈を確認しました</li><li>次に見る資料を整理しました</li></ul>}
             {isLoading && <p role="status" className="mb-4 text-sm text-stone-600">準備しています…</p>}
-            <form className="border-t border-stone-100 pt-3"><label htmlFor={`presentation-composer-${state}`} className="sr-only">Kadode AIへのメッセージ</label><textarea id={`presentation-composer-${state}`} aria-describedby={`presentation-composer-hint-${state}`} disabled={isLoading} placeholder="考えていることを入力" className="min-h-20 w-full resize-y rounded-lg border border-stone-200 p-3 text-sm" /><p id={`presentation-composer-hint-${state}`} className="mt-2 text-xs text-stone-500">Enterで送信、Shift+Enterで改行</p><div className="mt-2 flex justify-end"><button type="submit" disabled={isLoading} className="min-h-11 rounded-full bg-stone-900 px-4 text-sm font-semibold text-white disabled:opacity-50">送信</button></div></form>
+            <form className="border-t border-stone-100 pt-3"><label htmlFor={`presentation-composer-${state}`} className="sr-only">Dots. AIへのメッセージ</label><textarea id={`presentation-composer-${state}`} aria-describedby={`presentation-composer-hint-${state}`} disabled={isLoading} placeholder="考えていることを入力" className="min-h-20 w-full resize-y rounded-lg border border-stone-200 p-3 text-sm" /><p id={`presentation-composer-hint-${state}`} className="mt-2 text-xs text-stone-500">Enterで送信、Shift+Enterで改行</p><div className="mt-2 flex justify-end"><button type="submit" disabled={isLoading} className="min-h-11 rounded-full bg-stone-900 px-4 text-sm font-semibold text-white disabled:opacity-50">送信</button></div></form>
           </section>
         </main>
       </div>
@@ -62,14 +62,14 @@ function ContractPreview({ state = 'empty', activeSurface = 'Home' }) {
 }
 
 export default {
-  title: 'Kadode/WorkspaceShell Presentation Contract',
+  title: 'Dots./WorkspaceShell Presentation Contract',
   component: ContractPreview,
   parameters: { layout: 'fullscreen', viewport: { viewports: VIEWPORTS } },
 };
 
 const assertComposer = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  const composer = canvas.getByLabelText('Kadode AIへのメッセージ');
+  const composer = canvas.getByLabelText('Dots. AIへのメッセージ');
   const send = canvas.getByRole('button', { name: '送信' });
   expect(composer).toHaveAttribute('aria-describedby');
   expect(canvas.getByText('Enterで送信、Shift+Enterで改行')).toBeInTheDocument();

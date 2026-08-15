@@ -9,7 +9,7 @@ async function expectAnchoredGeometry(page, input) {
     const sidebar = document.querySelector('.workspace-shell__sidebar');
     const rect = composer.getBoundingClientRect();
     const sidebarRect = sidebar.getBoundingClientRect();
-    const buttons = [...composer.querySelectorAll('.kadode-composer__actions button')].map((button) => button.getBoundingClientRect());
+    const buttons = [...composer.querySelectorAll('.Dots-composer__actions button')].map((button) => button.getBoundingClientRect());
     return {
       sidebarWidth: getComputedStyle(shell).getPropertyValue('--workspace-sidebar-width').trim(),
       leftGap: rect.left - sidebarRect.right,

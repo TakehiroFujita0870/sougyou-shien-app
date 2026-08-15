@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test('keeps the successful channel and draft while retrying Knowledge hydration', async ({ page }) => {
-  await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-knowledgesurface--hydration-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
+  await page.goto('http://127.0.0.1:6007/iframe.html?id=dots-knowledgesurface--hydration-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
   const alert = page.getByRole('alert')
   await expect(alert).toBeVisible()
   const list = page.locator('section[aria-labelledby="knowledge-heading"] ol')

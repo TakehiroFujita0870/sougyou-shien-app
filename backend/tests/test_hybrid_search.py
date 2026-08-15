@@ -1,4 +1,4 @@
-from kadode_api.hybrid_search import (
+from dots.hybrid_search import (
     ChunkCandidate,
     DeterministicFakeEmbeddingAdapter,
     EmbeddingUnavailable,

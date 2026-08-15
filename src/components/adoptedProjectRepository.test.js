@@ -21,7 +21,7 @@ function memoryStorage(initial = {}) {
 describe('adopted project repository', () => {
   it('uses collision-safe owner and space scoped keys', () => {
     expect(adoptedProjectStorageKey('a:b', 'c')).not.toBe(adoptedProjectStorageKey('a', 'b:c'));
-    expect(adoptedProjectStorageKey('owner-a', 'space-a')).toBe('kadode:adopted-projects:7:owner-a:7:space-a:v1');
+    expect(adoptedProjectStorageKey('owner-a', 'space-a')).toBe('dots:adopted-projects:7:owner-a:7:space-a:v1');
   });
 
   it('persists and restores the current scope after remount', async () => {

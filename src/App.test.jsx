@@ -3,17 +3,17 @@ import { describe, expect, it } from 'vitest';
 
 import { App, WORKSPACE_NAV } from './App';
 
-describe('Kadode three-surface workspace shell', () => {
+describe('Dots. three-surface workspace shell', () => {
   it('exposes Home, Project, and Knowledge as the only top-level surfaces', () => {
     const html = renderToStaticMarkup(<App />);
     expect(WORKSPACE_NAV.map(({ label }) => label)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
     WORKSPACE_NAV.forEach(({ label }) => expect(html).toContain(label));
   });
 
-  it('starts Home with the reachable Kadode AI candidate composer', () => {
+  it('starts Home with the reachable Dots. AI candidate composer', () => {
     const html = renderToStaticMarkup(<App />);
     expect(html).toContain('id="home-supervisor-message"');
-    expect(html).toContain('Kadode AI');
+    expect(html).toContain('Dots. AI');
     expect(html).not.toContain('STAGE GATE');
     expect(html).not.toContain('現場で見つかった改善の芽を、低リスク');
   });

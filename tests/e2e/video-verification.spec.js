@@ -14,8 +14,8 @@ const completedProfile = {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((profile) => {
-    if (!localStorage.getItem('kadode:user-profile')) {
-      localStorage.setItem('kadode:user-profile', JSON.stringify(profile))
+    if (!localStorage.getItem('dots:user-profile')) {
+      localStorage.setItem('dots:user-profile', JSON.stringify(profile))
     }
   }, completedProfile)
 })
@@ -28,7 +28,7 @@ test('records the desktop PII-free Home, Project, and Knowledge happy path', asy
 
   await page.goto('/')
   await expect(page.getByRole('dialog', { name: 'あなたの情報' })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: 'Kadode AI' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Dots. AI' })).toBeVisible()
 
   const account = page.getByRole('button', { name: 'タケヒロのアカウント Free' })
   await account.click()
@@ -61,8 +61,8 @@ test('records the desktop PII-free Home, Project, and Knowledge happy path', asy
   await expect(page.locator('[data-project-question]')).toHaveCount(5)
 
   const projectMessage = '最初に確かめる顧客候補を3つに絞りたい'
-  const projectComposer = page.getByRole('textbox', { name: 'このプロジェクトについて Kadode AI に尋ねる' })
-  const projectModelTrigger = page.getByRole('form', { name: 'Project Kadode AI composer' }).getByRole('button', { name: /モデル:/ })
+  const projectComposer = page.getByRole('textbox', { name: 'このプロジェクトについて Dots. AI に尋ねる' })
+  const projectModelTrigger = page.getByRole('form', { name: 'Project Dots. AI composer' }).getByRole('button', { name: /モデル:/ })
   const projectModelMenuName = await projectModelTrigger.getAttribute('aria-label')
   await projectModelTrigger.click()
   await expect(page.getByRole('menu', { name: projectModelMenuName })).toBeVisible()
@@ -79,7 +79,7 @@ test('records the desktop PII-free Home, Project, and Knowledge happy path', asy
 
   await page.getByRole('button', { name: 'ナレッジ', exact: true }).click()
   await expect(page.locator('#knowledge-heading')).toBeVisible()
-  const knowledgeComposer = page.getByRole('textbox', { name: 'KnowledgeについてKadode AIに相談' })
+  const knowledgeComposer = page.getByRole('textbox', { name: 'KnowledgeについてDots. AIに相談' })
   await expect(knowledgeComposer).toBeVisible()
   const knowledgeModelTrigger = knowledgeComposer.locator('..').locator('..').getByRole('button', { name: /モデル:/ })
   const knowledgeModelMenuName = await knowledgeModelTrigger.getAttribute('aria-label')

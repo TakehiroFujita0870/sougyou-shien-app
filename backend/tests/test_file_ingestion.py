@@ -1,4 +1,4 @@
-from kadode_api.file_ingestion import (
+from dots.file_ingestion import (
     DeletionTarget,
     ExtractedPage,
     IngestionState,

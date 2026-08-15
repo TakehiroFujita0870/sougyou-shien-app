@@ -1,4 +1,4 @@
-from kadode_api.admin_demo_dataset import build_admin_demo_dataset
+from dots.admin_demo_dataset import build_admin_demo_dataset
 
 
 def test_admin_demo_dataset_is_deterministic_and_cross_referenced():

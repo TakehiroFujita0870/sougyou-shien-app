@@ -2,7 +2,7 @@ import { fn } from 'storybook/test';
 
 import { PlanSelection } from './PlanSelection';
 
-export default { title: 'Kadode/PlanSelection', component: PlanSelection, args: { onApplyPlan: fn() } };
+export default { title: 'Dots./PlanSelection', component: PlanSelection, args: { onApplyPlan: fn() } };
 
 export const Free = { args: { currentPlan: 'free' } };
 export const Standard = { args: { currentPlan: 'standard' } };

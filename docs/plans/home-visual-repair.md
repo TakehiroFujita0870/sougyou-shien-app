@@ -13,7 +13,7 @@
 ## ユーザーストーリーと受け入れ条件
 
 ### US-1
-As a 利用者, I want Homeを開いた直後にKadode AI composerだけへ集中したい, so that 会話をすぐ始められる。
+As a 利用者, I want Homeを開いた直後にDots. AI composerだけへ集中したい, so that 会話をすぐ始められる。
 
 Given: Homeを1440x900または390x844で開いている。
 When: first viewportを確認する。
@@ -66,7 +66,7 @@ Then: 一つのmenuにprofile、plan、設定、help、logoutが表示され、P
 | 判断 | 選択と理由 | 却下案と理由 | 結果 |
 | --- | --- | --- | --- |
 | Home entry | 既存conversation workflowのpresentationをHomeへ置く。storageと候補判断を保てる。 | 新workflow追加は状態と責務を二重化するため却下。 | 実装する。 |
-| chrome | header一層、sidebar三項目、account footerに限定し、collapse widgetを置かない。 | breadcrumb/header/Kadodeの重複とcollapse controlはfirst viewportを圧迫するため却下。 | 実装する。 |
+| chrome | header一層、sidebar三項目、account footerに限定し、collapse widgetを置かない。 | breadcrumb/header/Dots.の重複とcollapse controlはfirst viewportを圧迫するため却下。 | 実装する。 |
 | profile access | floating buttonをaccount footer/menuへ移す。 | 常時floating buttonはcomposerと競合するため却下。 | 実装する。 |
 
 ## 変更履歴

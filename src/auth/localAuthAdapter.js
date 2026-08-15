@@ -14,7 +14,7 @@ export function createLocalGoogleAuthAdapter({
   profile = 'local',
   principal = LOCAL_GOOGLE_PRINCIPAL,
   storage = globalThis.localStorage,
-  storageKey = 'kadode:local-auth',
+  storageKey = 'dots:local-auth',
 } = {}) {
   let current = null;
   let status = 'hydrating';

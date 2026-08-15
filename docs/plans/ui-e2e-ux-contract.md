@@ -60,7 +60,7 @@ Then: focus順、現在地、dialog、保存結果が観測可能で横overflow�
 
 As a プロダクト担当者, I want 現UIの欠陥を失敗テストとして残したい, so that 未達をgreenと誤認しない。
 
-Given: 現mainの巨大hero、手入力IdeaForm、Kadode workspace/local fake大警告を確認する
+Given: 現mainの巨大hero、手入力IdeaForm、Dots. workspace/local fake大警告を確認する
 When: 失敗テストを実行する
 Then: それぞれの欠陥IDが実行済みのfailing contractとして表示され、実装完了まで受入未達になる。観測eventはPII、本文、owner ID、実時刻、ハッシュを含まない。
 
@@ -78,7 +78,7 @@ Then: それぞれの欠陥IDが実行済みのfailing contractとして表示�
 | --- | --- | --- |
 | UX-DEF-01 | 巨大heroがAI壁打ち入口より先に視線を占有する | AI入口を全画面共通化 |
 | UX-DEF-02 | 手入力IdeaFormが会話中の芽previewと別入口になっている | 会話previewへ統合 |
-| UX-DEF-03 | Kadode workspace/local fake大警告が作業文脈を阻害する | 信頼境界を常設noticeへ再設計 |
+| UX-DEF-03 | Dots. workspace/local fake大警告が作業文脈を阻害する | 信頼境界を常設noticeへ再設計 |
 | UX-DEF-04 | 添付資料のspace共通library再利用契約がない | library共有境界とproject許可 |
 | UX-DEF-05 | 低速hydration中の空状態・F5復元契約がない | hydration state machine |
 

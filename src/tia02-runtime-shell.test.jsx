@@ -18,8 +18,8 @@ describe('T-IA-02-R runtime shell contract', () => {
   it('renders the Home conversation surface and composer without duplicate entry points', () => {
     const html = renderToStaticMarkup(<App />);
 
-    expect(html).toContain('Kadode AI');
-    expect(html).toContain('Kadode AIへのメッセージ');
+    expect(html).toContain('Dots. AI');
+    expect(html).toContain('Dots. AIへのメッセージ');
     expect(html).not.toContain('Enterで送信、Shift+Enterで改行');
     expect(html).not.toMatch(/local|fake|mock/i);
     expect(html).toContain('data-home-composer="true"');

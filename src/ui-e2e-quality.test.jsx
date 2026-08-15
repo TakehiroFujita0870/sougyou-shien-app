@@ -11,7 +11,7 @@ const mounted = [];
 const completedProfile = JSON.stringify({ status: 'completed', values: {} });
 
 function installStorage() {
-  const values = new Map([['kadode:user-profile', completedProfile]]);
+  const values = new Map([['dots:user-profile', completedProfile]]);
   const session = new Map();
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: (key) => values.get(key) ?? null,

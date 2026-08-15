@@ -9,7 +9,7 @@
 ## ユーザーストーリーと受け入れ条件
 ### US-30-1
 As a 開発者, I want 設定プロファイルごとに同じサービス名と接続状態を取得する, so that フロントエンドが接続先固有の分岐を持たない。
-Given: `KADODE_RUNTIME_PROFILE=local` でAPIを作成する。
+Given: `DOTS_RUNTIME_PROFILE=local` でAPIを作成する。
 When: `GET /v1/runtime/status` を呼ぶ。
 Then: Auth、DB、Storage、AI、Web Search、Billing の全サービスが `fake` 接続状態で返る。
 
@@ -27,7 +27,7 @@ Then: 200と `deleted` 状態を返し、以後の取得は404となる。
 
 ### US-30-4
 As a リリース担当, I want production 未設定を接続状態として取得する, so that 未実装と誤認せず安全にUIを制御できる。
-Given: `KADODE_RUNTIME_PROFILE=production` で資格情報を設定しない。
+Given: `DOTS_RUNTIME_PROFILE=production` で資格情報を設定しない。
 When: `GET /v1/runtime/status` を呼ぶ。
 Then: 全サービスが `unconfigured` と `external connection is not configured` を返す。
 

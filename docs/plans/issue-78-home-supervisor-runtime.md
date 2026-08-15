@@ -2,7 +2,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: HomeのKadode AIを、local context snapshotに基づくportfolio supervisor入口にする。
+要望: HomeのDots. AIを、local context snapshotに基づくportfolio supervisor入口にする。
 
 ゴール: deterministicな提案を事実・推論・操作として表示し、明示確認後だけ端末内に保存する。
 

@@ -14,8 +14,8 @@ import { createSidebarPortfolioRepository } from './components/sidebarPortfolioR
 import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'ホーム' }, { id: 'project', label: 'プロジェクト' }, { id: 'knowledge', label: 'ナレッジ' }];
-export const SELECTED_SURFACE_STORAGE_KEY = 'kadode:selected-surface';
-const PROJECT_EVIDENCE_CONTEXT_STORAGE_KEY = 'kadode:project-evidence-context';
+export const SELECTED_SURFACE_STORAGE_KEY = 'dots:selected-surface';
+const PROJECT_EVIDENCE_CONTEXT_STORAGE_KEY = 'dots:project-evidence-context';
 
 function portfolioMessageId(prefix, value) {
   let hash = 2166136261;
@@ -56,11 +56,11 @@ function IdeaWorkspace({ repository, onProjectAdopt, modelKey, models, onModelCh
 
 function ProfileLoadFailure({ onRetry }) {
   return (
-    <section className="kadode-dialog-panel w-full min-w-0 max-w-full overflow-hidden rounded-3xl p-6 shadow-xl sm:max-w-2xl" aria-labelledby="profile-load-error-heading">
-      <p className="kadode-dialog-kicker font-bold">あなたの情報</p>
+    <section className="Dots-dialog-panel w-full min-w-0 max-w-full overflow-hidden rounded-3xl p-6 shadow-xl sm:max-w-2xl" aria-labelledby="profile-load-error-heading">
+      <p className="Dots-dialog-kicker font-bold">あなたの情報</p>
       <h2 id="profile-load-error-heading" className="mt-2 text-2xl font-bold">読み込めませんでした</h2>
       <p className="mt-4 leading-7">保存済みの情報を守るため、入力フォームは表示していません。接続を確認して再試行してください。</p>
-      <button type="button" onClick={onRetry} className="kadode-dialog-submit mt-5 rounded-full px-5 py-3 font-bold">再試行</button>
+      <button type="button" onClick={onRetry} className="Dots-dialog-submit mt-5 rounded-full px-5 py-3 font-bold">再試行</button>
     </section>
   );
 }
@@ -243,11 +243,11 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   }
 
   return (
-    <main className="kadode-shell">
+    <main className="Dots-shell">
       <WorkspaceShell activePage={activeWorkspace} onSelect={(page) => { if (page !== 'project') setProjectTargetEvidence(null); const archivedHome = page === 'home' && portfolio.home.some((item) => item.id === activeHomeConversationId && item.archived); const archivedProject = page === 'project' && portfolio.project.some((item) => item.id === adoptedProjectHydration.value?.id && item.archived); setActiveWorkspace(archivedHome || archivedProject ? 'knowledge' : page); }} portfolio={portfolio} portfolioError={portfolioError} onOpenPortfolioItem={async (type, entry) => { if (entry.archived) return; try { if (type === 'home' && entry.snapshot) { await rawHomeConversationRepositoryRef.current.save(entry.snapshot); const next = await portfolioRepositoryRef.current.setActiveHome(entry.id); setPortfolio(next); setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } if (type === 'project' && entry.snapshot) { setProjectTargetEvidence(null); const restored = await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); adoptedProjectHydration.replaceReady(restored); } if (type === 'knowledge') { const next = await portfolioRepositoryRef.current.markRead('knowledge', entry.id); setPortfolio(next); } setPortfolioError(''); setActiveWorkspace(type); } catch { setPortfolioError('履歴を開けませんでした。項目は削除されていません。もう一度お試しください。'); throw new Error('Portfolio item open failed'); } }} onArchive={async (type, id) => { try { const next = await portfolioRepositoryRef.current.archive(type, id); setPortfolio(next); setPortfolioError(''); setActiveWorkspace('knowledge'); return true; } catch { setPortfolioError('アーカイブできませんでした。項目はそのまま残っています。もう一度お試しください。'); return false; } }} onRestore={async (type, entry) => { let previous; let staged = false; try { if (type === 'home') { previous = await rawHomeConversationRepositoryRef.current.load(); await rawHomeConversationRepositoryRef.current.save(entry.snapshot); } else { previous = adoptedProjectHydration.value; await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); } staged = true; const restoredPortfolio = await portfolioRepositoryRef.current.restore(type, entry.id); if (type === 'home') { setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } else { adoptedProjectHydration.replaceReady(entry.snapshot); } setPortfolio(restoredPortfolio); setPortfolioError(''); setActiveWorkspace(type); } catch { let compensated = !staged; try { if (staged) { if (type === 'home') await rawHomeConversationRepositoryRef.current.save(previous ?? { messages: [], proposals: [], input: '' }); else if (previous) await adoptedProjectRepositoryRef.current.saveAdopted(previous); else await adoptedProjectRepositoryRef.current.clearAdopted?.(); compensated = true; } } catch { compensated = false; } setPortfolioError(compensated ? '再開できませんでした。アーカイブは保持されています。もう一度お試しください。' : '再開できませんでした。アーカイブは保持されていますが、元の作業内容を復元できませんでした。'); } }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
-      {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="kadode-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="kadode-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
+      {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="Dots-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="Dots-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
     </main>
   );
 }

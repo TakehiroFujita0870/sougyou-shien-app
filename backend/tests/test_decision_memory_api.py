@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.decision_memory import InMemoryDecisionRepository
-from kadode_api.main import create_app
+from dots.decision_memory import InMemoryDecisionRepository
+from dots.main import create_app
 
 
 def client() -> TestClient:

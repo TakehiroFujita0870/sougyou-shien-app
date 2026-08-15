@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.main import app, orchestrator
-from kadode_api.research import DailyLimitExceeded, ResearchTimeout
-from kadode_api.research_orchestrator import FakeSource, LocatedEvidence, Source
+from dots.main import app, orchestrator
+from dots.research import DailyLimitExceeded, ResearchTimeout
+from dots.research_orchestrator import FakeSource, LocatedEvidence, Source
 
 
 client = TestClient(app)

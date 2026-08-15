@@ -1,9 +1,9 @@
--- Additive migration: existing decision_records and their API contract are unchanged.
+-- Additive migration: existing dots_decision_records and their API contract are unchanged.
 -- The transaction makes a failed deployment atomic; rollback can drop these new objects
 -- in reverse dependency order without changing pre-existing tables.
 begin;
 
-create table public.source_documents (
+create table public.dots_source_documents (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   source_type text not null check (source_type in ('file', 'web', 'manual')),
@@ -16,7 +16,7 @@ create table public.source_documents (
   constraint source_documents_id_owner_unique unique (id, owner_id)
 );
 
-create table public.document_versions (
+create table public.dots_document_versions (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   document_id uuid not null,
@@ -29,19 +29,19 @@ create table public.document_versions (
   created_at timestamptz not null default now(),
   constraint document_versions_document_owner_fk
     foreign key (document_id, owner_id)
-    references public.source_documents(id, owner_id)
+    references public.dots_source_documents(id, owner_id)
     on delete cascade,
   constraint document_versions_id_owner_unique unique (id, owner_id),
   constraint document_versions_document_version_unique unique (document_id, version_number)
 );
 
-alter table public.source_documents
+alter table public.dots_source_documents
   add constraint source_documents_current_version_fk
   foreign key (current_version_id)
-  references public.document_versions(id)
+  references public.dots_document_versions(id)
   on delete set null;
 
-create table public.document_chunks (
+create table public.dots_document_chunks (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   version_id uuid not null,
@@ -52,12 +52,12 @@ create table public.document_chunks (
   created_at timestamptz not null default now(),
   constraint document_chunks_version_owner_fk
     foreign key (version_id, owner_id)
-    references public.document_versions(id, owner_id)
+    references public.dots_document_versions(id, owner_id)
     on delete cascade,
   constraint document_chunks_version_chunk_unique unique (version_id, chunk_index)
 );
 
-create table public.research_runs (
+create table public.dots_research_runs (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   idea_id uuid not null,
@@ -69,12 +69,12 @@ create table public.research_runs (
   completed_at timestamptz,
   constraint research_runs_idea_owner_fk
     foreign key (idea_id, owner_id)
-    references public.ideas(id, owner_id)
+    references public.dots_ideas(id, owner_id)
     on delete cascade,
   constraint research_runs_id_owner_unique unique (id, owner_id)
 );
 
-create table public.research_evidence (
+create table public.dots_research_evidence (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   run_id uuid not null,
@@ -86,12 +86,12 @@ create table public.research_evidence (
   created_at timestamptz not null default now(),
   constraint research_evidence_run_owner_fk
     foreign key (run_id, owner_id)
-    references public.research_runs(id, owner_id)
+    references public.dots_research_runs(id, owner_id)
     on delete cascade,
   constraint research_evidence_id_owner_unique unique (id, owner_id)
 );
 
-create table public.decision_observations (
+create table public.dots_decision_observations (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   decision_id uuid not null,
@@ -101,26 +101,26 @@ create table public.decision_observations (
   created_at timestamptz not null default now(),
   constraint decision_observations_decision_owner_fk
     foreign key (decision_id, owner_id)
-    references public.decision_records(id, owner_id)
+    references public.dots_decision_records(id, owner_id)
     on delete cascade,
   constraint decision_observations_evidence_owner_fk
     foreign key (evidence_id, owner_id)
-    references public.research_evidence(id, owner_id)
+    references public.dots_research_evidence(id, owner_id)
     on delete set null (evidence_id)
 );
 
-create index source_documents_owner_id_idx on public.source_documents(owner_id);
-create index document_versions_owner_id_idx on public.document_versions(owner_id);
-create index document_chunks_owner_id_idx on public.document_chunks(owner_id);
-create index document_chunks_textsearch_idx on public.document_chunks using gin (textsearch);
-create index research_runs_owner_id_idx on public.research_runs(owner_id);
-create index research_evidence_owner_id_idx on public.research_evidence(owner_id);
-create index decision_observations_owner_id_idx on public.decision_observations(owner_id);
+create index source_documents_owner_id_idx on public.dots_source_documents(owner_id);
+create index document_versions_owner_id_idx on public.dots_document_versions(owner_id);
+create index document_chunks_owner_id_idx on public.dots_document_chunks(owner_id);
+create index document_chunks_textsearch_idx on public.dots_document_chunks using gin (textsearch);
+create index research_runs_owner_id_idx on public.dots_research_runs(owner_id);
+create index research_evidence_owner_id_idx on public.dots_research_evidence(owner_id);
+create index decision_observations_owner_id_idx on public.dots_decision_observations(owner_id);
 
 -- pgvector/HNSW is intentionally deferred until the managed extension and its
 -- lifecycle are verified in a dedicated spike. This migration is safe on the
 -- existing pgcrypto-only environment and provides the keyword half of ADR-02.
-create function public.search_document_chunks(search_query text, result_limit integer default 20)
+create function public.dots_search_document_chunks(search_query text, result_limit integer default 20)
 returns table (
   chunk_id uuid,
   document_id uuid,
@@ -140,9 +140,9 @@ as $$
     dc.page,
     dc.content,
     ts_rank(dc.textsearch, websearch_to_tsquery('simple', search_query))::real
-  from public.document_chunks as dc
-  join public.document_versions as dv on dv.id = dc.version_id
-  join public.source_documents as sd on sd.id = dv.document_id
+  from public.dots_document_chunks as dc
+  join public.dots_document_versions as dv on dv.id = dc.version_id
+  join public.dots_source_documents as sd on sd.id = dv.document_id
   where dc.owner_id = (select auth.uid())
     and sd.owner_id = (select auth.uid())
     and sd.state = 'ready'
@@ -152,64 +152,64 @@ as $$
   limit greatest(1, least(result_limit, 100));
 $$;
 
-alter table public.source_documents enable row level security;
-alter table public.document_versions enable row level security;
-alter table public.document_chunks enable row level security;
-alter table public.research_runs enable row level security;
-alter table public.research_evidence enable row level security;
-alter table public.decision_observations enable row level security;
+alter table public.dots_source_documents enable row level security;
+alter table public.dots_document_versions enable row level security;
+alter table public.dots_document_chunks enable row level security;
+alter table public.dots_research_runs enable row level security;
+alter table public.dots_research_evidence enable row level security;
+alter table public.dots_decision_observations enable row level security;
 
-alter table public.source_documents force row level security;
-alter table public.document_versions force row level security;
-alter table public.document_chunks force row level security;
-alter table public.research_runs force row level security;
-alter table public.research_evidence force row level security;
-alter table public.decision_observations force row level security;
+alter table public.dots_source_documents force row level security;
+alter table public.dots_document_versions force row level security;
+alter table public.dots_document_chunks force row level security;
+alter table public.dots_research_runs force row level security;
+alter table public.dots_research_evidence force row level security;
+alter table public.dots_decision_observations force row level security;
 
-create policy source_documents_select_own on public.source_documents for select to authenticated using ((select auth.uid()) = owner_id);
-create policy source_documents_insert_own on public.source_documents for insert to authenticated with check ((select auth.uid()) = owner_id);
-create policy source_documents_update_own on public.source_documents for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-create policy source_documents_delete_own on public.source_documents for delete to authenticated using ((select auth.uid()) = owner_id);
+create policy source_documents_select_own on public.dots_source_documents for select to authenticated using ((select auth.uid()) = owner_id);
+create policy source_documents_insert_own on public.dots_source_documents for insert to authenticated with check ((select auth.uid()) = owner_id);
+create policy source_documents_update_own on public.dots_source_documents for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+create policy source_documents_delete_own on public.dots_source_documents for delete to authenticated using ((select auth.uid()) = owner_id);
 
-create policy document_versions_select_own on public.document_versions for select to authenticated using ((select auth.uid()) = owner_id);
-create policy document_versions_insert_own on public.document_versions for insert to authenticated with check ((select auth.uid()) = owner_id);
-create policy document_versions_update_own on public.document_versions for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-create policy document_versions_delete_own on public.document_versions for delete to authenticated using ((select auth.uid()) = owner_id);
+create policy document_versions_select_own on public.dots_document_versions for select to authenticated using ((select auth.uid()) = owner_id);
+create policy document_versions_insert_own on public.dots_document_versions for insert to authenticated with check ((select auth.uid()) = owner_id);
+create policy document_versions_update_own on public.dots_document_versions for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+create policy document_versions_delete_own on public.dots_document_versions for delete to authenticated using ((select auth.uid()) = owner_id);
 
-create policy document_chunks_select_own on public.document_chunks for select to authenticated using ((select auth.uid()) = owner_id);
-create policy document_chunks_insert_own on public.document_chunks for insert to authenticated with check ((select auth.uid()) = owner_id);
-create policy document_chunks_update_own on public.document_chunks for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-create policy document_chunks_delete_own on public.document_chunks for delete to authenticated using ((select auth.uid()) = owner_id);
+create policy document_chunks_select_own on public.dots_document_chunks for select to authenticated using ((select auth.uid()) = owner_id);
+create policy document_chunks_insert_own on public.dots_document_chunks for insert to authenticated with check ((select auth.uid()) = owner_id);
+create policy document_chunks_update_own on public.dots_document_chunks for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+create policy document_chunks_delete_own on public.dots_document_chunks for delete to authenticated using ((select auth.uid()) = owner_id);
 
-create policy research_runs_select_own on public.research_runs for select to authenticated using ((select auth.uid()) = owner_id);
-create policy research_runs_insert_own on public.research_runs for insert to authenticated with check ((select auth.uid()) = owner_id);
-create policy research_runs_update_own on public.research_runs for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-create policy research_runs_delete_own on public.research_runs for delete to authenticated using ((select auth.uid()) = owner_id);
+create policy research_runs_select_own on public.dots_research_runs for select to authenticated using ((select auth.uid()) = owner_id);
+create policy research_runs_insert_own on public.dots_research_runs for insert to authenticated with check ((select auth.uid()) = owner_id);
+create policy research_runs_update_own on public.dots_research_runs for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+create policy research_runs_delete_own on public.dots_research_runs for delete to authenticated using ((select auth.uid()) = owner_id);
 
-create policy research_evidence_select_own on public.research_evidence for select to authenticated using ((select auth.uid()) = owner_id);
-create policy research_evidence_insert_own on public.research_evidence for insert to authenticated with check ((select auth.uid()) = owner_id);
-create policy research_evidence_update_own on public.research_evidence for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-create policy research_evidence_delete_own on public.research_evidence for delete to authenticated using ((select auth.uid()) = owner_id);
+create policy research_evidence_select_own on public.dots_research_evidence for select to authenticated using ((select auth.uid()) = owner_id);
+create policy research_evidence_insert_own on public.dots_research_evidence for insert to authenticated with check ((select auth.uid()) = owner_id);
+create policy research_evidence_update_own on public.dots_research_evidence for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+create policy research_evidence_delete_own on public.dots_research_evidence for delete to authenticated using ((select auth.uid()) = owner_id);
 
-create policy decision_observations_select_own on public.decision_observations for select to authenticated using ((select auth.uid()) = owner_id);
-create policy decision_observations_insert_own on public.decision_observations for insert to authenticated with check ((select auth.uid()) = owner_id);
-create policy decision_observations_update_own on public.decision_observations for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
-create policy decision_observations_delete_own on public.decision_observations for delete to authenticated using ((select auth.uid()) = owner_id);
+create policy decision_observations_select_own on public.dots_decision_observations for select to authenticated using ((select auth.uid()) = owner_id);
+create policy decision_observations_insert_own on public.dots_decision_observations for insert to authenticated with check ((select auth.uid()) = owner_id);
+create policy decision_observations_update_own on public.dots_decision_observations for update to authenticated using ((select auth.uid()) = owner_id) with check ((select auth.uid()) = owner_id);
+create policy decision_observations_delete_own on public.dots_decision_observations for delete to authenticated using ((select auth.uid()) = owner_id);
 
-revoke all on public.source_documents from anon, authenticated;
-revoke all on public.document_versions from anon, authenticated;
-revoke all on public.document_chunks from anon, authenticated;
-revoke all on public.research_runs from anon, authenticated;
-revoke all on public.research_evidence from anon, authenticated;
-revoke all on public.decision_observations from anon, authenticated;
-grant select, insert, update, delete on public.source_documents to authenticated;
-grant select, insert, update, delete on public.document_versions to authenticated;
-grant select, insert, update, delete on public.document_chunks to authenticated;
-grant select, insert, update, delete on public.research_runs to authenticated;
-grant select, insert, update, delete on public.research_evidence to authenticated;
-grant select, insert, update, delete on public.decision_observations to authenticated;
+revoke all on public.dots_source_documents from anon, authenticated;
+revoke all on public.dots_document_versions from anon, authenticated;
+revoke all on public.dots_document_chunks from anon, authenticated;
+revoke all on public.dots_research_runs from anon, authenticated;
+revoke all on public.dots_research_evidence from anon, authenticated;
+revoke all on public.dots_decision_observations from anon, authenticated;
+grant select, insert, update, delete on public.dots_source_documents to authenticated;
+grant select, insert, update, delete on public.dots_document_versions to authenticated;
+grant select, insert, update, delete on public.dots_document_chunks to authenticated;
+grant select, insert, update, delete on public.dots_research_runs to authenticated;
+grant select, insert, update, delete on public.dots_research_evidence to authenticated;
+grant select, insert, update, delete on public.dots_decision_observations to authenticated;
 
-revoke all on function public.search_document_chunks(text, integer) from public;
-grant execute on function public.search_document_chunks(text, integer) to authenticated;
+revoke all on function public.dots_search_document_chunks(text, integer) from public;
+grant execute on function public.dots_search_document_chunks(text, integer) to authenticated;
 
 commit;

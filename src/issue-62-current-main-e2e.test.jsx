@@ -34,7 +34,7 @@ function storage(values) {
 }
 
 function installStorage() {
-  localValues = new Map([['kadode:user-profile', JSON.stringify(completedProfile)]]);
+  localValues = new Map([['dots:user-profile', JSON.stringify(completedProfile)]]);
   sessionValues = new Map();
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage(localValues) });
   Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage(sessionValues) });

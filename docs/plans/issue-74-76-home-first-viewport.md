@@ -4,7 +4,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: Home first viewportを、静かなNotion風shell内でKadode AI composerと直近の会話または候補artifactへ即時に到達できる表示へ整える。
+要望: Home first viewportを、静かなNotion風shell内でDots. AI composerと直近の会話または候補artifactへ即時に到達できる表示へ整える。
 
 ゴール: Desktopと390pxで、Homeの主導線を既存conversationとcandidate decision workflowのまま視認・操作できる状態にする。
 
@@ -20,7 +20,7 @@ Given: HomeをDesktopまたは390px幅で開いている。
 
 When: first viewportを確認する。
 
-Then: compact header、Home / Project / Knowledge nav、Kadode AI composer、直近会話または候補artifactが表示され、巨大heading、重複CTA、二分割の空カードが表示されない。
+Then: compact header、Home / Project / Knowledge nav、Dots. AI composer、直近会話または候補artifactが表示され、巨大heading、重複CTA、二分割の空カードが表示されない。
 
 ### US-2
 

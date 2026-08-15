@@ -1,6 +1,6 @@
 import { MODEL_CATALOG } from '../models/modelCatalog';
 
-export const HOME_MODEL_STORAGE_KEY = 'kadode:home-model';
+export const HOME_MODEL_STORAGE_KEY = 'dots:home-model';
 export const DEFAULT_HOME_MODEL_KEY = MODEL_CATALOG.find((model) => model.logicalKey === 'gpt-5.6-terra')?.logicalKey ?? MODEL_CATALOG[0].logicalKey;
 
 export function getHomeModels() { return MODEL_CATALOG.filter((model) => model.enabled); }

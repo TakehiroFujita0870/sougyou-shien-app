@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.main import create_app
-from kadode_api.project_knowledge import InMemoryProjectKnowledgeRepository
+from dots.main import create_app
+from dots.project_knowledge import InMemoryProjectKnowledgeRepository
 
 
 def client() -> TestClient:

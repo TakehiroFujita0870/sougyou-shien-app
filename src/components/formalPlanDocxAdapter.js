@@ -43,9 +43,9 @@ export async function createFormalPlanDocx(project) {
 
   children.push(new Paragraph({ children: [text(noteText, { italics: true, color: '666666', size: 18 })], spacing: { before: 240 } }));
   const document = new Document({
-    creator: 'Kadode',
+    creator: 'Dots.',
     title: project.name,
-    description: 'Kadode business plan draft',
+    description: 'Dots. business plan draft',
     sections: [{
       properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
       children,
@@ -59,7 +59,7 @@ export async function downloadFormalPlanDocx(project, { documentRef = globalThis
   const href = url.createObjectURL(blob);
   const anchor = documentRef.createElement('a');
   anchor.href = href;
-  anchor.download = 'kadode-business-plan.docx';
+  anchor.download = 'dots-business-plan.docx';
   documentRef.body.append(anchor);
   anchor.click();
   anchor.remove();

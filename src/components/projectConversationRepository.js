@@ -1,10 +1,10 @@
 export const PROJECT_CONVERSATION_SCHEMA_VERSION = 1;
-export const PROJECT_CONVERSATION_STORAGE_KEY = 'kadode:project-conversations';
-export const PROJECT_CONVERSATION_QUARANTINE_KEY = 'kadode:project-conversations:quarantine';
+export const PROJECT_CONVERSATION_STORAGE_KEY = 'dots:project-conversations';
+export const PROJECT_CONVERSATION_QUARANTINE_KEY = 'dots:project-conversations:quarantine';
 
 function scopedDraftKey(ownerId, spaceId, projectId) {
   const segment = (value) => `${String(value).length}:${value}`;
-  return `kadode:project-conversation-draft:v1:${segment(ownerId)}:${segment(spaceId)}:${segment(projectId)}`;
+  return `dots:project-conversation-draft:v1:${segment(ownerId)}:${segment(spaceId)}:${segment(projectId)}`;
 }
 
 const roles = new Set(['user', 'assistant']);

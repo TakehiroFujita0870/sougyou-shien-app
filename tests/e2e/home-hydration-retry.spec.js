@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('keeps a local draft through repeated Home hydration failures and recovery', async ({ page }) => {
-  await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-homesupervisor--retryable-hydration-error&viewMode=story');
+  await page.goto('http://127.0.0.1:6007/iframe.html?id=dots-homesupervisor--retryable-hydration-error&viewMode=story');
   const composer = page.locator('#home-supervisor-message');
   const alert = page.getByRole('alert');
   await expect(alert).toContainText('会話を読み込めませんでした');

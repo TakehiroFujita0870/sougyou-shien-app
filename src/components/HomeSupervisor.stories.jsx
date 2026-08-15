@@ -15,6 +15,6 @@ const retryRepository = {
   async saveDraft(value) { storedDraft = value; return value; },
 };
 
-export default { title: 'Kadode/HomeSupervisor', component: HomeSupervisor };
+export default { title: 'Dots./HomeSupervisor', component: HomeSupervisor };
 
 export const RetryableHydrationError = { args: { repository: retryRepository } };

@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.main import create_app
-from kadode_api.runtime import RuntimeProfile, create_runtime
+from dots.main import create_app
+from dots.runtime import RuntimeProfile, create_runtime
 
 
 def test_local_profile_reports_all_service_ports_as_fake() -> None:

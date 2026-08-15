@@ -43,7 +43,7 @@ textarea {
   font: inherit;
 }
 
-.kadode-shell {
+.Dots-shell {
   min-height: 100vh;
   overflow-x: hidden;
   background: var(--color-canvas);
@@ -83,15 +83,15 @@ textarea {
 .workspace-shell__account { padding-block: .75rem; }
 
 /* Shared desktop AI composer: one outer surface owns the border and focus ring. */
-.kadode-composer { border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface-raised); padding: .75rem; box-shadow: 0 1px 2px rgb(0 0 0 / 6%); }
-.kadode-composer:focus-within { border-color: var(--color-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 22%, transparent); }
-.kadode-composer__textarea { display: block; min-width: 0; width: 100%; min-height: 9rem; resize: vertical; border: 0; outline: 0; background: transparent; padding: .25rem .5rem; font-size: 1rem; line-height: 1.75rem; }
-.kadode-composer__textarea--compact { min-height: 5.5rem; }
-.kadode-composer-layout { padding-bottom: 12rem; }
-.kadode-composer--anchored { position: fixed; right: max(1.5rem, calc((100vw - var(--workspace-sidebar-width) - 56rem) / 2)); bottom: 1.25rem; left: calc(var(--workspace-sidebar-width) + max(1.5rem, (100vw - var(--workspace-sidebar-width) - 56rem) / 2)); z-index: 10; width: auto; max-width: 56rem; margin-inline: auto; }
-.kadode-composer__actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .625rem; border-top: 1px solid var(--color-border-subtle); padding-top: .625rem; }
-.kadode-composer__actions > * { flex: 0 0 auto; }
-.kadode-composer__actions .flex.items-center { gap: .625rem; }
+.Dots-composer { border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface-raised); padding: .75rem; box-shadow: 0 1px 2px rgb(0 0 0 / 6%); }
+.Dots-composer:focus-within { border-color: var(--color-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 22%, transparent); }
+.Dots-composer__textarea { display: block; min-width: 0; width: 100%; min-height: 9rem; resize: vertical; border: 0; outline: 0; background: transparent; padding: .25rem .5rem; font-size: 1rem; line-height: 1.75rem; }
+.Dots-composer__textarea--compact { min-height: 5.5rem; }
+.Dots-composer-layout { padding-bottom: 12rem; }
+.Dots-composer--anchored { position: fixed; right: max(1.5rem, calc((100vw - var(--workspace-sidebar-width) - 56rem) / 2)); bottom: 1.25rem; left: calc(var(--workspace-sidebar-width) + max(1.5rem, (100vw - var(--workspace-sidebar-width) - 56rem) / 2)); z-index: 10; width: auto; max-width: 56rem; margin-inline: auto; }
+.Dots-composer__actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .625rem; border-top: 1px solid var(--color-border-subtle); padding-top: .625rem; }
+.Dots-composer__actions > * { flex: 0 0 auto; }
+.Dots-composer__actions .flex.items-center { gap: .625rem; }
 .workspace-shell__main { min-width: 0; flex: 1; }
 .workspace-shell__breadcrumb { display: flex; gap: .5rem; align-items: center; min-height: 48px; padding: .75rem 1.25rem; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: .875rem; }
 .workspace-shell__mobile-trigger, .workspace-shell__scrim { display: none; }
@@ -105,66 +105,66 @@ textarea {
   .workspace-shell__breadcrumb { padding-left: 4.25rem; }
 }
 
-.kadode-header,
-.kadode-navigation {
+.Dots-header,
+.Dots-navigation {
   border-color: var(--color-border-subtle);
   background: color-mix(in srgb, var(--color-surface) 94%, transparent);
 }
 
-.kadode-notice {
+.Dots-notice {
   border-color: var(--color-border);
   background: var(--color-accent-soft);
   color: var(--color-text);
 }
 
-.kadode-nav-button,
-.kadode-profile-button,
-.kadode-card-button {
+.Dots-nav-button,
+.Dots-profile-button,
+.Dots-card-button {
   transition: background-color var(--motion-feedback) var(--motion-easing), color var(--motion-feedback) var(--motion-easing), box-shadow var(--motion-feedback) var(--motion-easing);
 }
 
-.kadode-nav-button { color: var(--color-text); }
-.kadode-nav-button:hover { background: var(--color-accent-soft); }
-.kadode-nav-button[aria-current='page'] { background: var(--color-action); box-shadow: inset 0 -3px 0 var(--color-sakura-blush); color: var(--color-action-text); }
-.kadode-profile-button { background: var(--color-action); color: var(--color-action-text); }
-.kadode-profile-button:hover { background: var(--color-action-hover); }
-.kadode-nav-button:disabled,
-.kadode-profile-button:disabled,
-.kadode-card-button:disabled {
+.Dots-nav-button { color: var(--color-text); }
+.Dots-nav-button:hover { background: var(--color-accent-soft); }
+.Dots-nav-button[aria-current='page'] { background: var(--color-action); box-shadow: inset 0 -3px 0 var(--color-sakura-blush); color: var(--color-action-text); }
+.Dots-profile-button { background: var(--color-action); color: var(--color-action-text); }
+.Dots-profile-button:hover { background: var(--color-action-hover); }
+.Dots-nav-button:disabled,
+.Dots-profile-button:disabled,
+.Dots-card-button:disabled {
   border-color: var(--color-border);
   background: var(--color-surface);
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
-.kadode-card { border-color: var(--color-border); background: var(--color-surface-raised); }
-.kadode-card-kicker { color: var(--color-sakura-ink); }
-.kadode-card-detail { background: var(--color-sakura-petal); }
-.kadode-card-button { border-color: var(--color-action); color: var(--color-action); }
-.kadode-card-button:hover { background: var(--color-accent-soft); }
-.kadode-dialog-backdrop { background: color-mix(in srgb, var(--color-text) 32%, transparent); }
-.kadode-error { border-color: var(--color-warning); background: var(--color-warning-surface); color: var(--color-warning); }
-.kadode-dialog-panel { background: var(--color-surface-raised); color: var(--color-text); }
-.kadode-dialog-kicker { color: var(--color-sakura-ink); }
-.kadode-dialog-progress { color: var(--color-action); }
-.kadode-dialog-complete { background: var(--color-sakura-petal); }
-.kadode-dialog-submit { background: var(--color-action); color: var(--color-action-text); }
-.kadode-dialog-submit:hover { background: var(--color-action-hover); }
+.Dots-card { border-color: var(--color-border); background: var(--color-surface-raised); }
+.Dots-card-kicker { color: var(--color-sakura-ink); }
+.Dots-card-detail { background: var(--color-sakura-petal); }
+.Dots-card-button { border-color: var(--color-action); color: var(--color-action); }
+.Dots-card-button:hover { background: var(--color-accent-soft); }
+.Dots-dialog-backdrop { background: color-mix(in srgb, var(--color-text) 32%, transparent); }
+.Dots-error { border-color: var(--color-warning); background: var(--color-warning-surface); color: var(--color-warning); }
+.Dots-dialog-panel { background: var(--color-surface-raised); color: var(--color-text); }
+.Dots-dialog-kicker { color: var(--color-sakura-ink); }
+.Dots-dialog-progress { color: var(--color-action); }
+.Dots-dialog-complete { background: var(--color-sakura-petal); }
+.Dots-dialog-submit { background: var(--color-action); color: var(--color-action-text); }
+.Dots-dialog-submit:hover { background: var(--color-action-hover); }
 
-.kadode-shell :is(button, input, textarea, select):focus-visible {
+.Dots-shell :is(button, input, textarea, select):focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 3px;
 }
 
-.kadode-shell textarea.kadode-composer__textarea:focus-visible {
+.Dots-shell textarea.Dots-composer__textarea:focus-visible {
   outline: 0;
   outline-offset: 0;
 }
 
 @media (max-width: 700px) {
-  .kadode-composer--anchored { right: 1rem; left: 1rem; }
+  .Dots-composer--anchored { right: 1rem; left: 1rem; }
 }
 
-.kadode-high-contrast {
+.Dots-high-contrast {
   --color-canvas: Canvas;
   --color-surface: Canvas;
   --color-surface-raised: Canvas;
@@ -181,7 +181,7 @@ textarea {
 }
 
 @media (forced-colors: active) {
-  .kadode-shell { forced-color-adjust: auto; }
+  .Dots-shell { forced-color-adjust: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

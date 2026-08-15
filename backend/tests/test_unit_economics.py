@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from kadode_api.unit_economics import CalculationInputError, Money, ScenarioInput, calculate_plan
+from dots.unit_economics import CalculationInputError, Money, ScenarioInput, calculate_plan
 
 
 def yen(value: str) -> Money:

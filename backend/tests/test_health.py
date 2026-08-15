@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from kadode_api.main import app
+from dots.main import app
 
 def test_health() -> None:
     response = TestClient(app).get("/health")

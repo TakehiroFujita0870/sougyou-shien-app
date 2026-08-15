@@ -40,9 +40,9 @@ describe('default browser repositories', () => {
     const view = await mount(<App />);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(callsFor(getItem, 'kadode:user-profile')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:user-profile')).toHaveLength(1);
     await view.rerender(<App />);
-    expect(callsFor(getItem, 'kadode:user-profile')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:user-profile')).toHaveLength(1);
     await view.unmount();
   });
 
@@ -52,13 +52,13 @@ describe('default browser repositories', () => {
     const view = await mount(<IdeaCandidateWorkspace />);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(callsFor(getItem, 'kadode:idea-candidates')).toHaveLength(1);
-    expect(callsFor(getItem, 'kadode:idea-conversation')).toHaveLength(1);
-    expect(callsFor(getItem, 'kadode:idea-input-draft')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:idea-candidates')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:idea-conversation')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:idea-input-draft')).toHaveLength(1);
     await view.rerender(<IdeaCandidateWorkspace />);
-    expect(callsFor(getItem, 'kadode:idea-candidates')).toHaveLength(1);
-    expect(callsFor(getItem, 'kadode:idea-conversation')).toHaveLength(1);
-    expect(callsFor(getItem, 'kadode:idea-input-draft')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:idea-candidates')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:idea-conversation')).toHaveLength(1);
+    expect(callsFor(getItem, 'dots:idea-input-draft')).toHaveLength(1);
     await view.unmount();
   });
 });

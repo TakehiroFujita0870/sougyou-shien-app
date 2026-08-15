@@ -4,7 +4,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: Project surfaceのfirst viewportに、静かなshell、選択中projectのidentity/status、Kadode AI composer、5つの事業検討sectionを表示する。
+要望: Project surfaceのfirst viewportに、静かなshell、選択中projectのidentity/status、Dots. AI composer、5つの事業検討sectionを表示する。
 
 ゴール: APIやdomain計算に接続せず、決定的fixtureを使ってDesktopと390pxのProject presentationを確認できるようにする。
 
@@ -20,7 +20,7 @@ Given: Project surfaceをDesktopまたは390pxで開いている。
 
 When: first viewportを確認する。
 
-Then: compact project identity/status、Kadode AI composer、EmptyまたはPopulatedのartifactが表示され、巨大headingや大面積空カードは表示されない。
+Then: compact project identity/status、Dots. AI composer、EmptyまたはPopulatedのartifactが表示され、巨大headingや大面積空カードは表示されない。
 
 ### US-2
 

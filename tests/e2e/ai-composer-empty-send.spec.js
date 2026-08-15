@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: { experience: 'manufacturing', strengths: 'operations', interests: 'AI', time: '4 hours', budget: '100000', avoidances: 'high risk' } })))
+  await page.addInitScript(() => localStorage.setItem('dots:user-profile', JSON.stringify({ status: 'completed', values: { experience: 'manufacturing', strengths: 'operations', interests: 'AI', time: '4 hours', budget: '100000', avoidances: 'high risk' } })))
 })
 
 async function composerControls(page, id) {

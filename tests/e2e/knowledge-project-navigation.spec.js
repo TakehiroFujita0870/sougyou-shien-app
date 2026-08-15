@@ -5,7 +5,7 @@ const ownerId = 'local-owner'
 const spaceId = 'local-space'
 const project = { id: 'evidence-project', ownerId, spaceId, title: '根拠から開く事業', fact: '顧客ヒアリング', inference: '市場検証を進める', reason: '採用判断', status: 'adopted' }
 const otherProject = { ...project, id: 'other-project', title: '先にある事業' }
-const scopedKey = 'kadode:knowledge-conversation:11:local-owner:11:local-space:v1'
+const scopedKey = 'dots:knowledge-conversation:11:local-owner:11:local-space:v1'
 const adoptedProjectKey = adoptedProjectStorageKey(ownerId, spaceId)
 
 function entry(evaluationView, projectId = project.id) {
@@ -14,10 +14,10 @@ function entry(evaluationView, projectId = project.id) {
 
 async function seed(page, evaluationView, projectId = project.id) {
   await page.addInitScript(({ seededProject, seededEntry, key, projectKey }) => {
-    if (!localStorage.getItem('kadode:user-profile')) localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
+    if (!localStorage.getItem('dots:user-profile')) localStorage.setItem('dots:user-profile', JSON.stringify({ status: 'completed', values: {} }))
     if (!localStorage.getItem(projectKey)) localStorage.setItem(projectKey, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.current.ownerId, spaceId: seededProject.current.spaceId, projects: [seededProject.other, seededProject.current] }))
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.current.ownerId, spaceId: seededProject.current.spaceId, state: { messages: [], entries: [seededEntry] } }))
-    if (!sessionStorage.getItem('kadode:selected-surface')) sessionStorage.setItem('kadode:selected-surface', 'knowledge')
+    if (!sessionStorage.getItem('dots:selected-surface')) sessionStorage.setItem('dots:selected-surface', 'knowledge')
   }, { seededProject: { current: project, other: otherProject }, seededEntry: entry(evaluationView, projectId), key: scopedKey, projectKey: adoptedProjectKey })
 }
 
@@ -48,9 +48,9 @@ test('does not render a stale or cross-project evidence action', async ({ page }
 
 test('creates a same-owner decision evidence link only after an explicit view choice and survives F5', async ({ page }) => {
   await page.addInitScript(({ seededProject, projectKey }) => {
-    if (!localStorage.getItem('kadode:user-profile')) localStorage.setItem('kadode:user-profile', JSON.stringify({ status: 'completed', values: {} }))
+    if (!localStorage.getItem('dots:user-profile')) localStorage.setItem('dots:user-profile', JSON.stringify({ status: 'completed', values: {} }))
     if (!localStorage.getItem(projectKey)) localStorage.setItem(projectKey, JSON.stringify({ schemaVersion: 1, ownerId: seededProject.ownerId, spaceId: seededProject.spaceId, projects: [seededProject] }))
-    if (!sessionStorage.getItem('kadode:selected-surface')) sessionStorage.setItem('kadode:selected-surface', 'knowledge')
+    if (!sessionStorage.getItem('dots:selected-surface')) sessionStorage.setItem('dots:selected-surface', 'knowledge')
   }, { seededProject: project, projectKey: adoptedProjectKey })
   await page.goto('/')
   const composer = page.locator('#knowledge-composer')

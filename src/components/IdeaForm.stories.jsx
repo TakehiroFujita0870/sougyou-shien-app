@@ -3,7 +3,7 @@ import { fn } from 'storybook/test';
 import { IdeaForm } from './IdeaForm';
 
 export default {
-  title: 'Kadode/IdeaForm',
+  title: 'Dots./IdeaForm',
   component: IdeaForm,
   args: { onSubmit: fn() },
 };

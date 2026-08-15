@@ -17,7 +17,7 @@ const project = {
 describe('formal plan PDF adapter', () => {
   it('creates a Japanese PDF that can be inspected outside the browser', async () => {
     const bytes = new Uint8Array(await (await createFormalPlanPdf(project)).arrayBuffer());
-    if (process.env.KADODE_PDF_QA_PATH) await (await import('node:fs/promises')).writeFile(process.env.KADODE_PDF_QA_PATH, bytes);
+    if (process.env.DOTS_PDF_QA_PATH) await (await import('node:fs/promises')).writeFile(process.env.DOTS_PDF_QA_PATH, bytes);
     expect(new TextDecoder().decode(bytes.slice(0, 8))).toMatch(/^%PDF-1\.[4-7]$/);
     expect(bytes.length).toBeGreaterThan(1_000);
   }, 15000);

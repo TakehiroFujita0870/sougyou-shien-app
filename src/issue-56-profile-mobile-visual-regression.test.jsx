@@ -37,7 +37,7 @@ afterEach(async () => {
 describe('Issue #56 profile mobile visual regression contract', () => {
   it.each([320, 390, 1440])('keeps dialog header and textarea shrinkable at %ipx', async (width) => {
     const { container } = await mountInterview(width);
-    const dialog = container.querySelector('.kadode-dialog-panel');
+    const dialog = container.querySelector('.Dots-dialog-panel');
     const header = dialog.querySelector('div');
     const textarea = dialog.querySelector('textarea');
     const close = dialog.querySelector('[aria-label="ヒアリングを閉じる"]');

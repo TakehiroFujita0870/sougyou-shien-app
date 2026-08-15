@@ -1,6 +1,6 @@
 from datetime import date
 
-from kadode_api.research import (
+from dots.research import (
     DailyLimitExceeded,
     FakeJpoPatentSource,
     FakeWebResearchSource,

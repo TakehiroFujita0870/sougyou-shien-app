@@ -75,7 +75,7 @@ class InMemoryAccountPrivacyRepository:
     @staticmethod
     def _markdown(data: dict[str, object]) -> str:
         profile = data["profile"] or {}
-        lines = ["# Kadode data export", "", "## Profile", f"- id: {profile.get('id', '')}", f"- display_name: {_markdown_value(profile.get('display_name', ''))}"]
+        lines = ["# Dots. data export", "", "## Profile", f"- id: {profile.get('id', '')}", f"- display_name: {_markdown_value(profile.get('display_name', ''))}"]
         for section, fields in (
             ("ideas", ("title",)),
             ("documents", ("title", "metadata")),

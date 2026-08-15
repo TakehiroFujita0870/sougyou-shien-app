@@ -4,7 +4,7 @@
 
 ## 接続先
 
-- Kadodeアプリ: `http://localhost:5174/`
+- Dots.アプリ: `http://localhost:5174/`
 - Storybook: `http://localhost:6006/`
 - ローカルAPIヘルスチェック: `http://localhost:8000/health`
 
@@ -29,7 +29,7 @@ if (-not (Test-Utf8Preflight)) { throw 'UTF-8 preflight failed' }
 `Distribution`、`User`、`ClonePath`は実在するWSL native cloneに置き換える。scriptはclone欠落、`/mnt/c`、port競合、二重起動で非ゼロ終了し、既存processを停止しない。
 
 ```powershell
-.\scripts\powershell\Start-WslPreview.ps1 -Distribution Ubuntu -User <user> -ClonePath /home/<user>/projects/sougyou-shien-app
+.\scripts\powershell\Start-WslPreview.ps1 -Distribution Ubuntu -User <user> -ClonePath /home/<user>/projects/dots
 ```
 
 Viteは5174、APIは8000でhidden wsl.exeからtransient user unitとして開始する。開始後60秒待機し、Windowsから`http://localhost:5174/`と`http://localhost:8000/health`が200であることを確認する。

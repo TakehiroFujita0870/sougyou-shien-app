@@ -9,7 +9,7 @@ import profileFixture from './fixtures/t-ia-01-home-profile.json';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mounted = [];
-const profileKey = 'kadode:user-profile';
+const profileKey = 'dots:user-profile';
 
 function mountHome(width) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
@@ -47,13 +47,13 @@ afterEach(async () => {
 describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
   it.each([1280, 390])('keeps the initial canvas composer-first at %ipx', async (width) => {
     const container = await mountHome(width);
-    expect(container.textContent).toContain('Kadode AI');
+    expect(container.textContent).toContain('Dots. AI');
     expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
     expect(container.querySelector('textarea#home-supervisor-message')).toBeTruthy();
     expect(container.textContent).not.toContain('アイデアを登録する');
     expect(container.querySelector('h1')).toBeTruthy();
     expect(container.querySelector('h1[class*="text-6xl"], h1[class*="text-5xl"], h1[class*="text-4xl"]')).toBeNull();
-    expect(container.querySelector('.kadode-dialog-backdrop')).toBeNull();
+    expect(container.querySelector('.Dots-dialog-backdrop')).toBeNull();
     expect(container.querySelector('.workspace-shell__main')).toBeTruthy();
   });
 

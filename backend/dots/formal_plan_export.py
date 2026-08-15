@@ -14,7 +14,7 @@ from .project_dossier import ProjectDossier
 class FormalPlanContent(BaseModel):
     owner_id: str = Field(min_length=1, max_length=200)
     project_id: str = Field(min_length=1, max_length=200)
-    title: str = "Kadode フォーマル事業計画書"
+    title: str = "Dots. フォーマル事業計画書"
     dossier: ProjectDossier
 
 

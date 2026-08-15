@@ -14,7 +14,7 @@ When: UI基盤ファイルを参照する。
 Then: `cn`、semantic variables、Button/Card/Badge/FieldとRadixベースのDropdownMenu/Popover/Sheetが利用できる。
 
 ### US-2
-As a Kadode利用者, I want AccountとPlan surfaceを共通UIで確認したい, so that account状態と契約境界を理解できる。
+As a Dots.利用者, I want AccountとPlan surfaceを共通UIで確認したい, so that account状態と契約境界を理解できる。
 Given: FreeまたはStandardを選択している。
 When: Account/Plan surfaceを表示する。
 Then: 現在のプラン、変更確認、Pro非対象の境界が表示され、外部課金を実行しない。

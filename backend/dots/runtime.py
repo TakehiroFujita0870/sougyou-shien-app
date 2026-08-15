@@ -129,7 +129,7 @@ class UnconfiguredRuntime:
 
 
 def create_runtime(profile: RuntimeProfile | str | None = None) -> RuntimeAdapter:
-    selected = RuntimeProfile(profile or os.getenv("KADODE_RUNTIME_PROFILE", RuntimeProfile.LOCAL))
+    selected = RuntimeProfile(profile or os.getenv("DOTS_RUNTIME_PROFILE", RuntimeProfile.LOCAL))
     if selected is RuntimeProfile.PRODUCTION:
         return UnconfiguredRuntime()
     return FakeRuntime(selected)

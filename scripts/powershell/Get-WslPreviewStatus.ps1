@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Initialize-Utf8Preflight.ps1')
 if (-not (Test-Utf8Preflight)) { throw 'UTF-8 preflight failed.' }
-$statePath = Join-Path (Join-Path $env:LOCALAPPDATA 'Kadode') 'wsl-preview.json'
+$statePath = Join-Path (Join-Path $env:LOCALAPPDATA 'Dots.') 'wsl-preview.json'
 if (-not (Test-Path -LiteralPath $statePath)) { throw "Preview state is missing: $statePath" }
 $state = Get-Content -LiteralPath $statePath -Raw -Encoding utf8 | ConvertFrom-Json
 

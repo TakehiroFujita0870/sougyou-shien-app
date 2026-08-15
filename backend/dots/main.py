@@ -53,7 +53,7 @@ def create_app(
     account_privacy_repository: InMemoryAccountPrivacyRepository | None = None,
     project_knowledge_repository: InMemoryProjectKnowledgeRepository | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Kadode API", version="0.1.0")
+    app = FastAPI(title="Dots. API", version="0.1.0")
     decision_repository = repository or InMemoryDecisionRepository()
     report_repository = market_report_repository or InMemoryMarketReportRepository()
     privacy_repository = account_privacy_repository or InMemoryAccountPrivacyRepository.seeded()
@@ -74,7 +74,7 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "service": "kadode-api"}
+        return {"status": "ok", "service": "dots-api"}
 
     @app.get("/v1/runtime/status")
     def runtime_status() -> dict[str, object]:
