@@ -254,7 +254,10 @@ class Neo4jGraphReadService:
         owner_id: str,
         limit: int = 20,
         cursor: str | None = None,
-        timeout_ms: int = 1_000,
+        # A restarted Neo4j instance may need to warm its page cache before
+        # the first full-text scan. Keep the in-memory contract at 1 second,
+        # but give the persistent local database a bounded 5-second budget.
+        timeout_ms: int = 5_000,
     ) -> SearchPage:
         if not isinstance(query, str) or not query.strip() or len(query) > 512:
             raise GraphReadError("query must be a non-empty string of at most 512 characters")

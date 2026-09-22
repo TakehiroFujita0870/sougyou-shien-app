@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import inspect
 
 import dots.main as main_module
 from dots.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_write import Neo4jGraphWriteService, PersistedNodeReference
+from dots.founder_graph_neo4j_read import Neo4jGraphReadService
 from dots.founder_graph_runtime import create_neo4j_graph_composition, resolve_graph_backend
 from dots.main import create_app, create_configured_app, create_neo4j_app
 from dots.founder_graph_mcp_stdio import create_neo4j_stdio_server
@@ -156,6 +158,12 @@ def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
     assert response["result"]["tools"]
     assert len(response["result"]["tools"]) == 10
     assert session.calls == []
+
+
+def test_neo4j_search_has_bounded_cold_start_budget() -> None:
+    default = inspect.signature(Neo4jGraphReadService.search).parameters["timeout_ms"].default
+
+    assert default == 5_000
 
 
 def _record(node: object) -> dict[str, object]:
