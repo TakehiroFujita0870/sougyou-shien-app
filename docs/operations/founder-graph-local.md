@@ -73,6 +73,19 @@ cmp -- "$fixture_dir/before-stop.json" "$fixture_dir/after-restart.json"
 
 この手順はDockerが利用できるWSL2環境でだけ実行する。`stop`、`start`、`status`、manifest比較が成功し、volume名が同じであることを記録してT-FG-01の実機証跡とする。`down --volumes`、`docker volume rm`、volume pruneは使わない。
 
+## 実機合成データ検証記録
+
+2026-09-23にDocker Desktop Engine 29.8.0、Neo4j Community 5.26の隔離コンテナと隔離volumeで、MVPの保存縦断を確認した。既存のCompose volumeは変更していない。
+
+1. `capture_idea`でIdea、会話Source、SourceRevisionを保存した。
+2. IdeaとSourceRevisionを検索し、保存直後の結果を確認した。
+3. コンテナだけを停止・削除し、同じ隔離volumeで新しいコンテナを起動した。
+4. Ideaと会話の語句を再検索し、両方の結果が返ることを確認した。
+
+結果は「initial save and search: PASS」「after restart search: PASS」である。再起動直後の初回検索はNeo4jのページキャッシュ準備に時間がかかるため、永続read adapterの既定上限を5秒へ設定した。これは保存先を一時メモリへ切り替える変更ではない。
+
+この記録は合成データだけのadapter smokeであり、Compose live volumeのmanifest比較、dump / load、ChatGPTの実MCP登録を完了扱いにしない。
+
 ## Neo4j gatewayの接続境界
 
 backendの`Neo4jGraphGateway`は、composition rootから明示的に渡されたNeo4j Python driverだけを使う。driverを生成する責務は通常起動のcomposition rootに限定し、gateway自体はNodeType / RelationTypeのallowlist、owner境界、idempotency audit、Campaign / Sourceのrevision historyをparameterized Cypherへ変換する。任意Cypherを受け取るAPIはない。

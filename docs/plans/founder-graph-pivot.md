@@ -14,7 +14,7 @@
 - 会話付きcapture_ideaの保存単位は[`founder-graph-source-capture.md`](founder-graph-source-capture.md)を正本とする。
 - 個別PRは本書から受け入れ条件を引用し、差分500行以内かつレビュー30分以内へ分割する。
 
-## 実装進捗（2026-09-22時点）
+## 実装進捗（2026-09-23時点）
 
 初期のデータ境界とMCP縦切りは、外部AI接続なしの合成データ契約として実装済みである。下表は「コード契約と単体検査が完了した」ことを示し、Neo4j実機、ChatGPT接続、Deep Research write-back、実データ運用の完了を意味しない。
 
@@ -22,15 +22,15 @@
 | --- | --- | --- |
 | T-FG-02 schema / migration | 実装済み（offline） | `migrate_schema.py --validate-only`。Neo4j実機migrationはSP-FG-05後 |
 | T-FG-04 attachment store | 実装済み | content-address、symlink/reparse、quarantine契約テスト |
-| T-FG-05〜06 kernel / write境界 | 部分実装（in-memory + Neo4j gateway / write adapter contract） | 競合、冪等、監査、Campaign / Source revision、ReportVersionのRun / Campaign / Claim / Evidence参照、Neo4j bounded node projection、Idea / Claim correction hydrationを検査。Neo4j実機接続とrestoreは残課題 |
-| T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`を検査。MCP tunnel実機、ChatGPT tool discovery、Neo4j実機unavailableの確認は残課題 |
+| T-FG-05〜06 kernel / write境界 | 部分実装（in-memory + Neo4j gateway / write adapter contract） | 競合、冪等、監査、Campaign / Source revision、ReportVersionのRun / Campaign / Claim / Evidence参照、Neo4j bounded node projection、Idea / Claim correction hydrationを検査。隔離Neo4jでcapture_ideaの保存・再起動後fetch/searchを確認。Compose live volume、backup / restoreは残課題 |
+| T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`、隔離Neo4j再起動後searchを検査。MCP tunnel実機、ChatGPT tool discovery、Compose live volumeの確認は残課題 |
 | T-FG-10 instruction scanner | 実装済み | `AGENTS.md` / `SKILL.md`のallow-root、hash、差分、秘密語除外 |
 | T-FG-11〜12 contact / network | 部分実装 | Person / Organization capture、private contact境界、明示link、Mapping/CSV名刺取り込みのlocal normalizerを検査。名寄せ、能力候補、自動関係生成は未実施 |
-| T-FG-13〜14 idea capture / enrichment | 部分実装 | capture_ideaがIdea、会話Source、SourceRevisionを一括保存し、全領域read、model catalogの論理Luna境界、shareable入力からの名寄せ・facet・cluster proposal contractを検査。Neo4j実機再起動、実LLM推論、proposalのwrite-back、実データ評価は未実施 |
+| T-FG-13〜14 idea capture / enrichment | 部分実装 | capture_ideaがIdea、会話Source、SourceRevisionを一括保存し、隔離Neo4j再起動後の検索、全領域read、model catalogの論理Luna境界、shareable入力からの名寄せ・facet・cluster proposal contractを検査。実LLM推論、proposalのwrite-back、実データ評価は未実施 |
 | T-FG-15 ResearchBrief | 実装済み（local contract） | shareable Ideas / Assets / Sourcesの一括preflight、canonical URL、relation path、pagination、private除外を検査。ChatGPT実機handoffは未実施 |
 | T-FG-16 Campaign lifecycle | 部分実装（local + persistent contract） | 複数試行、期限、scope変更、許諾snapshot、in-memory / Neo4j gatewayのReportVersion参照整合性を検査。完全履歴parityと実機検証が残る |
 | T-FG-18〜19 report / impact / T-FG-22 write-back | 部分実装 | 8章shape、用途限定write tool、複数Runの保存契約、固定8章のsafe impact/diff contractを検査。Deep Research実機handoffとfollow-up write-backは未実施 |
-| T-FG-01 / T-FG-03 local Neo4j ops | 静的契約 + offline JSON manifest済み | Docker daemon unavailable。permission / Neo4j dump / isolated restore gateは未完了。safe JSON exportのmanifest / verify / dry-runはDocker-freeで検査済み |
+| T-FG-01 / T-FG-03 local Neo4j ops | 静的契約 + offline JSON manifest + 隔離persistence smoke済み | Docker Desktopの隔離volumeで再起動後fetch/searchを確認。Compose live volumeのpermission、manifest比較、Neo4j dump / isolated restore gateは未完了。safe JSON exportのmanifest / verify / dry-runはDocker-freeで検査済み |
 | T-FG-24 UI | 実装済み（read-only） | Founder Graph surface、Knowledge右隣のGraph navigation、keyboard / a11y / state tests、Appからのoptional report入力伝播を検査。実DB結果のruntime接続は残課題 |
 | T-FG-25〜26 report UI / export | 部分実装 | 8章のsafe projection・差分判定・keyboard/a11y対応の独立ReportDiff componentをFounderGraphSurfaceの任意Reports tabへ接続し、App optional prop伝播、Campaign / Run比較のread-only composition、GraphReadPortからのbounded Campaign comparison adapter、private除外JSON/Markdown export contractを検査。T-FG-26 runtime監査でsafe export / offline manifestと全owner backupを分離。Campaign実データのFastAPI/Neo4j接続、backup / restore / delete / 実ファイルexport UIは未実装 |
 
@@ -584,3 +584,4 @@ DB migration、MCP tool、privacy境界、backup / restoreは、unit testだけ�
 | 2026-09-22 | GraphReadPortからCampaign / Run / ReportVersionをboundedに合成するsafe read adapterを追加 | UIへ実データを接続する前にowner・node type・private field境界を固定するため | T-FG-25 |
 | 2026-09-22 | Neo4j persistent writeへReportVersionのRun / Campaign / Claim / Evidence参照validatorとfake-driver契約テストを追加 | in-memoryだけでなく永続mutation前にもauthorizationとsection evidence対応を検査するため | T-FG-05〜06、T-FG-16 |
 | 2026-09-23 | capture_ideaをIdea、会話Source、SourceRevisionの一括保存へ変更し、原文をIdeaから分離 | MVPの会話保存で出典を失わず、再送時の重複と部分保存を防ぐため | T-FG-05〜06、T-FG-13、SC-01〜SC-05 |
+| 2026-09-23 | 隔離Neo4jで保存直後と再起動後の検索を確認し、実機証跡をlocal runbookへ記録 | 合成データで永続化の最初のgateを通過したため | T-FG-01、T-FG-03、T-FG-05〜09、T-FG-13 |

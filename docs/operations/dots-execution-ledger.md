@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `7881228a80e4`
+main SHA: `f55266eb8c41`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P2/P3 MVP vertical slice |
-| Last merged PR | #209 |
-| Last main smoke | backend `uv run --isolated pytest -q`: 348 passed / 17 skipped、WSL preview script contract passed、MCP tunnel static contract passed、runtime/MCP focused tests 19 passed |
+| Last merged PR | #211 |
+| Last main smoke | backend `uv run --isolated pytest -q`: 349 passed / 17 skipped、WSL preview script contract passed、MCP tunnel static contract passed、isolated Neo4j save-stop-restart-search smoke passed |
 
 ## Task ledger
 
@@ -43,6 +43,8 @@ active goal: Founder Graph MVP
 | P3-01 | MERGED | root | main | #207 | `4394a891fc87` | Idea、conversation Source、SourceRevision atomic capture; backend 348 passed / 17 skipped | real Neo4j restart fetch remains | 2026-09-23 |
 | RT-04 | MERGED | root | main | #208 | `8c38747d8914` | WSL preview uses `dots.main:app`; script and tunnel contract checks passed | none | 2026-09-23 |
 | LEDGER-01 | MERGED | root | main | #209 | `7881228a80e4` | execution ledger synchronized with main after PR #209 | none | 2026-09-23 |
+| LEDGER-02 | MERGED | root | main | #210 | `fc64d057c6e0` | execution ledger head synchronized after PR #209 ledger update | none | 2026-09-23 |
+| P3-01-REAL | MERGED | root | main | #211 | `f55266eb8c41` | isolated Neo4j save, stop, same-volume restart, Idea and Source search passed | Compose live manifest and backup / restore remain | 2026-09-23 |
 
 ## Decision ledger
 
