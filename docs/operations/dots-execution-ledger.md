@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `c8017f54d034`
+main SHA: `9844cebc4f89`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,7 +22,7 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P2/P3 MVP vertical slice |
-| Last merged PR | #198 |
+| Last merged PR | #199 |
 | Last main smoke | focused backend 114 passed / 2 skipped、Docker Desktop Engine 29.8.0、Neo4j保存→停止→再起動→MCP検索を実機確認 |
 
 ## Task ledger
@@ -32,9 +32,9 @@ active goal: Founder Graph MVP
 | P0-01 | MERGED | root | main | #196 / #197 | `c8017f54d034` | planning, link, CI passed | none | 2026-09-23 |
 | P0-02 | MERGED | root | main | #197 | `c8017f54d034` | ledger, task packet, CI passed | none | 2026-09-23 |
 | P0-03 | READY | unassigned | - | - | `c8017f54d034` | issue alignment pending | none | 2026-09-23 |
-| P1-SP-01 | READY | schema_v2_spike_luna | delegated | - | - | spike artifact ready for separate integration PR | none | 2026-09-23 |
+| P1-SP-01 | REVIEW | schema_v2_spike_luna | delegated | - | - | fixture ready=True、blocking=0、migration preview files ready | none | 2026-09-23 |
 | P2-SP-01 | MERGED | neo4j_runtime_probe_luna | delegated | - | - | Docker Desktop 29.8.0、Compose 5.5.1、Windows CLIで実機確認 | none | 2026-09-23 |
-| P2-01/P2-03/P3-02 | RUNNING | root | working tree | - | - | Neo4j port/secret/read transaction修正、focused tests 114 passed / 2 skipped、MCP保存検索実機確認 | none | 2026-09-23 |
+| P2-01/P2-03/P3-02 | MERGED | root | main | #199 | `9844cebc4f89` | Neo4j port/secret/read transaction修正、focused tests 114 passed / 2 skipped、MCP保存検索実機確認 | none | 2026-09-23 |
 | P3/P5 audit | REVIEW | mvp_vertical_slice_audit_luna | delegated | - | - | default in-memoryの断絶、MCP egress条件、UI未接続を確認 | none | 2026-09-23 |
 
 ## Decision ledger
