@@ -6,7 +6,7 @@
 
 ## 現在の実装境界
 
-現行Dotsは `backend/dots/main.py` にowner-scoped read/writeのFastAPI-shaped adapterを持ち、`backend/dots/founder_graph_mcp_stdio.py` にstdio JSON-RPC transportを持つ。`backend/dots/founder_graph_runtime.py` の明示 factoryからNeo4j read/write adapterを同じgatewayへ注入できる。HTTP/SSE transport、Neo4j実driver接続、実tunnelは未検査である。
+現行Dotsは `backend/dots/main.py` にowner-scoped read/writeのFastAPI-shaped adapterを持ち、`backend/dots/founder_graph_mcp_stdio.py` にstdio JSON-RPC transportを持つ。`backend/dots/founder_graph_runtime.py` の共有選択規則から、FastAPI通常起動とstdio MCPへ同じNeo4j read/write adapterを接続できる。HTTP/SSE transport、Neo4j実driver接続、実tunnelは未検査である。
 
 - `search` / `fetch` readと用途限定writeをMCP toolへ変換する。
 - 任意Cypher、物理削除、raw payload、private fieldをtoolへ追加しない。

@@ -75,9 +75,9 @@ cmp -- "$fixture_dir/before-stop.json" "$fixture_dir/after-restart.json"
 
 ## Neo4j gatewayの接続境界
 
-backendの`Neo4jGraphGateway`は、明示的に注入したNeo4j Python driverだけを使う。module importやFastAPI起動時に自動接続せず、NodeType / RelationTypeのallowlist、owner境界、idempotency audit、Campaign / Sourceのrevision historyをparameterized Cypherへ変換する。任意Cypherを受け取るAPIはない。
+backendの`Neo4jGraphGateway`は、composition rootから明示的に渡されたNeo4j Python driverだけを使う。driverを生成する責務は通常起動のcomposition rootに限定し、gateway自体はNodeType / RelationTypeのallowlist、owner境界、idempotency audit、Campaign / Sourceのrevision historyをparameterized Cypherへ変換する。任意Cypherを受け取るAPIはない。
 
-実機接続を行う場合は、Composeがhealthyになった後に、credentialを環境変数またはsecret managerから読み、コード・argv・ログへ展開しないcomposition rootからdriverを生成する。`create_neo4j_app()`または`create_neo4j_stdio_server()`へ同じowner-bound gateway compositionを明示注入できる。MCP標準起動は、`DOTS_GRAPH_BACKEND=neo4j`、`DOTS_NEO4J_PASSWORD`、必要ならURI・利用者IDを指定した場合だけNeo4jを使う。未指定時の開発用既定値はin-memoryであり、接続失敗時に黙って切り替えない。
+実機接続を行う場合は、Composeがhealthyになった後に、credentialを環境変数またはsecret managerから読み、コード・argv・ログへ展開しないcomposition rootからdriverを生成する。`create_neo4j_app()`または`create_neo4j_stdio_server()`へ同じowner-bound gateway compositionを明示注入できる。FastAPI通常起動（`dots.main:app`）とMCP標準起動は、`DOTS_GRAPH_BACKEND=neo4j`または`DOTS_NEO4J_PASSWORD`を指定した場合にNeo4jを通常保存先として選ぶ。単体テストでは`DOTS_GRAPH_BACKEND=memory`を明示できる。Neo4j接続情報が不足または接続不能な場合に黙って一時メモリへ切り替えない。
 
 MCP標準起動をNeo4jへ向けるPowerShell例:
 
