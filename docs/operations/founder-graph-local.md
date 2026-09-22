@@ -98,7 +98,7 @@ from dots.main import create_neo4j_app
 
 driver = GraphDatabase.driver(
     "bolt://127.0.0.1:7687",
-    auth=("neo4j", os.environ["FOUNDER_GRAPH_NEO4J_PASSWORD"]),
+    auth=("neo4j", os.environ["DOTS_NEO4J_PASSWORD"]),
 )
 app = create_neo4j_app(driver, "local-owner")
 ```

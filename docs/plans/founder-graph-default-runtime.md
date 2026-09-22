@@ -57,6 +57,7 @@ Then: 起動は明示的なエラーで停止し、一時メモリへ切り替�
 | RT-01 | APIとstdioが共有する実行先選択 | 検査: backend選択テストとAPI・MCPのowner一致テストが成功する | 既知 |
 | RT-02 | 通常APIのNeo4j composition接続 | 検査: Neo4j設定時の`create_configured_app`がpersistent read/writeを使う | 類推可能 |
 | RT-03 | runbookと台帳の更新 | 検査: 起動例、接続失敗、memory明示方法、実機証跡が一致する | 既知 |
+| RT-04 | WSL previewの通常起動経路修正 | 検査: `Start-WslPreview.ps1`と`wsl-development.md`が`dots.main:app`を使い、`dots.main:create_app`を参照しないことをPowerShell契約検査で確認する | 既知 |
 
 ## ADR
 
@@ -70,3 +71,4 @@ Then: 起動は明示的なエラーで停止し、一時メモリへ切り替�
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-09-23 | API通常起動の保存先選択を追加 | 実機Neo4j保存確認後も`app = create_app()`が一時メモリを使っていたため | RT-01〜RT-03 |
+| 2026-09-23 | WSL previewのAPI起動を設定済みappへ変更し、環境変数の例をDOTSへ統一 | Neo4j設定時にpreviewだけが一時メモリへ戻る経路をなくすため | RT-04 |
