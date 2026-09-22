@@ -92,6 +92,8 @@ next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
 
 CEO室は `gpt-5.6-sol / low`、統合部と全実装部は `gpt-5.6-terra / low` を表のとおり使う。Lunaの選択、fallback、`model_unavailable`扱いは廃止する。
 
+ただし、[`dots-implementation-master-plan.md`](../plans/dots-implementation-master-plan.md)をobjectiveとするactive goalは利用者が明示承認した例外とし、全役割を`gpt-5.6-luna / max`に固定する。別modelへfallbackせず、利用不能は`model_unavailable`として該当scopeを停止する。
+
 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 
 `ASSIGNMENT` と `DEPENDENCY_READY` は `model` と `thinking` を必須項目とする。送信側はpayloadの同じoverrideで受信部の新turnを起動する。
@@ -342,3 +344,4 @@ merge後handoffは次の順序をすべて満たすまで未完了とする。
 
 - 標準プロファイルは `gpt-5.6-terra / low` とする。
 - 全担当に同じprofileを適用し、Lunaの選択、fallback、`model_unavailable`扱いを使わない。
+- Dots実装全体計画のactive goal中だけは、同計画の`gpt-5.6-luna / max`例外を優先する。
