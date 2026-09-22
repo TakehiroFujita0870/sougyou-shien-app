@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `8c38747d8914`
+main SHA: `7881228a80e4`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,7 +22,7 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P2/P3 MVP vertical slice |
-| Last merged PR | #208 |
+| Last merged PR | #209 |
 | Last main smoke | backend `uv run --isolated pytest -q`: 348 passed / 17 skipped、WSL preview script contract passed、MCP tunnel static contract passed、runtime/MCP focused tests 19 passed |
 
 ## Task ledger
@@ -42,6 +42,7 @@ active goal: Founder Graph MVP
 | P2-04 | MERGED | root | main | #206 | `eaadc0c4d526` | configured FastAPI / stdio runtime selection; focused runtime tests passed | real Neo4j restart smoke remains | 2026-09-23 |
 | P3-01 | MERGED | root | main | #207 | `4394a891fc87` | Idea、conversation Source、SourceRevision atomic capture; backend 348 passed / 17 skipped | real Neo4j restart fetch remains | 2026-09-23 |
 | RT-04 | MERGED | root | main | #208 | `8c38747d8914` | WSL preview uses `dots.main:app`; script and tunnel contract checks passed | none | 2026-09-23 |
+| LEDGER-01 | MERGED | root | main | #209 | `7881228a80e4` | execution ledger synchronized with main after PR #209 | none | 2026-09-23 |
 
 ## Decision ledger
 
