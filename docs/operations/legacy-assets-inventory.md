@@ -13,7 +13,7 @@
 | `src/components/ResearchWorkspace.*` | 現行のFounder Graph画面から参照されていない。自身のテスト・Storyが中心 | 保留候補 | ResearchCampaign移行との関係を確認 |
 | `src/components/FileLibrary.*` | 現行のFounder Graph画面から参照されていない。自身のテスト・Storyが中心 | 保留候補 | Attachment移行との関係を確認 |
 | `src/components/LocalGoogleSignIn.*` | 現行のFounder Graph画面から参照されていない | 保留候補 | 認証境界と既存データへの影響を確認 |
-| `src/adapters/projectDemoFixtureAdapter.js` | 現行のFounder Graphの本番経路から参照されていない可能性がある | 保留候補 | 全参照検索と画面テストを確認 |
+| `src/components/projectDemoFixtureAdapter.js` | 現行のFounder Graphの本番経路から参照されていない可能性がある | 保留候補 | 全参照検索と画面テストを確認 |
 
 ## 削除しない資産
 
