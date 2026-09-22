@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class DemoProvenance(BaseModel):
-    dataset_id: str = "kadode-admin-demo-v1"
+    dataset_id: str = "dots-admin-demo-v1"
     status: Literal["synthetic_demo"] = "synthetic_demo"
     notice: str = "これは管理者デモ専用の合成データであり、実在の人物・企業・取引を表しません。"
     generated_on: str = "2026-08-09"

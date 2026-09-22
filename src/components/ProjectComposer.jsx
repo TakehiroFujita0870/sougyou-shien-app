@@ -3,7 +3,7 @@ import { AiComposer } from "./AiComposer";
 import { Button } from "./ui/Button";
 
 /**
- * Project's narrow adapter for the shared `kadode-composer` visual contract.
+ * Project's narrow adapter for the shared `Dots-composer` visual contract.
  * Conversation persistence remains owned by ProjectSurface.
  */
 export function ProjectComposer({
@@ -27,15 +27,15 @@ export function ProjectComposer({
   return (
     <AiComposer
       id="project-composer"
-      label="このプロジェクトについて Kadode AI に尋ねる"
+      label="このプロジェクトについて Dots. AI に尋ねる"
       value={value}
       onValueChange={onValueChange}
       onSubmit={submit}
       disabled={disabled}
       textareaDisabled={loading}
       mode="anchored"
-      formAriaLabel="Project Kadode AI composer"
-      textareaClassName="kadode-composer__textarea--compact resize-none placeholder:text-[var(--color-text-muted)] disabled:cursor-wait"
+      formAriaLabel="Project Dots. AI composer"
+      textareaClassName="Dots-composer__textarea--compact resize-none placeholder:text-[var(--color-text-muted)] disabled:cursor-wait"
       placeholder={
           loading
             ? "会話を読み込んでいます…"

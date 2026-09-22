@@ -2,7 +2,7 @@ import { getDefaultModel, getReasoningModes, isModelAllowedForPlan } from '../mo
 import { PLAN } from '../models/modelCatalog';
 
 export const DEFAULT_PLAN = PLAN.FREE;
-export const PLAN_STORAGE_KEY = 'kadode:plan-selection';
+export const PLAN_STORAGE_KEY = 'dots:plan-selection';
 
 export function normalizePlanSelection(plan, selection = {}) {
   const defaultModel = getDefaultModel(plan);

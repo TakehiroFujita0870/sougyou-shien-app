@@ -6,9 +6,9 @@ SQL = MIGRATION.read_text(encoding="utf-8").lower()
 
 
 def test_embedding_contract_is_owner_scoped_without_assuming_pgvector_is_installed() -> None:
-    assert "create table public.document_chunk_embeddings" in SQL
+    assert "create table public.dots_document_chunk_embeddings" in SQL
     assert "embedding jsonb" in SQL
-    assert "references public.document_chunks(id, owner_id)" in SQL
+    assert "references public.dots_document_chunks(id, owner_id)" in SQL
     assert "enable row level security" in SQL
     assert "force row level security" in SQL
     for operation in ("select", "insert", "update", "delete"):

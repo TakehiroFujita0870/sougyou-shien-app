@@ -39,7 +39,7 @@ Then: 採用だけがproject化候補として保存され、却下理由は同�
 ## スコープ外
 
 - merged済みIA resetの後続runtime実装に含めるApp、WorkspaceShell、shared style、nav、tokens、独立chat route
-- `kadode:workspace-chat`、外部送信、外部AI、Supabase、owner/grant入力、保存先の自動変更
+- `dots:workspace-chat`、外部送信、外部AI、Supabase、owner/grant入力、保存先の自動変更
 - runtime component、Storybook、API、auth、entitlementの変更
 
 ## 旧idea state mapping

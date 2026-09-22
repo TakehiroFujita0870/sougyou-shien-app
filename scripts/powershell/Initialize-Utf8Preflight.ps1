@@ -18,12 +18,12 @@ function Initialize-Utf8Preflight {
     [Console]::OutputEncoding = $utf8NoBom
     Set-Variable -Name OutputEncoding -Scope Global -Value $utf8NoBom -Force
     [Environment]::SetEnvironmentVariable('PYTHONIOENCODING', 'utf-8', 'Process')
-    $global:KadodeUtf8PreflightVersion = 1
+    $global:DotsUtf8PreflightVersion = 1
 }
 
 function Test-Utf8Preflight {
     $outputEncoding = (Get-Variable -Name OutputEncoding -Scope Global -ErrorAction SilentlyContinue).Value
-    return $global:KadodeUtf8PreflightVersion -eq 1 -and
+    return $global:DotsUtf8PreflightVersion -eq 1 -and
         (Test-Utf8NoBomEncoding -Encoding ([Console]::InputEncoding)) -and
         (Test-Utf8NoBomEncoding -Encoding ([Console]::OutputEncoding)) -and
         (Test-Utf8NoBomEncoding -Encoding $outputEncoding) -and

@@ -42,7 +42,7 @@ const hydrationConversationRepository = {
   getLastError() { return null; },
 };
 
-export default { title: 'Kadode/KnowledgeSurface', component: KnowledgeSurface, parameters: { layout: 'centered', a11y: { test: 'error' } } };
+export default { title: 'Dots./KnowledgeSurface', component: KnowledgeSurface, parameters: { layout: 'centered', a11y: { test: 'error' } } };
 export const Desktop = { args: { fixture } };
 export const Mobile = { args: { fixture }, parameters: { viewport: { defaultViewport: 'mobile1' } } };
 export const Empty = { args: { fixture: null } };

@@ -4,7 +4,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: Home / Project / Knowledgeだけをtop-level navに表示し、HomeではKadode AI conversation surfaceをfirst viewportの主役にする。
+要望: Home / Project / Knowledgeだけをtop-level navに表示し、HomeではDots. AI conversation surfaceをfirst viewportの主役にする。
 
 ゴール: 既存の会話送受信・候補採否・context生成を変更せず、3-surface shell、compact header、responsive layout、selected surfaceのF5保持をruntimeへ接続する。
 
@@ -31,7 +31,7 @@ Then: Home、Project、Knowledgeの3項目だけが表示され、選択中surfa
 
 ### US-2: Home AI-first surface
 
-As a Home利用者, I want first viewportでKadode AI conversation surfaceとcomposerを見たい, so that 次の入力を探すためにスクロールしなくてよい。
+As a Home利用者, I want first viewportでDots. AI conversation surfaceとcomposerを見たい, so that 次の入力を探すためにスクロールしなくてよい。
 
 Given: Homeを選択している。
 

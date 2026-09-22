@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('kadode:user-profile', JSON.stringify({
+    localStorage.setItem('dots:user-profile', JSON.stringify({
       status: 'completed',
       values: { experience: '', strengths: '', interests: '', time: '', budget: '', avoidances: '' },
     }));
@@ -28,7 +28,7 @@ test('downloads the local Project PDF only after the user requests it', async ({
     button.click();
   });
   const file = await download;
-  expect(file.suggestedFilename()).toBe('kadode-business-plan.pdf');
+  expect(file.suggestedFilename()).toBe('dots-business-plan.pdf');
   expect(await file.createReadStream()).toBeTruthy();
 });
 
@@ -42,7 +42,7 @@ test('downloads the local Project DOCX only after its lazy generator is ready', 
     button.click();
   });
   const file = await download;
-  expect(file.suggestedFilename()).toBe('kadode-business-plan.docx');
+  expect(file.suggestedFilename()).toBe('dots-business-plan.docx');
   const stream = await file.createReadStream();
   expect(stream).toBeTruthy();
 });

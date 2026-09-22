@@ -1,6 +1,6 @@
 export const HOME_CONVERSATION_SCHEMA_VERSION = 1;
-export const HOME_CONVERSATION_STORAGE_KEY = 'kadode:home-conversation';
-export const HOME_DRAFT_STORAGE_KEY = 'kadode:home-conversation:draft';
+export const HOME_CONVERSATION_STORAGE_KEY = 'dots:home-conversation';
+export const HOME_DRAFT_STORAGE_KEY = 'dots:home-conversation:draft';
 export const EMPTY_HOME_CONVERSATION_STATE = Object.freeze({ messages: [], proposals: [] });
 
 const CANONICAL_OWNER_ID = 'local-owner';

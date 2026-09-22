@@ -16,8 +16,8 @@
 | --- | --- | --- |
 | navigation | `src/components/WorkspaceShell.jsx` の `SHELL_NAV` は `chat`、`ideas`、`projects`、`research`、`files`、`search` の6項目。 | T-IA-02でHome / Project / Knowledgeの3項目へ置換する。`chat`を第4項目として残さない。 |
 | chat placeholder | `src/App.jsx` は `activeWorkspace === 'chat'` でAIチャット見出しと説明を表示する。 | T-IA-02で独立routeをHomeへ非破壊redirectまたは明示案内へ置換する。選択はshell PRのテストで確定する。 |
-| unmerged workspace chat | `kadode:workspace-chat` と `WorkspaceChatPage` はmainに存在しない。PR #99だけがproducerであり、merge停止中。 | 実ユーザーstateのmigrationは不要。PR #99のstateをmainへ導入しない。 |
-| existing idea state | `IdeaCandidateWorkspace` は `kadode:idea-candidates`、`kadode:idea-conversation`、`kadode:idea-input-draft`、`kadode:idea-form-draft` を使用する。project IDは保存しない。 | 自動でHomeまたはProjectへ確定移行しない。T-IA-04は利用者が明示してHomeへimportするread-only候補だけを設計する。旧stateの削除は禁止する。 |
+| unmerged workspace chat | `dots:workspace-chat` と `WorkspaceChatPage` はmainに存在しない。PR #99だけがproducerであり、merge停止中。 | 実ユーザーstateのmigrationは不要。PR #99のstateをmainへ導入しない。 |
+| existing idea state | `IdeaCandidateWorkspace` は `dots:idea-candidates`、`dots:idea-conversation`、`dots:idea-input-draft`、`dots:idea-form-draft` を使用する。project IDは保存しない。 | 自動でHomeまたはProjectへ確定移行しない。T-IA-04は利用者が明示してHomeへimportするread-only候補だけを設計する。旧stateの削除は禁止する。 |
 | knowledge grants | `project_knowledge` / `knowledge_grants` とRLS migrationはproject単位grantを持つ。一方 `SpaceKnowledgeRepository` は同一user space内の横断参照を既定有効にする。 | T-IA-05でdomain/API compatibility matrixを作るまでDB migrationを行わない。owner隔離、原本一意、reference metadata、削除伝播を後退させない。 |
 | old plans | `design-system-chat-boundary.md` は単一`WorkspaceChatPage`を前提とし、`org-resource-governance.md` は旧#78名称を持つ。 | T-IA-02以降の各所有部が新contractに更新する。T-IA-00では旧文書を削除または書換えない。 |
 
@@ -27,7 +27,7 @@
 
 As a 既存利用者, I want 旧端末内会話を勝手に別surfaceへ確定移行されない, so that 文脈の違うprojectへ記録が混ざらない。
 
-Given: `kadode:idea-conversation`または`kadode:idea-input-draft`が端末内にある
+Given: `dots:idea-conversation`または`dots:idea-input-draft`が端末内にある
 When: Home / Project / Knowledgeの新しい会話機能を初めて開く
 Then: 旧stateは削除も自動保存先変更もしない。Homeへのimport候補は利用者の明示操作後だけread-onlyで表示する。
 
@@ -66,7 +66,7 @@ Then: 別ownerは0件、原本は一意、reference metadataはlocator/revision�
 | --- | --- | --- | --- |
 | T-IA-02 | プロダクトUI・デザインシステム部 | 6項目navと`chat` placeholderを3 surfaceへ置換する必要がある。 | App.jsx、shared style、conversation workflowを同時に所有しない。 |
 | T-IA-03 | 基盤・認証部 | current surface、route/view/subview、entity ID/name/revision/locator、selection、dirty、permission、plan、profileをallowlist snapshotにする。 | raw file、hidden knowledge、other-user、sensitive profileを投入しない。 |
-| T-IA-04 | 会話体験・プロジェクト部 | #99の`kadode:workspace-chat`は未マージ。既存idea stateは明示import候補まで。 | 独立chat route、project IDの推測、自動保存先変更をしない。 |
+| T-IA-04 | 会話体験・プロジェクト部 | #99の`dots:workspace-chat`は未マージ。既存idea stateは明示import候補まで。 | 独立chat route、project IDの推測、自動保存先変更をしない。 |
 | T-IA-05 | 事業設計・調査部 | legacy grantとspace knowledgeのcompatibility matrixが必要。 | owner隔離、原本一意、削除伝播を弱めない。 |
 
 ## タスク

@@ -1,6 +1,6 @@
 import pytest
 
-from kadode_api.space_knowledge import ExtractedPageInput, ReferenceInput, SpaceKnowledgeRepository
+from dots.space_knowledge import ExtractedPageInput, ReferenceInput, SpaceKnowledgeRepository
 
 
 def source() -> bytes:

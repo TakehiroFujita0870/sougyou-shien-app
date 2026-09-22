@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.account_privacy import ARTIFACT_TYPES, InMemoryAccountPrivacyRepository
-from kadode_api.main import create_app
+from dots.account_privacy import ARTIFACT_TYPES, InMemoryAccountPrivacyRepository
+from dots.main import create_app
 
 
 def client() -> TestClient:
@@ -23,7 +23,7 @@ def test_export_returns_only_the_owners_profile_ideas_documents_research_and_dec
     assert exported["json"]["research"][0]["id"] == "research-a"
     assert exported["json"]["decisions"][0]["id"] == "decision-a"
     assert "owner-b" not in str(exported)
-    assert "# Kadode data export" in exported["markdown"]
+    assert "# Dots. data export" in exported["markdown"]
     assert "owner-a profile" in exported["markdown"]
     assert "owner-a idea" in exported["markdown"]
     assert "owner-a document" in exported["markdown"]

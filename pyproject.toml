@@ -1,7 +1,7 @@
 [project]
-name = "kadode-api"
+name = "dots"
 version = "0.1.0"
-description = "Kadode deterministic product API"
+description = "Dots. deterministic product API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.116.1",

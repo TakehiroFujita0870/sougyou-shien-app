@@ -4,7 +4,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: ヴィンテージ参考配色を起点に、Kadode の深緑・生成りへ低彩度の桜ニュアンスを加えた semantic token を導入する。
+要望: ヴィンテージ参考配色を起点に、Dots. の深緑・生成りへ低彩度の桜ニュアンスを加えた semantic token を導入する。
 
 ゴール: App shell と代表 card/button/dialog が用途名の token を使い、桜を節目・選択・提案・完了の補助にだけ表示する。
 
@@ -14,7 +14,7 @@
 
 ### US-1 読みやすい作業面
 
-As a Kadode の利用者, I want 深緑と生成りを基調にした落ち着いた画面を使いたい, so that 長い検討作業に集中できる。
+As a Dots. の利用者, I want 深緑と生成りを基調にした落ち着いた画面を使いたい, so that 長い検討作業に集中できる。
 
 Given: App shell を表示している
 When: 通常、hover、focus、disabled、error の状態を確認する

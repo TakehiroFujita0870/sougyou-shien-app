@@ -5,13 +5,13 @@ test.use({ viewport: { width: 1440, height: 900 } })
 test('keeps the Project draft and production geometry through repeated hydration retries', async ({ page }) => {
   const pageErrors = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
-  await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-projectsurface--hydration-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
+  await page.goto('http://127.0.0.1:6007/iframe.html?id=dots-projectsurface--hydration-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
   const composer = page.locator('#project-composer')
   const retry = page.locator('[role="alert"] button')
   await expect(retry).toBeVisible()
   await expect(composer).toBeEnabled()
   await composer.fill('再試行しても残るProject下書き')
-  await expect(page.locator('form[aria-label="Project Kadode AI composer"] button[type="submit"]')).toBeDisabled()
+  await expect(page.locator('form[aria-label="Project Dots. AI composer"] button[type="submit"]')).toBeDisabled()
 
   await page.reload()
   pageErrors.length = 0
@@ -29,7 +29,7 @@ test('keeps the Project draft and production geometry through repeated hydration
   await expect(composer).toHaveValue('再試行しても残るProject下書き')
   await expect(page.getByLabel('Project conversation')).toBeVisible()
 
-  const composerBox = await page.getByLabel('Project Kadode AI composer').boundingBox()
+  const composerBox = await page.getByLabel('Project Dots. AI composer').boundingBox()
   const sidebarBox = await page.locator('#workspace-sidebar').boundingBox()
   const mainBox = await page.locator('.workspace-shell__main').boundingBox()
   expect(sidebarBox?.width).toBe(168)

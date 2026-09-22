@@ -1,4 +1,4 @@
-export const SIDEBAR_PORTFOLIO_KEY = 'kadode:sidebar-portfolio';
+export const SIDEBAR_PORTFOLIO_KEY = 'dots:sidebar-portfolio';
 export const SIDEBAR_PORTFOLIO_SCHEMA_VERSION = 1;
 
 const EMPTY_PORTFOLIO = Object.freeze({ home: [], project: [], knowledge: [], activeHomeId: '' });

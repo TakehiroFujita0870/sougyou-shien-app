@@ -1,7 +1,7 @@
 // Explicit admin/demo boundary. Mirrors the PII-free synthetic dataset from #139.
 // This adapter is presentation-only and must not be used by runtime auth or user data.
 export const demoProjectFixture = {
-  datasetId: 'kadode-admin-demo-v1',
+  datasetId: 'dots-admin-demo-v1',
   provenance: 'synthetic_demo',
   name: '現場改善ミニ診断（合成デモ）',
   status: '採用済み',

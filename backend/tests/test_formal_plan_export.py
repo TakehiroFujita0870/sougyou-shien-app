@@ -3,8 +3,8 @@ from zipfile import ZipFile
 
 import pytest
 
-from kadode_api.formal_plan_export import DocxTemplateAdapter, content_from_dossier
-from kadode_api.project_dossier import BusinessDefinition, DossierRequest, SourceReference, assemble_dossier
+from dots.formal_plan_export import DocxTemplateAdapter, content_from_dossier
+from dots.project_dossier import BusinessDefinition, DossierRequest, SourceReference, assemble_dossier
 
 
 def dossier():

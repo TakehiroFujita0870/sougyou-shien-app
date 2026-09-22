@@ -41,7 +41,7 @@ When: the component continues its lifecycle.
 Then: the initially mounted adapter remains the source of auth state.
 
 ### US-5
-As a Kadode user on any supported surface, I want Google sign-in in the account area, so that mobile uses the same authentication boundary.
+As a Dots. user on any supported surface, I want Google sign-in in the account area, so that mobile uses the same authentication boundary.
 
 Given: the WorkspaceShell is rendered at any viewport.
 When: the account area is opened.

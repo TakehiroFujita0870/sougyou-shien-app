@@ -1,4 +1,4 @@
-# Kadode 開発申し送り
+# Dots. 開発申し送り
 
 最終更新: 2026-08-09。担当はこの文書と`docs/spec/`を正本として開発を継続してください。
 
@@ -43,5 +43,5 @@
 ## 注意事項
 
 - `docs/inherited/ai-company-os`と`docs/inherited/mba-practice-app`はサブモジュールです。継承元の作業ツリーを改変しないでください。
-- MBA由来のGROWTH_PATTERNS/LESSONSはサブモジュール配下に追跡できないため、必要ならKadode本体の`docs/inherited-reports/`へ移します。
+- MBA由来のGROWTH_PATTERNS/LESSONSはサブモジュール配下に追跡できないため、必要ならDots.本体の`docs/inherited-reports/`へ移します。
 - Xは`x-drafts/`への下書きのみ。投稿APIや自動投稿を実装しません。

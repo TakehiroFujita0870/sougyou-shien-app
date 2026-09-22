@@ -1,4 +1,4 @@
-export const KNOWLEDGE_CONVERSATION_STORAGE_KEY = 'kadode:knowledge-conversation';
+export const KNOWLEDGE_CONVERSATION_STORAGE_KEY = 'dots:knowledge-conversation';
 export const KNOWLEDGE_CONVERSATION_SCHEMA_VERSION = 1;
 const emptyState = { messages: [], entries: [] };
 const epoch = new Date(0).toISOString();

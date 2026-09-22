@@ -20,9 +20,9 @@ describe('formal plan DOCX adapter', () => {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     expect([...bytes.slice(0, 4)]).toEqual([80, 75, 3, 4]);
-    if (process.env.KADODE_DOCX_QA_PATH) {
-      await mkdir(dirname(process.env.KADODE_DOCX_QA_PATH), { recursive: true });
-      await writeFile(process.env.KADODE_DOCX_QA_PATH, bytes);
+    if (process.env.DOTS_DOCX_QA_PATH) {
+      await mkdir(dirname(process.env.DOTS_DOCX_QA_PATH), { recursive: true });
+      await writeFile(process.env.DOTS_DOCX_QA_PATH, bytes);
     }
   });
 

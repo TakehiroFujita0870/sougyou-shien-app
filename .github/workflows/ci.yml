@@ -18,9 +18,9 @@ jobs:
       - run: npm ci
       - run: npm run test
       - name: Generate and inspect formal-plan PDF
-        run: mkdir -p pdf-qa-artifacts && KADODE_PDF_QA_PATH=pdf-qa-artifacts/formal-plan.pdf npm test -- --run src/components/formalPlanPdfAdapter.test.js
+        run: mkdir -p pdf-qa-artifacts && DOTS_PDF_QA_PATH=pdf-qa-artifacts/formal-plan.pdf npm test -- --run src/components/formalPlanPdfAdapter.test.js
       - name: Generate formal-plan DOCX
-        run: mkdir -p docx-qa-artifacts && KADODE_DOCX_QA_PATH=docx-qa-artifacts/formal-plan.docx npm test -- --run src/components/formalPlanDocxAdapter.test.js
+        run: mkdir -p docx-qa-artifacts && DOTS_DOCX_QA_PATH=docx-qa-artifacts/formal-plan.docx npm test -- --run src/components/formalPlanDocxAdapter.test.js
       - run: npm run test:a11y
       - run: npm run build
       - run: npm run build-storybook
@@ -36,7 +36,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-desktop-e2e-video
+          name: dots-desktop-e2e-video
           path: test-results/**/*.webm
           if-no-files-found: error
       - name: Verify desktop sidebar portfolio E2E
@@ -45,14 +45,14 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-sidebar-1440-screenshot
+          name: dots-sidebar-1440-screenshot
           path: test-results/sidebar-portfolio-1440x900.png
           if-no-files-found: error
       - name: Upload archive and restore desktop evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-sidebar-archive-restore-1440
+          name: dots-sidebar-archive-restore-1440
           path: |
             test-results/sidebar-archive-home-1440.png
             test-results/sidebar-restored-home-1440.png
@@ -65,7 +65,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-account-plan-1440-screenshot
+          name: dots-account-plan-1440-screenshot
           path: test-results/account-plan-1440x900.png
           if-no-files-found: error
       - name: Verify Chrome PDF and DOCX downloads
@@ -76,7 +76,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-composer-layout-screenshots
+          name: dots-composer-layout-screenshots
           path: |
             test-results/project-empty-composer-1440.png
             test-results/project-composer-820.png
@@ -88,7 +88,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-ai-composer-empty-send-1440
+          name: dots-ai-composer-empty-send-1440
           path: test-results/ai-composer-empty-send-1440x900.png
           if-no-files-found: error
       - name: Verify Home hydration retry and draft preservation
@@ -97,7 +97,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-home-hydration-retry-1440
+          name: dots-home-hydration-retry-1440
           path: test-results/home-hydration-retry*-1440x900.png
           if-no-files-found: error
       - name: Verify Knowledge evidence Project navigation
@@ -106,7 +106,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-knowledge-project-navigation-1440
+          name: dots-knowledge-project-navigation-1440
           path: |
             test-results/knowledge-project-navigation*-1440.png
             test-results/knowledge-confirm-evidence-link-1440.png
@@ -117,7 +117,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-knowledge-write-failure-1440
+          name: dots-knowledge-write-failure-1440
           path: test-results/knowledge-write-failure-1440.png
           if-no-files-found: error
       - name: Verify Knowledge hydration recovery
@@ -126,7 +126,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-knowledge-hydration-recovery-1440
+          name: dots-knowledge-hydration-recovery-1440
           path: test-results/knowledge-hydration-recovery-1440.png
           if-no-files-found: error
       - name: Verify Project hydration recovery
@@ -135,7 +135,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-project-hydration-recovery-1440
+          name: dots-project-hydration-recovery-1440
           path: test-results/project-hydration-recovery-1440.png
           if-no-files-found: error
       - uses: astral-sh/setup-uv@v6
@@ -148,7 +148,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-formal-plan-docx-qa
+          name: dots-formal-plan-docx-qa
           path: |
             docx-qa-artifacts/formal-plan.docx
             docx-qa-artifacts/rendered/formal-plan.pdf
@@ -160,7 +160,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: kadode-formal-plan-pdf-qa
+          name: dots-formal-plan-pdf-qa
           path: |
             pdf-qa-artifacts/formal-plan.pdf
             pdf-qa-artifacts/png/*.png

@@ -1,4 +1,4 @@
-export const DEMO_PRINCIPAL = Object.freeze({ id: 'demo-admin-principal', kind: 'demo', displayName: 'Kadode Demo Admin' });
+export const DEMO_PRINCIPAL = Object.freeze({ id: 'demo-admin-principal', kind: 'demo', displayName: 'Dots. Demo Admin' });
 export const DEMO_OWNER_ID = 'demo-owner';
 export const DEMO_SPACE_ID = 'demo-space';
 const SEED = Object.freeze({ documents: [{ id: 'demo-doc-1', ownerId: DEMO_OWNER_ID, spaceId: DEMO_SPACE_ID, name: 'Demo brief', state: 'searchable' }], ideas: [{ id: 'demo-idea-1', ownerId: DEMO_OWNER_ID, spaceId: DEMO_SPACE_ID, title: 'Demo idea' }] });

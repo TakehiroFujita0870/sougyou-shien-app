@@ -1,7 +1,7 @@
 export const KNOWLEDGE_SCHEMA_VERSION = 2;
-export const KNOWLEDGE_STORAGE_KEY = 'kadode:knowledge-metadata';
-export const KNOWLEDGE_QUARANTINE_KEY = 'kadode:knowledge-metadata:quarantine';
-export const KNOWLEDGE_SCOPED_STORAGE_KEY = 'kadode:knowledge-metadata-scoped';
+export const KNOWLEDGE_STORAGE_KEY = 'dots:knowledge-metadata';
+export const KNOWLEDGE_QUARANTINE_KEY = 'dots:knowledge-metadata:quarantine';
+export const KNOWLEDGE_SCOPED_STORAGE_KEY = 'dots:knowledge-metadata-scoped';
 
 const STATES = new Set(['metadata_only', 'processing', 'searchable', 'failed', 'deleted']);
 const PROCESSING_STATES = new Set(['pending', 'ready']);

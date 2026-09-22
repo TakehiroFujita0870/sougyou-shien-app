@@ -2,7 +2,7 @@ import { createLocalGoogleAuthAdapter } from '../auth/localAuthAdapter';
 import { LocalGoogleSignIn } from './LocalGoogleSignIn';
 
 export default {
-  title: 'Kadode/LocalGoogleSignIn',
+  title: 'Dots./LocalGoogleSignIn',
   component: LocalGoogleSignIn,
 };
 

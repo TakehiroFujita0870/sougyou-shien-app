@@ -12,12 +12,12 @@ const portfolioRepository = { load: async () => ({ home: [], project: [], knowle
 const desktop = { width: '1440px', height: '900px' };
 
 function SurfaceStory({ surface = 'home' }) {
-  window.sessionStorage.setItem('kadode:selected-surface', surface);
+  window.sessionStorage.setItem('dots:selected-surface', surface);
   return <App profileRepository={profileRepository} adoptedProjectRepository={adoptedProjectRepository} homeConversationRepository={homeConversationRepository} sidebarPortfolioRepository={portfolioRepository} />;
 }
 
 export default {
-  title: 'Kadode/App',
+  title: 'Dots./App',
   component: App,
   parameters: {
     layout: 'fullscreen',
@@ -28,7 +28,7 @@ export default {
 
 export const Desktop = {};
 export const Mobile = { parameters: { viewport: { defaultViewport: 'mobile1' } } };
-export const HighContrast = { render: () => <div className="kadode-high-contrast"><App /></div> };
+export const HighContrast = { render: () => <div className="Dots-high-contrast"><App /></div> };
 export const Collapsed = { render: () => <WorkspaceShell initialCollapsed activePage="ideas" onSelect={() => {}}><h1>折りたたみ状態</h1></WorkspaceShell> };
 export const MobileDrawer = { parameters: { viewport: { defaultViewport: 'mobile1' } }, render: () => <WorkspaceShell initialDrawerOpen activePage="ideas" onSelect={() => {}}><h1>モバイルドロワー</h1></WorkspaceShell> };
 export const Keyboard = { render: () => <WorkspaceShell activePage="research" onSelect={() => {}}><h1>キーボード操作</h1></WorkspaceShell> };

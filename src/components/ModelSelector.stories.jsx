@@ -3,7 +3,7 @@ import { fn } from 'storybook/test';
 import { ModelSelector } from './ModelSelector';
 
 export default {
-  title: 'Kadode/ModelSelector',
+  title: 'Dots./ModelSelector',
   component: ModelSelector,
   args: {
     onModelChange: fn(),

@@ -3,7 +3,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: Kadode標準のフォーマル事業計画書を、ユーザー編集可能なDOCXと提出向けPDFへ出力する内容契約とtemplate adapter境界を先に定義する。
+要望: Dots.標準のフォーマル事業計画書を、ユーザー編集可能なDOCXと提出向けPDFへ出力する内容契約とtemplate adapter境界を先に定義する。
 
 ゴール: 5観点、財務、実行計画、根拠を同じ契約で追跡し、未確定事項と出典・更新日・ライセンス確認を成果物へ明示できる設計を後続実装へ渡す。
 
@@ -66,7 +66,7 @@ Then: source URL、発行者、確認日、更新日、利用条件、差分を�
 
 ## Adapter境界
 
-`FormalPlanContent`はKadode標準の中間契約とし、`DocxTemplateAdapter`と`PdfSnapshotAdapter`はこの契約だけを受け取る。adapterは内容の計算、owner認証、根拠の取得、未確定事項の解消を行わない。
+`FormalPlanContent`はDots.標準の中間契約とし、`DocxTemplateAdapter`と`PdfSnapshotAdapter`はこの契約だけを受け取る。adapterは内容の計算、owner認証、根拠の取得、未確定事項の解消を行わない。
 
 将来の公式様式adapterは`TemplateSourceDescriptor {issuer, source_url, checked_at, published_at, license_status, version}`を受け取り、公式ページの最新版確認結果だけを記録する。日本政策金融公庫を含む候補の実ファイルを取得・保存せず、様式本文を複製しない。採用時は専用ADRと出典確認スパイクを先行させる。
 

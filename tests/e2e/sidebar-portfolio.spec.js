@@ -5,7 +5,7 @@ const portfolioStorageKey = sidebarPortfolioStorageKey('local-owner', 'local-spa
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('kadode:user-profile', JSON.stringify({
+    localStorage.setItem('dots:user-profile', JSON.stringify({
       status: 'completed',
       values: { experience: 'manufacturing', strengths: 'operations', interests: 'AI', time: '4 hours', budget: '100000', avoidances: 'high risk' },
     }))
@@ -77,7 +77,7 @@ test('keeps the Home composer and account visible with ten long turns', async ({
       confirmed: false,
       status: index === 0 ? 'pending' : 'held',
     }))
-    localStorage.setItem('kadode:home-conversation', JSON.stringify({ messages, proposals }))
+    localStorage.setItem('dots:home-conversation', JSON.stringify({ messages, proposals }))
   })
 
   await page.goto('/')
@@ -177,9 +177,9 @@ test('restores an archived Project snapshot by click and keeps the Project state
     fact: '顧客の作業時間が毎週失われている', inference: '受注管理の自動化が有効', reason: 'ヒアリングで確認済み', status: 'adopted',
   }
   await page.addInitScript((snapshot) => {
-    sessionStorage.setItem('kadode:selected-surface', 'project')
-    localStorage.setItem('kadode:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [snapshot] }))
-    localStorage.setItem('kadode:sidebar-portfolio:local-owner:local-space', JSON.stringify({
+    sessionStorage.setItem('dots:selected-surface', 'project')
+    localStorage.setItem('dots:adopted-projects', JSON.stringify({ schemaVersion: 1, projects: [snapshot] }))
+    localStorage.setItem('dots:sidebar-portfolio:local-owner:local-space', JSON.stringify({
       activeHomeId: '', home: [], knowledge: [], project: [{ id: snapshot.id, title: snapshot.title, snapshot, archived: false, updatedAt: 1 }],
     }))
   }, project)

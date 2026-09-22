@@ -4,7 +4,7 @@ import { demoProjectFixture } from './projectDemoFixtureAdapter';
 
 function retryableConversationRepository() {
   let retries = 0;
-  const draftKey = 'kadode:storybook:project-hydration-draft';
+  const draftKey = 'dots:storybook:project-hydration-draft';
   return {
     async load() { throw new Error('Injected Project hydration failure'); },
     async retryLoad() { retries += 1; if (retries === 1) throw new Error('Still offline'); await new Promise((resolve) => setTimeout(resolve, 600)); return [{ id: 'restored', role: 'assistant', content: '復元したProject会話' }]; },
@@ -14,7 +14,7 @@ function retryableConversationRepository() {
   };
 }
 
-export default { title: 'Kadode/ProjectSurface', component: ProjectSurface, parameters: { layout: 'padded', a11y: { test: 'error' } } };
+export default { title: 'Dots./ProjectSurface', component: ProjectSurface, parameters: { layout: 'padded', a11y: { test: 'error' } } };
 export const Desktop = { args: { state: 'populated' } };
 export const Mobile390 = { args: { state: 'populated' }, parameters: { viewport: { defaultViewport: 'mobile1' } } };
 export const Empty = { args: { state: 'empty' } };

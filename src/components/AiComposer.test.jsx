@@ -25,7 +25,7 @@ describe('AiComposer', () => {
 
   it('supports anchored and inline modes, action slots, model selection, and default empty-send policy', () => {
     const onSubmit = vi.fn(); const onModelChange = vi.fn(); const view = mount({ mode: 'anchored', value: '   ', onSubmit, onModelChange, leadingActions: <button type="button">補完</button> });
-    expect(view.container.querySelector('form').className).toContain('kadode-composer--anchored');
+    expect(view.container.querySelector('form').className).toContain('Dots-composer--anchored');
     expect(view.container.querySelector('button[type="submit"]').disabled).toBe(true);
     expect(view.container.querySelector('button[aria-label^="モデル:"]').disabled).toBe(false);
     expect(view.container.textContent).toContain('補完'); view.unmount();

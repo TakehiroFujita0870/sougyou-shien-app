@@ -1,4 +1,4 @@
-# Kadode PRD v0.2（SDD・実装前）
+# Dots. PRD v0.2（SDD・実装前）
 
 最終更新: 2026-08-09
 

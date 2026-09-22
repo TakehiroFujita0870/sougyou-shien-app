@@ -15,7 +15,7 @@ function openAccount(trigger) {
 }
 
 async function mount() {
-  sessionStorage.setItem('kadode:selected-surface', 'home');
+  sessionStorage.setItem('dots:selected-surface', 'home');
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -59,7 +59,7 @@ describe('App keyboard and accessibility quality', () => {
     expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
     expect(navigation.textContent).not.toContain('AI広報');
     expect(navigation.querySelector('button').className).toContain('workspace-shell__nav-item');
-    expect(container.querySelector('main').className).toContain('kadode-shell');
+    expect(container.querySelector('main').className).toContain('Dots-shell');
     expect(container.querySelector('.workspace-shell__nav-item').className).toContain('workspace-shell__nav-item');
     await unmount();
   });
@@ -73,7 +73,7 @@ describe('App keyboard and accessibility quality', () => {
     expect(container.querySelector('#home-supervisor-message')).not.toBeNull();
     expect(container.querySelector('header')).toBeNull();
     expect(navigation.className).toContain('min-w-0');
-    expect(container.querySelector('main').className).toContain('kadode-shell');
+    expect(container.querySelector('main').className).toContain('Dots-shell');
     await unmount();
   });
 });

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from kadode_api.execution_plan import ExecutionInputError, ExecutionPlanInput, SmallExperiment, evaluate_execution_plan
+from dots.execution_plan import ExecutionInputError, ExecutionPlanInput, SmallExperiment, evaluate_execution_plan
 
 
 def plan(**overrides: object) -> ExecutionPlanInput:

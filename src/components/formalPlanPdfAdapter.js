@@ -27,7 +27,7 @@ function wrap(text, maxCharacters) {
 
 function documentItems(project) {
   const items = [
-    { text: project.name || 'Kadode 事業計画書', size: 20, gap: 14 },
+    { text: project.name || 'Dots. 事業計画書', size: 20, gap: 14 },
     { text: '事業計画書（ローカル下書き）', size: 10, color: rgb(0.35, 0.35, 0.35), gap: 10 },
     { text: project.overview || '未確定', size: 11, gap: 14 },
   ];
@@ -73,8 +73,8 @@ export async function createFormalPlanPdf(project) {
     }
     y -= item.gap ?? 3;
   }
-  pdf.setTitle(`${project.name || 'Kadode'} 事業計画書`);
-  pdf.setSubject('Kadode ローカル下書き');
+  pdf.setTitle(`${project.name || 'Dots.'} 事業計画書`);
+  pdf.setSubject('Dots. ローカル下書き');
   return new Blob([await pdf.save()], { type: 'application/pdf' });
 }
 
@@ -83,7 +83,7 @@ export async function downloadFormalPlanPdf(project, { documentRef = globalThis.
   const href = url.createObjectURL(blob);
   const anchor = documentRef.createElement('a');
   anchor.href = href;
-  anchor.download = 'kadode-business-plan.pdf';
+  anchor.download = 'dots-business-plan.pdf';
   documentRef.body.append(anchor);
   anchor.click();
   anchor.remove();

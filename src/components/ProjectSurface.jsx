@@ -35,7 +35,7 @@ function createDraftProject() {
   return {
     name: "新しいプロジェクト",
     status: "下書き",
-    overview: "Kadode AI との会話から、事業の仮説を少しずつ育てていきます。",
+    overview: "Dots. AI との会話から、事業の仮説を少しずつ育てていきます。",
     decisions: [],
     sections: Object.fromEntries(
       evaluationDefinitions.map(({ key }) => [
@@ -45,7 +45,7 @@ function createDraftProject() {
           summary:
             "この観点について、まず確かめたいことを言葉にしてみましょう。",
           evidence: "まだ根拠は登録されていません。",
-          unknown: "Kadode AI と一緒に確認する問いを決めましょう。",
+          unknown: "Dots. AI と一緒に確認する問いを決めましょう。",
         },
       ]),
     ),
@@ -236,7 +236,7 @@ export function ProjectSurface({
       <section
         aria-labelledby="project-surface-heading"
         aria-busy={phase === "loading"}
-        className="kadode-composer-layout mx-auto min-h-[calc(100vh-3rem)] w-full max-w-5xl py-4"
+        className="Dots-composer-layout mx-auto min-h-[calc(100vh-3rem)] w-full max-w-5xl py-4"
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
           PROJECT
@@ -252,7 +252,7 @@ export function ProjectSurface({
             話したアイデアを、ひとつのプロジェクトに育てましょう
           </h2>
           <ol className="mt-4 space-y-2 text-sm leading-6 text-[var(--color-text-muted)]">
-            <li>1. Kadode AI と仮説を話す</li>
+            <li>1. Dots. AI と仮説を話す</li>
             <li>2. 残したい案をプロジェクトに採用する</li>
             <li>3. 5つの観点から根拠を確かめる</li>
           </ol>
@@ -285,7 +285,7 @@ export function ProjectSurface({
     <section
       aria-labelledby="project-surface-heading"
       aria-busy={phase === "loading"}
-      className="kadode-composer-layout mx-auto min-h-[calc(100vh-3rem)] w-full max-w-6xl pb-12"
+      className="Dots-composer-layout mx-auto min-h-[calc(100vh-3rem)] w-full max-w-6xl pb-12"
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] pb-5">
         <div>
@@ -351,7 +351,7 @@ export function ProjectSurface({
         <div className="min-w-0 space-y-7">
           <div>
             <h2 className="mb-3 text-base font-semibold">
-              Kadode AI と検討する
+              Dots. AI と検討する
             </h2>
             {conversationError && <div role="alert" className="mb-3 flex items-center gap-2 text-sm text-red-700"><span>{conversationError}</span>{phase === "error" && <Button type="button" variant="secondary" onClick={() => void loadConversation(true)}>会話を再試行</Button>}</div>}
             {messages.length > 0 && (

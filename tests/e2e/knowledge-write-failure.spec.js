@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test('keeps the Knowledge confirmation visible and retryable when its local save fails', async ({ page }) => {
-  await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-knowledgesurface--write-failure-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
+  await page.goto('http://127.0.0.1:6007/iframe.html?id=dots-knowledgesurface--write-failure-recovery&viewMode=story', { waitUntil: 'domcontentloaded' })
   const composer = page.locator('#knowledge-composer')
   await composer.fill('保存失敗時にも消えない確認内容')
   await composer.press('Enter')
@@ -24,7 +24,7 @@ test('keeps the Knowledge confirmation visible and retryable when its local save
 })
 
 test('keeps a pending file removal open through dismissal attempts and retries after rejection', async ({ page }) => {
-  await page.goto('http://127.0.0.1:6007/iframe.html?id=kadode-knowledgesurface--write-failure-removal&viewMode=story', { waitUntil: 'domcontentloaded' })
+  await page.goto('http://127.0.0.1:6007/iframe.html?id=dots-knowledgesurface--write-failure-removal&viewMode=story', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: '削除' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: '削除を確定' }).click()

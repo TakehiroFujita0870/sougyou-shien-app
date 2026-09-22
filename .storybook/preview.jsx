@@ -7,7 +7,7 @@ const preview = {
     backgrounds: { disable: true },
   },
   decorators: [
-    (Story) => <div className="kadode-shell min-h-screen"><Story /></div>,
+    (Story) => <div className="Dots-shell min-h-screen"><Story /></div>,
   ],
 };
 

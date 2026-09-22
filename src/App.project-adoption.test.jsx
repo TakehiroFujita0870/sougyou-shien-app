@@ -135,7 +135,7 @@ describe('adopted project hydration', () => {
     await portfolioRepository.upsertAndActivateHome({ id: 'home:first', title: '残している会話', snapshot: firstSnapshot });
     await portfolioRepository.upsertAndActivateHome({ id: 'home:archived', title: 'アーカイブした会話', snapshot: archivedSnapshot });
     await portfolioRepository.archive('home', 'home:archived');
-    globalThis.sessionStorage.setItem('kadode:selected-surface', 'home');
+    globalThis.sessionStorage.setItem('dots:selected-surface', 'home');
     const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage: createStorage() }), portfolioRepository, homeInitial: archivedSnapshot, ensureHome: false });
     await act(async () => Promise.resolve());
     expect(view.container.querySelector('#home-supervisor-message')).toBeNull();
@@ -157,7 +157,7 @@ describe('adopted project hydration', () => {
     else await portfolioRepository.upsert(surface, { id, title: 'アーカイブ済み' });
     await portfolioRepository.archive(surface, id);
     if (surface === 'project') await createAdoptedProjectRepository({ storage }).saveAdopted(adoptedCandidate);
-    globalThis.sessionStorage.setItem('kadode:selected-surface', surface);
+    globalThis.sessionStorage.setItem('dots:selected-surface', surface);
 
     const view = await mount({ projectRepository: createAdoptedProjectRepository({ storage }), portfolioRepository, ensureHome: false });
     await act(async () => Promise.resolve());
@@ -321,7 +321,7 @@ describe('adopted project hydration', () => {
     expect((await portfolio.load()).project).toEqual([expect.objectContaining({ id: archivedProject.id, archived: true, snapshot: archivedProject })]);
     await first.unmount();
 
-    globalThis.sessionStorage.setItem('kadode:selected-surface', 'project');
+    globalThis.sessionStorage.setItem('dots:selected-surface', 'project');
     const reloadedRepository = { load: async () => persistedProject, saveAdopted: async (value) => { persistedProject = value; return value; } };
     const reloaded = await mount({ projectRepository: reloadedRepository, portfolioRepository: portfolio, ensureHome: false });
     expect(reloaded.container.querySelector('#project-surface-heading').textContent).toBe(priorProject.title);

@@ -1,5 +1,5 @@
 export const ADOPTED_PROJECT_SCHEMA_VERSION = 1;
-export const ADOPTED_PROJECT_STORAGE_KEY = 'kadode:adopted-projects';
+export const ADOPTED_PROJECT_STORAGE_KEY = 'dots:adopted-projects';
 
 function scopePart(value) {
   const text = String(value);

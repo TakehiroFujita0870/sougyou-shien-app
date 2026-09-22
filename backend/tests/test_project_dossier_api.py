@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from kadode_api.main import create_app
-from kadode_api.market_report import InMemoryMarketReportRepository
+from dots.main import create_app
+from dots.market_report import InMemoryMarketReportRepository
 
 
 def client() -> TestClient:

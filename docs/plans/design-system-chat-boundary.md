@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the UI-system boundary for the Kadode chat surface. It is
+This document defines the UI-system boundary for the Dots. chat surface. It is
 an inventory and implementation contract for presentation work; it does not
 define conversation logic, idea decisions, project state, repositories, or API
 behavior.

@@ -4,7 +4,7 @@
 
 ## 要望 / ゴール / 成功指標
 
-要望: Kadode AI context/privacy boundary first sliceとして、決定的なlocal-only snapshot schemaとallowlistを提供する。
+要望: Dots. AI context/privacy boundary first sliceとして、決定的なlocal-only snapshot schemaとallowlistを提供する。
 
 ゴール: Home、Project、KnowledgeのUI状態から、AIへ渡してよい識別子・表示名・locator・revision・選択状態・明示的な未保存変更のmetadataだけを、owner境界と削除・権限変更伝播を保ったsnapshotへ変換する。
 
@@ -13,28 +13,28 @@
 ## ユーザーストーリーと受け入れ条件
 
 ### US-IA-03-1
-As a Kadode user, I want my current surface context to be explicit, so that AI output can identify its permitted source.
+As a Dots. user, I want my current surface context to be explicit, so that AI output can identify its permitted source.
 
 Given: Home、Project、Knowledgeのsurface stateがある。
 When: local snapshot adapterを実行する。
 Then: surface、selected project/asset/decisionのid、displayName、locator、revision、selection、selected entityのexplicit dirty metadataだけを返す。
 
 ### US-IA-03-2
-As a Kadode user, I want private or unavailable data excluded, so that it is never included in AI context.
+As a Dots. user, I want private or unavailable data excluded, so that it is never included in AI context.
 
 Given: raw upload body、hidden knowledge、別owner entity、token、secret、profile detail、削除済みまたは権限喪失entityが入力にある。
 When: local snapshot adapterを実行する。
 Then: snapshotにそれらの値、またはそれらを復元できるfieldは含まれない。
 
 ### US-IA-03-3
-As a Kadode user, I want facts and inference distinguished, so that I can judge the basis of AI context.
+As a Dots. user, I want facts and inference distinguished, so that I can judge the basis of AI context.
 
 Given: factとinferenceのsource entriesがある。
 When: local snapshot adapterを実行する。
 Then: kindと必須source locatorを保ち、空locatorのentryを除外する。
 
 ### US-IA-03-4
-As a Kadode user, I want a deterministic local snapshot, so that F5 hydration and tests do not alter its result.
+As a Dots. user, I want a deterministic local snapshot, so that F5 hydration and tests do not alter its result.
 
 Given: 同じ許可済みstateを異なる入力順で渡す。
 When: local snapshot adapterを実行する。

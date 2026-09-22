@@ -12,7 +12,7 @@ describe('Storybook global theme entry', () => {
 
     expect(preview).toContain("import '../src/styles.css'");
     expect(appEntry).toContain("import './styles.css'");
-    expect(preview).toContain('kadode-shell');
+    expect(preview).toContain('Dots-shell');
     expect(styles).toContain('@import "tailwindcss"');
     expect(styles).toContain('--color-canvas');
     expect(styles).toContain('--color-focus');
