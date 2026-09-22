@@ -2,6 +2,8 @@
 
 最終検証日: 2026-08-09
 
+> 状態: 歴史資料。通常の現行profileはリポジトリ直下の`AGENTS.md`、Dots実装全体goalの例外は[`dots-implementation-master-plan.md`](dots-implementation-master-plan.md)を正本とする。
+
 ## 要望 / ゴール / 成功指標
 
 要望: 部門の役割ごとにモデルと努力量を固定し、handoff時に同じoverrideで新turnを起動する。

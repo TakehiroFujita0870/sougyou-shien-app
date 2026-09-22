@@ -16,7 +16,7 @@
 
 ## プロダクト段階とAIモデル
 
-- 2026-09-20以降の製品正本は[`docs/plans/founder-graph-pivot.md`](docs/plans/founder-graph-pivot.md)とする。初期対象は本人一人がローカルで使うFounder Graphであり、Free、Standard、Pro、課金、複数利用者を実装対象にしない。
+- 2026-09-20以降の製品要件正本は[`docs/plans/founder-graph-pivot.md`](docs/plans/founder-graph-pivot.md)とする。データモデルは[`docs/plans/founder-graph-data-model.md`](docs/plans/founder-graph-data-model.md)、実行DAGと完了定義は[`docs/plans/dots-implementation-master-plan.md`](docs/plans/dots-implementation-master-plan.md)を正本とする。初期対象は本人一人がローカルで使うFounder Graphであり、Free、Standard、Pro、課金、複数利用者を実装対象にしない。
 - ChatGPTが会話、Deep Research、進捗・完了通知を担い、Dotsは保存、検索、構造化、provenanceへ集中する。Dots独自の調査schedulerと通知基盤を初期実装しない。
 - モデル、API、料金、廃止予定を変更するときは、先に [`docs/operations/model-lifecycle.md`](docs/operations/model-lifecycle.md) を読む。
 - モデルIDを画面、API、プロンプトへ分散してハードコードしない。プロバイダー別アダプターと一元的なモデルカタログを経由する。
@@ -75,6 +75,7 @@
 ### 役割別モデルプロファイル
 
 - CEO室は `gpt-5.6-sol / low` を使う。統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
+- 例外: [`docs/plans/dots-implementation-master-plan.md`](docs/plans/dots-implementation-master-plan.md)をobjectiveとするactive goalでは、利用者の明示指定によりcoordinator、worker、reviewerを`gpt-5.6-luna / max`に固定する。別modelへfallbackせず、Luna利用不能は`model_unavailable`として対象scopeを停止する。goal完了または停止後は前項の標準profileへ戻る。
 - 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 

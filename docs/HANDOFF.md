@@ -1,10 +1,11 @@
 # Dots. 開発申し送り
 
-最終更新: 2026-09-22。新規作業は`docs/plans/founder-graph-pivot.md`を唯一の要件・フェーズ入口とし、本書と`docs/spec/`は現状把握と移植元の確認に使ってください。
+最終更新: 2026-09-22。新規作業は製品要件`docs/plans/founder-graph-pivot.md`、データ契約`docs/plans/founder-graph-data-model.md`、実行DAG`docs/plans/dots-implementation-master-plan.md`を入口とし、本書と`docs/spec/`は現状把握と移植元の確認に使ってください。
 
 ## 現在地
 
 - 製品方針は、単独利用者向けの創業専用Founder Graphへ転換した。製品要件、8章レポート、実装フェーズ、ADRは[Dots Founder Graph ピボット・実装全体計画](plans/founder-graph-pivot.md)を正本とする。
+- ノード、関係、revision、根拠の単位は[Founder Graphデータモデル正本](plans/founder-graph-data-model.md)、Luna Maxでの実行DAGと完了定義は[Dots実装全体計画](plans/dots-implementation-master-plan.md)に従う。
 - PR #2のReact/Vite/Tailwind、Storybook a11y、FastAPI、uv、pytest、PR CIは`main`へマージ済みです。
 - PR #3のowner-based RLS、PR #5のアイデア入力・進捗UI、PR #6の`AGENTS.md`とモデル更新方針は`main`へマージ済みです。
 - Free / Standard、複数利用者、Pro、自動メールはピボット前の履歴であり、初期実装対象ではない。
