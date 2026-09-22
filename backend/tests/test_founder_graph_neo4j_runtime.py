@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import dots.main as main_module
 from dots.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_write import Neo4jGraphWriteService, PersistedNodeReference
-from dots.founder_graph_runtime import create_neo4j_graph_composition
-from dots.main import create_app, create_neo4j_app
+from dots.founder_graph_runtime import create_neo4j_graph_composition, resolve_graph_backend
+from dots.main import create_app, create_configured_app, create_neo4j_app
 from dots.founder_graph_mcp_stdio import create_neo4j_stdio_server
 
 
@@ -84,6 +85,57 @@ def test_app_rejects_persistent_write_without_matching_persistent_read() -> None
         assert "explicit founder_graph_read_service" in str(error)
     else:  # pragma: no cover - assertion branch
         raise AssertionError("persistent write must not silently use an in-memory read service")
+
+
+def test_backend_resolution_prefers_explicit_memory_for_isolated_tests(monkeypatch) -> None:
+    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "memory")
+
+    assert resolve_graph_backend() == "memory"
+    assert create_configured_app().title == "Dots. API"
+
+
+def test_backend_resolution_uses_configured_neo4j_without_backend_flag(monkeypatch) -> None:
+    monkeypatch.delenv("DOTS_GRAPH_BACKEND", raising=False)
+    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+
+    assert resolve_graph_backend() == "neo4j"
+
+
+def test_configured_app_wires_neo4j_when_selected(monkeypatch) -> None:
+    session = _Session({})
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "owner-persistent")
+    monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", lambda: _Driver(session))
+
+    app = create_configured_app()
+
+    assert app.title == "Dots. API"
+    assert session.calls == []
+
+
+def test_unknown_backend_fails_closed_before_app_creation(monkeypatch) -> None:
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "unknown")
+
+    try:
+        create_configured_app()
+    except ValueError as error:
+        assert "memory or neo4j" in str(error)
+    else:  # pragma: no cover - assertion branch
+        raise AssertionError("unknown backend must fail closed")
+
+
+def test_selected_neo4j_without_password_does_not_fall_back(monkeypatch) -> None:
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
+
+    try:
+        create_configured_app()
+    except RuntimeError as error:
+        assert "DOTS_NEO4J_PASSWORD" in str(error)
+    else:  # pragma: no cover - assertion branch
+        raise AssertionError("Neo4j configuration errors must not fall back to memory")
 
 
 def test_neo4j_app_factory_wires_matching_ports_without_connecting() -> None:

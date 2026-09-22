@@ -1,3 +1,4 @@
+import os
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
@@ -27,7 +28,7 @@ from .runtime import RuntimeAdapter, RuntimeFault, create_runtime
 from .founder_graph_mcp import McpReadError, McpReadSurface
 from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadPort, GraphReadService
-from .founder_graph_runtime import create_neo4j_graph_composition
+from .founder_graph_runtime import create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
 from .founder_graph_write import GraphWritePort, InMemoryGraphWriteService
 
 
@@ -316,4 +317,14 @@ def create_neo4j_app(driver: Any, owner_id: str, *, database: str = "neo4j") -> 
     )
 
 
-app = create_app()
+def create_configured_app() -> FastAPI:
+    """Build the normal local app from the shared storage selection rule."""
+
+    if resolve_graph_backend() == "memory":
+        return create_app()
+    owner_id = (os.environ.get("DOTS_LOCAL_OWNER_ID") or "local-owner").strip() or "local-owner"
+    database = os.environ.get("DOTS_NEO4J_DATABASE", "neo4j").strip() or "neo4j"
+    return create_neo4j_app(create_neo4j_driver_from_env(), owner_id, database=database)
+
+
+app = create_configured_app()

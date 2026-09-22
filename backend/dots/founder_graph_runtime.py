@@ -20,12 +20,31 @@ class Neo4jGraphComposition:
     reads: Neo4jGraphReadService
 
 
+def resolve_graph_backend() -> str:
+    """Resolve one storage backend for all local composition roots.
+
+    An explicit ``DOTS_GRAPH_BACKEND`` wins.  When it is absent, configured
+    Neo4j credentials make Neo4j the normal local runtime; without credentials
+    the isolated in-memory path remains available for tests.
+    """
+
+    configured = os.environ.get("DOTS_GRAPH_BACKEND")
+    if configured is not None and configured.strip():
+        backend = configured.strip().lower()
+        if backend not in {"memory", "neo4j"}:
+            raise ValueError("DOTS_GRAPH_BACKEND must be memory or neo4j")
+        return backend
+    return "neo4j" if os.environ.get("DOTS_NEO4J_PASSWORD", "").strip() else "memory"
+
+
 def create_neo4j_driver_from_env() -> Any:
     """Create the local driver from explicit environment settings.
 
-    The caller must opt in with ``DOTS_GRAPH_BACKEND=neo4j``.  No fallback to
-    an in-memory store is performed when the persistent configuration is
-    incomplete, because silently losing writes would be worse than stopping.
+    ``DOTS_GRAPH_BACKEND=neo4j`` explicitly selects Neo4j.  The configured
+    local password also selects Neo4j when the backend variable is absent.
+    No fallback to an in-memory store is performed when the persistent
+    configuration is incomplete, because silently losing writes would be
+    worse than stopping.
     """
 
     uri = os.environ.get("DOTS_NEO4J_URI", "bolt://127.0.0.1:7687").strip()
@@ -57,4 +76,9 @@ def create_neo4j_graph_composition(
         writes=Neo4jGraphWriteService(gateway),
         reads=Neo4jGraphReadService(gateway),
     )
-__all__ = ["Neo4jGraphComposition", "create_neo4j_driver_from_env", "create_neo4j_graph_composition"]
+__all__ = [
+    "Neo4jGraphComposition",
+    "create_neo4j_driver_from_env",
+    "create_neo4j_graph_composition",
+    "resolve_graph_backend",
+]
