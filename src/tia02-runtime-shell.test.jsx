@@ -6,11 +6,12 @@ import { App, WORKSPACE_NAV, readSelectedSurface } from './App';
 import { SHELL_NAV, WorkspaceShell } from './components/WorkspaceShell';
 
 describe('T-IA-02-R runtime shell contract', () => {
-  it('exposes only Home, Project, and Knowledge at the top level', () => {
+  it('exposes Home, Project, Knowledge, and Graph at the top level', () => {
     expect(WORKSPACE_NAV).toEqual([
       { id: 'home', label: 'ホーム' },
       { id: 'project', label: 'プロジェクト' },
       { id: 'knowledge', label: 'ナレッジ' },
+      { id: 'graph', label: 'Graph' },
     ]);
     expect(SHELL_NAV).toEqual(WORKSPACE_NAV);
   });

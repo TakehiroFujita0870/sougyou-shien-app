@@ -9,6 +9,7 @@ export const SHELL_NAV = [
   { id: 'home', label: 'ホーム' },
   { id: 'project', label: 'プロジェクト' },
   { id: 'knowledge', label: 'ナレッジ' },
+  { id: 'graph', label: 'Graph' },
 ];
 
 const PLAN_LABELS = { free: 'Free', standard: 'Standard' };
@@ -89,6 +90,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
         {portfolioError && <p role="alert" className="mx-3 rounded-lg bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{portfolioError}</p>}
         <div className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="最近の項目">
           {SHELL_NAV.map((item) => {
+            if (item.id === 'graph') return null;
             const entries = (portfolio[item.id] ?? []).filter((entry) => !entry.archived);
             const visibleLimit = item.id === 'knowledge' ? 5 : 10;
             return <section key={item.id} className="py-2"><p className="px-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.label}</p>{entries.slice(0, visibleLimit).map((entry) => <div key={entry.id} className="workspace-shell__history-row group"><button type="button" className="workspace-shell__history-title hover:underline" title={entry.title} aria-label={entry.title} onClick={() => { void openPortfolioItem(item.id, entry); }}>{entry.title}{item.id === 'knowledge' && entry.unread && <span className="ml-1 inline-block size-1.5 rounded-full bg-[var(--color-primary)] motion-safe:animate-pulse" aria-label="新着" />}</button>{(item.id === 'home' || item.id === 'project') && <HistoryAction pending={Boolean(archivePending)} label={`${entry.title}をアーカイブ`} onClick={() => { void archiveItem(item.id, entry.id); }} />}</div>)}{entries.length > visibleLimit && <button type="button" className="ml-2 px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:underline" onClick={() => setAllOpen(item.id)}>すべて表示</button>}</section>;
@@ -141,7 +143,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
         <DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); accountTriggerRef.current?.focus(); }}><DialogTitle>設定</DialogTitle><p className="mt-3 text-sm leading-6 text-[var(--color-text-muted)]">通知と認証連携は準備中です。プランと利用状況はアカウントメニューから開けます。</p></DialogContent>
       </Dialog>
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-        <DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); accountTriggerRef.current?.focus(); }}><DialogTitle>ヘルプ・ショートカット</DialogTitle><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-semibold">Alt + Shift + 1</dt><dd>ホームを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 2</dt><dd>プロジェクトを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 3</dt><dd>ナレッジを開く</dd></div><div><dt className="font-semibold">Escape</dt><dd>メニューまたはダイアログを閉じる</dd></div></dl></DialogContent>
+        <DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); accountTriggerRef.current?.focus(); }}><DialogTitle>ヘルプ・ショートカット</DialogTitle><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-semibold">Alt + Shift + 1</dt><dd>ホームを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 2</dt><dd>プロジェクトを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 3</dt><dd>ナレッジを開く</dd></div><div><dt className="font-semibold">Alt + Shift + 4</dt><dd>Graphを開く</dd></div><div><dt className="font-semibold">Escape</dt><dd>メニューまたはダイアログを閉じる</dd></div></dl></DialogContent>
       </Dialog>
     </div>
   );

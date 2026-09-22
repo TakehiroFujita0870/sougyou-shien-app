@@ -42,6 +42,9 @@ describe('App keyboard and accessibility quality', () => {
 
     await act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: '3', altKey: true, shiftKey: true, bubbles: true })));
     expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'プロジェクト')?.getAttribute('aria-current')).toBe('page');
+
+    await act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '4', altKey: true, shiftKey: true, bubbles: true })));
+    expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Graph')?.getAttribute('aria-current')).toBe('page');
     await unmount();
   });
 
@@ -56,7 +59,7 @@ describe('App keyboard and accessibility quality', () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull();
 
     const navigation = container.querySelector('nav[aria-label="主要ページ"]');
-    expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
+    expect([...navigation.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ', 'Graph']);
     expect(navigation.textContent).not.toContain('AI広報');
     expect(navigation.querySelector('button').className).toContain('workspace-shell__nav-item');
     expect(container.querySelector('main').className).toContain('Dots-shell');

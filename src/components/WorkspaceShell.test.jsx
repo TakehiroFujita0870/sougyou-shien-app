@@ -137,7 +137,7 @@ describe('WorkspaceShell', () => {
   it('renders the vertical information architecture and account footer', async () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();
-    expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(3);
+    expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(4);
     expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
     expect(container.textContent).toContain('タケヒロ');
@@ -164,8 +164,10 @@ describe('WorkspaceShell', () => {
     cleanup();
   });
 
-  it('keeps the three-surface sidebar and closes the mobile drawer with Escape', () => {
+  it('keeps the four-surface sidebar and closes the mobile drawer with Escape', () => {
     const { container, cleanup } = mount();
+    expect([...container.querySelectorAll('nav[aria-label="主要ページ"] button')].map((button) => button.textContent)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ', 'Graph']);
+    expect(container.querySelector('[aria-label="最近の項目"]').textContent).not.toContain('Graph');
     expect(container.querySelector('.workspace-shell__collapse')).toBeNull();
     act(() => container.querySelector('.workspace-shell__mobile-trigger').click());
     expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
