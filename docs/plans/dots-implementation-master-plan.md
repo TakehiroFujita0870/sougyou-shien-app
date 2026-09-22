@@ -129,6 +129,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - contact CSV normalizer、instruction scanner、Luna論理model catalog、enrichment proposal contract。
 - safe export、report diff、campaign compare、Graph read-only UI。
 - Docker Compose、schema migration、manifest、backup / restore helperのnetwork-free検査。
+- schema v1→v2の合成変換preview（書込み前の不足・重複・孤立関係検査）。
 - Windows Docker Desktop Engine応答。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
