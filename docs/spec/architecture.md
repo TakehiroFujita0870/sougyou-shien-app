@@ -1,4 +1,6 @@
-# Dots. アーキテクチャ決定 v0.2
+# Dots. アーキテクチャ決定 v0.2（ピボット前の履歴）
+
+> 2026-09-20以降のNeo4j候補、ローカルMCP、ChatGPT Deep Researchとの責務分離、read / write境界は[Dots Founder Graph ピボット・実装全体計画](../plans/founder-graph-pivot.md)を正本とする。本書のSupabase / Postgres / Vercel構成は移行inventoryの入力として保持する。
 
 ## 境界
 
@@ -26,7 +28,7 @@ flowchart LR
 
 全テーブルはowner_idのRLSを必須とし、サービスロールはVercel Functionだけが使います。
 
-横断調査、アップロード資料のハイブリッド検索、意思決定記憶の詳細は[横断調査・個人ナレッジ・意思決定記憶 計画](research-memory-plan.md)を正本とします。
+横断調査、アップロード資料のハイブリッド検索、意思決定記憶の既存契約は[横断調査・個人ナレッジ・意思決定記憶 計画](research-memory-plan.md)を移植元として参照する。新規実装のDBとMCP境界はFounder Graph計画を優先する。
 
 ## 品質・運用
 

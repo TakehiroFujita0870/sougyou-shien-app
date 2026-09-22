@@ -1,6 +1,10 @@
 # 横断調査・個人ナレッジ・意思決定記憶 計画 v0.1
 
-最終検証日: 2026-08-09
+> 2026-09-20以降、Deep Researchの実行と通知はChatGPT、検索・保存・履歴はDotsが担う。新しい責務境界、複数ResearchRun、MCP read / write分離は[Dots Founder Graph ピボット・実装全体計画](../plans/founder-graph-pivot.md)を正本とする。本書はEvidence、削除伝播、過去判断の既存契約として参照する。
+
+ピボット前内容の最終検証日: 2026-08-09
+
+以下のPostgres、RLS、Free / Standard、5観点、Dots内蔵オーケストレーターはピボット前の移植元であり、新規実装の指示ではない。再利用するのはPhase 0で採用されたEvidence、削除伝播、過去判断のcontractに限る。
 
 ## 要望 / ゴール / 成功指標
 
@@ -44,7 +48,7 @@ flowchart LR
 4. レポートでは、事実とAIの推論を分け、各主張の直後に出典を表示する。
 5. 過去と似た論点は、前回の判断を隠さずに提示し、新情報がある場合だけ再検討を促す。
 6. ユーザーが仮説カードを直した後、「市場の見込み」「競合との違い」「攻めどころの特定」を再実行できる。
-7. 事業のタネの市場、競合、利益、実現性ページは、本計画のEvidenceと意思決定記憶を根拠として利用する。5観点のUXと個別データ境界は[事業のタネを5観点で具体化する計画](business-seed-plan.md)を正本とする。
+7. ピボット前の市場、競合、利益、実現性ページは、本計画のEvidenceと意思決定記憶を利用した。5観点のUXは[事業のタネを5観点で具体化する計画](business-seed-plan.md)へ履歴として残す。
 
 ## ユーザーストーリーと受け入れ条件
 
@@ -196,7 +200,7 @@ MVPの「個人のベクトル空間」は、共有Postgres内の論理テナン
 | `project_knowledge` | owner_id, source_project_id, source_type, source_id, anonymized_content, deleted_at | 本人のみ。顧客ヒアリング由来は匿名化済み派生物だけを保存 |
 | `knowledge_grants` | owner_id, knowledge_id, source_project_id, target_project_id, granted_at, revoked_at | knowledge単位の明示許可。送信元・送信先とも本人所有に限定 |
 
-project横断検索は、有効な`knowledge_grants`と削除されていない`project_knowledge`の両方を満たす記録だけを返す。許可取消または元データ削除後は候補、検索、exportから除外し、既存レポートの参照は利用不能と表示する。顧客ヒアリングの原記録に対するgrantと、別ownerが所有する送信元・送信先projectへのgrantはRLSと認証済み関数で拒否する。5観点側のUXとE2Eは[事業のタネを5観点で具体化する計画](business-seed-plan.md)を正本とする。
+project横断検索は、有効な`knowledge_grants`と削除されていない`project_knowledge`の両方を満たす記録だけを返す。許可取消または元データ削除後は候補、検索、exportから除外し、既存レポートの参照は利用不能と表示する。顧客ヒアリングの原記録に対するgrantと、別ownerが所有する送信元・送信先projectへのgrantはRLSと認証済み関数で拒否する。この契約は移植候補であり、ピボット後の8章UXとE2EはFounder Graph計画を優先する。
 
 ### ハイブリッド検索
 
@@ -310,3 +314,4 @@ project横断検索は、有効な`knowledge_grants`と削除されていない`
 |---|---|---|---|
 | 2026-08-09 | 初版。横断調査、個人検索空間、意思決定記憶を定義 | ユーザー対話で製品方針が確定したため | SP-01からT-06 |
 | 2026-08-09 | 初回版の専用特許APIを日本国特許庁APIへ限定 | 公式APIを優先し、外部連携を最小化するため | SP-02、T-03、ADR-05 |
+| 2026-09-20 | Postgres、5観点、Dots内蔵調査をピボット前の移植元へ変更 | Founder Graph計画との二重正本を防ぐため | SP-FG-03、T-FG-17、T-FG-18 |
