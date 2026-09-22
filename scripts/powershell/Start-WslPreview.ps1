@@ -33,7 +33,7 @@ New-Item -ItemType Directory -Force -Path $stateDirectory | Out-Null
 $viteUnit = "dots-preview-vite-$UiPort"
 $apiUnit = "dots-preview-api-$ApiPort"
 $viteArgs = @('-d', $Distribution, '-u', $User, '--', 'systemd-run', '--user', "--unit=$viteUnit", '--collect', "--property=WorkingDirectory=$ClonePath", '/usr/bin/npm', 'run', 'dev', '--', '--host', '0.0.0.0', '--port', $UiPort)
-$apiArgs = @('-d', $Distribution, '-u', $User, '--', 'systemd-run', '--user', "--unit=$apiUnit", '--collect', "--property=WorkingDirectory=$ClonePath", "/home/$User/.local/bin/uv", 'run', 'uvicorn', '--app-dir', 'backend', 'dots.main:create_app', '--factory', '--host', '0.0.0.0', '--port', $ApiPort)
+$apiArgs = @('-d', $Distribution, '-u', $User, '--', 'systemd-run', '--user', "--unit=$apiUnit", '--collect', "--property=WorkingDirectory=$ClonePath", "/home/$User/.local/bin/uv", 'run', 'uvicorn', '--app-dir', 'backend', 'dots.main:app', '--host', '0.0.0.0', '--port', $ApiPort)
 $viteHost = $null
 $apiHost = $null
 $viteStarted = $false

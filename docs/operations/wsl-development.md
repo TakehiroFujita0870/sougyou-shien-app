@@ -71,7 +71,7 @@ systemd userのtransient unitでViteとローカルFastAPIを起動する。サ�
 
 ```powershell
 wsl.exe -d Ubuntu -u <user> -- systemd-run --user --unit dots-vite --property WorkingDirectory=/home/<user>/projects/dots --collect /usr/bin/npm run dev -- --host 0.0.0.0 --port 5174
-wsl.exe -d Ubuntu -u <user> -- systemd-run --user --unit dots-api --property WorkingDirectory=/home/<user>/projects/dots --collect /home/<user>/.local/bin/uv run uvicorn --app-dir backend dots.main:create_app --factory --host 0.0.0.0 --port 8000
+wsl.exe -d Ubuntu -u <user> -- systemd-run --user --unit dots-api --property WorkingDirectory=/home/<user>/projects/dots --collect /home/<user>/.local/bin/uv run uvicorn --app-dir backend dots.main:app --host 0.0.0.0 --port 8000
 ```
 
 状態、ログ、停止、ポート競合を確認する。
