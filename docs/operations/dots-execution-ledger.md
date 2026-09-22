@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `c2b1c6d1432d`
+main SHA: `8c38747d8914`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P2/P3 MVP vertical slice |
-| Last merged PR | #204 |
-| Last main smoke | backend 340 passed / 17 skipped、frontend test/build/storybook passed、Docker Desktop Engine 29.8.0、Neo4j保存→停止→再起動→MCP検索を実機確認 |
+| Last merged PR | #208 |
+| Last main smoke | backend `uv run --isolated pytest -q`: 348 passed / 17 skipped、WSL preview script contract passed、MCP tunnel static contract passed、runtime/MCP focused tests 19 passed |
 
 ## Task ledger
 
@@ -39,6 +39,9 @@ active goal: Founder Graph MVP
 | P3-03 | MERGED | root | main | #201 | `0c3892614b48` | 8 write tools publish actionable schemas、25 focused tests passed | none | 2026-09-23 |
 | CI-01 | MERGED | root | main | #203 | `64fdcbbc56d1` | PR quality 53s passed; manual CI run #35746980996 passed in 4m50s | none | 2026-09-23 |
 | LEG-01 | MERGED | root | main | #204 | `c2b1c6d1432d` | candidate inventory published; no deletion performed; path corrected | D-LEGACY-01 remains deferred | 2026-09-23 |
+| P2-04 | MERGED | root | main | #206 | `eaadc0c4d526` | configured FastAPI / stdio runtime selection; focused runtime tests passed | real Neo4j restart smoke remains | 2026-09-23 |
+| P3-01 | MERGED | root | main | #207 | `4394a891fc87` | Idea、conversation Source、SourceRevision atomic capture; backend 348 passed / 17 skipped | real Neo4j restart fetch remains | 2026-09-23 |
+| RT-04 | MERGED | root | main | #208 | `8c38747d8914` | WSL preview uses `dots.main:app`; script and tunnel contract checks passed | none | 2026-09-23 |
 
 ## Decision ledger
 
