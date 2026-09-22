@@ -37,11 +37,29 @@ afterEach(async () => {
 });
 
 describe('UI UX contract: executable baseline acceptance checks', () => {
-  it('FAIL-UX-01 exposes three-surface navigation and an operable Home composer', async () => {
+  it('FAIL-UX-01 exposes four-surface navigation and an operable Home composer', async () => {
     const { container } = await mountApp();
     expect(container.querySelector('[aria-label="主要ページ"]')).not.toBeNull();
-    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['ホーム', 'プロジェクト', 'ナレッジ', 'Graph']);
     expect(container.querySelector('#home-supervisor-message')).not.toBeNull();
+  });
+
+  it('FAIL-UX-07 opens the read-only Founder Graph surface from the fourth destination', async () => {
+    const { container } = await mountApp();
+    await clickButton(container, 'Graph');
+    expect(container.querySelector('[data-founder-graph-surface="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-founder-graph-state-message="empty"]')).not.toBeNull();
+    expect(container.querySelector('#home-supervisor-message')).toBeNull();
+  });
+
+  it('FAIL-UX-08 renders explicitly supplied safe graph results without a backend call', async () => {
+    const { container } = await mountApp({
+      founderGraphResults: [{ id: 'idea-1', kind: 'idea', title: '循環素材の仮説', snippet: 'safe snippet', fields: { egress_policy: 'shareable', status: 'active' } }],
+    });
+    await clickButton(container, 'Graph');
+    expect(container.textContent).toContain('循環素材の仮説');
+    expect(container.textContent).toContain('safe snippet');
+    expect(container.textContent).not.toContain('fetch(');
   });
 
   it('FAIL-UX-02 exposes Project and Knowledge as distinct context destinations', async () => {
@@ -54,7 +72,7 @@ describe('UI UX contract: executable baseline acceptance checks', () => {
 
   it('FAIL-UX-03 does not expose obsolete navigation destinations', async () => {
     const { container } = await mountApp();
-    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['ホーム', 'プロジェクト', 'ナレッジ']);
+    expect([...container.querySelectorAll('nav button')].map((button) => button.textContent.trim())).toEqual(['ホーム', 'プロジェクト', 'ナレッジ', 'Graph']);
   });
 
   it('FAIL-UX-04 baseline keeps profile hydration observable while loading', async () => {
