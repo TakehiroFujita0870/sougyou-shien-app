@@ -1,19 +1,20 @@
 # Founder Graph ローカル Neo4j 運用
 
-最終検証日: 2026-09-22
+最終検証日: 2026-09-23
 
 ## 範囲
 
-この運用は、本人一人がWSL2上で使うFounder Graph開発用Neo4jだけを対象にする。
-ComposeはHTTPとBoltを`127.0.0.1`へだけ公開し、内部ネットワークも外部接続不可としている。
+この運用は、本人一人がWindows上のDocker Desktop（またはWSL2から見える同じDocker Engine）で使うFounder Graph開発用Neo4jだけを対象にする。
+ComposeはHTTPとBoltを`127.0.0.1`へだけ公開する。コンテナ間の内部ネットワークは外部接続不可のまま保ち、Docker Desktopでポートを公開するために同じCompose project内の別ネットワークも併用する。
 既存Postgres、既存データ、ChatGPT接続、MCP tunnel、外部サービスはこの手順の対象外である。
 実データや実credentialをリポジトリへ置かない。
 
 ## 前提とcredential
 
-- WSL2のLinux native checkoutで実行する。Docker EngineまたはDocker DesktopのWSL integrationとDocker Compose v2が必要。
+- Windows PowerShellまたはWSL2のLinux native checkoutで実行する。Docker DesktopとDocker Compose v2が必要。WSL integrationが無い場合はWindows側のDocker CLIを使う。
 - Neo4j Communityイメージ`neo4j:5.26-community`が利用できることを確認する。イメージ取得は利用者が許可した環境で別途行い、このrunbookは外部接続を開始しない。
-- `FOUNDER_GRAPH_NEO4J_AUTH`へ、この端末だけで使う値を環境変数として設定する。形式は`neo4j/<local-password>`とし、実際のパスワードはコマンド履歴、ログ、Gitへ残さない。helperはDocker操作の直前に0600相当の一時secret fileを作り、Composeの`FOUNDER_GRAPH_NEO4J_AUTH_FILE`からread-only secretとしてマウントする。credentialをDocker argv、`docker inspect`、ログへ渡さない。
+- `FOUNDER_GRAPH_NEO4J_AUTH`へ、この端末だけで使う値を環境変数として設定する。形式は`neo4j/<local-password>`とし、実際のパスワードはコマンド履歴、ログ、Gitへ残さない。helperは`start`中だけComposeが参照し続けられる端末内の非公開secret fileを作り、`stop`で削除する。backupなど一回限りの操作では操作終了時に一時secret fileを削除する。credentialをDocker argv、`docker inspect`、ログへ渡さない。
+- Composeへ渡す環境変数名は`FOUNDER_GRAPH_NEO4J_AUTH_FILE`である。これはhelperが作るsecret fileの場所だけを示し、パスワードそのものを示さない。
 - Compose projectは`FOUNDER_GRAPH_COMPOSE_PROJECT`でnamespaceを指定できる。未設定時は`founder-graph-local`を使い、値は小文字のDocker project-name文字だけにする。
 
 WSL bash:
@@ -28,7 +29,7 @@ PowerShell:
 $env:FOUNDER_GRAPH_NEO4J_AUTH = 'neo4j/<local-password>'
 ```
 
-`.env`やcredentialファイルを新規作成してコミットしない。Composeの`${...:?}`ガードにより、helperが作る一時secret file以外を使った未設定のままの起動は失敗する。一時secret fileは各操作の終了時に削除される。
+`.env`やcredentialファイルを新規作成してコミットしない。Composeの`${...:?}`ガードにより、helperが作るsecret file以外を使った未設定のままの起動は失敗する。`start`で作られたsecret fileはコンテナ停止まで残り、`stop`で削除される。
 
 ## 構成とポート
 
@@ -38,7 +39,7 @@ $env:FOUNDER_GRAPH_NEO4J_AUTH = 'neo4j/<local-password>'
 | Bolt | `bolt://127.0.0.1:7687` | 同じ端末からのみ |
 | データ | `<project>_founder_graph_neo4j_data` | Compose project namespace付きvolume。`/data`へマウント |
 
-`0.0.0.0`やLANアドレスへポートを変更しない。Neo4jサービスは`founder_graph_local`のinternal networkに所属する。
+`0.0.0.0`やLANアドレスへポートを変更しない。Neo4jサービスは`founder_graph_local`のinternal networkと、ポート公開用の同一project内networkに所属する。外部へ公開されるのはloopbackだけである。
 live volumeには`com.openai.founder_graph.role=live` labelが付き、グローバル固定名を使わない。
 Composeのhealthcheckはコンテナ内の`cypher-shell`で`RETURN 1`を実行する。
 
@@ -76,7 +77,19 @@ cmp -- "$fixture_dir/before-stop.json" "$fixture_dir/after-restart.json"
 
 backendの`Neo4jGraphGateway`は、明示的に注入したNeo4j Python driverだけを使う。module importやFastAPI起動時に自動接続せず、NodeType / RelationTypeのallowlist、owner境界、idempotency audit、Campaign / Sourceのrevision historyをparameterized Cypherへ変換する。任意Cypherを受け取るAPIはない。
 
-実機接続を行う場合は、Composeがhealthyになった後に、credentialを環境変数またはsecret managerから読み、コード・argv・ログへ展開しないcomposition rootからdriverを生成する。`create_neo4j_app()`または`create_neo4j_stdio_server()`へ同じowner-bound gateway compositionを明示注入できる。既定の`create_app()`と`create_stdio_server()`は引き続きin-memoryで、driver自動接続は行わない。
+実機接続を行う場合は、Composeがhealthyになった後に、credentialを環境変数またはsecret managerから読み、コード・argv・ログへ展開しないcomposition rootからdriverを生成する。`create_neo4j_app()`または`create_neo4j_stdio_server()`へ同じowner-bound gateway compositionを明示注入できる。MCP標準起動は、`DOTS_GRAPH_BACKEND=neo4j`、`DOTS_NEO4J_PASSWORD`、必要ならURI・利用者IDを指定した場合だけNeo4jを使う。未指定時の開発用既定値はin-memoryであり、接続失敗時に黙って切り替えない。
+
+MCP標準起動をNeo4jへ向けるPowerShell例:
+
+```powershell
+$env:DOTS_GRAPH_BACKEND = 'neo4j'
+$env:DOTS_LOCAL_OWNER_ID = 'owner-mvp'
+$env:DOTS_NEO4J_URI = 'bolt://127.0.0.1:7687'
+$env:DOTS_NEO4J_USERNAME = 'neo4j'
+$env:DOTS_NEO4J_PASSWORD = '<same-local-password>'
+```
+
+MCPから検索結果を返す情報には`egress_policy=shareable`を明示する。`local_only`の情報は、誤って外部へ出さないためMCP検索結果から除外される。
 
 ```python
 import os
@@ -247,16 +260,15 @@ node / relation countを返す。これはNeo4j volumeの実loadではなく、T
 
 `validate`と`backend/tests/test_founder_graph_local_ops.py`はCompose本文、ポート、healthcheck、
 namespace付きvolume、credential参照、backup/restore/verify-restore/capture-manifest/verify-export-backupコマンド、runbookを静的に検査し、Docker daemonや
-registryへ接続しない。Windows側のこの環境ではDockerがPATHにないため、実際のDocker smokeは
-利用できない。`start`、health確認、backup dump、隔離volumeへのloadは、Dockerが利用できるWSL2環境で
-別途実行し、その結果（ノード数、関係数、代表検索結果を含む）を記録する。
-この環境ではlive smoke unavailableであり、静的検査の合格を実稼働確認の代わりに扱わない。
+registryへ接続しない。`start`、health確認、backup dump、隔離volumeへのloadはDockerが利用できる環境で
+別途実行し、その結果（ノード数、関係数、代表検索結果を含む）を記録する。従来はこの作業窓から実際のDocker smokeを利用できない状態だったが、現在はWindows側Docker Desktopで一部の実機確認を完了している。
+2026-09-23にWindows側Docker Desktopで、Neo4j起動、schema migration、合成IdeaのMCP保存、停止・再起動、検索・取得までを実行済みである。これはlive smokeの一部であり、backup / restoreの実機確認はまだ行っていない。Docker smoke全体は未完了である。
 
 監査時の判定は次のように分ける。
 
 | 対象 | Docker-freeで確認する項目 | Docker実機で確認する項目 | 現在の状態 |
 | --- | --- | --- | --- |
-| T-FG-01 | loopback port、healthcheck、secret-file、start / status / stop、再起動手順、live volume非削除 | clean start、health、stop、restart、認証、同じvolumeのmanifest一致 | static検査済み、実機未検査 |
+| T-FG-01 | loopback port、healthcheck、secret-file、start / status / stop、再起動手順、live volume非削除 | clean start、health、stop、restart、認証、同じvolumeのmanifest一致 | 起動・停止・再起動・MCP保存検索を実機確認、manifest一致は未実施 |
 | T-FG-03 | neo4j / system dump・load、隔離label、`--network none`、3 query count / hash、read-only contract | dump生成、隔離volume load、node / relationship count、代表3問のhash一致 | static検査済み、実機未検査 |
 
 実機gateの記録には、使用image tag、Compose project、volume名、各コマンドの終了コード、health、manifest比較、credential非露出、live volume非変更を含める。実機gateを通過するまでT-FG-01 / T-FG-03は完了扱いにしない。

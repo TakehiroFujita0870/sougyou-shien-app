@@ -5,6 +5,7 @@ import json
 
 from dots.founder_graph_mcp_stdio import FounderGraphStdioServer, create_stdio_server, run_stdio
 from dots.founder_graph_mcp_write import McpWriteError
+import dots.founder_graph_mcp_stdio as stdio_module
 
 
 def request(method: str, request_id: int, params: dict | None = None) -> dict:
@@ -75,3 +76,26 @@ def test_write_owner_error_is_converted_to_safe_json_rpc_error() -> None:
     assert response["error"]["code"] == -32000
     assert response["error"]["data"] == {"code": "owner_mismatch"}
     assert "local owner" in response["error"]["message"]
+
+
+def test_neo4j_backend_is_explicit_and_uses_environment_configuration(monkeypatch) -> None:
+    fake_driver = object()
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", lambda: fake_driver)
+
+    server = create_stdio_server("owner-persistent")
+
+    assert server.owner_id == "owner-persistent"
+    assert server.reads.reads.owner_id == "owner-persistent"
+
+
+def test_unknown_backend_does_not_silently_fall_back(monkeypatch) -> None:
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "unknown")
+
+    try:
+        create_stdio_server("owner-a")
+    except ValueError as error:
+        assert "memory or neo4j" in str(error)
+    else:  # pragma: no cover - assertion branch
+        raise AssertionError("unknown backend must fail closed")

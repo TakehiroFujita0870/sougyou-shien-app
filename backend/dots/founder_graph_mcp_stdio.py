@@ -18,7 +18,7 @@ from .founder_graph_mcp import McpReadError, McpReadSurface
 from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadService
 from .founder_graph_write import InMemoryGraphWriteService
-from .founder_graph_runtime import create_neo4j_graph_composition
+from .founder_graph_runtime import create_neo4j_driver_from_env, create_neo4j_graph_composition
 
 
 JSONRPC_VERSION = "2.0"
@@ -122,6 +122,13 @@ def create_stdio_server(owner_id: str | None = None) -> FounderGraphStdioServer:
     resolved_owner = (owner_id or os.environ.get("DOTS_LOCAL_OWNER_ID") or "local-owner").strip()
     if not resolved_owner:
         raise ValueError("DOTS_LOCAL_OWNER_ID must be non-empty")
+    backend = os.environ.get("DOTS_GRAPH_BACKEND", "memory").strip().lower()
+    if backend == "neo4j":
+        driver = create_neo4j_driver_from_env()
+        database = os.environ.get("DOTS_NEO4J_DATABASE", "neo4j").strip() or "neo4j"
+        return create_neo4j_stdio_server(driver, resolved_owner, database=database)
+    if backend != "memory":
+        raise ValueError("DOTS_GRAPH_BACKEND must be memory or neo4j")
     writes = InMemoryGraphWriteService(resolved_owner)
     reads = GraphReadService(writes)
     return FounderGraphStdioServer(McpReadSurface(reads), McpWriteSurface(writes), resolved_owner)

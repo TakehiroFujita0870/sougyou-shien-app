@@ -1,7 +1,7 @@
 # Dots 実装全体計画
 
-最終更新: 2026-09-22
-実行状態: Q-DM-01確定後にgoal開始可能
+最終更新: 2026-09-23
+実行状態: Founder Graph MVPを自走中
 製品要件正本: [`founder-graph-pivot.md`](founder-graph-pivot.md)
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)
 
@@ -314,7 +314,7 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 
 | ID | 判断 | 推奨既定 | 停止scope | 期限 |
 | --- | --- | --- | --- | --- |
-| Q-DM-01 | schema v2を採用するか | stable anchor + immutable revision + RelationAssertionを採用 | P1以降 | P1-SP-01前 |
+| Q-DM-01 | schema v2を採用するか | MVPの仮データ範囲でstable anchor + immutable revision + RelationAssertionを採用 | none（実データ投入前の安全確認は残す） | 2026-09-23 |
 | D-EXT-01 | ChatGPTへSecure MCP Tunnelを初回登録するか | 合成データだけで許可 | P5以降 | P5-SP-01前 |
 | D-BACKUP-01 | private archive保護とartifact構成 | アプリ層暗号化、同generationの別artifact | P8-SP-01以降 | P8-SP-01前 |
 | D-DELETE-01 | Source delete後の過去Report | Reportを残しunavailable表示 | P8-02以降 | P8-02前 |

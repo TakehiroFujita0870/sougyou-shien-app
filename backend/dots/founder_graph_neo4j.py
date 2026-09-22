@@ -480,15 +480,15 @@ class Neo4jGraphGateway:
         with self._session() as session:
             result = self._execute_read(
                 session,
-                lambda tx: tx.run(
+                lambda tx: _single(tx.run(
                     "MATCH (n {id: $node_id, owner_id: $owner_id}) "
                     "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
                     "n.revision AS revision, n.payload_json AS payload_json LIMIT 1",
                     node_id=node_id.strip(),
                     owner_id=self.owner_id,
-                ),
+                )),
             )
-            row = _single(result)
+            row = result
         if row is None:
             return None
         values = {

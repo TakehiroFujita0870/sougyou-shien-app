@@ -11,6 +11,7 @@ AUTH_SECRET_FILE=""
 AUTH_FILE_WAS_SET=""
 AUTH_FILE_ORIGINAL=""
 RESTART_REQUIRED=0
+PERSIST_AUTH_SECRET=0
 
 usage() {
   cat <<'EOF'
@@ -46,10 +47,18 @@ require_auth() {
 }
 
 prepare_auth_secret() {
+  local persist="${1:-0}"
   local old_umask
   old_umask="$(umask)"
   umask 077
-  AUTH_SECRET_FILE="$(mktemp "${TMPDIR:-/tmp}/founder-graph-auth.XXXXXX")" || fail 'could not create a private temporary auth file.'
+  if [[ "$persist" == 1 ]]; then
+    local project="${FOUNDER_GRAPH_COMPOSE_PROJECT:-founder-graph-local}"
+    AUTH_SECRET_FILE="${TMPDIR:-/tmp}/dots-founder-graph-auth-${project}.secret"
+    PERSIST_AUTH_SECRET=1
+  else
+    AUTH_SECRET_FILE="$(mktemp "${TMPDIR:-/tmp}/founder-graph-auth.XXXXXX")" || fail 'could not create a private temporary auth file.'
+    PERSIST_AUTH_SECRET=0
+  fi
   umask "$old_umask"
   printf '%s' "$FOUNDER_GRAPH_NEO4J_AUTH" > "$AUTH_SECRET_FILE" || fail 'could not write the private temporary auth file.'
   chmod 600 -- "$AUTH_SECRET_FILE" || fail 'could not protect the temporary auth file.'
@@ -63,7 +72,7 @@ prepare_auth_secret() {
 }
 
 cleanup_auth_secret() {
-  if [[ -n "$AUTH_SECRET_FILE" && -f "$AUTH_SECRET_FILE" ]]; then
+  if [[ "$PERSIST_AUTH_SECRET" -eq 0 && -n "$AUTH_SECRET_FILE" && -f "$AUTH_SECRET_FILE" ]]; then
     rm -f -- "$AUTH_SECRET_FILE"
   fi
   if [[ "$AUTH_FILE_WAS_SET" == 1 ]]; then
@@ -72,6 +81,13 @@ cleanup_auth_secret() {
     unset FOUNDER_GRAPH_NEO4J_AUTH_FILE || true
   fi
   AUTH_SECRET_FILE=""
+  PERSIST_AUTH_SECRET=0
+}
+
+remove_persistent_auth_secret() {
+  local project="${FOUNDER_GRAPH_COMPOSE_PROJECT:-founder-graph-local}"
+  local path="${TMPDIR:-/tmp}/dots-founder-graph-auth-${project}.secret"
+  [[ ! -e "$path" ]] || rm -f -- "$path"
 }
 
 on_exit() {
@@ -298,7 +314,11 @@ main() {
       require_docker
       require_auth
       require_project_name
-      prepare_auth_secret
+      if [[ "$action" == start ]]; then
+        prepare_auth_secret 1
+      else
+        prepare_auth_secret
+      fi
       trap on_exit EXIT
       case "$action" in
         start)
@@ -307,6 +327,7 @@ main() {
           ;;
         stop)
           compose stop neo4j
+          remove_persistent_auth_secret
           ;;
         status)
           compose ps
