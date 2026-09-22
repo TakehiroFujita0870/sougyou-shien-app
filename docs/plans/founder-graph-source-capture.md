@@ -61,7 +61,7 @@ Then: 所有者検証、Sourceのcurrent_revision_id検証、重複検証、監�
 | SC-02 | 一時保存の一括保存実装 | 検査: 途中例外後にノード、履歴、監査、冪等記録が残らないことを確認する | 既知 |
 | SC-03 | Neo4jの一括保存実装 | 検査: `backend/tests/test_founder_graph_neo4j.py`でSource、SourceRevision、Idea、監査のCREATEが各一回で、再送がreplayedになることを確認する | 類推可能 |
 | SC-04 | 通常起動の永続保存接続 | 検査: 起動手順と`create_configured_app`の参照先が一致し、Neo4j設定時に`create_app`へ落ちないことを静的検査とruntime testで確認する | 類推可能 |
-| SC-05 | 実Neo4j再起動保存確認 | 検査: 合成会話を保存し、コンテナ再起動後に同じIdeaとSourceRevisionをfetchできることを手動記録する | 未知 |
+| SC-05 | 実Neo4j再起動保存確認 | 検査: 合成会話を保存し、コンテナ再起動後に同じIdeaとSourceRevisionをfetchし、既定の検索時間内にIdeaと原文を検索できることを手動記録する | 未知 |
 
 ## スパイク
 
@@ -82,4 +82,4 @@ Then: 所有者検証、Sourceのcurrent_revision_id検証、重複検証、監�
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-09-23 | Idea、Source、SourceRevisionを一括保存する計画を追加 | MVPの最初の実機縦断を原文追跡付きで成立させるため | SC-01〜SC-05 |
-
+| 2026-09-23 | Neo4j再起動直後の検索時間を5秒へ設定 | 再起動直後の初回検索が一時保存の1秒設定を超え、永続データがあるのに検索失敗と見なされるため | SC-05 |
