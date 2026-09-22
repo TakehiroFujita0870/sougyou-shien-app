@@ -9,6 +9,8 @@
 - ピボット前のPRD、Postgres中心のアーキテクチャ、Free / Standardの料金設計、Dots内蔵の調査オーケストレーターと矛盾する箇所は、本書を優先する。
 - 既存実装は削除前提にせず、Phase 0で再利用、移行、廃止を分類する。
 - 事業評価レポートの章名は本書の「事業評価レポート契約」を正本とする。
+- ノード、関係、revision、根拠、削除、検索投影の粒度は[`founder-graph-data-model.md`](founder-graph-data-model.md)を正本とする。schema v2契約と実Neo4jの永続化gateが通るまで、通常保存先をin-memoryからNeo4jへ切り替えない。
+- 実行DAG、Luna worker運用、並列制御、完了定義は[`dots-implementation-master-plan.md`](dots-implementation-master-plan.md)を正本とする。
 - 個別PRは本書から受け入れ条件を引用し、差分500行以内かつレビュー30分以内へ分割する。
 
 ## 実装進捗（2026-09-22時点）
@@ -135,6 +137,8 @@ Dotsを、利用者がChatGPTで創業に関する会話をするたびに、ア
 市場規模と財務値は、数値だけを保存しない。式、入力値、単位、期間、通貨、仮説状態、感度を保存する。第6章の撤退ラインと第7章の各段階は同じDecisionCriterionを参照し、相互に矛盾する複製を作らない。
 
 ## グラフ情報モデル
+
+本章は製品の概念モデルを定める。Neo4jへの保存単位、stable anchor、immutable revision、RelationAssertion、ContentChunkの物理契約は[`founder-graph-data-model.md`](founder-graph-data-model.md)に従う。
 
 ### 3領域と抽象度
 
