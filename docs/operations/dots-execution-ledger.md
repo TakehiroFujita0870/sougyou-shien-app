@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `0c3892614b48`
+main SHA: `0c57f8492503`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,7 +22,7 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P2/P3 MVP vertical slice |
-| Last merged PR | #201 |
+| Last merged PR | #202 |
 | Last main smoke | backend 340 passed / 17 skipped、frontend test/build/storybook passed、Docker Desktop Engine 29.8.0、Neo4j保存→停止→再起動→MCP検索を実機確認 |
 
 ## Task ledger
@@ -37,6 +37,8 @@ active goal: Founder Graph MVP
 | P2-01/P2-03/P3-02 | MERGED | root | main | #199 | `9844cebc4f89` | Neo4j port/secret/read transaction修正、focused tests 114 passed / 2 skipped、MCP保存検索実機確認 | none | 2026-09-23 |
 | P3/P5 audit | MERGED | mvp_vertical_slice_audit_luna | delegated | #199 / #201 | `0c3892614b48` | persistent stdio opt-in、MCP egress条件、tool schemaを反映 | D-EXT-01で実ChatGPT登録は保留 | 2026-09-23 |
 | P3-03 | MERGED | root | main | #201 | `0c3892614b48` | 8 write tools publish actionable schemas、25 focused tests passed | none | 2026-09-23 |
+| CI-01 | RUNNING | root | current | - | - | fast required gate and manual milestone gate in progress | none | 2026-09-23 |
+| LEG-01 | RUNNING | legacy_assets_inventory | current | - | - | candidate inventory in progress; no deletion performed | D-LEGACY-01 remains deferred | 2026-09-23 |
 
 ## Decision ledger
 
