@@ -12,15 +12,18 @@
 4. 既存の未コミット変更は利用者または別作業のものとして扱う。対象外のファイルを変更、ステージ、復元しない。
 5. 次工程のtask、review、merge後handoffがある作業では、[handoff-closure](skills/dev/handoff-closure/SKILL.md)を使い、送達と受領確認まで同一turnで閉じる。
 6. 自律的な製品作業では、[ceo-decision-backlog](skills/dev/ceo-decision-backlog/SKILL.md)を使い、未解決の `ceo-decision` Issue件数と10件停止条件を確認する。
+7. 依頼された変更が意味単位で完了したら、利用者から停止指示がない限り、[finish-and-merge](skills/dev/finish-and-merge/SKILL.md)に従って検査、意味単位のcommit、push、PR、review、mainへのmerge、main smokeまで同一turnで閉じる。
 
 ## プロダクト段階とAIモデル
 
-- 初回リリースはFreeとStandardだけを対象とする。Proの自動調査・メール配信は、利用状況と原価データが蓄積するまで実装しない。
+- 2026-09-20以降の製品正本は[`docs/plans/founder-graph-pivot.md`](docs/plans/founder-graph-pivot.md)とする。初期対象は本人一人がローカルで使うFounder Graphであり、Free、Standard、Pro、課金、複数利用者を実装対象にしない。
+- ChatGPTが会話、Deep Research、進捗・完了通知を担い、Dotsは保存、検索、構造化、provenanceへ集中する。Dots独自の調査schedulerと通知基盤を初期実装しない。
 - モデル、API、料金、廃止予定を変更するときは、先に [`docs/operations/model-lifecycle.md`](docs/operations/model-lifecycle.md) を読む。
 - モデルIDを画面、API、プロンプトへ分散してハードコードしない。プロバイダー別アダプターと一元的なモデルカタログを経由する。
-- 開発時のClaude互換対象は `claude-opus-5`、`claude-sonnet-5`、`claude-haiku-4-5-20251001` とする。Standardのユーザー既定モデルは `gpt-5.6-terra` とし、利用可能モデルからユーザーが選択できる設計にする。
+- Dots製品内の抽出、名寄せ、分類、facet・関係候補、再順位付けは、初期値としてLunaの論理キーを使う。これは下記のCodex部門運営モデルを変更する指示ではなく、製品runtimeの選択である。embedding capabilityは先行スパイクで検証し、未対応時に別providerを無断追加しない。
+- 既存のClaude互換、`gpt-5.6-terra`既定、モデル選択UIはピボット前の実装inventoryとして扱い、移行判断前に削除しない。
 - モデル更新は公式情報の検知、評価、PR作成までを将来自動化してよい。本番の既定モデル変更、料金境界変更、廃止モデルからの移行を無審査で自動マージしない。
-- APIキー、課金開始、実ユーザーデータの外部AI送信はCEO決裁が完了するまで行わない。
+- APIキー、課金開始、実ユーザーデータを使う最初の外部AI接続は、利用者兼製品責任者の明示決裁まで行わない。egress policy設定後のshareableな通常MCP readは呼出ごとの承認を求めず、フル調査はResearchCampaignごとに目的・範囲・試行予算の許諾を得る。
 
 ## 変更規律
 

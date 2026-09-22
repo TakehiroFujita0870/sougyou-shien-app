@@ -1,4 +1,6 @@
-# 実装バックログ
+# 実装バックログ（ピボット前の履歴）
+
+> 2026-09-20以降の実装順序とフェーズゲートは[Dots Founder Graph ピボット・実装全体計画](../plans/founder-graph-pivot.md)を正本とする。以下は既存実装のinventoryとして保持する。
 
 1. 完了: Vite/React/Supabase/Vercel/Storybookの骨格とPR CI。
 2. 完了: owner-based RLSの初期スキーマ。
@@ -10,4 +12,4 @@
 8. 過去判断との差分表示と引用付き調査レポート。
 9. Free/Standardの利用上限とモデル選択。
 
-詳細な分解と受け入れ条件は[横断調査・個人ナレッジ・意思決定記憶 計画](research-memory-plan.md)を参照します。各項目は別PRで、テストとStorybookを伴います。Proの自動調査とメール配信は初回リリースに含めません。
+旧項目の分解と受け入れ条件は[横断調査・個人ナレッジ・意思決定記憶 計画](research-memory-plan.md)へ残す。新規IssueとPRを本一覧から開始せず、Founder Graph計画のPhase 0 inventoryで再利用判定する。

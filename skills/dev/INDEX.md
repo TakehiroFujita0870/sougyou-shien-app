@@ -13,6 +13,7 @@ planning
   -> implementation <-> testing-and-ci
                     <-> review-and-debug
   -> release-and-security
+  -> finish-and-merge
 
 docs-freshness は全工程で常時適用
 ```
@@ -25,6 +26,7 @@ docs-freshness は全工程で常時適用
 | コードまたは設定を変更する | [implementation](implementation/SKILL.md) |
 | 次工程のtaskへイベントを渡す、または受領確認を閉じる | [handoff-closure](handoff-closure/SKILL.md) |
 | CEO判断が必要な不明点を記録し、自動作業の停止上限を確認する | [ceo-decision-backlog](ceo-decision-backlog/SKILL.md) |
+| 変更の一区切り後にcommit、push、PR、mainへのmerge、main smokeまで閉じる | [finish-and-merge](finish-and-merge/SKILL.md) |
 | テスト、CI、レビュー、デバッグ、リリース、ドキュメント更新 | 対応するスキルを追加後に読む |
 
 未追加のスキルへのリンクは、それぞれのPRで追加する。プロジェクト固有の規約は、このライブラリではなく各プロジェクト側に置く。
