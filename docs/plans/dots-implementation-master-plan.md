@@ -73,6 +73,10 @@ NEXT: <ready dependent task IDs>
 
 長いtool outputをhandoffへ貼らず、artifact path、PR URL、失敗行、再現commandを記録する。
 
+### 利用者向け報告
+
+coordinatorは、workerから受け取った内部用の名前や検査結果をそのまま利用者へ転送しない。利用者へは、何が使えるようになったか、どの危険が残るか、元に戻せるか、判断が必要かを日常語で報告する。正確な内部名称は、作業証跡が必要な場合だけ、日常語の説明の後に参考情報として付ける。
+
 ## task packet契約
 
 workerへ渡す全task packetは次を含む。
