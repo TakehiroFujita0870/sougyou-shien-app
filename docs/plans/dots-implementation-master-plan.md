@@ -328,11 +328,13 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 
 - 一PRは一taskまたは同じ受け入れ条件を成立させる縦切りtask群に限定する。
 - 500行を超える場合、生成物、fixture、schema、adapter、UIを分離できるか先に確認する。
-- PR head更新ごとにCIとreviewを再実行する。
+- PR head更新ごとに短い必須CIとreviewを再実行する。画面、Storybook、PDF、DOCXを変更した場合は、節目の全確認を手動で実行する。
 - required `quality`成功前にmergeしない。
 - merge後はmain smokeとdependent task deliveryを同じturnで閉じる。
 - schema migration PRはforward、rollback、既存data影響を記載する。
 - 実機証跡は秘密値、個人情報、会話原文を含めない。
+
+CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../operations/ci-fast-and-full.md)に従う。旧資産の整理は[`../operations/legacy-assets-inventory.md`](../operations/legacy-assets-inventory.md)を先に更新する。
 
 ## 失敗時の再計画
 

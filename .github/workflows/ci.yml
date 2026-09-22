@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,38 +19,49 @@ jobs:
       - run: npm ci
       - run: npm run test
       - name: Generate and inspect formal-plan PDF
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: mkdir -p pdf-qa-artifacts && DOTS_PDF_QA_PATH=pdf-qa-artifacts/formal-plan.pdf npm test -- --run src/components/formalPlanPdfAdapter.test.js
       - name: Generate formal-plan DOCX
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: mkdir -p docx-qa-artifacts && DOTS_DOCX_QA_PATH=docx-qa-artifacts/formal-plan.docx npm test -- --run src/components/formalPlanDocxAdapter.test.js
       - run: npm run test:a11y
       - run: npm run build
+      - name: Stop before milestone-only checks
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        run: echo 'Fast quality gate complete; run CI manually for browser and document checks.'
       - run: npm run build-storybook
+        if: ${{ github.event_name == 'workflow_dispatch' }}
       - name: Install Playwright Chromium
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright install --with-deps chromium
       - name: Verify Storybook production-theme parity
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npm run test:storybook-visual
       - name: Record desktop happy-path E2E
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npm run test:video
       - name: Verify recorded WebM
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: test -n "$(find test-results -type f -name '*.webm' -size +0c -print -quit)"
       - name: Upload desktop E2E video
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-desktop-e2e-video
           path: test-results/**/*.webm
           if-no-files-found: error
       - name: Verify desktop sidebar portfolio E2E
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/sidebar-portfolio.spec.js
       - name: Upload desktop sidebar screenshot
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-sidebar-1440-screenshot
           path: test-results/sidebar-portfolio-1440x900.png
           if-no-files-found: error
       - name: Upload archive and restore desktop evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-sidebar-archive-restore-1440
@@ -60,20 +72,23 @@ jobs:
             test-results/sidebar-restored-project-1440.png
           if-no-files-found: error
       - name: Verify Account and Plan desktop contracts
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/account-plan.spec.js
       - name: Upload Account and Plan desktop evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-account-plan-1440-screenshot
           path: test-results/account-plan-1440x900.png
           if-no-files-found: error
       - name: Verify Chrome PDF and DOCX downloads
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/pdf-export.spec.js
       - name: Verify composer layout at desktop widths
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/composer-layout.spec.js
       - name: Upload composer layout screenshots
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-composer-layout-screenshots
@@ -83,27 +98,30 @@ jobs:
             test-results/knowledge-library-1440.png
           if-no-files-found: error
       - name: Verify shared AI composer empty-send contract
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/ai-composer-empty-send.spec.js
       - name: Upload shared AI composer desktop evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-ai-composer-empty-send-1440
           path: test-results/ai-composer-empty-send-1440x900.png
           if-no-files-found: error
       - name: Verify Home hydration retry and draft preservation
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/home-hydration-retry.spec.js
       - name: Upload Home hydration retry evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-home-hydration-retry-1440
           path: test-results/home-hydration-retry*-1440x900.png
           if-no-files-found: error
       - name: Verify Knowledge evidence Project navigation
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/knowledge-project-navigation.spec.js
       - name: Upload Knowledge evidence Project navigation
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-knowledge-project-navigation-1440
@@ -112,27 +130,30 @@ jobs:
             test-results/knowledge-confirm-evidence-link-1440.png
           if-no-files-found: error
       - name: Verify Knowledge write failure recovery
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/knowledge-write-failure.spec.js
       - name: Upload Knowledge write failure evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-knowledge-write-failure-1440
           path: test-results/knowledge-write-failure-1440.png
           if-no-files-found: error
       - name: Verify Knowledge hydration recovery
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/knowledge-hydration-recovery.spec.js
       - name: Upload Knowledge hydration recovery evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-knowledge-hydration-recovery-1440
           path: test-results/knowledge-hydration-recovery-1440.png
           if-no-files-found: error
       - name: Verify Project hydration recovery
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/project-hydration-recovery.spec.js
       - name: Upload Project hydration recovery evidence
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-project-hydration-recovery-1440
@@ -141,11 +162,13 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups
       - name: Install LibreOffice for DOCX visual QA
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk
       - name: Verify formal-plan DOCX Japanese text and render every page
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: uv run python scripts/verify-formal-plan-docx.py docx-qa-artifacts/formal-plan.docx docx-qa-artifacts/rendered
       - name: Upload formal-plan DOCX visual QA
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-formal-plan-docx-qa
@@ -155,9 +178,10 @@ jobs:
             docx-qa-artifacts/rendered/*.png
           if-no-files-found: error
       - name: Verify formal-plan Japanese text and render every PDF page
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: uv run python scripts/verify-formal-plan-pdf.py pdf-qa-artifacts/formal-plan.pdf pdf-qa-artifacts/png
       - name: Upload formal-plan PDF visual QA
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: dots-formal-plan-pdf-qa
