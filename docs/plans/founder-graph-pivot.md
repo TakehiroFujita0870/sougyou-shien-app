@@ -1,6 +1,6 @@
 # Dots Founder Graph ピボット・実装全体計画
 
-最終検証日: 2026-09-22
+最終検証日: 2026-09-23
 
 ## 正本の位置づけ
 
@@ -11,6 +11,7 @@
 - 事業評価レポートの章名は本書の「事業評価レポート契約」を正本とする。
 - ノード、関係、revision、根拠、削除、検索投影の粒度は[`founder-graph-data-model.md`](founder-graph-data-model.md)を正本とする。schema v2契約と実Neo4jの永続化gateが通るまで、通常保存先をin-memoryからNeo4jへ切り替えない。
 - 実行DAG、Luna worker運用、並列制御、完了定義は[`dots-implementation-master-plan.md`](dots-implementation-master-plan.md)を正本とする。
+- 会話付きcapture_ideaの保存単位は[`founder-graph-source-capture.md`](founder-graph-source-capture.md)を正本とする。
 - 個別PRは本書から受け入れ条件を引用し、差分500行以内かつレビュー30分以内へ分割する。
 
 ## 実装進捗（2026-09-22時点）
@@ -25,7 +26,7 @@
 | T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`を検査。MCP tunnel実機、ChatGPT tool discovery、Neo4j実機unavailableの確認は残課題 |
 | T-FG-10 instruction scanner | 実装済み | `AGENTS.md` / `SKILL.md`のallow-root、hash、差分、秘密語除外 |
 | T-FG-11〜12 contact / network | 部分実装 | Person / Organization capture、private contact境界、明示link、Mapping/CSV名刺取り込みのlocal normalizerを検査。名寄せ、能力候補、自動関係生成は未実施 |
-| T-FG-13〜14 idea capture / enrichment | 部分実装 | capture_idea、全領域read、model catalogの論理Luna境界、shareable入力からの名寄せ・facet・cluster proposal contractを検査。実LLM推論、proposalのwrite-back、実データ評価は未実施 |
+| T-FG-13〜14 idea capture / enrichment | 部分実装 | capture_ideaがIdea、会話Source、SourceRevisionを一括保存し、全領域read、model catalogの論理Luna境界、shareable入力からの名寄せ・facet・cluster proposal contractを検査。Neo4j実機再起動、実LLM推論、proposalのwrite-back、実データ評価は未実施 |
 | T-FG-15 ResearchBrief | 実装済み（local contract） | shareable Ideas / Assets / Sourcesの一括preflight、canonical URL、relation path、pagination、private除外を検査。ChatGPT実機handoffは未実施 |
 | T-FG-16 Campaign lifecycle | 部分実装（local + persistent contract） | 複数試行、期限、scope変更、許諾snapshot、in-memory / Neo4j gatewayのReportVersion参照整合性を検査。完全履歴parityと実機検証が残る |
 | T-FG-18〜19 report / impact / T-FG-22 write-back | 部分実装 | 8章shape、用途限定write tool、複数Runの保存契約、固定8章のsafe impact/diff contractを検査。Deep Research実機handoffとfollow-up write-backは未実施 |
@@ -582,3 +583,4 @@ DB migration、MCP tool、privacy境界、backup / restoreは、unit testだけ�
 | 2026-09-22 | Campaign / Run比較のread-only compositionとfocused testsを追加 | 既存の8章ReportDiffを複数試行へ再利用するUI境界を固定するため | T-FG-25 |
 | 2026-09-22 | GraphReadPortからCampaign / Run / ReportVersionをboundedに合成するsafe read adapterを追加 | UIへ実データを接続する前にowner・node type・private field境界を固定するため | T-FG-25 |
 | 2026-09-22 | Neo4j persistent writeへReportVersionのRun / Campaign / Claim / Evidence参照validatorとfake-driver契約テストを追加 | in-memoryだけでなく永続mutation前にもauthorizationとsection evidence対応を検査するため | T-FG-05〜06、T-FG-16 |
+| 2026-09-23 | capture_ideaをIdea、会話Source、SourceRevisionの一括保存へ変更し、原文をIdeaから分離 | MVPの会話保存で出典を失わず、再送時の重複と部分保存を防ぐため | T-FG-05〜06、T-FG-13、SC-01〜SC-05 |

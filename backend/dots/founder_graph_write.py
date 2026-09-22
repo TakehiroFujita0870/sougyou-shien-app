@@ -70,6 +70,17 @@ class GraphWritePort(Protocol):
     ) -> "WriteReceipt":
         """Persist one owner-scoped domain node."""
 
+    def capture_idea(
+        self,
+        idea: Any,
+        source: Source,
+        source_revision: SourceRevision,
+        *,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Persist an idea and its conversation source in one write boundary."""
+
     def link_entities(
         self,
         relationship: Relationship,
@@ -125,11 +136,12 @@ def _stable(value: Any) -> Any:
     if is_dataclass(value):
         # Timestamps and provenance carry a fresh transport event identity;
         # the command idempotency key, not those volatile fields, defines a
-        # replay-equivalent payload.
+        # replay-equivalent payload. SourceRevision.retrieved_at is likewise
+        # transport metadata, while its content hash remains in the payload.
         return {
             field.name: _stable(getattr(value, field.name))
             for field in fields(value)
-            if field.name not in {"created_at", "updated_at", "provenance"}
+            if field.name not in {"created_at", "updated_at", "retrieved_at", "provenance"}
         }
     if isinstance(value, Mapping):
         return {str(key): _stable(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
@@ -240,6 +252,52 @@ class InMemoryGraphWriteService:
             except Exception:
                 self._nodes.pop(node_id, None)
                 self._node_history.pop(node_id, None)
+                raise
+            self._idempotency[idempotency_key] = (fingerprint, receipt)
+            return receipt
+
+    def capture_idea(
+        self,
+        idea: Any,
+        source: Source,
+        source_revision: SourceRevision,
+        *,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        operation = self._validate_command("capture_idea", actor, idempotency_key)
+        nodes = (idea, source, source_revision)
+        if not isinstance(source, Source) or not isinstance(source_revision, SourceRevision):
+            raise GraphWriteError("capture_idea requires an Idea, Source, and SourceRevision")
+        if _node_type(idea) is not NodeType.IDEA:
+            raise GraphWriteError("capture_idea requires an Idea node")
+        if source_revision.source_id != source.id or source.current_revision_id != source_revision.id:
+            raise GraphWriteError("capture_idea source revision does not match the Source current pointer")
+        if any(getattr(node, "owner_id", None) != self.owner_id for node in nodes):
+            raise GraphWriteError("capture_idea nodes must belong to the local owner")
+        node_ids = tuple(_required_text(getattr(node, "id", None), "node.id") for node in nodes)
+        if len(set(node_ids)) != len(node_ids):
+            raise GraphWriteError("capture_idea nodes must have distinct ids")
+        fingerprint = payload_fingerprint(operation, *nodes, self.owner_id)
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            if any(node_id in self._nodes for node_id in node_ids):
+                raise NodeAlreadyExistsError("capture_idea node id is already registered")
+            try:
+                validate_source_revision_history(source, (source_revision,))
+                for node in nodes:
+                    self._validate_report_references_locked(node)
+                for node in nodes:
+                    self._nodes[node.id] = node
+                    self._node_history[node.id] = [node]
+                receipt = WriteReceipt(operation, idea.id, NodeType.IDEA.value, self._revision(idea), idempotency_key)
+                self._append_audit(receipt, actor, fingerprint)
+            except Exception:
+                for node_id in node_ids:
+                    self._nodes.pop(node_id, None)
+                    self._node_history.pop(node_id, None)
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt

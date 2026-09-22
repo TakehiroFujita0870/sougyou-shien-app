@@ -101,6 +101,47 @@ def test_put_node_uses_static_label_parameterized_payload_and_audit() -> None:
     assert any("FounderGraphAudit" in query for query, _params in driver.session_value.calls)
 
 
+def test_capture_idea_writes_source_chain_in_one_transaction_and_replays() -> None:
+    driver = FakeDriver()
+    gateway = Neo4jGraphGateway(driver, "owner-1")
+    idea = Idea(owner_id="owner-1", id="idea-capture-1", title="Captured idea")
+    source = Source(
+        owner_id="owner-1",
+        id="source-capture-1",
+        title="Captured conversation",
+        kind="conversation",
+        revision=1,
+        current_revision_id="source-revision-capture-1",
+    )
+    source_revision = SourceRevision(
+        owner_id="owner-1",
+        id="source-revision-capture-1",
+        source_id=source.id,
+        content="Raw conversation",
+    )
+
+    receipt = gateway.capture_idea(
+        idea,
+        source,
+        source_revision,
+        idempotency_key="capture-1",
+    )
+    replay = gateway.capture_idea(
+        idea,
+        source,
+        source_revision,
+        idempotency_key="capture-1",
+    )
+
+    assert receipt.target_id == idea.id
+    assert replay.replayed is True
+    queries = [query for query, _params in driver.session_value.calls]
+    assert sum("CREATE (n:Source)" in query for query in queries) == 1
+    assert sum("CREATE (n:SourceRevision)" in query for query in queries) == 1
+    assert sum("CREATE (n:Idea)" in query for query in queries) == 1
+    assert sum("CREATE (a:FounderGraphAudit" in query for query in queries) == 1
+
+
 def test_link_entities_requires_existing_same_owner_endpoints_and_static_relation_type() -> None:
     driver = FakeDriver()
     driver.session_value.endpoint_row = {

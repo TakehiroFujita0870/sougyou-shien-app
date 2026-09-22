@@ -8,7 +8,7 @@ driver-like object so contract tests do not need a running database; the real
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from hashlib import sha256
@@ -23,6 +23,7 @@ from .founder_graph import (
     RelationType,
     Source,
     SourceRevision,
+    validate_source_revision_history,
     _ALLOWED_RELATION_ENDPOINTS,
 )
 from .founder_graph_write import (
@@ -525,6 +526,99 @@ class Neo4jGraphGateway:
                 session,
                 lambda tx: self._put_node_tx(tx, node, node_type, label, idempotency_key, expected_revision, operation, actor, fingerprint),
             )
+
+    def capture_idea(
+        self,
+        idea: Any,
+        source: Source,
+        source_revision: SourceRevision,
+        *,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Persist an idea and its source chain in one Neo4j transaction."""
+
+        if getattr(idea, "owner_id", None) != self.owner_id or source.owner_id != self.owner_id or source_revision.owner_id != self.owner_id:
+            raise GraphWriteError("capture_idea nodes must belong to the local owner")
+        if source_revision.source_id != source.id or source.current_revision_id != source_revision.id:
+            raise GraphWriteError("capture_idea source revision does not match the Source current pointer")
+        fingerprint = payload_fingerprint("capture_idea", idea, source, source_revision, self.owner_id)
+        with self._session() as session:
+            return self._execute_write(
+                session,
+                lambda tx: self._capture_idea_tx(tx, idea, source, source_revision, idempotency_key, actor, fingerprint),
+            )
+
+    def _capture_idea_tx(
+        self,
+        tx: Any,
+        idea: Any,
+        source: Source,
+        source_revision: SourceRevision,
+        idempotency_key: str,
+        actor: str,
+        fingerprint: str,
+    ) -> WriteReceipt:
+        replay = _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
+            "RETURN a.payload_fingerprint AS payload_fingerprint, a.target_id AS target_id, "
+            "a.target_type AS target_type, a.revision AS revision",
+            owner_id=self.owner_id,
+            idempotency_key=idempotency_key,
+        ))
+        if replay is not None:
+            prior = _record_value(replay, "payload_fingerprint")
+            if prior != fingerprint:
+                raise IdempotencyConflictError("idempotency key was reused with a different payload")
+            return WriteReceipt(
+                "capture_idea",
+                str(_record_value(replay, "target_id")),
+                str(_record_value(replay, "target_type")),
+                int(_record_value(replay, "revision", 0)),
+                idempotency_key,
+                replayed=True,
+            )
+
+        validate_source_revision_history(source, (source_revision,))
+        node_ids = [str(idea.id), str(source.id), str(source_revision.id)]
+        existing = _rows(tx.run(
+            "MATCH (n) WHERE n.id IN $node_ids RETURN n.id AS id, n.owner_id AS owner_id",
+            node_ids=node_ids,
+        ))
+        if existing:
+            raise NodeAlreadyExistsError("capture_idea node id is already registered")
+
+        source_label = self.label_for(NodeType.SOURCE)
+        revision_label = self.label_for(NodeType.SOURCE_REVISION)
+        idea_label = self.label_for(NodeType.IDEA)
+        source_without_pointer = replace(source, current_revision_id=None)
+        tx.run(f"CREATE (n:{source_label}) SET n = $properties", properties=_node_properties(source_without_pointer))
+        tx.run(f"CREATE (n:{revision_label}) SET n = $properties", properties=_node_properties(source_revision))
+        tx.run(f"CREATE (n:{idea_label}) SET n = $properties", properties=_node_properties(idea))
+        tx.run(
+            f"MATCH (n:{source_label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
+            id=str(source.id),
+            owner_id=self.owner_id,
+            properties=_node_properties(source),
+        )
+
+        receipt = WriteReceipt("capture_idea", str(idea.id), NodeType.IDEA.value, _node_revision(idea), idempotency_key)
+        audit_id = f"audit_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        tx.run(
+            "CREATE (a:FounderGraphAudit {id: $audit_id, owner_id: $owner_id, actor: $actor, "
+            "operation: $operation, target_id: $target_id, target_type: $target_type, "
+            "revision: $revision, idempotency_key: $idempotency_key, payload_fingerprint: $payload_fingerprint})",
+            audit_id=audit_id,
+            owner_id=self.owner_id,
+            actor=actor,
+            operation="capture_idea",
+            target_id=receipt.target_id,
+            target_type=receipt.target_type,
+            revision=receipt.revision,
+            idempotency_key=idempotency_key,
+            payload_fingerprint=fingerprint,
+        )
+        return receipt
 
     def _put_node_tx(self, tx: Any, node: Any, node_type: NodeType, label: str, idempotency_key: str, expected_revision: int | None, operation: str, actor: str, fingerprint: str) -> WriteReceipt:
         replay = _single(tx.run(
