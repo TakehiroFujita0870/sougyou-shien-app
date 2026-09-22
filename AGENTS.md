@@ -14,6 +14,16 @@
 6. 自律的な製品作業では、[ceo-decision-backlog](skills/dev/ceo-decision-backlog/SKILL.md)を使い、未解決の `ceo-decision` Issue件数と10件停止条件を確認する。
 7. 依頼された変更が意味単位で完了したら、利用者から停止指示がない限り、[finish-and-merge](skills/dev/finish-and-merge/SKILL.md)に従って検査、意味単位のcommit、push、PR、review、mainへのmerge、main smokeまで同一turnで閉じる。
 
+## 利用者への説明と承認
+
+- 利用者向けの説明、進捗報告、判断依頼は、「プログラミングを知らない上司に説明し、承認を得る」前提で書く。
+- 変数名、ファイル内の名前、プログラム用語、略語、実装過程で作った呼び名を、利用者が理解している前提で使わない。まず日常語で言い換える。
+- 説明は原則として「何が変わるか」「なぜ必要か」「利点」「不利益または危険」「元に戻せるか」「今、何を判断してほしいか」の順で組み立てる。
+- 正確な内部名称、ファイル経路、番号が監査や作業確認に必要な場合は、日常語の説明後に「参考」として分離する。内部名称だけで意思決定を求めない。
+- 承認を求めるときは、選択した結果と選択しない結果を具体的に示す。内部設計の好みではなく、使い勝手、費用、安全性、後から変える負担を判断材料にする。
+- 実装者間の記録、コード、テスト、障害診断では正確な内部名称を使ってよい。ただし、その内容を利用者へ報告する際は、別に日常語の説明を作る。
+- 送信前に、対象の文章だけを読んだ上司が意思決定できるかを確認する。理解にコードや別文書が必要なら、説明を書き直す。
+
 ## プロダクト段階とAIモデル
 
 - 2026-09-20以降の製品要件正本は[`docs/plans/founder-graph-pivot.md`](docs/plans/founder-graph-pivot.md)とする。データモデルは[`docs/plans/founder-graph-data-model.md`](docs/plans/founder-graph-data-model.md)、実行DAGと完了定義は[`docs/plans/dots-implementation-master-plan.md`](docs/plans/dots-implementation-master-plan.md)を正本とする。初期対象は本人一人がローカルで使うFounder Graphであり、Free、Standard、Pro、課金、複数利用者を実装対象にしない。
