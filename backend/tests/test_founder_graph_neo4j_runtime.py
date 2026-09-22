@@ -1,0 +1,170 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+from dots.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship
+from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from dots.founder_graph_neo4j_write import Neo4jGraphWriteService, PersistedNodeReference
+from dots.founder_graph_runtime import create_neo4j_graph_composition
+from dots.main import create_app, create_neo4j_app
+from dots.founder_graph_mcp_stdio import create_neo4j_stdio_server
+
+
+@dataclass
+class _Result:
+    row: dict[str, object] | None = None
+
+    def single(self, **_kwargs):
+        return self.row
+
+    def __iter__(self):
+        return iter(() if self.row is None else (self.row,))
+
+
+class _Session:
+    def __init__(self, records: dict[str, dict[str, object]]) -> None:
+        self.records = records
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def close(self) -> None:
+        return None
+
+    def execute_read(self, callback):
+        return callback(self)
+
+    def execute_write(self, callback):
+        return callback(self)
+
+    def run(self, query: str, **params):
+        self.calls.append((query, params))
+        if "MATCH (n {id: $node_id, owner_id: $owner_id})" in query:
+            return _Result(self.records.get(params["node_id"]))
+        if "FounderGraphAudit" in query and query.startswith("MATCH"):
+            return _Result()
+        if "MATCH (n {id: $id})" in query:
+            return _Result()
+        if "MATCH (a {id: $source_id}), (b {id: $target_id})" in query:
+            return _Result({
+                "source_owner": "owner-1",
+                "target_owner": "owner-1",
+                "source_type": NodeType.PERSON.value,
+                "target_type": NodeType.IDEA.value,
+            })
+        if "MATCH (s:Source" in query or "MATCH (r:SourceRevision" in query:
+            return _Result()
+        return _Result()
+
+
+class _Driver:
+    def __init__(self, session: _Session) -> None:
+        self.session_value = session
+
+    def session(self, *, database: str):
+        assert database == "neo4j"
+        return self.session_value
+
+
+def test_composition_binds_one_gateway_without_implicit_connection() -> None:
+    session = _Session({})
+    composition = create_neo4j_graph_composition(_Driver(session), "owner-1")
+
+    assert composition.gateway.owner_id == "owner-1"
+    assert composition.writes.owner_id == composition.reads.owner_id == "owner-1"
+    assert session.calls == []
+
+
+def test_app_rejects_persistent_write_without_matching_persistent_read() -> None:
+    session = _Session({})
+    composition = create_neo4j_graph_composition(_Driver(session), "owner-1")
+
+    try:
+        create_app(founder_graph_write_service=composition.writes, founder_graph_owner_id="owner-1")
+    except ValueError as error:
+        assert "explicit founder_graph_read_service" in str(error)
+    else:  # pragma: no cover - assertion branch
+        raise AssertionError("persistent write must not silently use an in-memory read service")
+
+
+def test_neo4j_app_factory_wires_matching_ports_without_connecting() -> None:
+    session = _Session({})
+
+    app = create_neo4j_app(_Driver(session), "owner-1")
+
+    assert app.title == "Dots. API"
+    assert session.calls == []
+
+
+def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
+    session = _Session({})
+
+    server = create_neo4j_stdio_server(_Driver(session), "owner-1")
+    response = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+
+    assert response["result"]["tools"]
+    assert len(response["result"]["tools"]) == 10
+    assert session.calls == []
+
+
+def _record(node: object) -> dict[str, object]:
+    props = _node_properties(node)
+    return {
+        "id": props["id"],
+        "owner_id": props["owner_id"],
+        "node_type": props["node_type"],
+        "revision": props["revision"],
+        "payload_json": props["payload_json"],
+    }
+
+
+def test_persistent_adapter_hydrates_correction_node_and_keeps_owner_bound() -> None:
+    idea = Idea(owner_id="owner-1", id="idea-1", title="Persisted", revision=2)
+    session = _Session({idea.id: _record(idea)})
+    service = Neo4jGraphWriteService(Neo4jGraphGateway(_Driver(session), "owner-1"))
+
+    loaded = service.get_node("idea-1")
+
+    assert isinstance(loaded, Idea)
+    assert loaded.title == "Persisted"
+    assert loaded.revision == 2
+    assert service.get_node("missing") is None
+
+
+def test_persistent_adapter_returns_minimal_endpoint_projection_and_delegates_link() -> None:
+    person = PersonAsset(owner_id="owner-1", id="person-1", name="Founder")
+    idea = Idea(owner_id="owner-1", id="idea-1", title="Idea")
+    session = _Session({person.id: _record(person), idea.id: _record(idea)})
+    service = Neo4jGraphWriteService(Neo4jGraphGateway(_Driver(session), "owner-1"))
+    relationship = Relationship.from_entities(
+        source=service.get_node(person.id),
+        relation=RelationType.CAN_CONTRIBUTE_TO,
+        target=service.get_node(idea.id),
+        status="proposed",
+        confidence=0.8,
+        expires_at=datetime(2027, 1, 1, tzinfo=timezone.utc),
+        evidence_ids=("evidence-1",),
+    )
+
+    receipt = service.link_entities(relationship, idempotency_key="link-1")
+
+    assert isinstance(service.get_node(person.id), PersistedNodeReference)
+    assert receipt.target_type == "relationship"
+    assert any("CREATE (a)-[r:CAN_CONTRIBUTE_TO" in query for query, _ in session.calls)
+
+
+def test_persistent_adapter_correction_uses_gateway_and_revision_guard() -> None:
+    idea = Idea(owner_id="owner-1", id="idea-1", title="Before", revision=1)
+    session = _Session({idea.id: _record(idea)})
+    service = Neo4jGraphWriteService(Neo4jGraphGateway(_Driver(session), "owner-1"))
+    replacement = idea.revise(title="After")
+
+    receipt = service.record_correction(
+        idea.id,
+        replacement,
+        idempotency_key="correction-1",
+        expected_revision=1,
+    )
+
+    assert receipt.operation == "record_correction"
+    assert receipt.revision == 2
+    assert any("CREATE (n:Idea)" in query for query, _ in session.calls)
