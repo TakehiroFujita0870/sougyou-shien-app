@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from pydantic import BaseModel
@@ -24,6 +24,11 @@ from .project_knowledge import (
 )
 from .research_orchestrator import FakeSource, ResearchOrchestrator, Source
 from .runtime import RuntimeAdapter, RuntimeFault, create_runtime
+from .founder_graph_mcp import McpReadError, McpReadSurface
+from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from .founder_graph_read import GraphReadPort, GraphReadService
+from .founder_graph_runtime import create_neo4j_graph_composition
+from .founder_graph_write import GraphWritePort, InMemoryGraphWriteService
 
 
 orchestrator = ResearchOrchestrator({source: FakeSource() for source in Source})
@@ -52,6 +57,9 @@ def create_app(
     market_report_repository: InMemoryMarketReportRepository | None = None,
     account_privacy_repository: InMemoryAccountPrivacyRepository | None = None,
     project_knowledge_repository: InMemoryProjectKnowledgeRepository | None = None,
+    founder_graph_write_service: GraphWritePort | None = None,
+    founder_graph_read_service: GraphReadPort | None = None,
+    founder_graph_owner_id: str = "local-owner",
 ) -> FastAPI:
     app = FastAPI(title="Dots. API", version="0.1.0")
     decision_repository = repository or InMemoryDecisionRepository()
@@ -59,6 +67,23 @@ def create_app(
     privacy_repository = account_privacy_repository or InMemoryAccountPrivacyRepository.seeded()
     knowledge_repository = project_knowledge_repository or InMemoryProjectKnowledgeRepository()
     runtime_adapter = runtime or create_runtime()
+    graph_writes = founder_graph_write_service or InMemoryGraphWriteService(founder_graph_owner_id)
+    if graph_writes.owner_id != founder_graph_owner_id:
+        raise ValueError("founder_graph_write_service owner must match founder_graph_owner_id")
+    if founder_graph_read_service is None:
+        if not isinstance(graph_writes, InMemoryGraphWriteService):
+            raise ValueError("a persistent founder_graph_write_service requires an explicit founder_graph_read_service")
+        graph_reads = GraphReadService(graph_writes)
+    else:
+        graph_reads = founder_graph_read_service
+    try:
+        read_owner_id = graph_reads.owner_id
+    except AttributeError as error:
+        raise ValueError("founder_graph_read_service must expose owner_id") from error
+    if read_owner_id != graph_writes.owner_id:
+        raise ValueError("founder_graph_read_service owner must match founder_graph_owner_id")
+    graph_read_mcp = McpReadSurface(graph_reads)
+    graph_write_mcp = McpWriteSurface(graph_writes)
 
     def runtime_owner(x_local_owner_id: str | None = Header(default=None, alias="X-Local-Owner-Id")) -> str:
         try:
@@ -79,6 +104,57 @@ def create_app(
     @app.get("/v1/runtime/status")
     def runtime_status() -> dict[str, object]:
         return {"profile": runtime_adapter.profile, "services": runtime_adapter.service_status()}
+
+    def mcp_error(error: McpReadError | McpWriteError) -> HTTPException:
+        status_by_code = {
+            "not_found": status.HTTP_404_NOT_FOUND,
+            "owner_mismatch": status.HTTP_403_FORBIDDEN,
+            "idempotency_conflict": status.HTTP_409_CONFLICT,
+            "revision_conflict": status.HTTP_409_CONFLICT,
+            "read_timeout": status.HTTP_504_GATEWAY_TIMEOUT,
+            "unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
+            "unknown_tool": status.HTTP_404_NOT_FOUND,
+        }
+        return HTTPException(
+            status_code=status_by_code.get(error.code, status.HTTP_422_UNPROCESSABLE_ENTITY),
+            detail={"code": error.code, "message": error.message},
+        )
+
+    @app.get("/v1/founder-graph/mcp/tools")
+    def founder_graph_mcp_tools(owner_id: Annotated[str, Depends(local_owner_context)]) -> dict[str, object]:
+        if owner_id != graph_writes.owner_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "owner_mismatch"})
+        return {"read": graph_read_mcp.tool_definitions(), "write": graph_write_mcp.tool_definitions()}
+
+    @app.post("/v1/founder-graph/mcp/read/{tool_name}")
+    def founder_graph_mcp_read(
+        tool_name: str,
+        request: dict[str, Any],
+        owner_id: Annotated[str, Depends(local_owner_context)],
+    ) -> dict[str, Any]:
+        try:
+            return graph_read_mcp.call(tool_name, request, owner_id=owner_id)
+        except McpReadError as error:
+            raise mcp_error(error) from error
+
+    @app.post("/v1/founder-graph/mcp/write/{tool_name}")
+    def founder_graph_mcp_write(
+        tool_name: str,
+        request: dict[str, Any],
+        owner_id: Annotated[str, Depends(local_owner_context)],
+    ) -> dict[str, Any]:
+        try:
+            receipt = graph_write_mcp.call(tool_name, request, owner_id=owner_id)
+            return {
+                "operation": receipt.operation,
+                "target_id": receipt.target_id,
+                "target_type": receipt.target_type,
+                "revision": receipt.revision,
+                "idempotency_key": receipt.idempotency_key,
+                "replayed": receipt.replayed,
+            }
+        except McpWriteError as error:
+            raise mcp_error(error) from error
 
     @app.get("/v1/account/export")
     def export_account(owner_id: Annotated[str, Depends(local_owner_context)]) -> dict[str, object]:
@@ -222,6 +298,22 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "project_knowledge_not_found"}) from error
 
     return app
+
+
+def create_neo4j_app(driver: Any, owner_id: str, *, database: str = "neo4j") -> FastAPI:
+    """Build the API with one explicit, persistent Neo4j composition.
+
+    Driver construction, authentication, migration, and lifecycle remain the
+    caller's responsibility.  This helper only wires the already-created
+    driver into matching owner-scoped read and write ports.
+    """
+
+    composition = create_neo4j_graph_composition(driver, owner_id, database=database)
+    return create_app(
+        founder_graph_write_service=composition.writes,
+        founder_graph_read_service=composition.reads,
+        founder_graph_owner_id=composition.gateway.owner_id,
+    )
 
 
 app = create_app()

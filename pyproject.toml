@@ -5,6 +5,7 @@ description = "Dots. deterministic product API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.116.1",
+    "neo4j>=5.26,<6",
     "typing-extensions>=4.15.0",
     "uvicorn[standard]>=0.35.0",
 ]
