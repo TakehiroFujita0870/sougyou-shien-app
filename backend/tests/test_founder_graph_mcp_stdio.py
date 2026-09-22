@@ -32,6 +32,17 @@ def test_initialize_and_tools_list_expose_only_ten_tools() -> None:
     assert all("inputSchema" in tool and "readOnlyHint" in tool["annotations"] for tool in tools)
 
 
+def test_write_tools_publish_actionable_input_contracts() -> None:
+    server = create_stdio_server("owner-a")
+    tools = {tool["name"]: tool for tool in server.handle(request("tools/list", 20, {}))["result"]["tools"]}
+
+    assert tools["capture_idea"]["inputSchema"]["required"] == ["title", "idempotency_key"]
+    assert "egress_policy" in tools["capture_idea"]["inputSchema"]["properties"]
+    assert tools["link_entities"]["inputSchema"]["properties"]["relation"]["enum"]
+    assert tools["save_research_report"]["inputSchema"]["properties"]["sections"]["items"]["properties"]["content"]
+    assert tools["record_correction"]["inputSchema"]["required"] == ["previous_id", "idempotency_key"]
+
+
 def test_tools_call_delegates_read_and_idempotent_write() -> None:
     server = create_stdio_server("owner-a")
     write = server.handle(request("tools/call", 3, {"name": "capture_idea", "arguments": {"title": "MCP idea", "idempotency_key": "idea-1"}}))

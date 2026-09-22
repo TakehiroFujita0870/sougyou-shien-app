@@ -56,7 +56,25 @@ class McpWriteSurface:
     )
 
     def tool_definitions(self) -> tuple[Mapping[str, Any], ...]:
+        text = {"type": "string"}
+        ids = {"type": "array", "items": {"type": "string", "minLength": 1}}
+        idempotency = {"type": "string", "minLength": 1, "description": "A stable key reused when the same request is retried."}
         schemas: dict[str, Mapping[str, Any]] = {
+            "capture_idea": {
+                "type": "object",
+                "description": "Save one founder idea. Use shareable only when the private MCP may return the text to ChatGPT.",
+                "required": ["title", "idempotency_key"],
+                "properties": {
+                    "title": {**text, "minLength": 1},
+                    "summary": text,
+                    "description": text,
+                    "source_text": {**text, "description": "The conversation or note that produced the idea."},
+                    "tags": ids,
+                    "egress_policy": {"type": "string", "enum": [policy.value for policy in EgressPolicy]},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
             "capture_person": {
                 "type": "object",
                 "required": ["name", "idempotency_key"],
@@ -84,6 +102,96 @@ class McpWriteSurface:
                 },
                 "additionalProperties": False,
             },
+            "append_claim": {
+                "type": "object",
+                "required": ["text", "idempotency_key"],
+                "properties": {
+                    "text": {**text, "minLength": 1},
+                    "claim_type": text,
+                    "classification": text,
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "evidence_ids": ids,
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "link_entities": {
+                "type": "object",
+                "required": ["source_id", "target_id", "relation", "idempotency_key"],
+                "properties": {
+                    "source_id": {**text, "minLength": 1},
+                    "target_id": {**text, "minLength": 1},
+                    "relation": {"type": "string", "enum": [relation.value for relation in RelationType]},
+                    "status": {"type": "string", "enum": [status.value for status in Status]},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "expires_at": {"type": "string", "description": "ISO-8601 timestamp, if the relation should expire."},
+                    "evidence_ids": ids,
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "save_research_report": {
+                "type": "object",
+                "required": ["sections", "idempotency_key"],
+                "properties": {
+                    "sections": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["content"],
+                            "properties": {
+                                "id": text,
+                                "content": {**text, "minLength": 1},
+                                "facts": ids,
+                                "ai_inferences": ids,
+                                "unconfirmed": ids,
+                                "owner_decisions": ids,
+                                "claim_ids": ids,
+                                "evidence_ids": ids,
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
+                    "run_ids": ids,
+                    "evidence_ids": ids,
+                    "financial_formulas": {"type": "object", "additionalProperties": True},
+                    "decision_criteria": {"type": "object", "additionalProperties": True},
+                    "status": {"type": "string", "enum": [status.value for status in ReportStatus]},
+                    "parent_id": text,
+                    "change_reason": text,
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "record_decision": {
+                "type": "object",
+                "required": ["text", "idempotency_key"],
+                "properties": {
+                    "text": {**text, "minLength": 1},
+                    "claim_ids": ids,
+                    "report_ids": ids,
+                    "experiment_ids": ids,
+                    "status": {"type": "string", "enum": [status.value for status in Status]},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "record_correction": {
+                "type": "object",
+                "required": ["previous_id", "idempotency_key"],
+                "description": "Create a new revision while retaining the previous value.",
+                "properties": {
+                    "previous_id": {**text, "minLength": 1},
+                    "text": text,
+                    "title": text,
+                    "summary": text,
+                    "description": text,
+                    "source_text": text,
+                    "expected_revision": {"type": "integer", "minimum": 0},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
         }
         return tuple(
             {
@@ -93,7 +201,7 @@ class McpWriteSurface:
                     if name == "capture_person"
                     else "Capture an organization node without creating relationships."
                     if name == "capture_organization"
-                    else f"Purpose-limited Founder Graph write command: {name}."
+                    else f"Purpose-limited Founder Graph write command: {name}. Provide the fields in the input schema and reuse idempotency_key on retries."
                 ),
                 "readOnly": False,
                 "inputSchema": schemas.get(name, {"type": "object", "additionalProperties": False}),
