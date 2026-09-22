@@ -17,6 +17,7 @@ services:
       - founder_graph_neo4j_data:/data
     networks:
       - founder_graph_local
+      - founder_graph_host
     healthcheck:
       test:
         - CMD-SHELL
@@ -41,6 +42,10 @@ volumes:
 networks:
   founder_graph_local:
     internal: true
+  # The local-only network keeps container-to-container traffic private. The
+  # second, project-scoped network is needed because Docker does not publish
+  # ports from an internal-only network on Docker Desktop.
+  founder_graph_host: {}
 
 secrets:
   founder_graph_auth:

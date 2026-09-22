@@ -23,6 +23,7 @@ $manifestCapturer = Join-Path $scriptDirectory 'capture_manifest.py'
 $image = 'neo4j:5.26-community'
 $liveVolumeKey = 'founder_graph_neo4j_data'
 $script:authSecretFile = $null
+$script:authSecretPersistent = $false
 $script:authFileWasSet = $false
 $script:authFileOriginal = $null
 
@@ -51,8 +52,11 @@ function Require-ProjectName {
 }
 
 function Initialize-AuthSecret {
+    param([switch]$PersistForContainer)
     Require-Auth
-    $temporaryPath = [System.IO.Path]::GetTempFileName()
+    $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
+    $persistentPath = Join-Path ([System.IO.Path]::GetTempPath()) ("dots-founder-graph-auth-{0}.secret" -f $project)
+    $temporaryPath = if ($PersistForContainer) { $persistentPath } else { [System.IO.Path]::GetTempFileName() }
     try {
         $encoding = [System.Text.UTF8Encoding]::new($false)
         [System.IO.File]::WriteAllText($temporaryPath, $env:FOUNDER_GRAPH_NEO4J_AUTH, $encoding)
@@ -72,6 +76,7 @@ function Initialize-AuthSecret {
         throw 'could not create a private temporary auth secret file.'
     }
     $script:authSecretFile = $temporaryPath
+    $script:authSecretPersistent = [bool]$PersistForContainer
     if (Test-Path -LiteralPath Env:FOUNDER_GRAPH_NEO4J_AUTH_FILE) {
         $script:authFileWasSet = $true
         $script:authFileOriginal = $env:FOUNDER_GRAPH_NEO4J_AUTH_FILE
@@ -83,7 +88,7 @@ function Initialize-AuthSecret {
 }
 
 function Cleanup-AuthSecret {
-    if ($null -ne $script:authSecretFile -and (Test-Path -LiteralPath $script:authSecretFile)) {
+    if (-not $script:authSecretPersistent -and $null -ne $script:authSecretFile -and (Test-Path -LiteralPath $script:authSecretFile)) {
         Remove-Item -LiteralPath $script:authSecretFile -Force -ErrorAction SilentlyContinue
     }
     if ($script:authFileWasSet) {
@@ -93,6 +98,15 @@ function Cleanup-AuthSecret {
         Remove-Item Env:FOUNDER_GRAPH_NEO4J_AUTH_FILE -ErrorAction SilentlyContinue
     }
     $script:authSecretFile = $null
+    $script:authSecretPersistent = $false
+}
+
+function Remove-PersistentAuthSecret {
+    $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
+    $persistentPath = Join-Path ([System.IO.Path]::GetTempPath()) ("dots-founder-graph-auth-{0}.secret" -f $project)
+    if (Test-Path -LiteralPath $persistentPath) {
+        Remove-Item -LiteralPath $persistentPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Reject-Comma {
@@ -280,13 +294,14 @@ try {
             Validate-Contract
         }
         'start' {
-            Require-Docker; Require-ProjectName; Initialize-AuthSecret
+            Require-Docker; Require-ProjectName; Initialize-AuthSecret -PersistForContainer
             Invoke-Compose @('up', '--detach')
             Wait-ForHealthy
         }
         'stop' {
             Require-Docker; Require-ProjectName; Initialize-AuthSecret
-            Invoke-Compose @('stop', 'neo4j')
+            try { Invoke-Compose @('stop', 'neo4j') }
+            finally { Remove-PersistentAuthSecret }
         }
         'status' {
             Require-Docker; Require-ProjectName; Initialize-AuthSecret

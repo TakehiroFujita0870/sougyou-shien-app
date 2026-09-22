@@ -1,8 +1,8 @@
 # Dots implementation execution ledger
 
-最終更新: 2026-09-22
-main SHA: `27e157897162`
-active goal: none
+最終更新: 2026-09-23
+main SHA: `c8017f54d034`
+active goal: Founder Graph MVP
 
 ## 運用
 
@@ -21,21 +21,27 @@ active goal: none
 | Reasoning | `max` |
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
-| Current phase | P0 |
-| Last merged PR | #196 |
-| Last main smoke | backend 36 passed / 2 skipped、frontend 28 passed、Docker Engine 29.8.0 |
+| Current phase | P2/P3 MVP vertical slice |
+| Last merged PR | #198 |
+| Last main smoke | focused backend 114 passed / 2 skipped、Docker Desktop Engine 29.8.0、Neo4j保存→停止→再起動→MCP検索を実機確認 |
 
 ## Task ledger
 
 | Task | Status | Owner task | Branch | PR | Head SHA | Tests | Decision / Block | Updated at |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0-01 | READY | unassigned | - | - | `27e157897162` | planning validation pending | Q-DM-01 | 2026-09-22 |
+| P0-01 | MERGED | root | main | #196 / #197 | `c8017f54d034` | planning, link, CI passed | none | 2026-09-23 |
+| P0-02 | MERGED | root | main | #197 | `c8017f54d034` | ledger, task packet, CI passed | none | 2026-09-23 |
+| P0-03 | READY | unassigned | - | - | `c8017f54d034` | issue alignment pending | none | 2026-09-23 |
+| P1-SP-01 | READY | schema_v2_spike_luna | delegated | - | - | spike artifact ready for separate integration PR | none | 2026-09-23 |
+| P2-SP-01 | MERGED | neo4j_runtime_probe_luna | delegated | - | - | Docker Desktop 29.8.0、Compose 5.5.1、Windows CLIで実機確認 | none | 2026-09-23 |
+| P2-01/P2-03/P3-02 | RUNNING | root | working tree | - | - | Neo4j port/secret/read transaction修正、focused tests 114 passed / 2 skipped、MCP保存検索実機確認 | none | 2026-09-23 |
+| P3/P5 audit | REVIEW | mvp_vertical_slice_audit_luna | delegated | - | - | default in-memoryの断絶、MCP egress条件、UI未接続を確認 | none | 2026-09-23 |
 
 ## Decision ledger
 
 | Decision | Status | Stopped scope | Recommended default |
 | --- | --- | --- | --- |
-| Q-DM-01 | OPEN | P1以降 | schema v2を採用 |
+| Q-DM-01 | ADOPTED (MVP仮データ範囲) | none | schema v2を採用 |
 | D-EXT-01 | OPEN | P5以降 | 合成データ接続を許可 |
 | D-BACKUP-01 | OPEN | P8-SP-01以降 | アプリ層暗号化、同generationの別artifact |
 | D-DELETE-01 | OPEN | P8-02以降 | Reportを残しunavailable表示 |

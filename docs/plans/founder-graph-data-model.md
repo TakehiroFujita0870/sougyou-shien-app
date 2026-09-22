@@ -280,9 +280,9 @@ fixtureは次を固定する。
 
 ## 質問リスト
 
-| ID | 質問 | 決定者 | 期限 |
+| ID | 質問 | MVP早期の扱い | 決定者 | 期限 |
 | --- | --- | --- | --- |
-| Q-DM-01 | schema v2のRelationAssertion正本化とstable anchor / immutable revision分離を採用するか | 利用者兼製品責任者 | schema v2実装開始前 |
+| Q-DM-01 | schema v2のRelationAssertion正本化とstable anchor / immutable revision分離を採用するか | MVPの仮データ範囲で採用。実データ投入前に最終確認 | 利用者兼製品責任者 | 2026-09-23 |
 | Q-DM-02 | private archiveをアプリ層で暗号化するか | 利用者兼製品責任者 | 実データ投入前 |
 
 ## スコープ外
@@ -320,3 +320,4 @@ fixtureは次を固定する。
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-09-22 | 初版。schema v1を暫定契約とし、stable anchor、immutable revision、RelationAssertion正本、ContentChunkをschema v2に定義 | Neo4j既定化前にデータ粒度を固定するため | DM-SP-01〜DM-05 |
+| 2026-09-23 | MVPの仮データ範囲でschema v2を採用し、実装と合成永続化検査を開始 | 全体計画を止めず、実データ投入とは分離して進めるため | P1-SP-01〜P2-04 |

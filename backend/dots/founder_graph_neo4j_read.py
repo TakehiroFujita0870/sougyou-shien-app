@@ -232,14 +232,14 @@ class Neo4jGraphReadService:
         with self._read_session() as session:
             result = self._gateway._execute_read(
                 session,
-                lambda tx: tx.run(
+                lambda tx: _rows(tx.run(
                     _FETCH_QUERY,
                     node_id=identifier,
                     owner_id=owner,
                     non_current=sorted(_NON_CURRENT),
-                ),
+                )),
             )
-            rows = _rows(result)
+            rows = tuple(result)
         if not rows:
             raise GraphReadNotFoundError("node was not found")
         view = _view_from_row(rows[0], owner_id=owner)
@@ -271,14 +271,14 @@ class Neo4jGraphReadService:
         with self._read_session() as session:
             result = self._gateway._execute_read(
                 session,
-                lambda tx: tx.run(
+                lambda tx: _rows(tx.run(
                     _SEARCH_QUERY,
                     owner_id=owner,
                     tokens=list(tokens),
                     non_current=sorted(_NON_CURRENT),
-                ),
+                )),
             )
-            rows = _rows(result)
+            rows = tuple(result)
             self._check_timeout(started, timeout_ms)
             views: dict[str, NodeView] = {}
             scores: dict[str, float] = {}
@@ -299,14 +299,14 @@ class Neo4jGraphReadService:
             if scores:
                 relation_result = self._gateway._execute_read(
                     session,
-                    lambda tx: tx.run(
+                    lambda tx: _rows(tx.run(
                         _SEARCH_RELATIONS_QUERY,
                         owner_id=owner,
                         matched_ids=list(scores),
                         non_current=sorted(_NON_CURRENT),
-                    ),
+                    )),
                 )
-                for row in _rows(relation_result):
+                for row in tuple(relation_result):
                     self._check_timeout(started, timeout_ms)
                     source = _view_from_row(row, owner_id=owner, prefix="source_", strict=False)
                     target = _view_from_row(row, owner_id=owner, prefix="target_", strict=False)
@@ -345,14 +345,14 @@ class Neo4jGraphReadService:
         with self._read_session() as session:
             result = self._gateway._execute_read(
                 session,
-                lambda tx: tx.run(
+                lambda tx: _rows(tx.run(
                     _RELATIONS_QUERY,
                     node_id=identifier,
                     owner_id=owner,
                     non_current=sorted(_NON_CURRENT),
-                ),
+                )),
             )
-            rows = _rows(result)
+            rows = tuple(result)
         relations: list[GraphRelationView] = []
         for row in rows:
             source_id = _row_value(row, "source_id")
