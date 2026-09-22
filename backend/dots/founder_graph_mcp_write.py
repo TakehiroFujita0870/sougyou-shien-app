@@ -13,13 +13,17 @@ from .founder_graph import (
     DomainValidationError,
     EgressPolicy,
     Idea,
+    MaterialKind,
     Organization,
     PersonAsset,
+    Provenance,
     ReportSection,
     ReportStatus,
     ReportVersion,
     Relationship,
     RelationType,
+    Source,
+    SourceRevision,
     Status,
 )
 from .founder_graph_write import (
@@ -230,17 +234,70 @@ class McpWriteSurface:
 
     def _capture_idea(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {"title", "summary", "description", "source_text", "tags", "egress_policy", "idempotency_key"})
+        idempotency_key = self._idempotency(arguments)
+        idea_id = self._command_id("idea", idempotency_key)
+        source_id = self._command_id("source", idempotency_key)
+        source_revision_id = self._command_id("source-revision", idempotency_key)
+        source_text = arguments.get("source_text", "")
+        if not isinstance(source_text, str):
+            raise McpWriteError("invalid_input", "source_text must be a string")
+        source_provenance = Provenance(
+            actor="local-owner",
+            operation="capture_idea",
+            target_id=source_id,
+            source_id=source_revision_id,
+            idempotency_key=f"{idempotency_key}:source",
+        )
+        source_revision_provenance = Provenance(
+            actor="local-owner",
+            operation="capture_idea",
+            target_id=source_revision_id,
+            source_id=source_revision_id,
+            idempotency_key=f"{idempotency_key}:source-revision",
+        )
+        idea_provenance = Provenance(
+            actor="local-owner",
+            operation="capture_idea",
+            target_id=idea_id,
+            source_id=source_revision_id,
+            idempotency_key=idempotency_key,
+        )
+        source_revision = SourceRevision(
+            owner_id=self.writes.owner_id,
+            id=source_revision_id,
+            source_id=source_id,
+            content=source_text,
+            revision=1,
+            egress_policy=EgressPolicy.LOCAL_ONLY,
+            provenance=source_revision_provenance,
+        )
+        source = Source(
+            owner_id=self.writes.owner_id,
+            id=source_id,
+            title=arguments.get("title", "Conversation source"),
+            kind=MaterialKind.CONVERSATION,
+            current_revision_id=source_revision_id,
+            revision=1,
+            egress_policy=EgressPolicy.LOCAL_ONLY,
+            provenance=source_provenance,
+        )
         idea = Idea(
             owner_id=self.writes.owner_id,
-            id=self._command_id("idea", self._idempotency(arguments)),
+            id=idea_id,
             title=arguments.get("title", ""),
             summary=arguments.get("summary", ""),
             description=arguments.get("description", ""),
-            source_text=arguments.get("source_text", ""),
+            source_text="",
             tags=arguments.get("tags", ()),
             egress_policy=EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY)),
+            provenance=idea_provenance,
         )
-        return self.writes.put_node(idea, idempotency_key=self._idempotency(arguments), operation="capture_idea")
+        return self.writes.capture_idea(
+            idea,
+            source,
+            source_revision,
+            idempotency_key=idempotency_key,
+        )
 
     def _capture_person(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(

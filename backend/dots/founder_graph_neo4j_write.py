@@ -20,6 +20,8 @@ from .founder_graph import (
     NodeType,
     Provenance,
     ProvenanceOrigin,
+    Source,
+    SourceRevision,
 )
 from .founder_graph_neo4j import Neo4jGraphGateway
 from .founder_graph_write import (
@@ -145,6 +147,23 @@ class Neo4jGraphWriteService(GraphWritePort):
             idempotency_key=idempotency_key,
             expected_revision=expected_revision,
             operation=operation,
+            actor=actor,
+        )
+
+    def capture_idea(
+        self,
+        idea: Any,
+        source: Source,
+        source_revision: SourceRevision,
+        *,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self.gateway.capture_idea(
+            idea,
+            source,
+            source_revision,
+            idempotency_key=idempotency_key,
             actor=actor,
         )
 

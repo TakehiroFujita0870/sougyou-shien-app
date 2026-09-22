@@ -15,6 +15,8 @@ from dots.founder_graph import (
     Provenance,
     ResearchCampaign,
     ResearchRun,
+    Source,
+    SourceRevision,
     project_shareable,
 )
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
@@ -193,8 +195,47 @@ def test_capture_idea_and_append_claim_are_idempotent() -> None:
     assert first.target_id == replay.target_id
     assert replay.replayed is True
     assert claim_first.target_id == claim_replay.target_id
-    assert len(writes.nodes()) == 2
+    assert len(writes.nodes()) == 4
     assert len(writes.audit_events()) == 2
+
+
+def test_capture_idea_persists_source_and_source_revision_atomically() -> None:
+    writes, surface = _surface()
+
+    receipt = surface.call(
+        "capture_idea",
+        {
+            "title": "Conversation idea",
+            "source_text": "The raw founder conversation.",
+            "idempotency_key": "idea-with-source",
+        },
+        owner_id="owner-1",
+    )
+
+    idea = writes.get_node(receipt.target_id)
+    sources = tuple(node for node in writes.nodes() if isinstance(node, Source))
+    revisions = tuple(node for node in writes.nodes() if isinstance(node, SourceRevision))
+
+    assert isinstance(idea, Idea)
+    assert idea.source_text == ""
+    assert len(sources) == 1
+    assert len(revisions) == 1
+    assert sources[0].current_revision_id == revisions[0].id
+    assert revisions[0].source_id == sources[0].id
+    assert revisions[0].content == "The raw founder conversation."
+    assert idea.provenance.source_id == revisions[0].id
+
+    replay = surface.call(
+        "capture_idea",
+        {
+            "title": "Conversation idea",
+            "source_text": "The raw founder conversation.",
+            "idempotency_key": "idea-with-source",
+        },
+        owner_id="owner-1",
+    )
+    assert replay.replayed is True
+    assert len(writes.nodes()) == 3
 
 
 def test_link_entities_and_record_correction_use_domain_contracts() -> None:
