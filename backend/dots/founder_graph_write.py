@@ -565,6 +565,15 @@ class InMemoryGraphWriteService:
         if not isinstance(node, ReportVersion):
             return
 
+        if node.parent_id is not None:
+            parent = self._nodes.get(node.parent_id)
+            if parent is None:
+                raise GraphWriteNotFoundError(f"report parent does not exist: {node.parent_id}")
+            if _node_type(parent) is not NodeType.REPORT_VERSION:
+                raise GraphWriteError("report parent has an invalid node type")
+            if getattr(parent, "owner_id", None) != self.owner_id:
+                raise GraphWriteError("report parent owner does not match the local owner")
+
         runs = tuple(self._resolve_report_nodes(node.run_ids, NodeType.RESEARCH_RUN, "report run"))
         campaigns: dict[str, ResearchCampaign] = {}
         for run in runs:
