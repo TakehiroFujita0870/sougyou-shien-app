@@ -6,6 +6,7 @@
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)
 Graph RAG read計画: [`founder-graph-read-2hop.md`](founder-graph-read-2hop.md)
 schema v2移行計画: [`founder-graph-schema-v2-migration.md`](founder-graph-schema-v2-migration.md)
+名寄せ候補評価計画: [`founder-graph-namesake-evaluation.md`](founder-graph-namesake-evaluation.md)
 
 ## 要望 / ゴール / 成功指標
 
@@ -138,6 +139,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - Founder Graphのmax 2-hop read traversal、path、Evidence safe projection。
 - 合成MCPの同一接続保存、検索、詳細取得と外部投影からの会話原文除外。
 - 合成名刺CSVの全行検査後のPerson / Organization保存、private field境界、再実行時の重複防止。
+- 合成人物だけを使うローカル名寄せ候補と上位3件評価。候補は保存処理を持たず、自動統合0件を確認。
 - Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
@@ -151,6 +153,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - Graph全体検索からResearchBriefを作り、許諾後にDeep Researchへ渡す実経路。
 - Deep Research完了後のRun、Evidence、ReportVersion write-back。
 - Graph UIの実backend接続、訂正、削除impact、実file export。
+- 外部AIを使う名寄せ順位付け評価と、本人確定後だけ実行できる統合処理。
 - private full archive、soft delete propagation、safe export。
 - 実データ投入前security reviewと既存データ移行判断。
 
@@ -404,3 +407,4 @@ CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../oper
 | 2026-09-23 | schema v2 domain contract、max 2-hop read、Neo4j/system dumpと隔離restore queryの実機証跡を反映 | 実装済み範囲と未完了のAttachment、manifest、外部接続を分離して次の作業を選べるようにするため | DM-01、P3-02、P8-SP-01 |
 | 2026-09-23 | schema v2 migrationと非破壊rollbackを実装し、空DB・v1合成ノードで実機確認 | v2構造をNeo4jへ安全に追加し、既存データ変換とは分けて次のwrite/read作業へ進めるため | DM-02、P1-03 |
 | 2026-09-23 | 合成MCP保存・検索・詳細取得と名刺CSV安全取込を反映 | 外部ChatGPT接続と自動名寄せを開始せず、P5/P4のローカル価値をmainで検証できるようにするため | P5-SP-01、P4-02 |
+| 2026-09-23 | 合成人物のローカル名寄せ候補と上位3件評価を追加 | 連絡先を外部送信せず、本人確定前の自動統合を防いだ品質基準を固定するため | P4-SP-03-A |
