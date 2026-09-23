@@ -84,7 +84,17 @@ cmp -- "$fixture_dir/before-stop.json" "$fixture_dir/after-restart.json"
 
 結果は「initial save and search: PASS」「after restart search: PASS」である。再起動直後の初回検索はNeo4jのページキャッシュ準備に時間がかかるため、永続read adapterの既定上限を5秒へ設定した。これは保存先を一時メモリへ切り替える変更ではない。
 
-この記録は合成データだけのadapter smokeであり、Compose live volumeのmanifest比較、dump / load、ChatGPTの実MCP登録を完了扱いにしない。
+この記録は合成データだけのadapter smokeであり、Compose live volumeのmanifest比較、ChatGPTの実MCP登録を完了扱いにしない。
+
+同日、Docker Desktop上で別名の一時コンテナ・一時volumeを使い、backup / restoreの実機確認も行った。既存のCompose projectとlive volumeは変更していない。
+
+1. `neo4j:5.26-community`の隔離コンテナへ合成ノード`Smoke(smoke-20260923)`を書き込み、値`before-backup`を確認した。
+2. コンテナを停止し、`neo4j-admin database dump neo4j`と`neo4j-admin database dump system`を実行した。両方のdumpが非空で生成された（Neo4j dump 13,725 bytes、system dump 19,411 bytes）。
+3. 別の隔離restore volumeへ`neo4j-admin database load`を`neo4j`、`system`の順で実行した。両方とも終了コード0だった。
+4. restore volumeから新しい隔離コンテナを起動し、`MATCH (n:Smoke {id: $id}) RETURN n.value`で`before-backup`を読み出した。
+5. 確認後、隔離コンテナ、隔離volume、backupディレクトリを削除した。既存のlive volumeは残っている。
+
+結果は「backup dump: PASS」「isolated restore load: PASS」「restore query: PASS before-backup」である。Neo4jのsystem dump読み込み時に表示される注意文と、network noneのload時に出るホスト名解決警告は、loadの終了コードと復元結果には影響しなかった。これはNeo4j database dump / loadの実機証跡であり、Attachmentとmanifestを同generationで復元するP8-SP-01全体、およびsafe exportの完了を意味しない。
 
 ## Neo4j gatewayの接続境界
 
@@ -274,14 +284,14 @@ node / relation countを返す。これはNeo4j volumeの実loadではなく、T
 `validate`と`backend/tests/test_founder_graph_local_ops.py`はCompose本文、ポート、healthcheck、
 namespace付きvolume、credential参照、backup/restore/verify-restore/capture-manifest/verify-export-backupコマンド、runbookを静的に検査し、Docker daemonや
 registryへ接続しない。`start`、health確認、backup dump、隔離volumeへのloadはDockerが利用できる環境で
-別途実行し、その結果（ノード数、関係数、代表検索結果を含む）を記録する。従来はこの作業窓から実際のDocker smokeを利用できない状態だったが、現在はWindows側Docker Desktopで一部の実機確認を完了している。
-2026-09-23にWindows側Docker Desktopで、Neo4j起動、schema migration、合成IdeaのMCP保存、停止・再起動、検索・取得までを実行済みである。これはlive smokeの一部であり、backup / restoreの実機確認はまだ行っていない。Docker smoke全体は未完了である。
+別途実行し、その結果（ノード数、関係数、代表検索結果を含む）を記録する。従来はこの作業窓から実際のDocker smokeを利用できない状態だったが、現在はWindows側Docker Desktopでlive smokeの実機確認を進めている。
+2026-09-23にWindows側Docker Desktopで、Neo4j起動、schema migration、合成IdeaのMCP保存、停止・再起動、検索・取得、別volumeへのdatabase dump / loadと復元後の読み出しまでを実行済みである。Compose live volumeのmanifest一致、Attachmentの同generation復元、ChatGPT実MCP登録は未完了である。
 
 監査時の判定は次のように分ける。
 
 | 対象 | Docker-freeで確認する項目 | Docker実機で確認する項目 | 現在の状態 |
 | --- | --- | --- | --- |
 | T-FG-01 | loopback port、healthcheck、secret-file、start / status / stop、再起動手順、live volume非削除 | clean start、health、stop、restart、認証、同じvolumeのmanifest一致 | 起動・停止・再起動・MCP保存検索を実機確認、manifest一致は未実施 |
-| T-FG-03 | neo4j / system dump・load、隔離label、`--network none`、3 query count / hash、read-only contract | dump生成、隔離volume load、node / relationship count、代表3問のhash一致 | static検査済み、実機未検査 |
+| T-FG-03 | neo4j / system dump・load、隔離label、`--network none`、3 query count / hash、read-only contract | dump生成、隔離volume load、node / relationship count、代表3問のhash一致 | static検査済み。database dump / loadと復元後の代表queryを実機確認したが、3件のquery hash、Attachment、manifest hash一致は実機未検査 |
 
 実機gateの記録には、使用image tag、Compose project、volume名、各コマンドの終了コード、health、manifest比較、credential非露出、live volume非変更を含める。実機gateを通過するまでT-FG-01 / T-FG-03は完了扱いにしない。
