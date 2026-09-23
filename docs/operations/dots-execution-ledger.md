@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `32097ef3a3ea`
+main SHA: `63ade9a5171a`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
-| Last merged PR | #218 |
-| Last main smoke | backend `uv run --isolated pytest -q`: 363 passed / 17 skipped、frontend 311 passed、schema v2 migration/rollback、isolated Neo4j save-stop-restart-search and database dump/load restore query passed |
+| Last merged PR | #222 |
+| Last main smoke | backend `uv run --isolated pytest -q`: 375 passed / 17 skipped、frontend `npm.cmd test -- --run`: 320 passed、frontend build passed; schema v2 migration/rollback、isolated Neo4j save-stop-restart-search and database dump/load restore query passed |
 
 ## Task ledger
 
@@ -51,6 +51,9 @@ active goal: Founder Graph MVP
 | P4-02 | MERGED | root | main | #217 | `9ade328d1af3` | synthetic contact CSV all-row validation, owner/private boundary, idempotent write; backend 361 passed / 17 skipped | P4-SP-03 namesake evaluation remains | 2026-09-23 |
 | P8-SP-01-NEO4J | MERGED | root | main | #215 | `6c91b108d9ed` | isolated Neo4j/system dump, load, restore query passed; temporary resources removed | D-BACKUP-01 Attachment and same-generation manifest remain | 2026-09-23 |
 | P1-03 / DM-02 | MERGED | root | main | #218 | `32097ef3a3ea` | schema v2 migration, idempotent rerun, non-destructive rollback passed on isolated Neo4j; backend 363 passed / 17 skipped | Existing-data conversion and v2 write/read parity remain | 2026-09-23 |
+| P4-SP-03-A | MERGED | p4_namesake_relation_next | main | #220 | `69f9628c6fea` | synthetic namesake candidates, top-3 recall 1.00, automatic merges 0; backend 367 passed / 17 skipped | Real Luna ranking and confirmed-only merge API/UI remain | 2026-09-23 |
+| P6-02-local | MERGED | p6_local_report_next | main | #221 | `d6977ed62961` | explicit three-way follow-up classification, immutable snapshot; backend 375 passed / 17 skipped | D-EXT-01 external connection and persistence integration remain | 2026-09-23 |
+| P7-01-read | MERGED | p7_graph_live_ui_next | main | #222 | `63ade9a5171a` | live-read client state/retry tests 18 focused; frontend 320 passed and build passed | App wiring, search input, correction/history remain | 2026-09-23 |
 
 ## Decision ledger
 
