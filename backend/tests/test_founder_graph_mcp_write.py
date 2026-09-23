@@ -17,6 +17,7 @@ from dots.founder_graph import (
     ResearchRun,
     Source,
     SourceRevision,
+    Status,
     project_shareable,
 )
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
@@ -83,7 +84,7 @@ def _report_arguments(*, run_ids: list[str], claim_id: str = "claim-1", evidence
     }
 
 
-def test_write_surface_exposes_exactly_eight_tools() -> None:
+def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
     _writes, surface = _surface()
     definitions = surface.tool_definitions()
 
@@ -96,6 +97,7 @@ def test_write_surface_exposes_exactly_eight_tools() -> None:
         "save_research_report",
         "record_decision",
         "record_correction",
+        "confirm_person_merge",
     ]
     assert all(definition["readOnly"] is False for definition in definitions)
 
@@ -138,6 +140,47 @@ def test_capture_person_and_organization_are_idempotent_and_keep_relationships_e
     assert writes.relations() == ()
     assert len(writes.nodes()) == 2
     assert len(writes.audit_events()) == 2
+
+
+def test_confirm_person_merge_requires_explicit_confirmation_and_is_idempotent() -> None:
+    writes, surface = _surface()
+    winner = PersonAsset(owner_id="owner-1", id="person-winner", name="Aki Ito", contact={"email": "winner@example.test"})
+    loser = PersonAsset(owner_id="owner-1", id="person-loser", name="Aki Ito", contact={"email": "loser@example.test"})
+    evidence = Evidence(owner_id="owner-1", id="merge-evidence", material_id="synthetic-card", claim_id="synthetic-claim")
+    writes.put_node(winner, idempotency_key="seed-winner")
+    writes.put_node(loser, idempotency_key="seed-loser")
+    writes.put_node(evidence, idempotency_key="seed-evidence")
+    arguments = {
+        "winner_person_id": winner.id,
+        "loser_person_id": loser.id,
+        "confirmation": "confirmed",
+        "evidence_ids": [evidence.id],
+        "idempotency_key": "confirm-namesake-merge",
+    }
+
+    with pytest.raises(McpWriteError) as rejected:
+        surface.call("confirm_person_merge", {**arguments, "confirmation": "proposed"}, owner_id="owner-1")
+    assert rejected.value.code == "invalid_input"
+    assert writes.get_node(loser.id).status is Status.ACTIVE
+    assert writes.relations() == ()
+
+    first = surface.call("confirm_person_merge", arguments, owner_id="owner-1")
+    replay = surface.call("confirm_person_merge", arguments, owner_id="owner-1")
+
+    assertion = writes.get_node(first.target_id)
+    assert first.target_type == "relation_assertion"
+    assert replay.target_id == first.target_id
+    assert replay.replayed is True
+    assert writes.get_node(winner.id).status is Status.ACTIVE
+    assert writes.get_node(loser.id).status is Status.ARCHIVED
+    assert assertion.predicate.value == "MERGED_INTO"
+    assert assertion.status.value == "confirmed"
+    assert assertion.source_id == loser.id
+    assert assertion.target_id == winner.id
+    assert assertion.evidence_ids == (evidence.id,)
+    assert "winner@example.test" not in str(first)
+    assert "loser@example.test" not in str(first)
+    assert len(tuple(node for node in writes.nodes() if node.node_type.value == "relation_assertion")) == 1
 
 
 def test_capture_person_rejects_non_local_egress_before_persistence() -> None:
@@ -524,7 +567,7 @@ def test_save_research_report_rejects_section_evidence_for_another_claim() -> No
 
 def test_unsupported_write_and_payload_conflict_fail_closed() -> None:
     _writes, surface = _surface()
-    with pytest.raises(McpWriteError, match="eight"):
+    with pytest.raises(McpWriteError, match="purpose-limited"):
         surface.call("delete", {}, owner_id="owner-1")
 
     surface.call("capture_idea", {"title": "Original", "idempotency_key": "same"}, owner_id="owner-1")

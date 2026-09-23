@@ -72,7 +72,8 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     tools = client.get("/v1/founder-graph/mcp/tools", headers=headers)
     assert tools.status_code == 200
     assert [item["name"] for item in tools.json()["read"]] == ["search", "fetch"]
-    assert len(tools.json()["write"]) == 8
+    assert len(tools.json()["write"]) == 9
+    assert "confirm_person_merge" in {item["name"] for item in tools.json()["write"]}
 
     first = client.post(
         "/v1/founder-graph/mcp/write/capture_idea",
