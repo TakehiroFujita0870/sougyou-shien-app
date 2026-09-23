@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `bf204638753f`
+main SHA: `793f7c593f95`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
-| Last merged PR | #230 |
-| Last main smoke | backend `uv run --isolated pytest -q`: 387 passed / 17 skipped、frontend `npm.cmd test -- --run`: 321 passed、frontend build and Storybook build passed; schema v2 migration/rollback、v2 read/write parity、isolated Neo4j save-stop-restart-search and database dump/load restore query passed; Appの明示Graph live read接続点、本人確認済みPerson統合境界、ReportVersion親版検証を追加 |
+| Last merged PR | #233 |
+| Last main smoke | backend `uv run --isolated pytest -q`: 387 passed / 17 skipped、frontend `npm.cmd test -- --run`: 322 passed、frontend build and Storybook build passed; schema v2 migration/rollback、v2 read/write parity、isolated Neo4j save-stop-restart-search and database dump/load restore query passed; Appの明示Graph live read接続点、検索入力、本人確認済みPerson統合境界、ReportVersion親版検証、Compose再起動manifest検査を追加 |
 
 ## Task ledger
 
@@ -58,6 +58,8 @@ active goal: Founder Graph MVP
 | P7-01-D | MERGED | root | main | #226 | `b90f2319b18c` | Appの明示クライアント接続、Graph live read focused 7 passed、frontend 321 passed、build/Storybook passed、backend 378 passed / 17 skipped | 検索入力、訂正/履歴、実ChatGPT接続は未着手またはD-EXT-01で保留 | 2026-09-23 |
 | P4-03-C | MERGED | p4_relation_confirm | main | #228 | `ad70463e2fc8` | 明示confirmed + 根拠IDのPerson統合、敗者archived、冪等再送、MCP HTTP/stdio契約、Neo4j未対応時の明示拒否; backend 379 passed / 17 skipped | Neo4j原子統合、既存関係付替え、統合UIは未実装 | 2026-09-23 |
 | RPP-01/RPP-02 | MERGED | p6_parent_validation | main | #230 | `bf204638753f` | ReportVersion親版の存在・種類・ownerをメモリ/Neo4j互換保存前に検証、同owner親版を許可; backend 387 passed / 17 skipped | 差分計算、親版比較UI、Deep Research接続は未実装 | 2026-09-23 |
+| P7-01-E | MERGED | p7_graph_search_input | main | #232 | `945ad46b8335` | Graph検索入力、submit時のみ明示local clientへ依頼、focused 5 passed、frontend 322 passed、build passed | 訂正/履歴UI、実ChatGPT接続は未実装またはD-EXT-01で保留 | 2026-09-23 |
+| P2-02/P2-03 | MERGED | p2_compose_manifest | main | #233 | `793f7c593f95` | Compose live volume名と停止前後synthetic manifest一致の手順・回帰検査、focused 23 passed / 2 skipped、static validator passed | Attachment同generation、実データ、backup decisionは未完了 | 2026-09-23 |
 
 ## Decision ledger
 
