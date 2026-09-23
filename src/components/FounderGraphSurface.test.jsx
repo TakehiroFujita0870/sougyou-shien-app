@@ -151,6 +151,81 @@ describe('FounderGraphSurface', () => {
 
     expect(view.querySelectorAll('[data-founder-graph-category-tab]')).toHaveLength(4);
     expect(view.querySelector('[data-founder-graph-report-diff]')).toBeNull();
+    expect(view.querySelector('[data-founder-graph-namesake-candidates]')).toBeNull();
+  });
+
+  it('keeps namesake candidates read-safe and sends an explicit confirmation only through its callback', () => {
+    const onConfirmNamesakeMerge = vi.fn();
+    const view = renderSurface({
+      namesakeCandidates: [{
+        person_ids: ['person-a', 'person-b'],
+        reasons: ['same_name', 'same_email'],
+        confidence: 0.95,
+        status: 'proposed',
+        contact: { email: 'private@example.test', phone: '090-0000-0000' },
+        private_notes: 'do not render',
+      }],
+      onConfirmNamesakeMerge,
+    });
+
+    const panel = view.querySelector('[data-founder-graph-namesake-candidates]');
+    expect(panel.textContent).toContain('person-a');
+    expect(panel.textContent).toContain('person-b');
+    expect(panel.textContent).toContain('same_name');
+    expect(panel.textContent).not.toContain('private@example.test');
+    expect(panel.textContent).not.toContain('090-0000-0000');
+    expect(panel.textContent).not.toContain('do not render');
+    expect(onConfirmNamesakeMerge).not.toHaveBeenCalled();
+
+    const evidenceInput = panel.querySelector('[data-founder-graph-merge-evidence-id]');
+    act(() => panel.querySelector('input[type="radio"][value="person-a"]').click());
+    act(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      valueSetter.call(evidenceInput, 'evidence-1');
+      evidenceInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    act(() => panel.querySelector('[data-founder-graph-confirm-namesake-merge]').click());
+
+    expect(onConfirmNamesakeMerge).toHaveBeenCalledWith({
+      winner_person_id: 'person-a',
+      loser_person_id: 'person-b',
+      confirmation: 'confirmed',
+      evidence_ids: ['evidence-1'],
+    });
+  });
+
+  it('requires a winner choice and evidence before invoking a namesake confirmation callback', () => {
+    const onConfirmNamesakeMerge = vi.fn();
+    const view = renderSurface({
+      namesakeCandidates: [{
+        person_ids: ['person-a', 'person-b'],
+        reasons: ['same_name'],
+        confidence: 0.55,
+        status: 'proposed',
+      }],
+      onConfirmNamesakeMerge,
+    });
+    const panel = view.querySelector('[data-founder-graph-namesake-candidates]');
+
+    act(() => panel.querySelector('[data-founder-graph-confirm-namesake-merge]').click());
+
+    expect(onConfirmNamesakeMerge).not.toHaveBeenCalled();
+    expect(panel.querySelector('[data-founder-graph-namesake-merge-error]').textContent)
+      .toContain('勝者と根拠IDを選択してください。');
+  });
+
+  it('shows supplied namesake candidates without enabling a write path when no callback is supplied', () => {
+    const view = renderSurface({
+      namesakeCandidates: [{
+        person_ids: ['person-a', 'person-b'],
+        reasons: ['same_name'],
+        confidence: 0.55,
+        status: 'proposed',
+      }],
+    });
+
+    expect(view.querySelector('[data-founder-graph-namesake-candidates]')).toBeTruthy();
+    expect(view.querySelector('[data-founder-graph-confirm-namesake-merge]').disabled).toBe(true);
   });
 
   it('adds an optional Reports category and mounts the read-only report diff', () => {
