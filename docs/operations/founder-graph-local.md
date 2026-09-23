@@ -61,6 +61,9 @@ T-FG-01の実機gateでは、合成fixtureのmanifestを停止前と再起動後
 
 ```bash
 fixture_dir='/mnt/c/Users/<you>/founder-graph-backups/tfg01'
+project="${FOUNDER_GRAPH_COMPOSE_PROJECT:-founder-graph-local}"
+live_volume="${project}_founder_graph_neo4j_data"
+live_volume_before="$(docker volume inspect --format '{{.Name}}' "$live_volume")"
 bash scripts/founder-graph/founder-graph.sh capture-manifest \
   "$fixture_dir/queries.json" "$fixture_dir/before-stop.json"
 bash scripts/founder-graph/founder-graph.sh stop
@@ -69,9 +72,11 @@ bash scripts/founder-graph/founder-graph.sh status
 bash scripts/founder-graph/founder-graph.sh capture-manifest \
   "$fixture_dir/queries.json" "$fixture_dir/after-restart.json"
 cmp -- "$fixture_dir/before-stop.json" "$fixture_dir/after-restart.json"
+live_volume_after="$(docker volume inspect --format '{{.Name}}' "$live_volume")"
+test "$live_volume_before" = "$live_volume_after"
 ```
 
-この手順はDockerが利用できるWSL2環境でだけ実行する。`stop`、`start`、`status`、manifest比較が成功し、volume名が同じであることを記録してT-FG-01の実機証跡とする。`down --volumes`、`docker volume rm`、volume pruneは使わない。
+この手順はDockerが利用できるWSL2環境でだけ実行する。合成fixtureの`queries.json`だけを使い、`cmp`とvolume名の両方が成功したときだけ、停止前後で同じlive volumeのmanifestが完全一致したと記録する。`down --volumes`、`docker volume rm`、volume pruneは使わない。
 
 ## 実機合成データ検証記録
 
@@ -148,7 +153,26 @@ python .\scripts\founder-graph\migrate_schema.py --validate-only
 .\scripts\founder-graph\founder-graph.ps1 status
 ```
 
-PowerShellでも、停止前と再起動後に`capture-manifest`を別の出力pathへ実行し、`Compare-Object`でmanifestの一致を記録する。実機結果がない状態でstatic validatorのPASSをlive PASSと扱わない。
+PowerShellでも、停止前と再起動後に合成fixtureのmanifestを別の出力pathへ実行し、同じCompose projectのlive volume名とmanifestの一致を記録する。
+
+```powershell
+$fixtureDir = 'C:\Users\<you>\founder-graph-backups\tfg01'
+$project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
+$liveVolume = "${project}_founder_graph_neo4j_data"
+$liveVolumeBefore = (& docker volume inspect --format '{{.Name}}' $liveVolume).Trim()
+.\scripts\founder-graph\founder-graph.ps1 capture-manifest -Path (Join-Path $fixtureDir 'queries.json') -RestoreVolume (Join-Path $fixtureDir 'before-stop.json')
+.\scripts\founder-graph\founder-graph.ps1 stop
+.\scripts\founder-graph\founder-graph.ps1 start
+.\scripts\founder-graph\founder-graph.ps1 status
+.\scripts\founder-graph\founder-graph.ps1 capture-manifest -Path (Join-Path $fixtureDir 'queries.json') -RestoreVolume (Join-Path $fixtureDir 'after-restart.json')
+$beforeManifest = Get-Content -Raw -LiteralPath (Join-Path $fixtureDir 'before-stop.json')
+$afterManifest = Get-Content -Raw -LiteralPath (Join-Path $fixtureDir 'after-restart.json')
+if (Compare-Object -ReferenceObject $beforeManifest -DifferenceObject $afterManifest) { throw 'restart manifest does not match' }
+$liveVolumeAfter = (& docker volume inspect --format '{{.Name}}' $liveVolume).Trim()
+if ($liveVolumeBefore -ne $liveVolumeAfter) { throw 'restart used a different live volume' }
+```
+
+この比較が成功するまではstatic validatorのPASSをlive PASSと扱わない。
 
 ## Backup drill
 

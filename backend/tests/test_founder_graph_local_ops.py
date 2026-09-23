@@ -369,6 +369,12 @@ def test_tfg01_lifecycle_static_contract_includes_restart_and_persistence_eviden
     restart = runbook.index("founder-graph.sh start", stop)
     after = runbook.index("after-restart.json", restart)
     assert before < stop < restart < after < runbook.index("cmp --", after)
+    assert 'live_volume_before="$(docker volume inspect --format \'{{.Name}}\' "$live_volume")"' in runbook
+    assert 'live_volume_after="$(docker volume inspect --format \'{{.Name}}\' "$live_volume")"' in runbook
+    assert 'test "$live_volume_before" = "$live_volume_after"' in runbook
+    assert '$liveVolumeBefore = (& docker volume inspect --format \'{{.Name}}\' $liveVolume).Trim()' in runbook
+    assert '$liveVolumeAfter = (& docker volume inspect --format \'{{.Name}}\' $liveVolume).Trim()' in runbook
+    assert 'Compare-Object -ReferenceObject $beforeManifest -DifferenceObject $afterManifest' in runbook
     assert "同じlive volume" in runbook
     assert "実機未検査" in runbook
 
