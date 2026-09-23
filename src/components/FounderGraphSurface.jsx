@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Badge } from './ui/Badge';
 import { Card } from './ui/Card';
+import FounderGraphNamesakeCandidates from './FounderGraphNamesakeCandidates';
 import FounderGraphReportDiff from './FounderGraphReportDiff';
 
 export const FOUNDER_GRAPH_CATEGORIES = [
@@ -162,7 +163,7 @@ function focusTab(tabRefs, index) {
   requestAnimationFrame(() => tabRefs.current[index]?.focus());
 }
 
-export function FounderGraphSurface({ results, fixture, state, status, initialCategory = 'ideas', reports, onRetry }) {
+export function FounderGraphSurface({ results, fixture, state, status, initialCategory = 'ideas', reports, namesakeCandidates, onConfirmNamesakeMerge, onRetry }) {
   const headingId = useId();
   const tabRefs = useRef([]);
   const reportConfig = useMemo(() => normalizeReportConfig(reports), [reports]);
@@ -258,6 +259,8 @@ export function FounderGraphSurface({ results, fixture, state, status, initialCa
           )}
         </div>
       )}
+
+      <FounderGraphNamesakeCandidates candidates={namesakeCandidates} onConfirm={onConfirmNamesakeMerge} />
 
       <div id={`${headingId}-panel`} role="tabpanel" aria-labelledby={`${headingId}-tab-${activeCategoryKey}`} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {activeCategoryKey === FOUNDER_GRAPH_REPORT_CATEGORY.key && reportConfig ? (
