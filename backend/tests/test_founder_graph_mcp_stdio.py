@@ -54,6 +54,38 @@ def test_tools_call_delegates_read_and_idempotent_write() -> None:
     assert search["result"]["structuredContent"]["results"] == []
 
 
+def test_tools_call_captures_and_reads_a_shareable_idea_without_source_text() -> None:
+    """Exercise the three P5 synthetic MCP tools through one stdio session."""
+
+    server = create_stdio_server("owner-a")
+    captured = server.handle(
+        request(
+            "tools/call",
+            11,
+            {
+                "name": "capture_idea",
+                "arguments": {
+                    "title": "Shareable card-network idea",
+                    "summary": "A synthetic business idea.",
+                    "source_text": "This private conversation text must not leave Dots.",
+                    "egress_policy": "shareable",
+                    "idempotency_key": "shareable-idea-1",
+                },
+            },
+        )
+    )
+    idea_id = json.loads(captured["result"]["content"][0]["text"])["target_id"]
+
+    searched = server.handle(request("tools/call", 12, {"name": "search", "arguments": {"query": "card-network"}}))
+    fetched = server.handle(request("tools/call", 13, {"name": "fetch", "arguments": {"id": idea_id}}))
+
+    assert [result["id"] for result in searched["result"]["structuredContent"]["results"]] == [idea_id]
+    projection = fetched["result"]["structuredContent"]
+    assert projection["id"] == idea_id
+    assert projection["fields"]["title"] == "Shareable card-network idea"
+    assert "private conversation" not in json.dumps(projection, ensure_ascii=False)
+
+
 def test_errors_notifications_and_malformed_lines_are_safe() -> None:
     server = create_stdio_server("owner-a")
     assert server.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
