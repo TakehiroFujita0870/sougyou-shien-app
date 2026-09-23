@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FounderGraphSurface } from './FounderGraphSurface';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -129,6 +129,14 @@ describe('FounderGraphSurface', () => {
     expect(view.querySelector(`[role="${role}"]`).textContent).toContain(message);
     expect(view.querySelectorAll('[data-founder-graph-card]')).toHaveLength(0);
     expect(view.querySelector('[data-founder-graph-detail]')).toBeNull();
+  });
+
+  it('offers retry only when an unavailable or failed live read supplies an action', () => {
+    const retry = vi.fn();
+    const view = renderSurface({ state: 'unavailable', onRetry: retry });
+
+    act(() => view.querySelector('[data-founder-graph-retry="true"]').click());
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it('announces an empty category distinctly when the graph is ready', () => {

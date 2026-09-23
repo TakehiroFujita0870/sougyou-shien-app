@@ -162,7 +162,7 @@ function focusTab(tabRefs, index) {
   requestAnimationFrame(() => tabRefs.current[index]?.focus());
 }
 
-export function FounderGraphSurface({ results, fixture, state, status, initialCategory = 'ideas', reports }) {
+export function FounderGraphSurface({ results, fixture, state, status, initialCategory = 'ideas', reports, onRetry }) {
   const headingId = useId();
   const tabRefs = useRef([]);
   const reportConfig = useMemo(() => normalizeReportConfig(reports), [reports]);
@@ -246,14 +246,17 @@ export function FounderGraphSurface({ results, fixture, state, status, initialCa
       </div>
 
       {stateMessage && (
-        <p
+        <div
           role={resolvedState === 'error' ? 'alert' : 'status'}
           aria-live={resolvedState === 'error' ? 'assertive' : 'polite'}
           data-founder-graph-state-message={resolvedState}
-          className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-muted)] px-4 py-3 text-sm"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-muted)] px-4 py-3 text-sm"
         >
-          {stateMessage}
-        </p>
+          <span>{stateMessage}</span>
+          {(resolvedState === 'unavailable' || resolvedState === 'error') && typeof onRetry === 'function' && (
+            <button type="button" data-founder-graph-retry="true" onClick={onRetry} className="rounded-lg border border-[var(--color-border-subtle)] px-3 py-1.5 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">再試行</button>
+          )}
+        </div>
       )}
 
       <div id={`${headingId}-panel`} role="tabpanel" aria-labelledby={`${headingId}-tab-${activeCategoryKey}`} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
