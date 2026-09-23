@@ -1269,6 +1269,7 @@ def test_shareable_projection_covers_all_read_mcp_node_types_without_private_fie
 
 
 def test_local_only_and_explicit_projection_fail_closed_for_all_read_mcp_node_types() -> None:
+    authorization_time = utc_now() + timedelta(seconds=1)
     for node in _shareable_node_fixture():
         local = replace(node, egress_policy=EgressPolicy.LOCAL_ONLY)
         assert project_shareable(local) == {}
@@ -1280,14 +1281,14 @@ def test_local_only_and_explicit_projection_fail_closed_for_all_read_mcp_node_ty
             purpose="Explicit projection",
             target_idea_id=str(node.id),
             allowed_categories=("*",),
-            expires_at=datetime(2026, 10, 1, tzinfo=UTC),
-        ).approve(approved_at=datetime(2026, 9, 23, tzinfo=UTC))
+            expires_at=authorization_time + timedelta(days=1),
+        ).approve(approved_at=authorization_time)
         registry = CampaignAuthorizationRegistry.from_campaign(campaign)
         projection = project_shareable(
             explicit,
             authorization=campaign.authorization_snapshot,
             campaign=campaign,
             authorization_registry=registry,
-            at=datetime(2026, 9, 23, 1, tzinfo=UTC),
+            at=authorization_time + timedelta(seconds=1),
         )
         assert projection, node.node_type

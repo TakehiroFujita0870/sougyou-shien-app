@@ -1,7 +1,7 @@
 # Founder Graph データモデル正本
 
 最終更新: 2026-09-22
-状態: Neo4j既定化前の実装契約
+状態: DM-01 domain contract実装済み、Neo4j既定化前の実装契約
 
 ## 要望 / ゴール / 成功指標
 
@@ -14,6 +14,8 @@
 ## 現行schema v1の扱い
 
 現行コードは、`Idea`と`Claim`の訂正を新しい同種ノードで表し、Neo4jの主要fieldを`payload_json`にも保持する。`Relationship`はNeo4j relationshipへ直接保存し、根拠IDをJSON配列propertyに置く。この実装は契約試験用のschema v1であり、本書のschema v2を満たしていない。
+
+2026-09-23時点で、schema v2へ移行するためのdomain contractとして`EntityRevision`、`RelationAssertion`、`ContentChunk`、`Facet`とpredicate allowlistを追加した。これは保存形式の切替ではなく、既存schema v1の利用経路を壊さずにv2の入力値を検証する段階である。Neo4j migration、既存データ変換、既定保存先の切替は未完了である。
 
 次の不一致が解消するまで、`create_app()`の既定保存先をNeo4jへ切り替えない。
 
@@ -299,7 +301,7 @@ fixtureは次を固定する。
 | ID | 成果物 | 完了判定（検査:） | 不確実性 |
 | --- | --- | --- | --- |
 | DM-SP-01 | schema v1からv2へのfixture変換spike | 検査: 20会話と10名刺を変換し、欠落field、孤立edge、重複anchor一覧を出力する | 未知 |
-| DM-01 | NodeType、revision、RelationAssertion domain contract | 検査: stable ID、current pointer一意、immutable revision、predicate allowlistのunit testが成功する | 類推可能 |
+| DM-01 | NodeType、revision、RelationAssertion domain contract | 検査: `backend/tests/test_founder_graph_schema_v2.py`と既存Founder Graph unit testでstable anchor参照、immutable revision、evidence境界、predicate allowlistを確認する | 類推可能 |
 | DM-02 | Neo4j schema migration v2 | 検査: constraint、index、owner境界、rollback fixtureが実Neo4jで成功する | 類推可能 |
 | DM-03 | schema v2 write adapter | 検査: anchorとrevisionのtransaction、idempotency、revision conflict testが成功する | 類推可能 |
 | DM-04 | schema v2 read / Graph RAG adapter | 検査: 代表10問でowner越境0件、private field投影0件、根拠path欠落0件になる | 類推可能 |
@@ -321,3 +323,4 @@ fixtureは次を固定する。
 | --- | --- | --- | --- |
 | 2026-09-22 | 初版。schema v1を暫定契約とし、stable anchor、immutable revision、RelationAssertion正本、ContentChunkをschema v2に定義 | Neo4j既定化前にデータ粒度を固定するため | DM-SP-01〜DM-05 |
 | 2026-09-23 | MVPの仮データ範囲でschema v2を採用し、実装と合成永続化検査を開始 | 全体計画を止めず、実データ投入とは分離して進めるため | P1-SP-01〜P2-04 |
+| 2026-09-23 | DM-01のdomain contractを追加し、既存schema v1の保存経路は変更せずにv2値の検証を可能にした | stable anchor、immutable revision、RelationAssertion、ContentChunk、FacetをNeo4j移行前にテスト可能にするため | DM-01 |
