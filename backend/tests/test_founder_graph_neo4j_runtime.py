@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 import inspect
 
 import dots.main as main_module
+import dots.founder_graph_mcp_stdio as stdio_module
+from fastapi.testclient import TestClient
 from dots.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_write import Neo4jGraphWriteService, PersistedNodeReference
@@ -68,6 +70,12 @@ class _Driver:
         return self.session_value
 
 
+class _UnavailableDriver:
+    def session(self, *, database: str):
+        assert database == "neo4j"
+        raise OSError("Neo4j is stopped")
+
+
 def test_composition_binds_one_gateway_without_implicit_connection() -> None:
     session = _Session({})
     composition = create_neo4j_graph_composition(_Driver(session), "owner-1")
@@ -115,6 +123,39 @@ def test_configured_app_wires_neo4j_when_selected(monkeypatch) -> None:
 
     assert app.title == "Dots. API"
     assert session.calls == []
+
+
+def test_configured_neo4j_outage_fails_closed_for_fastapi_and_stdio(monkeypatch) -> None:
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "owner-persistent")
+    monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", _UnavailableDriver)
+    monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", _UnavailableDriver)
+
+    api = TestClient(create_configured_app())
+    headers = {"X-Local-Owner-Id": "owner-persistent"}
+    read = api.post("/v1/founder-graph/mcp/read/search", headers=headers, json={"query": "idea"})
+    write = api.post(
+        "/v1/founder-graph/mcp/write/capture_idea",
+        headers=headers,
+        json={"title": "must not be stored in memory", "idempotency_key": "outage-write"},
+    )
+    stdio = stdio_module.create_stdio_server()
+    stdio_write = stdio.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "capture_idea",
+                "arguments": {"title": "must not be stored in memory", "idempotency_key": "outage-stdio"},
+            },
+        }
+    )
+
+    assert read.status_code == write.status_code == 503
+    assert read.json()["detail"]["code"] == write.json()["detail"]["code"] == "unavailable"
+    assert stdio_write["error"]["data"]["code"] == "unavailable"
 
 
 def test_unknown_backend_fails_closed_before_app_creation(monkeypatch) -> None:
