@@ -7,7 +7,7 @@ adapter must preserve the same command, idempotency, revision, and audit rules.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from hashlib import sha256
@@ -18,13 +18,18 @@ from typing import Any, Mapping, Protocol
 from .founder_graph import (
     CampaignAuthorizationRegistry,
     DomainValidationError,
+    Evidence,
     NodeType,
+    PersonAsset,
+    RelationAssertion,
+    RelationType,
     ReportVersion,
     Relationship,
     ResearchCampaign,
     ResearchRun,
     Source,
     SourceRevision,
+    Status,
     _ALLOWED_RELATION_ENDPOINTS,
     validate_report_references,
     validate_run_campaign_reference,
@@ -90,6 +95,15 @@ class GraphWritePort(Protocol):
         actor: str = "local-owner",
     ) -> "WriteReceipt":
         """Persist one owner-scoped relationship."""
+
+    def confirm_person_merge(
+        self,
+        assertion: RelationAssertion,
+        *,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Archive one Person and record its confirmed MERGED_INTO assertion."""
 
     def record_correction(
         self,
@@ -185,6 +199,7 @@ class InMemoryGraphWriteService:
         "save_research_report",
         "record_decision",
         "record_correction",
+        "confirm_person_merge",
     })
 
     def __init__(self, owner_id: str) -> None:
@@ -347,6 +362,77 @@ class InMemoryGraphWriteService:
                 self._append_audit(receipt, actor, fingerprint)
             except Exception:
                 self._relations.pop(relation_id, None)
+                raise
+            self._idempotency[idempotency_key] = (fingerprint, receipt)
+            return receipt
+
+    def confirm_person_merge(
+        self,
+        assertion: RelationAssertion,
+        *,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Atomically archive the losing Person and persist a confirmed merge assertion."""
+
+        operation = self._validate_command("confirm_person_merge", actor, idempotency_key)
+        if not isinstance(assertion, RelationAssertion):
+            raise GraphWriteError("person merge requires a RelationAssertion")
+        if assertion.owner_id != self.owner_id:
+            raise GraphWriteError("relation assertion owner does not match the local owner")
+        if (
+            assertion.predicate is not RelationType.MERGED_INTO
+            or assertion.status.value != "confirmed"
+            or assertion.source_kind is not NodeType.PERSON
+            or assertion.target_kind is not NodeType.PERSON
+        ):
+            raise GraphWriteError("person merge requires a confirmed Person-to-Person MERGED_INTO assertion")
+        # ``valid_from`` is assigned when this command object is rebuilt for a
+        # retry.  It is audit metadata, not caller intent, so it must not make
+        # an otherwise identical confirmation conflict with its idempotency key.
+        fingerprint = payload_fingerprint(
+            operation,
+            assertion.id,
+            assertion.source_id,
+            assertion.target_id,
+            assertion.assertion_family_id,
+            assertion.predicate,
+            assertion.status,
+            assertion.evidence_ids,
+            self.owner_id,
+        )
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            loser = self._nodes.get(assertion.source_id)
+            winner = self._nodes.get(assertion.target_id)
+            if not isinstance(loser, PersonAsset) or not isinstance(winner, PersonAsset):
+                raise GraphWriteError("person merge endpoints must already be Person records")
+            if loser.status is not Status.ACTIVE or winner.status is not Status.ACTIVE:
+                raise GraphWriteError("person merge endpoints must both be active")
+            if assertion.id in self._nodes:
+                raise NodeAlreadyExistsError("relation assertion id is already registered")
+            for evidence_id in assertion.evidence_ids:
+                evidence = self._nodes.get(evidence_id)
+                if not isinstance(evidence, Evidence):
+                    raise GraphWriteNotFoundError("person merge evidence must already exist")
+                if evidence.owner_id != self.owner_id:
+                    raise GraphWriteError("person merge evidence must belong to the local owner")
+            archived_loser = replace(loser, status=Status.ARCHIVED)
+            receipt = WriteReceipt(operation, assertion.id, NodeType.RELATION_ASSERTION.value, assertion.revision, idempotency_key)
+            prior_history = list(self._node_history[loser.id])
+            try:
+                self._nodes[loser.id] = archived_loser
+                self._node_history[loser.id].append(archived_loser)
+                self._nodes[assertion.id] = assertion
+                self._node_history[assertion.id] = [assertion]
+                self._append_audit(receipt, actor, fingerprint)
+            except Exception:
+                self._nodes[loser.id] = loser
+                self._node_history[loser.id] = prior_history
+                self._nodes.pop(assertion.id, None)
+                self._node_history.pop(assertion.id, None)
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt

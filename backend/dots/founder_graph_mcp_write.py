@@ -17,6 +17,7 @@ from .founder_graph import (
     Organization,
     PersonAsset,
     Provenance,
+    RelationAssertion,
     ReportSection,
     ReportStatus,
     ReportVersion,
@@ -57,6 +58,7 @@ class McpWriteSurface:
         "save_research_report",
         "record_decision",
         "record_correction",
+        "confirm_person_merge",
     )
 
     def tool_definitions(self) -> tuple[Mapping[str, Any], ...]:
@@ -196,6 +198,19 @@ class McpWriteSurface:
                 },
                 "additionalProperties": False,
             },
+            "confirm_person_merge": {
+                "type": "object",
+                "description": "Archive the losing local Person only after the owner explicitly confirms this namesake merge.",
+                "required": ["winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"],
+                "properties": {
+                    "winner_person_id": {**text, "minLength": 1},
+                    "loser_person_id": {**text, "minLength": 1},
+                    "confirmation": {"type": "string", "enum": ["confirmed"]},
+                    "evidence_ids": {**ids, "minItems": 1},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
         }
         return tuple(
             {
@@ -215,7 +230,7 @@ class McpWriteSurface:
 
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> WriteReceipt:
         if tool_name not in self._TOOL_NAMES:
-            raise McpWriteError("unknown_tool", "Only the eight purpose-limited write tools are available.")
+            raise McpWriteError("unknown_tool", "Only the purpose-limited write tools are available.")
         if not isinstance(arguments, Mapping):
             raise McpWriteError("invalid_input", "Tool arguments must be an object.")
         if owner_id != self.writes.owner_id:
@@ -371,6 +386,43 @@ class McpWriteSurface:
         )
         return self.writes.link_entities(relationship, idempotency_key=self._idempotency(arguments))
 
+    def _confirm_person_merge(self, arguments: Mapping[str, Any]) -> WriteReceipt:
+        self._reject_unknown(arguments, {"winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"})
+        winner_id = self._text(arguments.get("winner_person_id"), "winner_person_id")
+        loser_id = self._text(arguments.get("loser_person_id"), "loser_person_id")
+        if winner_id == loser_id:
+            raise McpWriteError("invalid_input", "winner_person_id and loser_person_id must be different")
+        if arguments.get("confirmation") != "confirmed":
+            raise McpWriteError("invalid_input", "person merge requires explicit confirmation=confirmed")
+        evidence_ids = self._ids(arguments.get("evidence_ids"), "evidence_ids")
+        if not evidence_ids:
+            raise McpWriteError("invalid_input", "person merge requires at least one confirmation evidence id")
+        winner = self.writes.get_node(winner_id)
+        loser = self.writes.get_node(loser_id)
+        if not isinstance(winner, PersonAsset) or not isinstance(loser, PersonAsset):
+            raise McpWriteError("invalid_input", "person merge endpoints must be saved Person records")
+        idempotency_key = self._idempotency(arguments)
+        assertion_id = self._command_id("relation-assertion", idempotency_key)
+        assertion = RelationAssertion(
+            owner_id=self.writes.owner_id,
+            id=assertion_id,
+            source_id=loser.id,
+            source_kind=loser.node_type,
+            target_id=winner.id,
+            target_kind=winner.node_type,
+            predicate=RelationType.MERGED_INTO,
+            assertion_family_id=self._command_id("merge-family", idempotency_key),
+            status="confirmed",
+            evidence_ids=evidence_ids,
+            provenance=Provenance(
+                actor="local-owner",
+                operation="confirm_person_merge",
+                target_id=assertion_id,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        return self.writes.confirm_person_merge(assertion, idempotency_key=idempotency_key)
+
     def _save_research_report(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {"sections", "run_ids", "evidence_ids", "financial_formulas", "decision_criteria", "status", "parent_id", "change_reason", "idempotency_key"})
         raw_sections = arguments.get("sections")
@@ -464,6 +516,15 @@ class McpWriteSurface:
         if not isinstance(value, str) or not value.strip():
             raise McpWriteError("invalid_input", f"{field_name} must be a non-empty string")
         return value.strip()
+
+    @staticmethod
+    def _ids(value: Any, field_name: str) -> tuple[str, ...]:
+        if not isinstance(value, (list, tuple)):
+            raise McpWriteError("invalid_input", f"{field_name} must be an array of non-empty strings")
+        values = tuple(McpWriteSurface._text(item, field_name) for item in value)
+        if len(set(values)) != len(values):
+            raise McpWriteError("invalid_input", f"{field_name} must not contain duplicates")
+        return values
 
     @staticmethod
     def _contact(value: Any) -> dict[str, str]:

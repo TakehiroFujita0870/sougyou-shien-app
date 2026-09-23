@@ -15,7 +15,7 @@ def request(method: str, request_id: int, params: dict | None = None) -> dict:
     return payload
 
 
-def test_initialize_and_tools_list_expose_only_ten_tools() -> None:
+def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
     server = create_stdio_server("owner-a")
     initialized = server.handle(request("initialize", 1, {"protocolVersion": "2025-06-18", "clientInfo": {}}))
     listed = server.handle(request("tools/list", 2, {}))
@@ -24,10 +24,10 @@ def test_initialize_and_tools_list_expose_only_ten_tools() -> None:
     assert initialized["result"]["protocolVersion"] == "2025-06-18"
     assert ping["result"] == {}
     tools = listed["result"]["tools"]
-    assert len(tools) == 10
+    assert len(tools) == 11
     assert {tool["name"] for tool in tools} == {
         "search", "fetch", "capture_idea", "capture_person", "capture_organization", "append_claim",
-        "link_entities", "save_research_report", "record_decision", "record_correction",
+        "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
     assert all("inputSchema" in tool and "readOnlyHint" in tool["annotations"] for tool in tools)
 
@@ -41,6 +41,7 @@ def test_write_tools_publish_actionable_input_contracts() -> None:
     assert tools["link_entities"]["inputSchema"]["properties"]["relation"]["enum"]
     assert tools["save_research_report"]["inputSchema"]["properties"]["sections"]["items"]["properties"]["content"]
     assert tools["record_correction"]["inputSchema"]["required"] == ["previous_id", "idempotency_key"]
+    assert tools["confirm_person_merge"]["inputSchema"]["required"] == ["winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"]
 
 
 def test_tools_call_delegates_read_and_idempotent_write() -> None:

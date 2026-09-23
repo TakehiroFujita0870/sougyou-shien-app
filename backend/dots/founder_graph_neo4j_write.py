@@ -20,6 +20,7 @@ from .founder_graph import (
     NodeType,
     Provenance,
     ProvenanceOrigin,
+    RelationAssertion,
     Source,
     SourceRevision,
 )
@@ -171,6 +172,11 @@ class Neo4jGraphWriteService(GraphWritePort):
         if expected_revision not in (None, 0):
             raise RevisionConflictError("relationships do not have mutable revisions")
         return self.gateway.link_entities(relationship, idempotency_key=idempotency_key, actor=actor)
+
+    def confirm_person_merge(self, assertion: RelationAssertion, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        """Fail closed until the persistent adapter can archive and assert atomically."""
+
+        raise GraphWriteError("confirmed person merge is unavailable until Neo4j supports atomic archive and RelationAssertion writes")
 
     def record_correction(self, previous_id: str, replacement: Any, *, idempotency_key: str, expected_revision: int | None = None, actor: str = "local-owner") -> WriteReceipt:
         previous = self.get_node(previous_id)
