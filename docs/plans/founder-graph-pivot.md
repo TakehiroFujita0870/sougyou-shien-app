@@ -585,3 +585,4 @@ DB migration、MCP tool、privacy境界、backup / restoreは、unit testだけ�
 | 2026-09-22 | Neo4j persistent writeへReportVersionのRun / Campaign / Claim / Evidence参照validatorとfake-driver契約テストを追加 | in-memoryだけでなく永続mutation前にもauthorizationとsection evidence対応を検査するため | T-FG-05〜06、T-FG-16 |
 | 2026-09-23 | capture_ideaをIdea、会話Source、SourceRevisionの一括保存へ変更し、原文をIdeaから分離 | MVPの会話保存で出典を失わず、再送時の重複と部分保存を防ぐため | T-FG-05〜06、T-FG-13、SC-01〜SC-05 |
 | 2026-09-23 | 隔離Neo4jで保存直後と再起動後の検索を確認し、実機証跡をlocal runbookへ記録 | 合成データで永続化の最初のgateを通過したため | T-FG-01、T-FG-03、T-FG-05〜09、T-FG-13 |
+| 2026-09-23 | in-memoryとNeo4jの検索を最大2段階へ拡張し、MCPへshareableな関係経路とEvidence IDだけを返す契約を追加 | Graph RAGの候補取得と根拠追跡を同じbounded read contractへ揃えるため | T-FG-07〜09、P3-02〜03 |

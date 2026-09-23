@@ -49,6 +49,49 @@ def test_search_returns_keyword_and_one_hop_graph_hits() -> None:
     assert idea_hit.score < page.hits[0].score
 
 
+def test_search_expands_to_two_hops_but_not_three() -> None:
+    writes, reads = _fixture()
+    nodes = tuple(
+        Idea(owner_id="owner-1", id=node_id, title=title)
+        for node_id, title in (
+            ("root", "Founder seed"),
+            ("middle", "Bridge idea"),
+            ("leaf", "Remote asset"),
+            ("far", "Too far"),
+        )
+    )
+    for node, key in zip(nodes, ("root", "middle", "leaf", "far")):
+        writes.put_node(node, idempotency_key=key)
+    for index, (source, target) in enumerate(zip(nodes, nodes[1:]), start=1):
+        writes.link_entities(
+            Relationship(
+                owner_id="owner-1",
+                source_id=source.id,
+                source_kind=NodeType.IDEA,
+                source_owner_id="owner-1",
+                relation=RelationType.DERIVED_FROM,
+                target_id=target.id,
+                target_kind=NodeType.IDEA,
+                target_owner_id="owner-1",
+            ),
+            idempotency_key=f"link-{index}",
+        )
+
+    page = reads.search("Founder", owner_id="owner-1")
+
+    assert [hit.node.id for hit in page.hits] == ["root", "middle", "leaf"]
+    assert page.hits[0].path == ()
+    assert page.hits[1].path == ("root", RelationType.DERIVED_FROM.value, "middle")
+    assert page.hits[2].path == (
+        "root",
+        RelationType.DERIVED_FROM.value,
+        "middle",
+        RelationType.DERIVED_FROM.value,
+        "leaf",
+    )
+    assert page.hits[0].score > page.hits[1].score > page.hits[2].score
+
+
 def test_search_filters_owner_and_non_current_nodes() -> None:
     writes, reads = _fixture()
     writes.put_node(Idea(owner_id="owner-1", id="current", title="Graph current"), idempotency_key="current")
