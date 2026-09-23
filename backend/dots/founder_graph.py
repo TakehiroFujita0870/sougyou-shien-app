@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum, StrEnum
 from hashlib import sha256
+import json
 from math import isfinite
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence, TypeVar
@@ -133,6 +134,26 @@ def _freeze(value: Any, path: str = "value") -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(item, f"{path}[{index}]") for index, item in enumerate(value))
     raise DomainValidationError(f"{path} must contain only JSON-like values")
+
+
+def _canonical_json_value(value: Any) -> Any:
+    """Return a JSON-serializable copy of a frozen JSON-like value."""
+
+    if isinstance(value, Mapping):
+        return {str(key): _canonical_json_value(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_canonical_json_value(item) for item in value]
+    return value
+
+
+def _json_content_hash(value: Any) -> str:
+    canonical = json.dumps(
+        _canonical_json_value(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _fresh_provenance(
@@ -313,6 +334,12 @@ class RelationType(StrEnum):
     HAS_CAPABILITY = "HAS_CAPABILITY"
     CAN_CONTRIBUTE_TO = "CAN_CONTRIBUTE_TO"
     INTRODUCED_BY = "INTRODUCED_BY"
+    REQUIRES_CAPABILITY = "REQUIRES_CAPABILITY"
+    CLASSIFIED_AS = "CLASSIFIED_AS"
+    SERVES = "SERVES"
+    COMPETES_WITH = "COMPETES_WITH"
+    DEPENDS_ON = "DEPENDS_ON"
+    MERGED_INTO = "MERGED_INTO"
     HAS_REVISION = "HAS_REVISION"
     SUPPORTED_BY = "SUPPORTED_BY"
     CONTRADICTED_BY = "CONTRADICTED_BY"
@@ -343,6 +370,10 @@ class NodeType(StrEnum):
     DECISION = "decision"
     EXPERIMENT = "experiment"
     INSTRUCTION_ARTIFACT = "instruction_artifact"
+    ENTITY_REVISION = "entity_revision"
+    RELATION_ASSERTION = "relation_assertion"
+    CONTENT_CHUNK = "content_chunk"
+    FACET = "facet"
 
 
 _NODE_TYPE_ALIASES = {
@@ -375,6 +406,8 @@ _ALLOWED_RELATION_ENDPOINTS: dict[RelationType, frozenset[tuple[NodeType, NodeTy
         (NodeType.OWNER_PROFILE, NodeType.IDEA),
         (NodeType.OWNER_PROFILE, NodeType.ASSET),
         (NodeType.OWNER_PROFILE, NodeType.PERSON),
+        (NodeType.OWNER_PROFILE, NodeType.ORGANIZATION),
+        (NodeType.OWNER_PROFILE, NodeType.FACET),
         (NodeType.OWNER_PROFILE, NodeType.SOURCE),
         (NodeType.OWNER_PROFILE, NodeType.RESEARCH_MATERIAL),
         (NodeType.OWNER_PROFILE, NodeType.RESEARCH_CAMPAIGN),
@@ -385,6 +418,8 @@ _ALLOWED_RELATION_ENDPOINTS: dict[RelationType, frozenset[tuple[NodeType, NodeTy
     RelationType.ADDRESSES: frozenset({(NodeType.IDEA, NodeType.CLAIM)}),
     RelationType.DERIVED_FROM: frozenset({
         (NodeType.IDEA, NodeType.IDEA),
+        (NodeType.ENTITY_REVISION, NodeType.SOURCE_REVISION),
+        (NodeType.ENTITY_REVISION, NodeType.CONTENT_CHUNK),
         (NodeType.EVIDENCE, NodeType.RESEARCH_MATERIAL),
         (NodeType.EVIDENCE, NodeType.SOURCE_REVISION),
         (NodeType.CLAIM, NodeType.CLAIM),
@@ -394,7 +429,37 @@ _ALLOWED_RELATION_ENDPOINTS: dict[RelationType, frozenset[tuple[NodeType, NodeTy
     RelationType.HAS_CAPABILITY: frozenset({(NodeType.PERSON, NodeType.ASSET)}),
     RelationType.CAN_CONTRIBUTE_TO: frozenset({(NodeType.PERSON, NodeType.IDEA)}),
     RelationType.INTRODUCED_BY: frozenset({(NodeType.PERSON, NodeType.PERSON)}),
-    RelationType.HAS_REVISION: frozenset({(NodeType.SOURCE, NodeType.SOURCE_REVISION)}),
+    RelationType.REQUIRES_CAPABILITY: frozenset({(NodeType.IDEA, NodeType.ASSET)}),
+    RelationType.CLASSIFIED_AS: frozenset({
+        (NodeType.IDEA, NodeType.FACET),
+        (NodeType.ASSET, NodeType.FACET),
+        (NodeType.PERSON, NodeType.FACET),
+        (NodeType.ORGANIZATION, NodeType.FACET),
+        (NodeType.SOURCE, NodeType.FACET),
+        (NodeType.CLAIM, NodeType.FACET),
+    }),
+    RelationType.SERVES: frozenset({(NodeType.IDEA, NodeType.PERSON), (NodeType.IDEA, NodeType.ORGANIZATION)}),
+    RelationType.COMPETES_WITH: frozenset({(NodeType.IDEA, NodeType.IDEA), (NodeType.IDEA, NodeType.ORGANIZATION)}),
+    RelationType.DEPENDS_ON: frozenset({
+        (NodeType.IDEA, NodeType.IDEA),
+        (NodeType.IDEA, NodeType.ASSET),
+        (NodeType.EXPERIMENT, NodeType.ASSET),
+    }),
+    RelationType.MERGED_INTO: frozenset({
+        (NodeType.IDEA, NodeType.IDEA),
+        (NodeType.ASSET, NodeType.ASSET),
+        (NodeType.PERSON, NodeType.PERSON),
+        (NodeType.ORGANIZATION, NodeType.ORGANIZATION),
+    }),
+    RelationType.HAS_REVISION: frozenset({
+        (NodeType.SOURCE, NodeType.SOURCE_REVISION),
+        (NodeType.OWNER_PROFILE, NodeType.ENTITY_REVISION),
+        (NodeType.IDEA, NodeType.ENTITY_REVISION),
+        (NodeType.ASSET, NodeType.ENTITY_REVISION),
+        (NodeType.PERSON, NodeType.ENTITY_REVISION),
+        (NodeType.ORGANIZATION, NodeType.ENTITY_REVISION),
+        (NodeType.FACET, NodeType.ENTITY_REVISION),
+    }),
     RelationType.SUPPORTED_BY: frozenset({(NodeType.CLAIM, NodeType.EVIDENCE)}),
     RelationType.CONTRADICTED_BY: frozenset({(NodeType.CLAIM, NodeType.EVIDENCE)}),
     RelationType.HAS_RUN: frozenset({(NodeType.RESEARCH_CAMPAIGN, NodeType.RESEARCH_RUN)}),
@@ -404,6 +469,8 @@ _ALLOWED_RELATION_ENDPOINTS: dict[RelationType, frozenset[tuple[NodeType, NodeTy
         (NodeType.CLAIM, NodeType.CLAIM),
         (NodeType.REPORT_VERSION, NodeType.REPORT_VERSION),
         (NodeType.SOURCE_REVISION, NodeType.SOURCE_REVISION),
+        (NodeType.RELATION_ASSERTION, NodeType.RELATION_ASSERTION),
+        (NodeType.ENTITY_REVISION, NodeType.ENTITY_REVISION),
     }),
     RelationType.BASED_ON: frozenset({
         (NodeType.DECISION, NodeType.CLAIM),
@@ -1771,6 +1838,240 @@ class SourceRevision:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class EntityRevision:
+    """An immutable revision belonging to a stable entity anchor.
+
+    The anchor keeps its identity while this value records one immutable
+    public projection.  Raw or private material is represented only by a
+    local reference and never copied into ``public_payload``.
+    """
+
+    entity_id: str
+    entity_type: NodeType | str
+    revision: int
+    payload_schema: str
+    public_payload: Mapping[str, Any] = field(default_factory=dict)
+    owner_id: str | None = None
+    id: str = field(default_factory=lambda: new_id("entity-revision"))
+    local_content_ref: str | None = None
+    content_hash: str | None = None
+    status: Status = Status.ACTIVE
+    egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
+    created_at: datetime = field(default_factory=utc_now)
+    provenance_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
+        object.__setattr__(self, "id", _identifier(self.id, "id"))
+        object.__setattr__(self, "entity_id", _identifier(self.entity_id, "entity_id"))
+        if self.entity_id == self.id:
+            raise DomainValidationError("entity_id must differ from revision id")
+        entity_type = _node_type(self.entity_type, "entity_type")
+        if entity_type in {NodeType.ENTITY_REVISION, NodeType.RELATION_ASSERTION, NodeType.CONTENT_CHUNK}:
+            raise DomainValidationError("entity_type must identify a stable entity anchor")
+        object.__setattr__(self, "entity_type", entity_type)
+        if not isinstance(self.revision, int) or isinstance(self.revision, bool) or self.revision < 1:
+            raise DomainValidationError("entity revision must be a positive integer")
+        object.__setattr__(self, "payload_schema", _identifier(self.payload_schema, "payload_schema"))
+        frozen_payload = _freeze(self.public_payload, "public_payload")
+        if not isinstance(frozen_payload, Mapping):
+            raise DomainValidationError("public_payload must be a mapping")
+        object.__setattr__(self, "public_payload", frozen_payload)
+        digest = _json_content_hash(frozen_payload)
+        supplied_hash = _identifier(self.content_hash or digest, "content_hash").lower()
+        if supplied_hash != digest:
+            raise DomainValidationError("content_hash must match public_payload")
+        object.__setattr__(self, "content_hash", supplied_hash)
+        if self.local_content_ref is not None:
+            object.__setattr__(self, "local_content_ref", _identifier(self.local_content_ref, "local_content_ref"))
+        object.__setattr__(self, "status", _enum(self.status, Status, "status"))
+        object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
+        object.__setattr__(self, "created_at", _required_timestamp(self.created_at, "created_at"))
+        if not isinstance(self.provenance, Provenance):
+            raise DomainValidationError("provenance must be a Provenance")
+        object.__setattr__(self, "provenance_id", _identifier(self.provenance_id or self.provenance.idempotency_key, "provenance_id"))
+        _validate_provenance_target(self.provenance, self.id)
+
+    @property
+    def node_type(self) -> NodeType:
+        return NodeType.ENTITY_REVISION
+
+    def egress_projection(self, **kwargs: Any) -> dict[str, object]:
+        return project_shareable(self, **kwargs)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ContentChunk:
+    """A stable, citeable range within one immutable source revision."""
+
+    source_revision_id: str
+    ordinal: int
+    char_start: int
+    char_end: int
+    text: str = ""
+    owner_id: str | None = None
+    id: str = field(default_factory=lambda: new_id("content-chunk"))
+    content_locator: str | None = None
+    text_hash: str | None = None
+    status: Status = Status.ACTIVE
+    egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
+    created_at: datetime = field(default_factory=utc_now)
+    provenance_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
+        object.__setattr__(self, "id", _identifier(self.id, "id"))
+        object.__setattr__(self, "source_revision_id", _identifier(self.source_revision_id, "source_revision_id"))
+        if not isinstance(self.ordinal, int) or isinstance(self.ordinal, bool) or self.ordinal < 0:
+            raise DomainValidationError("ordinal must be a non-negative integer")
+        if not isinstance(self.char_start, int) or isinstance(self.char_start, bool) or self.char_start < 0:
+            raise DomainValidationError("char_start must be a non-negative integer")
+        if not isinstance(self.char_end, int) or isinstance(self.char_end, bool) or self.char_end <= self.char_start:
+            raise DomainValidationError("char_end must be greater than char_start")
+        object.__setattr__(self, "text", _text(self.text, "text", allow_empty=True))
+        if not self.text and self.content_locator is None:
+            raise DomainValidationError("content chunk requires text or content_locator")
+        if self.content_locator is not None:
+            object.__setattr__(self, "content_locator", _identifier(self.content_locator, "content_locator"))
+        digest = sha256(self.text.encode("utf-8")).hexdigest()
+        supplied_hash = _identifier(self.text_hash or digest, "text_hash").lower()
+        if self.text and supplied_hash != digest:
+            raise DomainValidationError("text_hash must match text")
+        object.__setattr__(self, "text_hash", supplied_hash)
+        object.__setattr__(self, "status", _enum(self.status, Status, "status"))
+        object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
+        object.__setattr__(self, "created_at", _required_timestamp(self.created_at, "created_at"))
+        if not isinstance(self.provenance, Provenance):
+            raise DomainValidationError("provenance must be a Provenance")
+        object.__setattr__(self, "provenance_id", _identifier(self.provenance_id or self.provenance.idempotency_key, "provenance_id"))
+        _validate_provenance_target(self.provenance, self.id)
+
+    @property
+    def node_type(self) -> NodeType:
+        return NodeType.CONTENT_CHUNK
+
+    def egress_projection(self, **kwargs: Any) -> dict[str, object]:
+        return project_shareable(self, **kwargs)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Facet:
+    """A reusable classification term, scoped to the local owner."""
+
+    namespace: str
+    value: str
+    owner_id: str | None = None
+    id: str = field(default_factory=lambda: new_id("facet"))
+    normalized_value: str = field(init=False)
+    status: Status = Status.ACTIVE
+    egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
+    created_at: datetime = field(default_factory=utc_now)
+    provenance_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
+        object.__setattr__(self, "id", _identifier(self.id, "id"))
+        object.__setattr__(self, "namespace", _identifier(self.namespace, "namespace"))
+        value = _text(self.value, "value")
+        object.__setattr__(self, "value", value)
+        object.__setattr__(self, "normalized_value", value.strip().casefold())
+        object.__setattr__(self, "status", _enum(self.status, Status, "status"))
+        object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
+        object.__setattr__(self, "created_at", _required_timestamp(self.created_at, "created_at"))
+        if not isinstance(self.provenance, Provenance):
+            raise DomainValidationError("provenance must be a Provenance")
+        object.__setattr__(self, "provenance_id", _identifier(self.provenance_id or self.provenance.idempotency_key, "provenance_id"))
+        _validate_provenance_target(self.provenance, self.id)
+
+    @property
+    def node_type(self) -> NodeType:
+        return NodeType.FACET
+
+    def egress_projection(self, **kwargs: Any) -> dict[str, object]:
+        return project_shareable(self, **kwargs)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RelationAssertion:
+    """An immutable, evidence-aware semantic relation between two anchors."""
+
+    source_id: str
+    target_id: str
+    source_kind: NodeType | str
+    target_kind: NodeType | str
+    predicate: RelationType | str
+    assertion_family_id: str
+    owner_id: str | None = None
+    id: str = field(default_factory=lambda: new_id("relation-assertion"))
+    revision: int = 1
+    status: RelationshipStatus = RelationshipStatus.PROPOSED
+    confidence: float | None = None
+    evidence_ids: tuple[str, ...] = ()
+    valid_from: datetime = field(default_factory=utc_now)
+    expires_at: datetime | None = None
+    supersedes_id: str | None = None
+    egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
+    provenance_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
+        object.__setattr__(self, "id", _identifier(self.id, "id"))
+        object.__setattr__(self, "source_id", _identifier(self.source_id, "source_id"))
+        object.__setattr__(self, "target_id", _identifier(self.target_id, "target_id"))
+        source_kind = _node_type(self.source_kind, "source_kind")
+        target_kind = _node_type(self.target_kind, "target_kind")
+        object.__setattr__(self, "source_kind", source_kind)
+        object.__setattr__(self, "target_kind", target_kind)
+        predicate = _enum(self.predicate, RelationType, "predicate")
+        object.__setattr__(self, "predicate", predicate)
+        allowed_endpoints = _ALLOWED_RELATION_ENDPOINTS.get(predicate, frozenset())
+        if (source_kind, target_kind) not in allowed_endpoints:
+            raise DomainValidationError("relation assertion endpoint kinds are not allowed")
+        object.__setattr__(self, "assertion_family_id", _identifier(self.assertion_family_id, "assertion_family_id"))
+        if not isinstance(self.revision, int) or isinstance(self.revision, bool) or self.revision < 1:
+            raise DomainValidationError("relation assertion revision must be a positive integer")
+        status = _enum(self.status, RelationshipStatus, "status")
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "confidence", _confidence(self.confidence))
+        object.__setattr__(self, "evidence_ids", _strings(self.evidence_ids, "evidence_ids"))
+        if status in {RelationshipStatus.INFERRED, RelationshipStatus.CONFIRMED} and not self.evidence_ids:
+            raise DomainValidationError("inferred and confirmed relation assertions require evidence")
+        if predicate in {RelationType.CAN_CONTRIBUTE_TO, RelationType.INTRODUCED_BY}:
+            if status not in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED}:
+                raise DomainValidationError("network relations must be proposed or inferred")
+            if self.confidence is None:
+                raise DomainValidationError("network relation assertions require confidence")
+            if self.expires_at is None:
+                raise DomainValidationError("network relation assertions require an expiration")
+        object.__setattr__(self, "valid_from", _required_timestamp(self.valid_from, "valid_from"))
+        expires_at = _timestamp(self.expires_at, "expires_at")
+        if expires_at is not None and expires_at <= self.valid_from:
+            raise DomainValidationError("expires_at must be after valid_from")
+        object.__setattr__(self, "expires_at", expires_at)
+        if self.supersedes_id is not None:
+            supersedes_id = _identifier(self.supersedes_id, "supersedes_id")
+            if supersedes_id == self.id:
+                raise DomainValidationError("relation assertion cannot supersede itself")
+            object.__setattr__(self, "supersedes_id", supersedes_id)
+        object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
+        if not isinstance(self.provenance, Provenance):
+            raise DomainValidationError("provenance must be a Provenance")
+        object.__setattr__(self, "provenance_id", _identifier(self.provenance_id or self.provenance.idempotency_key, "provenance_id"))
+        _validate_provenance_target(self.provenance, self.id)
+
+    @property
+    def node_type(self) -> NodeType:
+        return NodeType.RELATION_ASSERTION
+
+    def egress_projection(self, **kwargs: Any) -> dict[str, object]:
+        return project_shareable(self, **kwargs)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OwnerProfile:
     owner_id: str | None = None
     id: str | None = None
@@ -2184,7 +2485,20 @@ validate_claim_reference = validate_claim_evidence_references
 validate_report_reference = validate_report_references
 
 
-_READ_MCP_NODE_TYPES = frozenset(NodeType)
+# Schema-v2 value objects are validated by the domain contract first.  They
+# join the external read boundary only when DM-04 adds their persisted
+# traversal and safe projection contract.
+_READ_MCP_NODE_TYPES = frozenset(
+    node_type
+    for node_type in NodeType
+    if node_type
+    not in {
+        NodeType.ENTITY_REVISION,
+        NodeType.RELATION_ASSERTION,
+        NodeType.CONTENT_CHUNK,
+        NodeType.FACET,
+    }
+)
 
 # The map is intentionally data-only: callers can inspect the external field
 # boundary without deriving it from dataclass fields (which include private
@@ -2248,6 +2562,45 @@ SHAREABLE_PROJECTION_ALLOWLIST = MappingProxyType({
     NodeType.DECISION: ("id", "text", "claim_ids", "report_ids", "experiment_ids", "status"),
     NodeType.EXPERIMENT: ("id", "name", "success_criteria", "stop_criteria", "status"),
     NodeType.INSTRUCTION_ARTIFACT: ("id", "content_hash", "status"),
+    NodeType.ENTITY_REVISION: (
+        "id",
+        "entity_id",
+        "entity_type",
+        "revision",
+        "payload_schema",
+        "public_payload",
+        "content_hash",
+        "created_at",
+        "provenance_id",
+        "status",
+    ),
+    NodeType.RELATION_ASSERTION: (
+        "id",
+        "source_id",
+        "target_id",
+        "source_kind",
+        "target_kind",
+        "predicate",
+        "assertion_family_id",
+        "revision",
+        "status",
+        "confidence",
+        "evidence_ids",
+        "valid_from",
+        "expires_at",
+        "supersedes_id",
+        "provenance_id",
+    ),
+    NodeType.CONTENT_CHUNK: (
+        "id",
+        "source_revision_id",
+        "ordinal",
+        "char_start",
+        "char_end",
+        "text_hash",
+        "status",
+    ),
+    NodeType.FACET: ("id", "namespace", "normalized_value", "status"),
 })
 PROJECTION_ALLOWLIST = SHAREABLE_PROJECTION_ALLOWLIST
 READ_MCP_NODE_TYPES = _READ_MCP_NODE_TYPES
@@ -2338,6 +2691,62 @@ def _safe_projection(value: Any) -> tuple[dict[str, object], dict[str, str]] | N
         node_type = NodeType.INSTRUCTION_ARTIFACT
         result = {"id": value.id, "content_hash": value.content_hash, "status": value.status.value}
         category_prefix = "instruction_artifact"
+    elif isinstance(value, EntityRevision):
+        node_type = NodeType.ENTITY_REVISION
+        result = {
+            "id": value.id,
+            "entity_id": value.entity_id,
+            "entity_type": value.entity_type,
+            "revision": value.revision,
+            "payload_schema": value.payload_schema,
+            "public_payload": value.public_payload,
+            "content_hash": value.content_hash,
+            "created_at": value.created_at,
+            "provenance_id": value.provenance_id,
+            "status": value.status.value,
+        }
+        category_prefix = "entity_revision"
+    elif isinstance(value, RelationAssertion):
+        node_type = NodeType.RELATION_ASSERTION
+        result = {
+            "id": value.id,
+            "source_id": value.source_id,
+            "target_id": value.target_id,
+            "source_kind": value.source_kind,
+            "target_kind": value.target_kind,
+            "predicate": value.predicate,
+            "assertion_family_id": value.assertion_family_id,
+            "revision": value.revision,
+            "status": value.status.value,
+            "confidence": value.confidence,
+            "evidence_ids": value.evidence_ids,
+            "valid_from": value.valid_from,
+            "expires_at": value.expires_at,
+            "supersedes_id": value.supersedes_id,
+            "provenance_id": value.provenance_id,
+        }
+        category_prefix = "relation_assertion"
+    elif isinstance(value, ContentChunk):
+        node_type = NodeType.CONTENT_CHUNK
+        result = {
+            "id": value.id,
+            "source_revision_id": value.source_revision_id,
+            "ordinal": value.ordinal,
+            "char_start": value.char_start,
+            "char_end": value.char_end,
+            "text_hash": value.text_hash,
+            "status": value.status.value,
+        }
+        category_prefix = "content_chunk"
+    elif isinstance(value, Facet):
+        node_type = NodeType.FACET
+        result = {
+            "id": value.id,
+            "namespace": value.namespace,
+            "normalized_value": value.normalized_value,
+            "status": value.status.value,
+        }
+        category_prefix = "facet"
     else:
         return None
 
@@ -2399,6 +2808,7 @@ __all__ = [
     "Asset",
     "AssetKind",
     "AssetStatus",
+    "ContentChunk",
     "CampaignAuthorizationRegistry",
     "CampaignAuthorizationSnapshot",
     "CampaignStatus",
@@ -2408,10 +2818,12 @@ __all__ = [
     "ClaimType",
     "DataPolicy",
     "DomainValidationError",
+    "EntityRevision",
     "EgressPolicy",
     "EntityStatus",
     "Evidence",
     "EvidencePolarity",
+    "Facet",
     "Idea",
     "IdeaStatus",
     "Knowledge",
@@ -2426,6 +2838,7 @@ __all__ = [
     "ProvenanceKind",
     "ProvenanceOrigin",
     "RelationStatus",
+    "RelationAssertion",
     "RelationType",
     "Relationship",
     "RelationshipStatus",
