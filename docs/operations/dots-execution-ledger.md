@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `b90f2319b18c`
+main SHA: `ad70463e2fc8`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
-| Last merged PR | #226 |
-| Last main smoke | backend `uv run --isolated pytest -q`: 378 passed / 17 skipped、frontend `npm.cmd test -- --run`: 321 passed、frontend build and Storybook build passed; schema v2 migration/rollback、v2 read/write parity、isolated Neo4j save-stop-restart-search and database dump/load restore query passed; Appの明示Graph live read接続点を追加 |
+| Last merged PR | #228 |
+| Last main smoke | backend `uv run --isolated pytest -q`: 379 passed / 17 skipped、frontend `npm.cmd test -- --run`: 321 passed、frontend build and Storybook build passed; schema v2 migration/rollback、v2 read/write parity、isolated Neo4j save-stop-restart-search and database dump/load restore query passed; Appの明示Graph live read接続点と本人確認済みPerson統合境界を追加 |
 
 ## Task ledger
 
@@ -56,6 +56,7 @@ active goal: Founder Graph MVP
 | P7-01-read | MERGED | p7_graph_live_ui_next | main | #222 | `63ade9a5171a` | live-read client state/retry tests 18 focused; frontend 320 passed and build passed | App wiring, search input, correction/history remain | 2026-09-23 |
 | P1-04 | MERGED | root | main | #224 | `de4d6d77b75a` | v2 all-node-type manifest and representative search parity; backend 378 passed / 17 skipped | Existing-data conversion, Compose live manifest, default Neo4j switch remain | 2026-09-23 |
 | P7-01-D | MERGED | root | main | #226 | `b90f2319b18c` | Appの明示クライアント接続、Graph live read focused 7 passed、frontend 321 passed、build/Storybook passed、backend 378 passed / 17 skipped | 検索入力、訂正/履歴、実ChatGPT接続は未着手またはD-EXT-01で保留 | 2026-09-23 |
+| P4-03-C | MERGED | p4_relation_confirm | main | #228 | `ad70463e2fc8` | 明示confirmed + 根拠IDのPerson統合、敗者archived、冪等再送、MCP HTTP/stdio契約、Neo4j未対応時の明示拒否; backend 379 passed / 17 skipped | Neo4j原子統合、既存関係付替え、統合UIは未実装 | 2026-09-23 |
 
 ## Decision ledger
 
