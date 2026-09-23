@@ -144,6 +144,25 @@ describe('FounderGraphReportDiff', () => {
     expect(view.textContent).not.toContain('現版の原文を描画しない');
   });
 
+  it('honors an explicit unavailable chapter projection as absent instead of reviving its old content', () => {
+    const view = renderDiff({
+      currentReport: {
+        ...currentReport,
+        sections: currentReport.sections.map((section) => (
+          section?.id === 1 ? { ...section, present: false } : section
+        )),
+      },
+    });
+
+    const businessModelTab = view.querySelectorAll('[data-founder-graph-report-tab]')[1];
+    expect(businessModelTab.textContent).toContain('削除');
+    act(() => businessModelTab.click());
+    const columns = view.querySelectorAll('[data-founder-graph-report-column]');
+    expect(columns[0].textContent).toContain('旧ビジネスモデル');
+    expect(columns[1].textContent).toContain('この版にはこの章がありません。');
+    expect(columns[1].textContent).not.toContain('新ビジネスモデル');
+  });
+
   it.each([
     ['loading', 'レポート差分を読み込んでいます。', 'status'],
     ['unavailable', 'レポート差分は現在利用できません。', 'status'],
