@@ -63,7 +63,7 @@ Then: read projectionまたはwrite receiptをstructured contentへ変換し、p
 
 ## 検査結果
 
-- `uv run --isolated --python 3.14 --with pytest pytest -q backend/tests/test_founder_graph_mcp_stdio.py`: 4 passed。
+- `uv run pytest backend/tests/test_founder_graph_mcp_stdio.py -q`: 8 passed。`capture_idea`で保存したshareableな合成Ideaを、同じstdio接続の`search`と`fetch`で取得し、会話原文がprojectionに含まれないことも確認する。
 - `validate_mcp_tunnel.py --root .`: stdio entrypoint、method、protocol versionの静的検査を追加済み。
 - 実tunnel、ChatGPT tool discovery、write confirmationは未検査。
 
@@ -73,3 +73,4 @@ Then: read projectionまたはwrite receiptをstructured contentへ変換し、p
 | --- | --- | --- | --- |
 | 2026-09-22 | stdio JSON-RPC transportの計画を追加 | Secure MCP Tunnelの`--mcp-command`と既存Dots surfaceの間を埋めるため | T-STDIO-01〜03 |
 | 2026-09-22 | dependency-free stdio dispatcherと3件のfocused testsを実装 | read/write surfaceをSecure Tunnelのstdio commandへ委譲するため | T-STDIO-01〜03 |
+| 2026-09-23 | 合成のshareable Ideaをcapture、search、fetchで往復するstdio回帰を追加 | 実ChatGPT接続なしでも、P5が必要とする三つのtoolの連続利用と会話原文の非投影を確認するため | T-STDIO-02、P5-SP-01のローカル部分 |
