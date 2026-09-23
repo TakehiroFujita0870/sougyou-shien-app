@@ -27,6 +27,7 @@ from .founder_graph import (
     SourceRevision,
     Status,
 )
+from .founder_graph_neo4j import Neo4jUnavailableError
 from .founder_graph_write import (
     GraphWriteError,
     GraphWritePort,
@@ -244,6 +245,8 @@ class McpWriteSurface:
             raise McpWriteError("idempotency_conflict", str(error)) from error
         except RevisionConflictError as error:
             raise McpWriteError("revision_conflict", str(error)) from error
+        except Neo4jUnavailableError as error:
+            raise McpWriteError("unavailable", "The local Founder Graph is unavailable; retry after it starts.") from error
         except (DomainValidationError, GraphWriteError, ValueError, TypeError, KeyError) as error:
             raise McpWriteError("invalid_input", str(error)) from error
 
