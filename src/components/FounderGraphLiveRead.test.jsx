@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FounderGraphReadClientError } from './founderGraphReadClient';
 import { FounderGraphLiveRead } from './FounderGraphLiveRead';
 
@@ -50,6 +50,25 @@ describe('FounderGraphLiveRead', () => {
 
     expect(view.querySelector('[data-founder-graph-state-message="empty"]')).not.toBeNull();
     expect(view.querySelectorAll('[data-founder-graph-card]')).toHaveLength(0);
+  });
+
+  it('searches the entered wording only after the local founder submits it', async () => {
+    const client = { search: vi.fn(async () => [{ id: 'idea-3', kind: 'idea', title: '検索した仮説', snippet: 'safe search result', fields: { egress_policy: 'shareable', status: 'active' } }]) };
+    const view = await renderLive({ client, query: '' });
+    const input = view.querySelector('#founder-graph-search');
+
+    expect(input.labels[0].textContent).toContain('保存済みの情報を検索');
+    expect(client.search).not.toHaveBeenCalled();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, ' 顧客課題 ');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => view.querySelector('[role="search"]').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    await act(async () => Promise.resolve());
+
+    expect(client.search).toHaveBeenCalledWith('顧客課題', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(view.textContent).toContain('検索した仮説');
   });
 
   it('clears old data and retries after the local service becomes available', async () => {
