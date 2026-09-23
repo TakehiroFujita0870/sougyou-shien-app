@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `793f7c593f95`
+main SHA: `37332903a228`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
-| Last merged PR | #233 |
-| Last main smoke | backend `uv run --isolated pytest -q`: 387 passed / 17 skipped、frontend `npm.cmd test -- --run`: 322 passed、frontend build and Storybook build passed; schema v2 migration/rollback、v2 read/write parity、isolated Neo4j save-stop-restart-search and database dump/load restore query passed; Appの明示Graph live read接続点、検索入力、本人確認済みPerson統合境界、ReportVersion親版検証、Compose再起動manifest検査を追加 |
+| Last merged PR | #238 |
+| Last main smoke | PR #236: Report Diff focused frontend 11 passed、backend diff 6 passed; PR #237: focused frontend 13 passed、build passed、full Vitest 325 passed / 1 unrelated existing PDF browser-download timeout; PR #238: focused backend 52 passed。各PRで`git diff --check` passed。 |
 
 ## Task ledger
 
@@ -60,6 +60,9 @@ active goal: Founder Graph MVP
 | RPP-01/RPP-02 | MERGED | p6_parent_validation | main | #230 | `bf204638753f` | ReportVersion親版の存在・種類・ownerをメモリ/Neo4j互換保存前に検証、同owner親版を許可; backend 387 passed / 17 skipped | 差分計算、親版比較UI、Deep Research接続は未実装 | 2026-09-23 |
 | P7-01-E | MERGED | p7_graph_search_input | main | #232 | `945ad46b8335` | Graph検索入力、submit時のみ明示local clientへ依頼、focused 5 passed、frontend 322 passed、build passed | 訂正/履歴UI、実ChatGPT接続は未実装またはD-EXT-01で保留 | 2026-09-23 |
 | P2-02/P2-03 | MERGED | p2_compose_manifest | main | #233 | `793f7c593f95` | Compose live volume名と停止前後synthetic manifest一致の手順・回帰検査、focused 23 passed / 2 skipped、static validator passed | Attachment同generation、実データ、backup decisionは未完了 | 2026-09-23 |
+| P6-03 | MERGED | root | main | #236 | `1a6e98b7432` | Report Diff frontend focused 11 passed、backend diff 6 passed、diff check passed | `present: false`の章を旧内容として復活させず、利用不可として保持。外部接続なし | 2026-09-23 |
+| P7-02 | MERGED | root | main | #237 | `02d295637128` | focused frontend 13 passed、build passed、full Vitest 325 passed / 1 unrelated existing PDF browser-download timeout、diff check passed | 本人が勝者と根拠IDを明示確認する境界。自動統合、連絡先表示、backend書込みなし | 2026-09-23 |
+| P2-04 | MERGED | root | main | #238 | `37332903a228` | Neo4j runtime / MCP API / stdio / write focused backend 52 passed、diff check passed | 設定済みNeo4j障害時は503またはunavailableを返し、in-memory成功保存へfallbackしない | 2026-09-23 |
 
 ## Decision ledger
 
