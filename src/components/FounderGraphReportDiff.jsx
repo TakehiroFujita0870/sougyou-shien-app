@@ -119,7 +119,10 @@ function normalizeSection(chapter, section) {
   return {
     id: chapter.id,
     title: chapter.title,
-    present: Boolean(section),
+    // The backend's immutable safe projection can explicitly preserve a
+    // missing/unavailable chapter as `{ present: false }`.  Do not revive
+    // retained text or provenance from that projection in the UI.
+    present: Boolean(section) && source.present !== false,
     content: asText(source.content) || asText(source.summary),
     facts: safeMetadataList(source.facts),
     aiInferences: safeMetadataList(source.ai_inferences ?? source.aiInferences),

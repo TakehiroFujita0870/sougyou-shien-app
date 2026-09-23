@@ -43,7 +43,8 @@ T-FG-25の最小UI契約として、二つの安全な`ReportVersion`投影を�
   - 固定8章の名称と追加・変更・変更なしの分類。
   - tablist、tabpanel、ArrowRightのキーボード操作とARIA契約。
   - 引用・撤回された主張の表示専用保持、およびprivate/rawフィールド非表示。
-  - loading / unavailable / error / emptyで古い章を描画しないこと。
+- loading / unavailable / error / emptyで古い章を描画しないこと。
+- backendのsafe projectionで章が`present: false`の場合、本文が残っていても欠落（`removed`または`added`）として扱うこと。
 - 実行コマンド: `npm.cmd test -- --run src/components/FounderGraphReportDiff.test.jsx`
 - 後続の統合時に、既存frontend全体、build、Storybookを実行する。
 
@@ -105,6 +106,7 @@ Then: 実ファイルや外部通信を発生させず、形式名、scope、pro
 - 成果物: `src/components/FounderGraphReportDiff.jsx`、`src/components/FounderGraphReportDiff.test.jsx`
 - safe projection: `projectFounderGraphReportVersion`が、章本文と明示的なprovenanceメタデータだけを新しい表示モデルへコピーする。`private_notes`、`source_text`など未知キーは描画しない。
 - 差分契約: `diffFounderGraphReports`が固定8章を返し、片方の章が欠落した場合は`added`または`removed`、同一内容は`unchanged`、それ以外は`changed`とする。
+- safe projectionの`present: false`は欠落章として扱い、旧版の本文やprovenanceを現版の内容として誤表示しない。
 - エラー分類: loading / unavailable / errorは読み取り回復可能状態。入力不足はemptyとして扱い、export intentを含め書き込みや外部副作用は発生しない。
 - API互換性: 新規React componentのみ。既存App、API、MCP、DBの変更なし。
 - 外部通信: なし。
