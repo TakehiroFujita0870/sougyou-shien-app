@@ -146,6 +146,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
 - 追加質問を「新しい調査」「レポート再編集」「通信再試行」に明示分類するローカル契約。保存や外部送信は開始しない。
 - Graph画面用の明示接続部品。読み込み、空、停止、失敗、再試行、結果表示を既存の安全な読み取り口で検査。
+- Appから明示クライアントを渡した場合だけGraph画面をlive readへ切り替える接続点。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
 ### 未完了
