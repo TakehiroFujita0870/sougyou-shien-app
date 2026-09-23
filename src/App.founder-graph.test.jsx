@@ -72,4 +72,25 @@ describe('App Founder Graph composition', () => {
 
     await view.unmount();
   });
+
+  it('uses an explicitly supplied local read client for the live Graph surface', async () => {
+    const calls = [];
+    const view = await mount({
+      founderGraphClient: {
+        search: async (query) => {
+          calls.push(query);
+          return [{ id: 'idea-live', kind: 'idea', title: '保存済みの仮説', snippet: '再起動後も読める', fields: { egress_policy: 'shareable', status: 'active' } }];
+        },
+      },
+      founderGraphQuery: '保存済み',
+    });
+
+    await view.openGraph();
+    await act(async () => Promise.resolve());
+
+    expect(calls).toEqual(['保存済み']);
+    expect(view.container.textContent).toContain('保存済みの仮説');
+    expect(view.container.textContent).toContain('再起動後も読める');
+    await view.unmount();
+  });
 });
