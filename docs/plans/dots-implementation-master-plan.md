@@ -7,6 +7,7 @@
 Graph RAG read計画: [`founder-graph-read-2hop.md`](founder-graph-read-2hop.md)
 schema v2移行計画: [`founder-graph-schema-v2-migration.md`](founder-graph-schema-v2-migration.md)
 名寄せ候補評価計画: [`founder-graph-namesake-evaluation.md`](founder-graph-namesake-evaluation.md)
+Graph UI live read計画: [`founder-graph-live-ui-read.md`](founder-graph-live-ui-read.md)
 
 ## 要望 / ゴール / 成功指標
 
@@ -142,6 +143,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - 合成人物だけを使うローカル名寄せ候補と上位3件評価。候補は保存処理を持たず、自動統合0件を確認。
 - Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
 - 追加質問を「新しい調査」「レポート再編集」「通信再試行」に明示分類するローカル契約。保存や外部送信は開始しない。
+- Graph画面用の明示接続部品。読み込み、空、停止、失敗、再試行、結果表示を既存の安全な読み取り口で検査。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
 ### 未完了
