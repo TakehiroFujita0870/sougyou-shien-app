@@ -13,6 +13,8 @@ from dots.founder_graph import (
     Organization,
     PersonAsset,
     Provenance,
+    ReportSection,
+    ReportVersion,
     ResearchCampaign,
     ResearchRun,
     Source,
@@ -64,8 +66,15 @@ def _seed_report_dependencies(
     return run
 
 
-def _report_arguments(*, run_ids: list[str], claim_id: str = "claim-1", evidence_id: str = "evidence-1") -> dict[str, object]:
-    return {
+def _report_arguments(
+    *,
+    run_ids: list[str],
+    claim_id: str = "claim-1",
+    evidence_id: str = "evidence-1",
+    parent_id: str | None = None,
+    idempotency_key: str = "report-with-references",
+) -> dict[str, object]:
+    arguments: dict[str, object] = {
         "sections": [
             {
                 "id": index,
@@ -80,8 +89,11 @@ def _report_arguments(*, run_ids: list[str], claim_id: str = "claim-1", evidence
         "financial_formulas": {"break_even": "fixed_cost / margin"},
         "decision_criteria": {"stop": "stop if evidence fails"},
         "status": "final",
-        "idempotency_key": "report-with-references",
+        "idempotency_key": idempotency_key,
     }
+    if parent_id is not None:
+        arguments["parent_id"] = parent_id
+    return arguments
 
 
 def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
@@ -503,6 +515,71 @@ def test_save_research_report_rejects_missing_or_cross_owner_references(field: s
 
     with pytest.raises(McpWriteError) as error:
         surface.call("save_research_report", arguments, owner_id="owner-1")
+
+    assert error.value.code == "invalid_input"
+    assert writes.nodes() == before_nodes
+    assert writes.audit_events() == before_audit
+
+
+def test_save_research_report_accepts_a_same_owner_report_parent() -> None:
+    writes, surface = _surface()
+    run = _seed_report_dependencies(writes)
+    parent = surface.call(
+        "save_research_report",
+        _report_arguments(run_ids=[run.id], idempotency_key="report-parent"),
+        owner_id="owner-1",
+    )
+
+    child = surface.call(
+        "save_research_report",
+        _report_arguments(
+            run_ids=[run.id],
+            parent_id=parent.target_id,
+            idempotency_key="report-child",
+        ),
+        owner_id="owner-1",
+    )
+
+    assert writes.get_node(child.target_id).parent_id == parent.target_id
+
+
+@pytest.mark.parametrize("parent_id", ("missing-report-parent", "run-1"))
+def test_save_research_report_rejects_missing_or_wrong_type_parent(parent_id: str) -> None:
+    writes, surface = _surface()
+    run = _seed_report_dependencies(writes)
+    before_nodes = writes.nodes()
+    before_audit = writes.audit_events()
+
+    with pytest.raises(McpWriteError) as error:
+        surface.call(
+            "save_research_report",
+            _report_arguments(run_ids=[run.id], parent_id=parent_id),
+            owner_id="owner-1",
+        )
+
+    assert error.value.code == "invalid_input"
+    assert writes.nodes() == before_nodes
+    assert writes.audit_events() == before_audit
+
+
+def test_save_research_report_rejects_cross_owner_report_parent() -> None:
+    writes, surface = _surface()
+    run = _seed_report_dependencies(writes)
+    foreign_parent = ReportVersion(
+        owner_id="owner-2",
+        id="foreign-report-parent",
+        sections=tuple(ReportSection(owner_id="owner-2", id=index, content="foreign") for index in range(8)),
+    )
+    writes._nodes[foreign_parent.id] = foreign_parent
+    before_nodes = writes.nodes()
+    before_audit = writes.audit_events()
+
+    with pytest.raises(McpWriteError) as error:
+        surface.call(
+            "save_research_report",
+            _report_arguments(run_ids=[run.id], parent_id=foreign_parent.id),
+            owner_id="owner-1",
+        )
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes

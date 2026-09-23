@@ -125,7 +125,15 @@ def _approved_fixture(owner_id: str = "owner-1") -> tuple[ResearchCampaign, Rese
     return campaign, run, claim, evidence
 
 
-def _report(owner_id: str, *, run_id: str, claim_id: str, evidence_id: str) -> ReportVersion:
+def _report(
+    owner_id: str,
+    *,
+    run_id: str,
+    claim_id: str,
+    evidence_id: str,
+    report_id: str = "report-1",
+    parent_id: str | None = None,
+) -> ReportVersion:
     sections = tuple(
         ReportSection(
             id=section_id,
@@ -138,11 +146,12 @@ def _report(owner_id: str, *, run_id: str, claim_id: str, evidence_id: str) -> R
     )
     return ReportVersion(
         owner_id=owner_id,
-        id="report-1",
+        id=report_id,
         sections=sections,
         run_ids=(run_id,),
         evidence_ids=(evidence_id,),
         status=ReportStatus.DRAFT,
+        parent_id=parent_id,
     )
 
 
@@ -200,6 +209,66 @@ def test_persistent_report_write_rejects_evidence_for_unreferenced_claim() -> No
 
     with pytest.raises(GraphWriteError, match="section evidence must identify a referenced claim"):
         gateway.put_node(_report(owner_id, run_id=run.id, claim_id=claim.id, evidence_id=wrong_evidence.id), idempotency_key="report-wrong-evidence")
+
+    assert not any("CREATE (n:ReportVersion)" in query for query, _params in driver.session_value.calls)
+    assert not driver.session_value.audit_rows
+
+
+def test_persistent_report_write_accepts_same_owner_report_parent() -> None:
+    owner_id = "owner-1"
+    driver = ReportReferenceDriver(owner_id)
+    campaign, run, claim, evidence = _approved_fixture(owner_id)
+    parent = _report(owner_id, run_id=run.id, claim_id=claim.id, evidence_id=evidence.id, report_id="report-parent")
+    _seed(driver, campaign, run, claim, evidence, parent)
+    gateway = Neo4jGraphGateway(driver, owner_id)
+
+    receipt = gateway.put_node(
+        _report(
+            owner_id,
+            run_id=run.id,
+            claim_id=claim.id,
+            evidence_id=evidence.id,
+            report_id="report-child",
+            parent_id=parent.id,
+        ),
+        idempotency_key="report-child",
+    )
+
+    assert receipt.target_id == "report-child"
+    assert driver.session_value.nodes[receipt.target_id]["node_type"] == NodeType.REPORT_VERSION.value
+
+
+@pytest.mark.parametrize("parent_id", ("missing-report-parent", "claim-1"))
+def test_persistent_report_write_rejects_missing_or_wrong_type_parent_before_create(parent_id: str) -> None:
+    owner_id = "owner-1"
+    driver = ReportReferenceDriver(owner_id)
+    campaign, run, claim, evidence = _approved_fixture(owner_id)
+    _seed(driver, campaign, run, claim, evidence)
+    gateway = Neo4jGraphGateway(driver, owner_id)
+
+    with pytest.raises((GraphWriteError, GraphWriteNotFoundError)):
+        gateway.put_node(
+            _report(owner_id, run_id=run.id, claim_id=claim.id, evidence_id=evidence.id, parent_id=parent_id),
+            idempotency_key="report-invalid-parent",
+        )
+
+    assert not any("CREATE (n:ReportVersion)" in query for query, _params in driver.session_value.calls)
+    assert not driver.session_value.audit_rows
+
+
+def test_persistent_report_write_rejects_cross_owner_parent_before_create() -> None:
+    owner_id = "owner-1"
+    driver = ReportReferenceDriver(owner_id)
+    campaign, run, claim, evidence = _approved_fixture(owner_id)
+    foreign_parent = _report("owner-2", run_id=run.id, claim_id=claim.id, evidence_id=evidence.id, report_id="foreign-parent")
+    _seed(driver, campaign, run, claim, evidence, foreign_parent)
+    gateway = Neo4jGraphGateway(driver, owner_id)
+
+    with pytest.raises(GraphWriteNotFoundError, match="report reference does not exist"):
+        gateway.put_node(
+            _report(owner_id, run_id=run.id, claim_id=claim.id, evidence_id=evidence.id, parent_id=foreign_parent.id),
+            idempotency_key="report-cross-owner-parent",
+        )
 
     assert not any("CREATE (n:ReportVersion)" in query for query, _params in driver.session_value.calls)
     assert not driver.session_value.audit_rows

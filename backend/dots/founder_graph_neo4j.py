@@ -289,6 +289,8 @@ class Neo4jGraphGateway:
         report_evidence_ids = set(node.evidence_ids)
         run_ids = set(node.run_ids)
         all_ids = run_ids | section_claim_ids | section_evidence_ids | report_evidence_ids
+        if node.parent_id is not None:
+            all_ids.add(node.parent_id)
         rows = self._report_node_rows(tx, all_ids)
 
         # Campaigns are reached through each persisted run's payload.  Resolve
@@ -317,6 +319,9 @@ class Neo4jGraphGateway:
             if payload.get("owner_id") != self.owner_id:
                 raise GraphWriteError("report reference owner does not match the local owner")
             return payload
+
+        if node.parent_id is not None:
+            require(node.parent_id, NodeType.REPORT_VERSION)
 
         campaigns: dict[str, Mapping[str, Any]] = {}
         for run_id in sorted(run_ids):
