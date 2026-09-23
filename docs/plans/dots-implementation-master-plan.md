@@ -141,6 +141,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - 合成名刺CSVの全行検査後のPerson / Organization保存、private field境界、再実行時の重複防止。
 - 合成人物だけを使うローカル名寄せ候補と上位3件評価。候補は保存処理を持たず、自動統合0件を確認。
 - Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
+- 追加質問を「新しい調査」「レポート再編集」「通信再試行」に明示分類するローカル契約。保存や外部送信は開始しない。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
 ### 未完了
@@ -290,7 +291,7 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 | --- | --- | --- | --- | --- |
 | P6-01 | P5-01 | Dots全体検索→ResearchBrief→許諾preflight | 検査: 目的、範囲、field category、試行予算、期限がsnapshot化される | 類推可能 |
 | P6-SP-02 | P6-01 | Deep Research一回とwrite-back spike | 検査: 一Campaign、一Run、一ReportVersion、通知時刻、write receiptを記録する | 未知 |
-| P6-02 | P6-SP-02 | 二回調査と追加質問のRun分類 | 検査: 方針変更は新Run、再構成は新ReportVersion、transport retryは同Runになる | 類推可能 |
+| P6-02 | P6-SP-02 | 二回調査と追加質問のRun分類 | 検査: 方針変更は新Run、再構成は新ReportVersion、transport retryは同Runになる。接続前の明示分類契約は[`founder-graph-follow-up-classification.md`](founder-graph-follow-up-classification.md)で実装済み | 類推可能 |
 | P6-03 | P6-02 | 固定8章生成、差分、訂正 | 検査: 8章、Claim区分、Evidence、撤退line、roadmapが旧版不変で保存される | 類推可能 |
 
 ### P7 Live UI
