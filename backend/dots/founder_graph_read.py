@@ -47,6 +47,7 @@ class SearchHit:
     node: NodeView
     score: float
     path: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +226,7 @@ class GraphReadService:
         node_by_id = {node.id: node for node in self._writes.nodes()}
         scores: dict[str, float] = {}
         paths: dict[str, tuple[str, ...]] = {}
+        evidence_by_node: dict[str, tuple[str, ...]] = {}
         for node in node_by_id.values():
             self._check_timeout(started, timeout_ms)
             if not self._visible(node, owner):
@@ -235,24 +237,59 @@ class GraphReadService:
             if matched:
                 scores[node.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack.casefold() else 0.0)
 
+        adjacency: dict[str, list[tuple[str, str, tuple[str, ...]]]] = {}
         for relation in self._writes.relations():
             self._check_timeout(started, timeout_ms)
-            if relation.source_id in scores:
-                neighbor = node_by_id.get(relation.target_id)
-                if neighbor is not None and self._visible(neighbor, owner):
-                    scores[neighbor.id] = max(scores.get(neighbor.id, 0.0), scores[relation.source_id] * 0.5)
-                    paths[neighbor.id] = (relation.source_id, relation.relation.value, relation.target_id)
-            if relation.target_id in scores:
-                neighbor = node_by_id.get(relation.source_id)
-                if neighbor is not None and self._visible(neighbor, owner):
-                    scores[neighbor.id] = max(scores.get(neighbor.id, 0.0), scores[relation.target_id] * 0.5)
-                    paths[neighbor.id] = (relation.source_id, relation.relation.value, relation.target_id)
+            if not relation.is_active():
+                continue
+            source = node_by_id.get(relation.source_id)
+            target = node_by_id.get(relation.target_id)
+            if source is None or target is None or not self._visible(source, owner) or not self._visible(target, owner):
+                continue
+            edge = (relation.relation.value, tuple(relation.evidence_ids))
+            adjacency.setdefault(relation.source_id, []).append((relation.target_id, *edge))
+            adjacency.setdefault(relation.target_id, []).append((relation.source_id, *edge))
+
+        frontier = set(scores)
+        for _depth in range(1, 3):
+            next_frontier: set[str] = set()
+            for current_id in sorted(frontier):
+                self._check_timeout(started, timeout_ms)
+                current_score = scores[current_id]
+                current_path = paths.get(current_id, ())
+                current_evidence = evidence_by_node.get(current_id, ())
+                for neighbor_id, relation_name, edge_evidence in sorted(adjacency.get(current_id, ()), key=lambda item: (item[0], item[1], item[2])):
+                    if neighbor_id in current_path[0::2]:
+                        continue
+                    neighbor = node_by_id.get(neighbor_id)
+                    if neighbor is None or not self._visible(neighbor, owner):
+                        continue
+                    candidate_score = current_score * 0.5
+                    candidate_path = current_path + (relation_name, neighbor_id) if current_path else (current_id, relation_name, neighbor_id)
+                    previous_score = scores.get(neighbor_id)
+                    if previous_score is not None and candidate_score <= previous_score:
+                        continue
+                    scores[neighbor_id] = candidate_score
+                    paths[neighbor_id] = candidate_path
+                    evidence_by_node[neighbor_id] = tuple(dict.fromkeys((*current_evidence, *edge_evidence)))
+                    next_frontier.add(neighbor_id)
+            frontier = next_frontier
+            if not frontier:
+                break
 
         ordered_ids = sorted(scores, key=lambda node_id: (-scores[node_id], node_id))
         page_ids = ordered_ids[offset : offset + limit]
         next_cursor = str(offset + limit) if offset + limit < len(ordered_ids) else None
         return SearchPage(
-            tuple(SearchHit(_node_view(node_by_id[node_id]), scores[node_id], paths.get(node_id, ())) for node_id in page_ids),
+            tuple(
+                SearchHit(
+                    _node_view(node_by_id[node_id]),
+                    scores[node_id],
+                    paths.get(node_id, ()),
+                    evidence_by_node.get(node_id, ()),
+                )
+                for node_id in page_ids
+            ),
             next_cursor,
         )
 

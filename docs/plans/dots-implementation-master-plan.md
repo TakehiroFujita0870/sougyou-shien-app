@@ -4,6 +4,7 @@
 実行状態: Founder Graph MVPを自走中
 製品要件正本: [`founder-graph-pivot.md`](founder-graph-pivot.md)
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)
+Graph RAG read計画: [`founder-graph-read-2hop.md`](founder-graph-read-2hop.md)
 
 ## 要望 / ゴール / 成功指標
 

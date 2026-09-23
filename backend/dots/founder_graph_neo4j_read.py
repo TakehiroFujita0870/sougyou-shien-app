@@ -71,7 +71,7 @@ _SEARCH_RELATIONS_QUERY = (
     "AND NOT coalesce(a.status, '') IN $non_current "
     "AND NOT coalesce(b.status, '') IN $non_current "
     "AND (a.id IN $matched_ids OR b.id IN $matched_ids) "
-    "RETURN a.id AS source_id, type(r) AS relation, b.id AS target_id, "
+    "RETURN a.id AS source_id, type(r) AS relation, r.evidence_ids_json AS evidence_ids_json, b.id AS target_id, "
     "a.owner_id AS source_owner_id, a.node_type AS source_node_type, "
     "a.status AS source_status, a.revision AS source_revision, "
     "a.payload_json AS source_payload_json, a.search_text AS source_search_text, "
@@ -129,6 +129,26 @@ def _parse_payload(row: Any, *, prefix: str = "") -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise GraphReadError("Neo4j node payload must be a JSON object")
     return payload
+
+
+def _parse_evidence_ids(row: Any) -> tuple[str, ...]:
+    raw = _row_value(row, "evidence_ids_json")
+    if raw is None:
+        return ()
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError) as error:
+            raise GraphReadError("Neo4j relation evidence ids are not valid JSON") from error
+    if not isinstance(raw, (list, tuple)):
+        raise GraphReadError("Neo4j relation evidence ids must be a list")
+    values: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.strip():
+            raise GraphReadError("Neo4j relation evidence id is invalid")
+        if item.strip() not in values:
+            values.append(item.strip())
+    return tuple(values)
 
 
 def _view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: bool = True) -> NodeView | None:
@@ -286,6 +306,7 @@ class Neo4jGraphReadService:
             views: dict[str, NodeView] = {}
             scores: dict[str, float] = {}
             paths: dict[str, tuple[str, ...]] = {}
+            evidence_by_node: dict[str, tuple[str, ...]] = {}
             for row in rows:
                 self._check_timeout(started, timeout_ms)
                 view = _view_from_row(row, owner_id=owner, strict=False)
@@ -299,16 +320,20 @@ class Neo4jGraphReadService:
                 if matched:
                     scores[view.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack else 0.0)
 
-            if scores:
+            frontier = set(scores)
+            for _depth in range(1, 3):
+                if not frontier:
+                    break
                 relation_result = self._gateway._execute_read(
                     session,
-                    lambda tx: _rows(tx.run(
+                    lambda tx, matched_ids=tuple(sorted(frontier)): _rows(tx.run(
                         _SEARCH_RELATIONS_QUERY,
                         owner_id=owner,
-                        matched_ids=list(scores),
+                        matched_ids=list(matched_ids),
                         non_current=sorted(_NON_CURRENT),
                     )),
                 )
+                next_frontier: set[str] = set()
                 for row in tuple(relation_result):
                     self._check_timeout(started, timeout_ms)
                     source = _view_from_row(row, owner_id=owner, prefix="source_", strict=False)
@@ -320,22 +345,40 @@ class Neo4jGraphReadService:
                     relation = _row_value(row, "relation")
                     try:
                         relation_name = Neo4jGraphGateway.relation_type_for(relation)
+                        edge_evidence = _parse_evidence_ids(row)
                     except Neo4jQueryContractError as error:
                         raise GraphReadError("Neo4j relation type is not in the Founder Graph allowlist") from error
-                    path = (source.id, relation_name, target.id)
-                    if source.id in scores and target.id not in scores:
-                        scores[target.id] = scores[source.id] * 0.5
-                        paths[target.id] = path
-                    elif target.id in scores and source.id not in scores:
-                        scores[source.id] = scores[target.id] * 0.5
-                        paths[source.id] = path
+                    for current, neighbor in ((source, target), (target, source)):
+                        if current.id not in frontier:
+                            continue
+                        current_path = paths.get(current.id, ())
+                        if neighbor.id in current_path[0::2]:
+                            continue
+                        candidate_score = scores[current.id] * 0.5
+                        candidate_path = current_path + (relation_name, neighbor.id) if current_path else (current.id, relation_name, neighbor.id)
+                        previous_score = scores.get(neighbor.id)
+                        if previous_score is not None and candidate_score <= previous_score:
+                            continue
+                        scores[neighbor.id] = candidate_score
+                        paths[neighbor.id] = candidate_path
+                        evidence_by_node[neighbor.id] = tuple(dict.fromkeys((*evidence_by_node.get(current.id, ()), *edge_evidence)))
+                        next_frontier.add(neighbor.id)
+                frontier = next_frontier
             self._check_timeout(started, timeout_ms)
 
         ordered_ids = sorted(scores, key=lambda node_id: (-scores[node_id], node_id))
         page_ids = ordered_ids[offset : offset + limit]
         next_cursor = str(offset + limit) if offset + limit < len(ordered_ids) else None
         return SearchPage(
-            tuple(SearchHit(views[node_id], scores[node_id], paths.get(node_id, ())) for node_id in page_ids),
+            tuple(
+                SearchHit(
+                    views[node_id],
+                    scores[node_id],
+                    paths.get(node_id, ()),
+                    evidence_by_node.get(node_id, ()),
+                )
+                for node_id in page_ids
+            ),
             next_cursor,
         )
 

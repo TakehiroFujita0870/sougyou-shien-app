@@ -27,6 +27,8 @@ class FakeReadSession:
         self.fetch_rows: list[dict[str, object]] = []
         self.search_rows: list[dict[str, object]] = []
         self.search_relation_rows: list[dict[str, object]] = []
+        self.search_relation_rows_by_call: list[list[dict[str, object]]] = []
+        self.search_relation_call_count = 0
         self.relation_rows: list[dict[str, object]] = []
 
     def close(self) -> None:
@@ -38,6 +40,10 @@ class FakeReadSession:
     def run(self, query: str, **params):
         self.calls.append((query, params))
         if "MATCH (a)-[r]->(b)" in query and "matched_ids" in query:
+            if self.search_relation_rows_by_call:
+                index = min(self.search_relation_call_count, len(self.search_relation_rows_by_call) - 1)
+                self.search_relation_call_count += 1
+                return FakeResult(self.search_relation_rows_by_call[index])
             return FakeResult(self.search_relation_rows)
         if "MATCH (a)-[r]->(b)" in query:
             return FakeResult(self.relation_rows)
@@ -96,6 +102,7 @@ def _relation_row(source: dict[str, object], target: dict[str, object], relation
     return {
         "source_id": source["id"],
         "relation": relation,
+        "evidence_ids_json": json.dumps(["evidence-1"]),
         "target_id": target["id"],
         "source_owner_id": source["owner_id"],
         "source_node_type": source["node_type"],
@@ -161,6 +168,37 @@ def test_search_returns_neighbor_path_and_uses_parameterized_queries() -> None:
     assert idea_hit.score < page.hits[0].score
     assert all("Founder ) MATCH (n)" not in query for query, _params in driver.session_value.calls)
     assert any(params.get("tokens") for _query, params in driver.session_value.calls)
+
+
+def test_search_expands_two_parameterized_relation_queries_to_two_hops() -> None:
+    driver, reads = _gateway()
+    person = _node_row(
+        "person-1",
+        node_type=NodeType.PERSON.value,
+        title="Founder network",
+        search_text="founder network",
+    )
+    idea = _node_row("idea-1", title="Circular materials", search_text="circular materials")
+    asset = _node_row("asset-1", node_type=NodeType.ASSET.value, title="Material expertise", search_text="material expertise")
+    driver.session_value.search_rows = [person]
+    driver.session_value.search_relation_rows_by_call = [
+        [_relation_row(person, idea, RelationType.CAN_CONTRIBUTE_TO.value)],
+        [_relation_row(idea, asset, RelationType.REUSES.value)],
+    ]
+
+    page = reads.search("Founder", owner_id="owner-1")
+
+    asset_hit = next(hit for hit in page.hits if hit.node.id == asset["id"])
+    assert asset_hit.path == (
+        "person-1",
+        RelationType.CAN_CONTRIBUTE_TO.value,
+        "idea-1",
+        RelationType.REUSES.value,
+        "asset-1",
+    )
+    assert asset_hit.evidence_ids == ("evidence-1",)
+    assert driver.session_value.search_relation_call_count == 2
+    assert all(params.get("matched_ids") for query, params in driver.session_value.calls if "matched_ids" in params)
 
 
 def test_search_paginates_with_stable_cursor() -> None:

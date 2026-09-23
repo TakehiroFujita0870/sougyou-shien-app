@@ -106,6 +106,48 @@ def test_relation_path_never_discloses_a_local_only_endpoint() -> None:
     assert person.id not in str(result)
 
 
+def test_shareable_relation_path_returns_safe_evidence_ids() -> None:
+    writes, surface = _surface()
+    person = PersonAsset(
+        owner_id="owner-1",
+        id="shareable-person",
+        name="Network person",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    idea = Idea(
+        owner_id="owner-1",
+        id="network-idea",
+        title="Network idea",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    evidence = Evidence(
+        owner_id="owner-1",
+        id="shareable-evidence",
+        material_id="material-1",
+        source_revision_id="source-revision-1",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    for node, key in ((person, "shareable-person"), (idea, "network-idea"), (evidence, "shareable-evidence")):
+        writes.put_node(node, idempotency_key=key)
+    writes.link_entities(
+        Relationship.from_entities(
+            source=person,
+            relation=RelationType.CAN_CONTRIBUTE_TO,
+            target=idea,
+            evidence_ids=(evidence.id,),
+            confidence=0.8,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+        ),
+        idempotency_key="shareable-network",
+    )
+
+    result = surface.call("search", {"query": "Network person"}, owner_id="owner-1")
+    idea_result = next(item for item in result["results"] if item["id"] == idea.id)
+
+    assert idea_result["relation_path"] == [person.id, RelationType.CAN_CONTRIBUTE_TO.value, idea.id]
+    assert idea_result["evidence_ids"] == [evidence.id]
+
+
 def test_prompt_injection_text_is_returned_as_untrusted_data() -> None:
     writes, surface = _surface()
     material = ResearchMaterial(

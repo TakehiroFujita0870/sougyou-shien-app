@@ -113,24 +113,42 @@ class McpReadSurface:
         result = self._project_view(hit.node)
         if result is not None and hit.path and self._shareable_relation_path(hit, owner_id=owner_id):
             result["relation_path"] = list(hit.path)
+            evidence_ids = self._shareable_evidence_ids(hit.evidence_ids, owner_id=owner_id)
+            if evidence_ids:
+                result["evidence_ids"] = list(evidence_ids)
         return result
 
     def _shareable_relation_path(self, hit, *, owner_id: str) -> bool:
         path = hit.path
         if (
             not isinstance(path, (tuple, list))
-            or len(path) != 3
+            or len(path) < 3
+            or len(path) % 2 == 0
             or not all(isinstance(item, str) and item.strip() for item in path)
-            or hit.node.id not in {path[0], path[2]}
+            or hit.node.id not in {path[0], path[-1]}
         ):
             return False
         try:
-            RelationType(path[1])
-            other_id = path[2] if path[0] == hit.node.id else path[0]
-            other = self.reads.fetch(other_id, owner_id=owner_id)
+            for index in range(1, len(path), 2):
+                RelationType(path[index])
+                left = self.reads.fetch(path[index - 1], owner_id=owner_id)
+                right = self.reads.fetch(path[index + 1], owner_id=owner_id)
+                if self._project_view(left) is None or self._project_view(right) is None:
+                    return False
         except (GraphReadError, TypeError, ValueError):
             return False
-        return self._project_view(other) is not None
+        return True
+
+    def _shareable_evidence_ids(self, evidence_ids: tuple[str, ...], *, owner_id: str) -> tuple[str, ...]:
+        safe_ids: list[str] = []
+        for evidence_id in evidence_ids:
+            try:
+                evidence = self.reads.fetch(evidence_id, owner_id=owner_id)
+            except GraphReadError:
+                continue
+            if self._project_view(evidence) is not None:
+                safe_ids.append(evidence_id)
+        return tuple(dict.fromkeys(safe_ids))
 
     @staticmethod
     def _project_view(view) -> dict[str, Any] | None:
