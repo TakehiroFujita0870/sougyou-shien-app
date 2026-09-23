@@ -7,11 +7,14 @@ from dots.founder_graph_contact_import import (
     MAX_CSV_BYTES,
     MAX_FIELD_LENGTH,
     ContactImportError,
+    import_contacts,
     normalize_contact_csv,
     normalize_contact_input,
     normalize_contact_row,
 )
+from dots.founder_graph_mcp import McpReadSurface
 from dots.founder_graph_mcp_write import McpWriteSurface
+from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_write import InMemoryGraphWriteService
 
 
@@ -119,3 +122,61 @@ def test_idempotency_is_stable_and_organization_key_is_distinct() -> None:
     assert second.organization is not None
     assert first.organization.idempotency_key == second.organization.idempotency_key
     assert first.person.idempotency_key != first.organization.idempotency_key
+
+
+def test_import_contacts_persists_ten_synthetic_cards_without_relationships_or_shareable_contacts() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    surface = McpWriteSurface(writes)
+    cards = "name,company,email,phone,private_notes\n" + "\n".join(
+        f"Founder {index},Company {index},founder-{index}@example.test,+81-90-0000-{index:04d},private {index}"
+        for index in range(10)
+    )
+
+    receipts = import_contacts(cards, write_surface=surface)
+
+    assert len(receipts) == 10
+    assert writes.relations() == ()
+    read_surface = McpReadSurface(GraphReadService(writes))
+    assert read_surface.call("search", {"query": "Founder"}, owner_id="owner-1")["results"] == []
+    for index, receipt in enumerate(receipts):
+        person = writes.get_node(receipt.person.target_id)
+        organization = writes.get_node(receipt.organization.target_id if receipt.organization else "")
+        assert isinstance(person, PersonAsset)
+        assert isinstance(organization, Organization)
+        assert person.name == f"Founder {index}"
+        assert person.contact == {
+            "email": f"founder-{index}@example.test",
+            "phone": f"+81-90-0000-{index:04d}",
+        }
+        assert person.egress_policy is EgressPolicy.LOCAL_ONLY
+
+
+def test_import_contacts_validates_all_rows_before_saving_anything() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    surface = McpWriteSurface(writes)
+
+    with pytest.raises(ContactImportError, match="name"):
+        import_contacts(
+            [{"name": "First"}, {"name": " "}],
+            write_surface=surface,
+        )
+
+    assert writes.get_node("person-capture_person") is None
+    assert writes.audit_events() == ()
+
+
+def test_import_contacts_can_retry_a_completed_batch_without_duplicate_nodes() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    surface = McpWriteSurface(writes)
+    source = "name,company,email\nRetry Person,Retry Inc.,retry@example.test\n"
+
+    first = import_contacts(source, write_surface=surface)
+    second = import_contacts(source, write_surface=surface)
+
+    assert first[0].person.replayed is False
+    assert first[0].organization is not None
+    assert first[0].organization.replayed is False
+    assert second[0].person.replayed is True
+    assert second[0].organization is not None
+    assert second[0].organization.replayed is True
+    assert len(writes.audit_events()) == 2

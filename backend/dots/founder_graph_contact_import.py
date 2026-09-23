@@ -19,6 +19,8 @@ from typing import Any, Iterable, Mapping
 from urllib.parse import unquote
 
 from .founder_graph import EgressPolicy, Organization, PersonAsset
+from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from .founder_graph_write import WriteReceipt
 
 
 MAX_ROWS = 500
@@ -339,6 +341,15 @@ PersonAssetCapturePayload = PersonCapturePayload
 OrganizationAssetCapturePayload = OrganizationCapturePayload
 
 
+@dataclass(frozen=True, slots=True)
+class ContactImportReceipt:
+    """Write receipts for one contact row, without exposing contact details."""
+
+    position: int
+    person: WriteReceipt
+    organization: WriteReceipt | None = None
+
+
 def normalize_contact_row(row: Mapping[str, Any], *, owner_id: str) -> ContactCaptureRecord:
     """Normalize one mapping into write-surface payloads without side effects."""
 
@@ -467,3 +478,43 @@ def normalize_contact_input(
     if isinstance(source, str):
         return normalize_contact_csv(source, owner_id=owner_id)
     return normalize_contact_rows(source, owner_id=owner_id)
+
+
+def import_contacts(
+    source: str | Mapping[str, Any] | Iterable[Mapping[str, Any]],
+    *,
+    write_surface: McpWriteSurface,
+) -> tuple[ContactImportReceipt, ...]:
+    """Save fully validated local contacts through the purpose-limited write boundary.
+
+    All rows are normalized before the first write, so a malformed later row
+    cannot leave earlier rows saved.  A storage failure can still occur after a
+    prior row is saved; callers can retry the whole import because each row has
+    a stable idempotency key.
+    """
+
+    if not isinstance(write_surface, McpWriteSurface):
+        raise ContactImportError("write_surface must be a local contact write surface")
+    owner_id = write_surface.writes.owner_id
+    records = normalize_contact_input(source, owner_id=owner_id)
+    receipts: list[ContactImportReceipt] = []
+    for position, record in enumerate(records, start=1):
+        try:
+            person = write_surface.call(
+                record.person.tool_name,
+                record.person.to_tool_arguments(),
+                owner_id=record.person.owner_id,
+            )
+            organization = (
+                write_surface.call(
+                    record.organization.tool_name,
+                    record.organization.to_tool_arguments(),
+                    owner_id=record.organization.owner_id,
+                )
+                if record.organization is not None
+                else None
+            )
+        except McpWriteError as error:
+            raise ContactImportError(f"contact import stopped at row {position}: {error.code}") from error
+        receipts.append(ContactImportReceipt(position=position, person=person, organization=organization))
+    return tuple(receipts)
