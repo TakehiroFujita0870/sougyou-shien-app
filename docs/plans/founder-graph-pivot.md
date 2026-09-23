@@ -9,7 +9,7 @@
 - ピボット前のPRD、Postgres中心のアーキテクチャ、Free / Standardの料金設計、Dots内蔵の調査オーケストレーターと矛盾する箇所は、本書を優先する。
 - 既存実装は削除前提にせず、Phase 0で再利用、移行、廃止を分類する。
 - 事業評価レポートの章名は本書の「事業評価レポート契約」を正本とする。
-- ノード、関係、revision、根拠、削除、検索投影の粒度は[`founder-graph-data-model.md`](founder-graph-data-model.md)を正本とする。schema v2契約と実Neo4jの永続化gateが通るまで、通常保存先をin-memoryからNeo4jへ切り替えない。
+- ノード、関係、revision、根拠、削除、検索投影の粒度は[`founder-graph-data-model.md`](founder-graph-data-model.md)を正本とする。schema v2の制約・索引migrationと実Neo4jの永続化gateは通過したが、v2 write/read parityが通るまで通常保存先の切替範囲を拡大しない。
 - 実行DAG、Luna worker運用、並列制御、完了定義は[`dots-implementation-master-plan.md`](dots-implementation-master-plan.md)を正本とする。
 - 会話付きcapture_ideaの保存単位は[`founder-graph-source-capture.md`](founder-graph-source-capture.md)を正本とする。
 - 個別PRは本書から受け入れ条件を引用し、差分500行以内かつレビュー30分以内へ分割する。
@@ -20,17 +20,17 @@
 
 | 範囲 | 状態 | 証跡 / 残課題 |
 | --- | --- | --- |
-| T-FG-02 schema / migration | 実装済み（offline） | `migrate_schema.py --validate-only`。Neo4j実機migrationはSP-FG-05後 |
+| T-FG-02 schema / migration | 実装済み（offline + 隔離Neo4j） | `migrate_schema.py --validate-only`、v2 migrationの同じ移行再実行、rollback後のデータ保持を実機確認。既存データ変換とv2 write/read parityは残課題 |
 | T-FG-04 attachment store | 実装済み | content-address、symlink/reparse、quarantine契約テスト |
-| T-FG-05〜06 kernel / write境界 | 部分実装（in-memory + Neo4j gateway / write adapter contract） | 競合、冪等、監査、Campaign / Source revision、ReportVersionのRun / Campaign / Claim / Evidence参照、Neo4j bounded node projection、Idea / Claim correction hydrationを検査。隔離Neo4jでcapture_ideaの保存・再起動後fetch/searchを確認。Compose live volume、backup / restoreは残課題 |
-| T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`、隔離Neo4j再起動後searchを検査。MCP tunnel実機、ChatGPT tool discovery、Compose live volumeの確認は残課題 |
+| T-FG-05〜06 kernel / write境界 | 部分実装（in-memory + Neo4j gateway / write adapter contract） | 競合、冪等、監査、Campaign / Source revision、ReportVersionのRun / Campaign / Claim / Evidence参照、Neo4j bounded node projection、Idea / Claim correction hydrationを検査。隔離Neo4jでcapture_ideaの保存・再起動後fetch/searchを確認。Attachmentとmanifestを同世代で扱うprivate archiveは残課題 |
+| T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`、合成アイデアの同一接続保存・検索・詳細表示、隔離Neo4j再起動後searchを検査。MCP tunnel実機、ChatGPT tool discovery、Compose live volumeの確認は残課題 |
 | T-FG-10 instruction scanner | 実装済み | `AGENTS.md` / `SKILL.md`のallow-root、hash、差分、秘密語除外 |
-| T-FG-11〜12 contact / network | 部分実装 | Person / Organization capture、private contact境界、明示link、Mapping/CSV名刺取り込みのlocal normalizerと書込み実行を検査。名寄せ、能力候補、自動関係生成は未実施 |
+| T-FG-11〜12 contact / network | 部分実装 | Person / Organization capture、private contact境界、明示link、Mapping/CSV名刺取り込みのlocal normalizerと全行検査後の安全な書込みを検査。名寄せ、能力候補、自動関係生成は未実施 |
 | T-FG-13〜14 idea capture / enrichment | 部分実装 | capture_ideaがIdea、会話Source、SourceRevisionを一括保存し、隔離Neo4j再起動後の検索、全領域read、model catalogの論理Luna境界、shareable入力からの名寄せ・facet・cluster proposal contractを検査。実LLM推論、proposalのwrite-back、実データ評価は未実施 |
 | T-FG-15 ResearchBrief | 実装済み（local contract） | shareable Ideas / Assets / Sourcesの一括preflight、canonical URL、relation path、pagination、private除外を検査。ChatGPT実機handoffは未実施 |
 | T-FG-16 Campaign lifecycle | 部分実装（local + persistent contract） | 複数試行、期限、scope変更、許諾snapshot、in-memory / Neo4j gatewayのReportVersion参照整合性を検査。完全履歴parityと実機検証が残る |
 | T-FG-18〜19 report / impact / T-FG-22 write-back | 部分実装 | 8章shape、用途限定write tool、複数Runの保存契約、固定8章のsafe impact/diff contractを検査。Deep Research実機handoffとfollow-up write-backは未実施 |
-| T-FG-01 / T-FG-03 local Neo4j ops | 静的契約 + offline JSON manifest + 隔離persistence smoke済み | Docker Desktopの隔離volumeで再起動後fetch/searchを確認。Compose live volumeのpermission、manifest比較、Neo4j dump / isolated restore gateは未完了。safe JSON exportのmanifest / verify / dry-runはDocker-freeで検査済み |
+| T-FG-01 / T-FG-03 local Neo4j ops | 静的契約 + offline JSON manifest + 隔離persistence / dump-restore smoke済み | Docker Desktopの隔離volumeで再起動後fetch/search、Neo4j/system dump、別volume load、復元後queryを確認。Compose live volumeのpermission、3件のmanifest hash、Attachment同世代復元は未完了。safe JSON exportのmanifest / verify / dry-runはDocker-freeで検査済み |
 | T-FG-24 UI | 実装済み（read-only） | Founder Graph surface、Knowledge右隣のGraph navigation、keyboard / a11y / state tests、Appからのoptional report入力伝播を検査。実DB結果のruntime接続は残課題 |
 | T-FG-25〜26 report UI / export | 部分実装 | 8章のsafe projection・差分判定・keyboard/a11y対応の独立ReportDiff componentをFounderGraphSurfaceの任意Reports tabへ接続し、App optional prop伝播、Campaign / Run比較のread-only composition、GraphReadPortからのbounded Campaign comparison adapter、private除外JSON/Markdown export contractを検査。T-FG-26 runtime監査でsafe export / offline manifestと全owner backupを分離。Campaign実データのFastAPI/Neo4j接続、backup / restore / delete / 実ファイルexport UIは未実装 |
 

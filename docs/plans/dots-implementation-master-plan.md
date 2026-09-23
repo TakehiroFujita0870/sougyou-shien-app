@@ -136,6 +136,8 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - schema v2 domain contract、owner境界、RelationAssertionのallowlist。
 - schema v2のNeo4j制約・索引migration、同じ移行の再実行、非破壊rollbackの実機確認。
 - Founder Graphのmax 2-hop read traversal、path、Evidence safe projection。
+- 合成MCPの同一接続保存、検索、詳細取得と外部投影からの会話原文除外。
+- 合成名刺CSVの全行検査後のPerson / Organization保存、private field境界、再実行時の重複防止。
 - Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
@@ -401,3 +403,4 @@ CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../oper
 | 2026-09-22 | 初版。schema v2、Neo4j実機、ChatGPT接続、Research、UI、backup、実データcanaryまでのDAGを定義 | Luna Max主体のゴールモードで実装全体を完遂できる正本が必要なため | P0-01〜P9-04 |
 | 2026-09-23 | schema v2 domain contract、max 2-hop read、Neo4j/system dumpと隔離restore queryの実機証跡を反映 | 実装済み範囲と未完了のAttachment、manifest、外部接続を分離して次の作業を選べるようにするため | DM-01、P3-02、P8-SP-01 |
 | 2026-09-23 | schema v2 migrationと非破壊rollbackを実装し、空DB・v1合成ノードで実機確認 | v2構造をNeo4jへ安全に追加し、既存データ変換とは分けて次のwrite/read作業へ進めるため | DM-02、P1-03 |
+| 2026-09-23 | 合成MCP保存・検索・詳細取得と名刺CSV安全取込を反映 | 外部ChatGPT接続と自動名寄せを開始せず、P5/P4のローカル価値をmainで検証できるようにするため | P5-SP-01、P4-02 |

@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
 最終更新: 2026-09-23
-main SHA: `6db8ad24ddd2`
+main SHA: `32097ef3a3ea`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -21,9 +21,9 @@ active goal: Founder Graph MVP
 | Reasoning | `max` |
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
-| Current phase | P3/P8 MVP vertical slice |
-| Last merged PR | #214 |
-| Last main smoke | backend `uv run --isolated pytest -q`: 357 passed / 17 skipped、isolated Neo4j save-stop-restart-search smoke passed、Neo4j database dump/load and restore query passed |
+| Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
+| Last merged PR | #218 |
+| Last main smoke | backend `uv run --isolated pytest -q`: 363 passed / 17 skipped、frontend 311 passed、schema v2 migration/rollback、isolated Neo4j save-stop-restart-search and database dump/load restore query passed |
 
 ## Task ledger
 
@@ -44,10 +44,13 @@ active goal: Founder Graph MVP
 | RT-04 | MERGED | root | main | #208 | `8c38747d8914` | WSL preview uses `dots.main:app`; script and tunnel contract checks passed | none | 2026-09-23 |
 | LEDGER-01 | MERGED | root | main | #209 | `7881228a80e4` | execution ledger synchronized with main after PR #209 | none | 2026-09-23 |
 | LEDGER-02 | MERGED | root | main | #210 | `fc64d057c6e0` | execution ledger head synchronized after PR #209 ledger update | none | 2026-09-23 |
-| P3-01-REAL | MERGED | root | main | #211 | `f55266eb8c41` | isolated Neo4j save, stop, same-volume restart, Idea and Source search passed | Compose live manifest and backup / restore remain | 2026-09-23 |
+| P3-01-REAL | MERGED | root | main | #211 | `f55266eb8c41` | isolated Neo4j save, stop, same-volume restart, Idea and Source search passed | Compose live manifest and Attachment archive remain | 2026-09-23 |
 | DM-01 | MERGED | root | main | #213 | `99793152125d` | schema v2 domain contract tests passed、backend 354 passed / 17 skipped | Neo4j persistence migration remains | 2026-09-23 |
 | P3-02 | MERGED | root | main | #214 | `6db8ad24ddd2` | max-2-hop in-memory / Neo4j / MCP tests passed、backend 357 passed / 17 skipped | Luna rerank evaluation remains | 2026-09-23 |
-| P8-SP-01-NEO4J | RUNNING | root | codex/p8-backup-restore-evidence | - | - | isolated Neo4j/system dump, load, restore query passed; temporary resources removed | Attachment and same-generation manifest hash remain | 2026-09-23 |
+| P5-SP-01 | MERGED | root | main | #216 | `5f83fb2bf8b8` | synthetic MCP capture, search, fetch on one stdio connection; backend 358 passed / 17 skipped | D-EXT-01 real ChatGPT registration remains | 2026-09-23 |
+| P4-02 | MERGED | root | main | #217 | `9ade328d1af3` | synthetic contact CSV all-row validation, owner/private boundary, idempotent write; backend 361 passed / 17 skipped | P4-SP-03 namesake evaluation remains | 2026-09-23 |
+| P8-SP-01-NEO4J | MERGED | root | main | #215 | `6c91b108d9ed` | isolated Neo4j/system dump, load, restore query passed; temporary resources removed | D-BACKUP-01 Attachment and same-generation manifest remain | 2026-09-23 |
+| P1-03 / DM-02 | MERGED | root | main | #218 | `32097ef3a3ea` | schema v2 migration, idempotent rerun, non-destructive rollback passed on isolated Neo4j; backend 363 passed / 17 skipped | Existing-data conversion and v2 write/read parity remain | 2026-09-23 |
 
 ## Decision ledger
 
