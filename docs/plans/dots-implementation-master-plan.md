@@ -5,6 +5,7 @@
 製品要件正本: [`founder-graph-pivot.md`](founder-graph-pivot.md)
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)
 Graph RAG read計画: [`founder-graph-read-2hop.md`](founder-graph-read-2hop.md)
+schema v2移行計画: [`founder-graph-schema-v2-migration.md`](founder-graph-schema-v2-migration.md)
 
 ## 要望 / ゴール / 成功指標
 
@@ -133,13 +134,14 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - schema v1→v2の合成変換preview（書込み前の不足・重複・孤立関係検査）。
 - Windows Docker Desktop Engine応答。
 - schema v2 domain contract、owner境界、RelationAssertionのallowlist。
+- schema v2のNeo4j制約・索引migration、同じ移行の再実行、非破壊rollbackの実機確認。
 - Founder Graphのmax 2-hop read traversal、path、Evidence safe projection。
 - Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
 ### 未完了
 
-- schema v2のstable anchor、immutable revision、RelationAssertion、ContentChunkのNeo4j persistence migration。
+- schema v2のstable anchor、immutable revision、RelationAssertion、ContentChunkの既存データ変換とwrite/read adapter。
 - UbuntuからDocker Desktop Engineを使う経路。
 - Compose live volumeのmanifest一致、Attachmentとmanifestの同generation restore。
 - FastAPI / stdioの既定runtimeをNeo4jへ切り替えるgate。
@@ -398,3 +400,4 @@ CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../oper
 | --- | --- | --- | --- |
 | 2026-09-22 | 初版。schema v2、Neo4j実機、ChatGPT接続、Research、UI、backup、実データcanaryまでのDAGを定義 | Luna Max主体のゴールモードで実装全体を完遂できる正本が必要なため | P0-01〜P9-04 |
 | 2026-09-23 | schema v2 domain contract、max 2-hop read、Neo4j/system dumpと隔離restore queryの実機証跡を反映 | 実装済み範囲と未完了のAttachment、manifest、外部接続を分離して次の作業を選べるようにするため | DM-01、P3-02、P8-SP-01 |
+| 2026-09-23 | schema v2 migrationと非破壊rollbackを実装し、空DB・v1合成ノードで実機確認 | v2構造をNeo4jへ安全に追加し、既存データ変換とは分けて次のwrite/read作業へ進めるため | DM-02、P1-03 |

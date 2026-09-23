@@ -35,7 +35,7 @@ from .founder_graph_write import (
     WriteReceipt,
     payload_fingerprint,
 )
-from .founder_graph_schema import migration_queries
+from .founder_graph_schema import SCHEMA_VERSION, migration_queries, rollback_queries
 
 
 class Neo4jGatewayError(GraphWriteError):
@@ -447,7 +447,7 @@ class Neo4jGraphGateway:
         if _record_value(current, "revision") != ordered[-1][0]:
             raise GraphWriteError("source current revision must be the latest revision")
 
-    def migrate(self, *, current_version: int = 0, target_version: int = 1) -> int:
+    def migrate(self, *, current_version: int = 0, target_version: int = SCHEMA_VERSION) -> int:
         queries = migration_queries(current_version, target_version)
         with self._session() as session:
             try:
@@ -458,6 +458,21 @@ class Neo4jGraphGateway:
                         consume()
             except Exception as error:  # pragma: no cover - concrete driver failure
                 raise Neo4jUnavailableError("Neo4j schema migration failed") from error
+        return len(queries)
+
+    def rollback(self, *, current_version: int = SCHEMA_VERSION, target_version: int = 1) -> int:
+        """Remove only schema-v2 constraints and indexes, never graph data."""
+
+        queries = rollback_queries(current_version, target_version)
+        with self._session() as session:
+            try:
+                for query in queries:
+                    result = session.run(query)
+                    consume = getattr(result, "consume", None)
+                    if callable(consume):
+                        consume()
+            except Exception as error:  # pragma: no cover - concrete driver failure
+                raise Neo4jUnavailableError("Neo4j schema rollback failed") from error
         return len(queries)
 
     def health(self) -> bool:
