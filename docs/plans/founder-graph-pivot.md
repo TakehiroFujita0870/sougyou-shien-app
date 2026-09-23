@@ -25,7 +25,7 @@
 | T-FG-05〜06 kernel / write境界 | 部分実装（in-memory + Neo4j gateway / write adapter contract） | 競合、冪等、監査、Campaign / Source revision、ReportVersionのRun / Campaign / Claim / Evidence参照、Neo4j bounded node projection、Idea / Claim correction hydrationを検査。隔離Neo4jでcapture_ideaの保存・再起動後fetch/searchを確認。Compose live volume、backup / restoreは残課題 |
 | T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`、隔離Neo4j再起動後searchを検査。MCP tunnel実機、ChatGPT tool discovery、Compose live volumeの確認は残課題 |
 | T-FG-10 instruction scanner | 実装済み | `AGENTS.md` / `SKILL.md`のallow-root、hash、差分、秘密語除外 |
-| T-FG-11〜12 contact / network | 部分実装 | Person / Organization capture、private contact境界、明示link、Mapping/CSV名刺取り込みのlocal normalizerを検査。名寄せ、能力候補、自動関係生成は未実施 |
+| T-FG-11〜12 contact / network | 部分実装 | Person / Organization capture、private contact境界、明示link、Mapping/CSV名刺取り込みのlocal normalizerと書込み実行を検査。名寄せ、能力候補、自動関係生成は未実施 |
 | T-FG-13〜14 idea capture / enrichment | 部分実装 | capture_ideaがIdea、会話Source、SourceRevisionを一括保存し、隔離Neo4j再起動後の検索、全領域read、model catalogの論理Luna境界、shareable入力からの名寄せ・facet・cluster proposal contractを検査。実LLM推論、proposalのwrite-back、実データ評価は未実施 |
 | T-FG-15 ResearchBrief | 実装済み（local contract） | shareable Ideas / Assets / Sourcesの一括preflight、canonical URL、relation path、pagination、private除外を検査。ChatGPT実機handoffは未実施 |
 | T-FG-16 Campaign lifecycle | 部分実装（local + persistent contract） | 複数試行、期限、scope変更、許諾snapshot、in-memory / Neo4j gatewayのReportVersion参照整合性を検査。完全履歴parityと実機検証が残る |
@@ -586,3 +586,4 @@ DB migration、MCP tool、privacy境界、backup / restoreは、unit testだけ�
 | 2026-09-23 | capture_ideaをIdea、会話Source、SourceRevisionの一括保存へ変更し、原文をIdeaから分離 | MVPの会話保存で出典を失わず、再送時の重複と部分保存を防ぐため | T-FG-05〜06、T-FG-13、SC-01〜SC-05 |
 | 2026-09-23 | 隔離Neo4jで保存直後と再起動後の検索を確認し、実機証跡をlocal runbookへ記録 | 合成データで永続化の最初のgateを通過したため | T-FG-01、T-FG-03、T-FG-05〜09、T-FG-13 |
 | 2026-09-23 | in-memoryとNeo4jの検索を最大2段階へ拡張し、MCPへshareableな関係経路とEvidence IDだけを返す契約を追加 | Graph RAGの候補取得と根拠追跡を同じbounded read contractへ揃えるため | T-FG-07〜09、P3-02〜03 |
+| 2026-09-23 | 合成名刺の手入力・CSV正規化結果を、目的限定の書込み境界へ保存する処理を追加 | 連絡先を手で整形するだけでなく、重複なく安全に保存するP4-02の最小経路を成立させるため | P4-02 |
