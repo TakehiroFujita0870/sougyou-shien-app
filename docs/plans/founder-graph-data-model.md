@@ -1,7 +1,7 @@
 # Founder Graph データモデル正本
 
 最終更新: 2026-09-22
-状態: DM-01 domain contract実装済み、Neo4j既定化前の実装契約
+状態: DM-01 domain contractとDM-02 schema v2 migration実装済み、Neo4j既定化前の実装契約
 
 ## 要望 / ゴール / 成功指標
 
@@ -15,7 +15,7 @@
 
 現行コードは、`Idea`と`Claim`の訂正を新しい同種ノードで表し、Neo4jの主要fieldを`payload_json`にも保持する。`Relationship`はNeo4j relationshipへ直接保存し、根拠IDをJSON配列propertyに置く。この実装は契約試験用のschema v1であり、本書のschema v2を満たしていない。
 
-2026-09-23時点で、schema v2へ移行するためのdomain contractとして`EntityRevision`、`RelationAssertion`、`ContentChunk`、`Facet`とpredicate allowlistを追加した。これは保存形式の切替ではなく、既存schema v1の利用経路を壊さずにv2の入力値を検証する段階である。Neo4j migration、既存データ変換、既定保存先の切替は未完了である。
+2026-09-23時点で、schema v2へ移行するためのdomain contractとして`EntityRevision`、`RelationAssertion`、`ContentChunk`、`Facet`とpredicate allowlistを追加し、Neo4jへv2の制約・索引を追加するmigrationと非破壊rollbackを実装した。空のNeo4jとv1合成ノードで、移行、同じ移行の再実行、rollback後のデータ保持を実機確認済みである。既存データの変換、v2 write/read adapter、既定保存先の切替は未完了である。
 
 次の不一致が解消するまで、`create_app()`の既定保存先をNeo4jへ切り替えない。
 

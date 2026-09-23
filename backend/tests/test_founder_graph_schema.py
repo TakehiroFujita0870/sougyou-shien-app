@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 from dots.founder_graph import Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship
-from dots.founder_graph_schema import migration_queries, migration_plan, schema_manifest, validate_import_batch
+from dots.founder_graph_schema import (
+    migration_queries,
+    migration_plan,
+    rollback_queries,
+    schema_manifest,
+    validate_import_batch,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,8 +39,26 @@ def _relation(person: PersonAsset, idea: Idea, evidence: Evidence) -> Relationsh
 def test_schema_plan_is_idempotent_and_versioned() -> None:
     assert migration_plan(0, 1) == migration_plan(0, 1)
     assert migration_plan(1, 1) == ()
+    assert migration_plan(1, 2)
     assert all("IF NOT EXISTS" in query for query in migration_queries())
-    assert schema_manifest()["version"] == 1
+    assert schema_manifest()["version"] == 2
+    assert schema_manifest()["rollback_query_count"] == 12
+
+
+def test_schema_v2_adds_only_new_labels_and_rollback_keeps_data_contract() -> None:
+    v1_queries = migration_queries(0, 1)
+    v2_queries = migration_queries(1, 2)
+
+    assert v1_queries
+    assert all(label not in " ".join(v1_queries) for label in ("EntityRevision", "RelationAssertion", "ContentChunk", "Facet"))
+    assert all("IF NOT EXISTS" in query for query in v2_queries)
+    assert all(label in " ".join(v2_queries) for label in ("EntityRevision", "RelationAssertion", "ContentChunk", "Facet"))
+
+    rollback = rollback_queries(2, 1)
+    assert len(rollback) == 12
+    assert all(query.startswith("DROP ") and "IF EXISTS" in query for query in rollback)
+    assert all(label in " ".join(rollback) for label in ("entityrevision", "relationassertion", "contentchunk", "facet"))
+    assert rollback_queries(1, 1) == ()
 
 
 def test_import_batch_rejects_duplicate_ids_and_invalid_relation() -> None:
