@@ -132,19 +132,22 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - Docker Compose、schema migration、manifest、backup / restore helperのnetwork-free検査。
 - schema v1→v2の合成変換preview（書込み前の不足・重複・孤立関係検査）。
 - Windows Docker Desktop Engine応答。
+- schema v2 domain contract、owner境界、RelationAssertionのallowlist。
+- Founder Graphのmax 2-hop read traversal、path、Evidence safe projection。
+- Windows Docker Desktop上の合成Idea保存、停止・再起動検索、Neo4j/system dump、隔離volume load、復元後query。
 - finish-and-merge Skill、main保護、CI必須、Auto-merge。
 
 ### 未完了
 
-- schema v2のstable anchor、immutable revision、RelationAssertion、ContentChunk。
+- schema v2のstable anchor、immutable revision、RelationAssertion、ContentChunkのNeo4j persistence migration。
 - UbuntuからDocker Desktop Engineを使う経路。
-- 実Neo4jでのmigration、write、read、restart、restore。
+- Compose live volumeのmanifest一致、Attachmentとmanifestの同generation restore。
 - FastAPI / stdioの既定runtimeをNeo4jへ切り替えるgate。
 - ChatGPT Secure MCP Tunnelのtool discoveryと代表会話。
 - Graph全体検索からResearchBriefを作り、許諾後にDeep Researchへ渡す実経路。
 - Deep Research完了後のRun、Evidence、ReportVersion write-back。
 - Graph UIの実backend接続、訂正、削除impact、実file export。
-- private full archive、restore、soft delete propagation。
+- private full archive、soft delete propagation、safe export。
 - 実データ投入前security reviewと既存データ移行判断。
 
 ## phase DAG
@@ -394,3 +397,4 @@ CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../oper
 | 日時 | 変更 | 理由 | 影響task |
 | --- | --- | --- | --- |
 | 2026-09-22 | 初版。schema v2、Neo4j実機、ChatGPT接続、Research、UI、backup、実データcanaryまでのDAGを定義 | Luna Max主体のゴールモードで実装全体を完遂できる正本が必要なため | P0-01〜P9-04 |
+| 2026-09-23 | schema v2 domain contract、max 2-hop read、Neo4j/system dumpと隔離restore queryの実機証跡を反映 | 実装済み範囲と未完了のAttachment、manifest、外部接続を分離して次の作業を選べるようにするため | DM-01、P3-02、P8-SP-01 |
