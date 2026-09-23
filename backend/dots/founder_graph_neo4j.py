@@ -36,6 +36,7 @@ from .founder_graph_write import (
     payload_fingerprint,
 )
 from .founder_graph_schema import SCHEMA_VERSION, migration_queries, rollback_queries
+from .founder_graph_read import _FIELD_ALLOWLIST
 
 
 class Neo4jGatewayError(GraphWriteError):
@@ -84,7 +85,15 @@ def _node_properties(node: Any) -> dict[str, Any]:
     node_type = node.node_type if isinstance(node.node_type, NodeType) else NodeType(node.node_type)
     payload = _json_value(node)
     payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    fields_for_search = payload if isinstance(payload, Mapping) else {"value": payload}
+    # Keep the persistent search projection aligned with the in-memory read
+    # contract.  In particular, local-only ContentChunk text may stay in the
+    # stored payload but must not become a searchable or browser-visible field
+    # through the safe read adapter.
+    fields_for_search = (
+        {field_name: payload[field_name] for field_name in _FIELD_ALLOWLIST[node_type] if field_name in payload}
+        if isinstance(payload, Mapping)
+        else {"value": payload}
+    )
     search_text = " ".join(str(item) for item in fields_for_search.values())
     status = getattr(node, "status", None)
     egress_policy = getattr(node, "egress_policy", None)

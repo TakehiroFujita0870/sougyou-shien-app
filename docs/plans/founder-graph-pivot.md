@@ -9,7 +9,7 @@
 - ピボット前のPRD、Postgres中心のアーキテクチャ、Free / Standardの料金設計、Dots内蔵の調査オーケストレーターと矛盾する箇所は、本書を優先する。
 - 既存実装は削除前提にせず、Phase 0で再利用、移行、廃止を分類する。
 - 事業評価レポートの章名は本書の「事業評価レポート契約」を正本とする。
-- ノード、関係、revision、根拠、削除、検索投影の粒度は[`founder-graph-data-model.md`](founder-graph-data-model.md)を正本とする。schema v2の制約・索引migrationと実Neo4jの永続化gateは通過したが、v2 write/read parityが通るまで通常保存先の切替範囲を拡大しない。
+- ノード、関係、revision、根拠、削除、検索投影の粒度は[`founder-graph-data-model.md`](founder-graph-data-model.md)を正本とする。schema v2の制約・索引migrationと実Neo4jの永続化gate、および合成v2 write/read parityは通過したが、既存データ変換とCompose live manifest確認が終わるまで通常保存先の切替範囲を拡大しない。
 - 実行DAG、Luna worker運用、並列制御、完了定義は[`dots-implementation-master-plan.md`](dots-implementation-master-plan.md)を正本とする。
 - 会話付きcapture_ideaの保存単位は[`founder-graph-source-capture.md`](founder-graph-source-capture.md)を正本とする。
 - 個別PRは本書から受け入れ条件を引用し、差分500行以内かつレビュー30分以内へ分割する。
@@ -20,7 +20,7 @@
 
 | 範囲 | 状態 | 証跡 / 残課題 |
 | --- | --- | --- |
-| T-FG-02 schema / migration | 実装済み（offline + 隔離Neo4j） | `migrate_schema.py --validate-only`、v2 migrationの同じ移行再実行、rollback後のデータ保持を実機確認。既存データ変換とv2 write/read parityは残課題 |
+| T-FG-02 schema / migration | 実装済み（offline + 隔離Neo4j + 合成parity） | `migrate_schema.py --validate-only`、v2 migrationの同じ移行再実行、rollback後のデータ保持、v2全node typeの一時保存・Neo4j保存・安全なfetch/search parityを確認。既存データ変換とCompose live manifestは残課題 |
 | T-FG-04 attachment store | 実装済み | content-address、symlink/reparse、quarantine契約テスト |
 | T-FG-05〜06 kernel / write境界 | 部分実装（in-memory + Neo4j gateway / write adapter contract） | 競合、冪等、監査、Campaign / Source revision、ReportVersionのRun / Campaign / Claim / Evidence参照、Neo4j bounded node projection、Idea / Claim correction hydrationを検査。隔離Neo4jでcapture_ideaの保存・再起動後fetch/searchを確認。Attachmentとmanifestを同世代で扱うprivate archiveは残課題 |
 | T-FG-07〜09 read / MCP | 部分実装（in-memory + Neo4j read/write contract + stdio transport） | owner、egress、pagination、relation path、MCP error、明示read/write-service注入、停止時503、stdio `initialize` / `tools/list` / `tools/call`、合成アイデアの同一接続保存・検索・詳細表示、隔離Neo4j再起動後searchを検査。MCP tunnel実機、ChatGPT tool discovery、Compose live volumeの確認は残課題 |

@@ -6,6 +6,7 @@
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)
 Graph RAG read計画: [`founder-graph-read-2hop.md`](founder-graph-read-2hop.md)
 schema v2移行計画: [`founder-graph-schema-v2-migration.md`](founder-graph-schema-v2-migration.md)
+schema v2 parity計画: [`founder-graph-v2-parity.md`](founder-graph-v2-parity.md)
 名寄せ候補評価計画: [`founder-graph-namesake-evaluation.md`](founder-graph-namesake-evaluation.md)
 Graph UI live read計画: [`founder-graph-live-ui-read.md`](founder-graph-live-ui-read.md)
 
@@ -137,6 +138,7 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 - Windows Docker Desktop Engine応答。
 - schema v2 domain contract、owner境界、RelationAssertionのallowlist。
 - schema v2のNeo4j制約・索引migration、同じ移行の再実行、非破壊rollbackの実機確認。
+- schema v2のEntityRevision、RelationAssertion、ContentChunk、Facetについて、一時保存とNeo4j向け保存・安全な検索結果の合成parity検査。
 - Founder Graphのmax 2-hop read traversal、path、Evidence safe projection。
 - 合成MCPの同一接続保存、検索、詳細取得と外部投影からの会話原文除外。
 - 合成名刺CSVの全行検査後のPerson / Organization保存、private field境界、再実行時の重複防止。
@@ -249,7 +251,7 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 | P1-01 | P1-SP-01 | stable anchor / EntityRevision domain contract | 検査: anchor ID維持、current pointer一意、revision不変testが成功する | 類推可能 |
 | P1-02 | P1-SP-01 | RelationAssertion / Facet / ContentChunk contract | 検査: predicate、根拠、期限、chunk locatorのallowlist testが成功する | 類推可能 |
 | P1-03 | P1-01,P1-02 | Neo4j migration v2とrollback | 検査: 実Neo4jの空DBとv1 fixtureの双方でmigration / rollbackが成功する | 類推可能 |
-| P1-04 | P1-03 | v2 read/write parity | 検査: in-memoryとNeo4jで同じmanifestと代表query結果になる | 類推可能 |
+| P1-04 | P1-03 | v2 read/write parity | 検査: in-memoryとNeo4jで同じmanifestと代表query結果になる。合成v2全node typeのfetch/search parityを実装・検査済み | 類推可能 |
 
 ### P2 Neo4j Real Runtime
 
