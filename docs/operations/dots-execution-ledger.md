@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
-最終更新: 2026-09-23
-main SHA: `37332903a228`
+最終更新: 2026-09-24
+main SHA: `7186d88fb617`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -22,8 +22,8 @@ active goal: Founder Graph MVP
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
-| Last merged PR | #238 |
-| Last main smoke | PR #236: Report Diff focused frontend 11 passed、backend diff 6 passed; PR #237: focused frontend 13 passed、build passed、full Vitest 325 passed / 1 unrelated existing PDF browser-download timeout; PR #238: focused backend 52 passed。各PRで`git diff --check` passed。 |
+| Last merged PR | #241 |
+| Last main smoke | main `7186d88fb617`上のbackend全体: 413 passed / 2 skipped (4.32s)、frontend全47 files / 327 tests passed (29.00s)、production build passed、Storybook build passed (17.23s)、git show --check passed。production / Storybook buildは大きなbundle警告のみで成功。PR #240: backend focused 24 passed、full 398 passed / 17 skipped、py_compileとdiff check passed; PR #241: frontend full 47 files / 327 tests passed、buildとStorybook build passed、diff check passed。 |
 
 ## Task ledger
 
@@ -60,9 +60,10 @@ active goal: Founder Graph MVP
 | RPP-01/RPP-02 | MERGED | p6_parent_validation | main | #230 | `bf204638753f` | ReportVersion親版の存在・種類・ownerをメモリ/Neo4j互換保存前に検証、同owner親版を許可; backend 387 passed / 17 skipped | 差分計算、親版比較UI、Deep Research接続は未実装 | 2026-09-23 |
 | P7-01-E | MERGED | p7_graph_search_input | main | #232 | `945ad46b8335` | Graph検索入力、submit時のみ明示local clientへ依頼、focused 5 passed、frontend 322 passed、build passed | 訂正/履歴UI、実ChatGPT接続は未実装またはD-EXT-01で保留 | 2026-09-23 |
 | P2-02/P2-03 | MERGED | p2_compose_manifest | main | #233 | `793f7c593f95` | Compose live volume名と停止前後synthetic manifest一致の手順・回帰検査、focused 23 passed / 2 skipped、static validator passed | Attachment同generation、実データ、backup decisionは未完了 | 2026-09-23 |
-| P6-03 | MERGED | root | main | #236 | `1a6e98b7432` | Report Diff frontend focused 11 passed、backend diff 6 passed、diff check passed | `present: false`の章を旧内容として復活させず、利用不可として保持。外部接続なし | 2026-09-23 |
-| P7-02 | MERGED | root | main | #237 | `02d295637128` | focused frontend 13 passed、build passed、full Vitest 325 passed / 1 unrelated existing PDF browser-download timeout、diff check passed | 本人が勝者と根拠IDを明示確認する境界。自動統合、連絡先表示、backend書込みなし | 2026-09-23 |
+| P6-03 | MERGED | root | main | #236 | `1a6e98b7432c` | Report Diff frontend focused 11 passed、backend diff 6 passed、diff check passed | `present: false`の章を旧内容として復活させず、利用不可として保持。外部接続なし | 2026-09-23 |
+| P7-02 | MERGED | root | main | #237 / #241 | `7186d88fb617` | #237 focused frontend 13 passed、build passed、full Vitest 325 passed / 1 unrelated existing PDF browser-download timeout、diff check passed; #241 frontend full 47 files / 327 tests passed、build、Storybook build、diff check passed | 本人が勝者と根拠IDを明示確認する境界。#241で確定前previewと矢印キー選択を追加。自動統合、連絡先表示、backend書込みなし | 2026-09-24 |
 | P2-04 | MERGED | root | main | #238 | `37332903a228` | Neo4j runtime / MCP API / stdio / write focused backend 52 passed、diff check passed | 設定済みNeo4j障害時は503またはunavailableを返し、in-memory成功保存へfallbackしない | 2026-09-23 |
+| P3-SP-03 | MERGED | root | main | #240 | `9b9d350d87dc` | backend focused 24 passed、full 398 passed / 17 skipped、py_compile、diff check passed | 固定20問のLuna rerank評価契約。外部AI、実データ送信、既存検索順の変更なし | 2026-09-24 |
 
 ## Decision ledger
 
