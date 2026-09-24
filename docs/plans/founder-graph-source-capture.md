@@ -1,5 +1,7 @@
 # Founder Graph 会話付きアイデア保存 計画
 
+この文書はIdea、Source、SourceRevisionを一括保存する初期sliceの受け入れ条件である。schema v2の引用範囲生成と、MCP応答に本文を含めず出典IDを返す後続作業は[根拠付き関係保存計画](founder-graph-relationship-evidence-write.md)に従う。
+
 最終検証日: 2026-09-23
 
 ## 要望 / ゴール / 成功指標
