@@ -46,6 +46,23 @@ function NamesakeCandidateCard({ candidate, onConfirm }) {
   const [evidenceId, setEvidenceId] = useState('');
   const [error, setError] = useState('');
   const [firstPersonId, secondPersonId] = candidate.personIds;
+  const loserId = winnerId === firstPersonId ? secondPersonId : firstPersonId;
+
+  function chooseWinnerFromKeyboard(event) {
+    const focusedValue = typeof event.target?.value === 'string' ? event.target.value : winnerId;
+    const currentIndex = candidate.personIds.indexOf(focusedValue);
+    const nextIndexByKey = {
+      ArrowDown: currentIndex < 0 ? 0 : (currentIndex + 1) % candidate.personIds.length,
+      ArrowRight: currentIndex < 0 ? 0 : (currentIndex + 1) % candidate.personIds.length,
+      ArrowUp: currentIndex < 0 ? candidate.personIds.length - 1 : (currentIndex - 1 + candidate.personIds.length) % candidate.personIds.length,
+      ArrowLeft: currentIndex < 0 ? candidate.personIds.length - 1 : (currentIndex - 1 + candidate.personIds.length) % candidate.personIds.length,
+    };
+    const nextIndex = nextIndexByKey[event.key];
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    setWinnerId(candidate.personIds[nextIndex]);
+    event.currentTarget.querySelectorAll('input[type="radio"]')[nextIndex]?.focus();
+  }
 
   function submitConfirmation(event) {
     event.preventDefault();
@@ -58,7 +75,6 @@ function NamesakeCandidateCard({ candidate, onConfirm }) {
       setError('勝者と根拠IDを選択してください。');
       return;
     }
-    const loserId = winnerId === firstPersonId ? secondPersonId : firstPersonId;
     setError('');
     onConfirm({
       winner_person_id: winnerId,
@@ -79,7 +95,7 @@ function NamesakeCandidateCard({ candidate, onConfirm }) {
           <span className="rounded-full border border-[var(--color-border-subtle)] px-2 py-1 text-xs font-medium">提案中</span>
         </div>
 
-        <fieldset className="mt-4 grid gap-2">
+        <fieldset className="mt-4 grid gap-2" onKeyDown={chooseWinnerFromKeyboard}>
           <legend className="text-sm font-semibold">残す人物を選択</legend>
           {candidate.personIds.map((personId) => (
             <label key={personId} className="flex items-center gap-2 text-sm">
@@ -94,6 +110,12 @@ function NamesakeCandidateCard({ candidate, onConfirm }) {
             </label>
           ))}
         </fieldset>
+
+        {winnerId && (
+          <p data-founder-graph-namesake-merge-preview="true" role="status" className="mt-3 text-sm text-[var(--color-text-muted)]">
+            統合内容の確認: {winnerId} を残し、{loserId} は統合済みとして保管します。確定前は保存済みの人物に変更はありません。
+          </p>
+        )}
 
         <label className="mt-4 grid gap-1 text-sm font-semibold">
           統合を裏付ける根拠ID
