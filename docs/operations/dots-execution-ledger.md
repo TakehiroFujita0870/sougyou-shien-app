@@ -1,6 +1,6 @@
 # Dots implementation execution ledger
 
-最終更新: 2026-09-23
+最終更新: 2026-09-24
 main SHA: `7186d88fb617`
 active goal: Founder Graph MVP
 
@@ -23,7 +23,7 @@ active goal: Founder Graph MVP
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
 | Last merged PR | #241 |
-| Last main smoke | PR #240: backend focused 24 passed、full 398 passed / 17 skipped、py_compileとdiff check passed; PR #241: frontend full 47 files / 327 tests passed、buildとStorybook build passed、diff check passed。 |
+| Last main smoke | main `7186d88fb617`上のbackend全体: 413 passed / 2 skipped。PR #240: backend focused 24 passed、full 398 passed / 17 skipped、py_compileとdiff check passed; PR #241: frontend full 47 files / 327 tests passed、buildとStorybook build passed、diff check passed。 |
 
 ## Task ledger
 
