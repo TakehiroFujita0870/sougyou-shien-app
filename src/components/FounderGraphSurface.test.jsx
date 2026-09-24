@@ -214,6 +214,32 @@ describe('FounderGraphSurface', () => {
       .toContain('勝者と根拠IDを選択してください。');
   });
 
+  it('previews the exact merge before confirmation and lets the owner choose the survivor with arrow keys', () => {
+    const view = renderSurface({
+      namesakeCandidates: [{
+        person_ids: ['person-a', 'person-b'],
+        reasons: ['same_name'],
+        confidence: 0.55,
+        status: 'proposed',
+      }],
+      onConfirmNamesakeMerge: vi.fn(),
+    });
+    const panel = view.querySelector('[data-founder-graph-namesake-candidates]');
+    const firstChoice = panel.querySelector('input[type="radio"][value="person-a"]');
+
+    act(() => firstChoice.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    })));
+
+    expect(panel.querySelector('input[type="radio"][value="person-b"]').checked).toBe(true);
+    expect(panel.querySelector('[data-founder-graph-namesake-merge-preview]').textContent)
+      .toContain('person-b を残し、person-a は統合済みとして保管します。');
+    expect(panel.querySelector('[data-founder-graph-namesake-merge-preview]').textContent)
+      .toContain('確定前は保存済みの人物に変更はありません。');
+  });
+
   it('shows supplied namesake candidates without enabling a write path when no callback is supplied', () => {
     const view = renderSurface({
       namesakeCandidates: [{
