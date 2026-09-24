@@ -8,7 +8,7 @@ or quietly changing the default retrieval order.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from math import ceil, isfinite
 from time import perf_counter
@@ -26,8 +26,8 @@ def _text(value: object, field_name: str) -> str:
     return value.strip()
 
 
-def _ids(values: Sequence[object], field_name: str) -> tuple[str, ...]:
-    if isinstance(values, (str, bytes, bytearray)):
+def _ids(values: object, field_name: str) -> tuple[str, ...]:
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes, bytearray)):
         raise RerankEvaluationError(f"{field_name} must be a sequence of identifiers")
     normalized = tuple(_text(value, field_name) for value in values)
     if not normalized:
@@ -127,7 +127,10 @@ def evaluate_reranker(
         if not isfinite(elapsed_ms) or elapsed_ms < 0:
             raise RerankEvaluationError("clock must return a non-decreasing finite value")
         durations_ms.append(elapsed_ms)
-        if isinstance(returned, (str, bytes, bytearray)):
+        if (
+            not isinstance(returned, Sequence)
+            or isinstance(returned, (str, bytes, bytearray, Mapping))
+        ):
             raise RerankEvaluationError("reranker must return a sequence of identifiers")
         allowed = set(case.candidate_ids)
         ranked: list[str] = []

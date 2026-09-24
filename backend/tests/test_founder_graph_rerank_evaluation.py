@@ -60,3 +60,17 @@ def test_evaluation_rejects_non_sequence_model_output() -> None:
 
     with pytest.raises(RerankEvaluationError, match="sequence"):
         evaluate_reranker((case,), lambda _query, _candidates: "idea-a")
+
+
+@pytest.mark.parametrize("candidate_ids", (None, {"idea-a": "unexpected"}))
+def test_case_rejects_non_sequence_candidate_identifiers(candidate_ids: object) -> None:
+    with pytest.raises(RerankEvaluationError, match="candidate_ids must be a sequence"):
+        RerankEvaluationCase("topic", candidate_ids, "idea-a")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("returned", (None, {"idea-a": "unexpected"}, 1))
+def test_evaluation_normalizes_non_sequence_model_output(returned: object) -> None:
+    case = RerankEvaluationCase("topic", ("idea-a",), "idea-a")
+
+    with pytest.raises(RerankEvaluationError, match="reranker must return a sequence"):
+        evaluate_reranker((case,), lambda _query, _candidates: returned)  # type: ignore[return-value]
