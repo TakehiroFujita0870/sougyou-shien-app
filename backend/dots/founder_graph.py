@@ -1956,6 +1956,191 @@ class ContentChunk:
         return project_shareable(self, **kwargs)
 
 
+CONTENT_CHUNK_TARGET_LENGTH = 2_400
+CONTENT_CHUNK_MAX_LENGTH = 4_000
+
+
+def deterministic_content_chunk_id(
+    source_revision_id: str,
+    char_start: int,
+    char_end: int,
+    text: str,
+) -> str:
+    """Return the stable identity for one source-revision text range."""
+
+    if not isinstance(source_revision_id, str) or not source_revision_id.strip():
+        raise DomainValidationError("source_revision_id must be a non-empty string")
+    if not isinstance(char_start, int) or isinstance(char_start, bool) or char_start < 0:
+        raise DomainValidationError("char_start must be a non-negative integer")
+    if not isinstance(char_end, int) or isinstance(char_end, bool) or char_end <= char_start:
+        raise DomainValidationError("char_end must be greater than char_start")
+    if not isinstance(text, str) or not text:
+        raise DomainValidationError("content chunk text must not be empty")
+    identity = "\x00".join((source_revision_id.strip(), str(char_start), str(char_end)))
+    digest = sha256(identity.encode("utf-8") + b"\x00" + text.encode("utf-8")).hexdigest()
+    return f"content-chunk_{digest}"
+
+
+def _paragraph_boundaries(content: str, start: int, limit: int) -> tuple[int, ...]:
+    boundaries: list[int] = []
+    index = start
+    while index < limit:
+        if content[index] not in "\r\n":
+            index += 1
+            continue
+        end = index
+        newline_count = 0
+        while end < limit and content[end] in "\r\n":
+            if content[end] == "\r" and end + 1 < len(content) and content[end + 1] == "\n":
+                end += 2
+            else:
+                end += 1
+            newline_count += 1
+        if newline_count >= 2 and end <= limit:
+            boundaries.append(end)
+        index = end
+    return tuple(boundaries)
+
+
+def _sentence_boundaries(content: str, start: int, limit: int) -> tuple[int, ...]:
+    terminators = frozenset(".!?。！？")
+    closers = frozenset("\"'”’»）】〕〉》")
+    boundaries: list[int] = []
+    index = start
+    while index < limit:
+        if content[index] not in terminators:
+            index += 1
+            continue
+        end = index + 1
+        while end < limit and content[end] in closers:
+            end += 1
+        if end < len(content) and not content[end].isspace():
+            index += 1
+            continue
+        while end < limit and content[end].isspace():
+            end += 1
+        if end <= limit:
+            boundaries.append(end)
+        index = end
+    return tuple(boundaries)
+
+
+def _whitespace_boundaries(content: str, start: int, limit: int) -> tuple[int, ...]:
+    boundaries: list[int] = []
+    index = start
+    while index < limit:
+        if not content[index].isspace():
+            index += 1
+            continue
+        end = index + 1
+        while end < limit and content[end].isspace():
+            end += 1
+        boundaries.append(end)
+        index = end
+    return tuple(boundaries)
+
+
+def _select_chunk_boundary(
+    content: str,
+    start: int,
+    target: int,
+    maximum: int,
+) -> int:
+    """Select a preferred structural boundary, or hard-split at maximum."""
+
+    boundary_candidates = (
+        _paragraph_boundaries(content, start, maximum),
+        _sentence_boundaries(content, start, maximum),
+        _whitespace_boundaries(content, start, maximum),
+    )
+    for candidates in boundary_candidates:
+        candidates = tuple(candidate for candidate in candidates if start < candidate <= target)
+        if not candidates:
+            continue
+        return max(candidates)
+    for candidates in boundary_candidates:
+        candidates = tuple(candidate for candidate in candidates if target < candidate <= maximum)
+        if candidates:
+            return min(candidates)
+    return maximum
+
+
+def split_source_content(
+    content: str,
+    *,
+    target_length: int = CONTENT_CHUNK_TARGET_LENGTH,
+    max_length: int = CONTENT_CHUNK_MAX_LENGTH,
+) -> tuple[tuple[int, int, str], ...]:
+    """Split content into contiguous Unicode-codepoint ranges.
+
+    Structural boundaries are preferred in paragraph, sentence, and whitespace
+    order. The returned text slices concatenate exactly to the input string.
+    """
+
+    if not isinstance(content, str):
+        raise DomainValidationError("source content must be a string")
+    if (
+        not isinstance(target_length, int)
+        or isinstance(target_length, bool)
+        or target_length < 1
+        or not isinstance(max_length, int)
+        or isinstance(max_length, bool)
+        or max_length < target_length
+    ):
+        raise DomainValidationError("chunk lengths must be positive integers with max_length >= target_length")
+    if not content:
+        return ()
+
+    chunks: list[tuple[int, int, str]] = []
+    start = 0
+    content_length = len(content)
+    while start < content_length:
+        remaining = content_length - start
+        if remaining <= max_length:
+            end = content_length
+        else:
+            target = min(start + target_length, content_length)
+            maximum = min(start + max_length, content_length)
+            end = _select_chunk_boundary(content, start, target, maximum)
+        if end <= start:
+            raise DomainValidationError("chunk splitter produced an empty range")
+        chunks.append((start, end, content[start:end]))
+        start = end
+    return tuple(chunks)
+
+
+def build_content_chunks(source_revision: SourceRevision) -> tuple[ContentChunk, ...]:
+    """Build deterministic, local-only chunks for one immutable revision."""
+
+    if not isinstance(source_revision, SourceRevision):
+        raise DomainValidationError("content chunks require a SourceRevision")
+    chunks: list[ContentChunk] = []
+    for ordinal, (char_start, char_end, text) in enumerate(split_source_content(source_revision.content)):
+        chunk_id = deterministic_content_chunk_id(source_revision.id, char_start, char_end, text)
+        chunks.append(
+            ContentChunk(
+                owner_id=source_revision.owner_id,
+                id=chunk_id,
+                source_revision_id=source_revision.id,
+                ordinal=ordinal,
+                char_start=char_start,
+                char_end=char_end,
+                text=text,
+                egress_policy=EgressPolicy.LOCAL_ONLY,
+                created_at=source_revision.retrieved_at,
+                provenance=Provenance(
+                    actor="local-owner",
+                    operation="capture_idea",
+                    target_id=chunk_id,
+                    source_id=source_revision.id,
+                    occurred_at=source_revision.retrieved_at,
+                    idempotency_key=f"content-chunk:{chunk_id}",
+                ),
+            )
+        )
+    return tuple(chunks)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Facet:
     """A reusable classification term, scoped to the local owner."""
@@ -2808,6 +2993,8 @@ __all__ = [
     "Asset",
     "AssetKind",
     "AssetStatus",
+    "CONTENT_CHUNK_MAX_LENGTH",
+    "CONTENT_CHUNK_TARGET_LENGTH",
     "ContentChunk",
     "CampaignAuthorizationRegistry",
     "CampaignAuthorizationSnapshot",
@@ -2818,6 +3005,8 @@ __all__ = [
     "ClaimType",
     "DataPolicy",
     "DomainValidationError",
+    "build_content_chunks",
+    "deterministic_content_chunk_id",
     "EntityRevision",
     "EgressPolicy",
     "EntityStatus",
@@ -2875,6 +3064,7 @@ __all__ = [
     "report_section_title",
     "section_title",
     "shareable_projection",
+    "split_source_content",
     "to_egress_projection",
     "validate_aggregate_references",
     "validate_campaign_reference",

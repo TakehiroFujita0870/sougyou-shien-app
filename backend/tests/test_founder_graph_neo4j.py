@@ -2,15 +2,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 
 import pytest
 
-from dots.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship, Source, SourceRevision
+from dots.founder_graph import (
+    Idea,
+    NodeType,
+    PersonAsset,
+    RelationType,
+    Relationship,
+    Source,
+    SourceRevision,
+    build_content_chunks,
+)
 from dots.founder_graph_neo4j import (
     Neo4jGraphGateway,
     Neo4jQueryContractError,
+    Neo4jUnavailableError,
 )
-from dots.founder_graph_write import GraphWriteError, GraphWriteNotFoundError, RevisionConflictError
+from dots.founder_graph_write import (
+    GraphWriteError,
+    GraphWriteNotFoundError,
+    RevisionConflictError,
+    payload_fingerprint,
+)
 
 
 @dataclass
@@ -70,6 +86,8 @@ class FakeSession:
                 "target_type": params.get("target_type"),
                 "revision": params.get("revision", 0),
                 "idempotency_key": params.get("idempotency_key"),
+                "source_revision_id": params.get("source_revision_id"),
+                "content_chunk_ids": params.get("content_chunk_ids"),
             }
         return FakeResult()
 
@@ -81,6 +99,102 @@ class FakeDriver:
     def session(self, *, database: str):
         assert database == "neo4j"
         return self.session_value
+
+
+class LegacyCaptureSession(FakeSession):
+    def __init__(self, *, audit_row: dict[str, object], source_revision: SourceRevision) -> None:
+        super().__init__()
+        self.audit_row = dict(audit_row)
+        self.original_audit_row = dict(audit_row)
+        self.source_revision = source_revision
+        self.chunks: dict[str, dict[str, object]] = {}
+        self.backfill_events: dict[str, dict[str, object]] = {}
+
+    def run(self, query: str, **params):
+        self.calls.append((query, params))
+        if "MATCH (a:FounderGraphAudit" in query:
+            if params.get("idempotency_key") == self.audit_row.get("idempotency_key"):
+                return FakeResult(self.audit_row)
+            return FakeResult()
+        if "MATCH (i:Idea" in query and "SourceRevision" in query:
+            if (
+                params.get("owner_id") != self.source_revision.owner_id
+                or params.get("source_revision_id") != self.source_revision.id
+            ):
+                return FakeResult()
+            return FakeResult({
+                "owner_id": self.source_revision.owner_id,
+                "payload_json": json.dumps({
+                    "source_id": self.source_revision.source_id,
+                    "content_hash": self.source_revision.content_hash,
+                    "revision": self.source_revision.revision,
+                }),
+            })
+        if "MATCH (n) WHERE n.id IN $chunk_ids" in query:
+            rows = tuple(
+                {
+                    "id": chunk_id,
+                    "owner_id": props["owner_id"],
+                    "labels": ["ContentChunk"],
+                    "payload_json": props["payload_json"],
+                }
+                for chunk_id, props in self.chunks.items()
+                if chunk_id in params.get("chunk_ids", ())
+            )
+            return FakeResult(rows=rows)
+        if "CREATE (n:ContentChunk)" in query:
+            properties = dict(params["properties"])
+            self.chunks[str(properties["id"])] = properties
+            return FakeResult()
+        if "MERGE (a:FounderGraphAudit {id: $audit_id})" in query:
+            audit_id = str(params["audit_id"])
+            event = self.backfill_events.setdefault(audit_id, {
+                "id": audit_id,
+                "owner_id": params["owner_id"],
+                "actor": params["actor"],
+                "operation": params["operation"],
+                "target_id": params["target_id"],
+                "target_type": params["target_type"],
+                "revision": params["revision"],
+                "idempotency_key": params["idempotency_key"],
+                "payload_fingerprint": params["payload_fingerprint"],
+                "source_revision_id": params["source_revision_id"],
+                "content_chunk_ids": params["content_chunk_ids"],
+            })
+            return FakeResult(event)
+        return FakeResult()
+
+
+class RollbackSession(FakeSession):
+    def __init__(self) -> None:
+        super().__init__()
+        self.created_nodes: list[str] = []
+
+    def execute_write(self, callback):
+        calls = list(self.calls)
+        audit_row = self.audit_row
+        created_nodes = list(self.created_nodes)
+        try:
+            return callback(self)
+        except Exception:
+            self.calls = calls
+            self.audit_row = audit_row
+            self.created_nodes = created_nodes
+            raise
+
+    def run(self, query: str, **params):
+        if "CREATE (a:FounderGraphAudit" in query:
+            raise RuntimeError("audit sink unavailable")
+        if "CREATE (n:" in query and "SET n = $properties" in query:
+            self.created_nodes.append(str(params["properties"]["id"]))
+        return super().run(query, **params)
+
+
+class ChunkFailureSession(RollbackSession):
+    def run(self, query: str, **params):
+        if "CREATE (n:ContentChunk)" in query:
+            raise RuntimeError("content chunk write failed")
+        return super().run(query, **params)
 
 
 def test_put_node_uses_static_label_parameterized_payload_and_audit() -> None:
@@ -135,11 +249,136 @@ def test_capture_idea_writes_source_chain_in_one_transaction_and_replays() -> No
 
     assert receipt.target_id == idea.id
     assert replay.replayed is True
+    assert receipt.source_revision_id == source_revision.id
+    assert replay.source_revision_id == receipt.source_revision_id
+    assert replay.content_chunk_ids == receipt.content_chunk_ids
     queries = [query for query, _params in driver.session_value.calls]
     assert sum("CREATE (n:Source)" in query for query in queries) == 1
     assert sum("CREATE (n:SourceRevision)" in query for query in queries) == 1
+    assert sum("CREATE (n:ContentChunk)" in query for query in queries) == 1
     assert sum("CREATE (n:Idea)" in query for query in queries) == 1
     assert sum("CREATE (a:FounderGraphAudit" in query for query in queries) == 1
+
+
+def test_capture_idea_backfills_legacy_audit_refs_once_and_returns_opaque_stable_receipt(caplog) -> None:
+    owner_id = "owner-1"
+    idea = Idea(owner_id=owner_id, id="idea-legacy-capture", title="Legacy idea")
+    source = Source(
+        owner_id=owner_id,
+        id="source-legacy-capture",
+        title="Legacy source",
+        kind="conversation",
+        revision=1,
+        current_revision_id="source-revision-legacy-capture",
+    )
+    source_revision = SourceRevision(
+        owner_id=owner_id,
+        id="source-revision-legacy-capture",
+        source_id=source.id,
+        content="Private legacy conversation text.",
+    )
+    idempotency_key = "legacy-capture"
+    legacy_audit = {
+        "id": "audit-legacy-capture",
+        "owner_id": owner_id,
+        "actor": "local-owner",
+        "operation": "capture_idea",
+        "target_id": idea.id,
+        "target_type": NodeType.IDEA.value,
+        "revision": 0,
+        "idempotency_key": idempotency_key,
+        "payload_fingerprint": payload_fingerprint(
+            "capture_idea", idea, source, source_revision, owner_id
+        ),
+    }
+    driver = FakeDriver()
+    legacy_session = LegacyCaptureSession(audit_row=legacy_audit, source_revision=source_revision)
+    driver.session_value = legacy_session
+    gateway = Neo4jGraphGateway(driver, owner_id)
+    expected_chunks = build_content_chunks(source_revision)
+
+    first = gateway.capture_idea(idea, source, source_revision, idempotency_key=idempotency_key)
+    original_audit_after_first = dict(legacy_session.audit_row)
+    replay = gateway.capture_idea(idea, source, source_revision, idempotency_key=idempotency_key)
+
+    expected_chunk_ids = tuple(chunk.id for chunk in expected_chunks)
+    assert first.replayed is True
+    assert replay.replayed is True
+    assert first.source_revision_id == replay.source_revision_id == source_revision.id
+    assert first.content_chunk_ids == replay.content_chunk_ids == expected_chunk_ids
+    assert len(legacy_session.chunks) == len(expected_chunks)
+    assert sum("CREATE (n:ContentChunk)" in query for query, _params in legacy_session.calls) == len(expected_chunks)
+    assert legacy_session.audit_row == legacy_session.original_audit_row == original_audit_after_first
+    assert len(legacy_session.backfill_events) == 1
+    event = next(iter(legacy_session.backfill_events.values()))
+    assert event["operation"] == "capture_idea_chunk_backfill"
+    assert event["source_revision_id"] == source_revision.id
+    assert event["content_chunk_ids"] == list(expected_chunk_ids)
+    assert event["idempotency_key"] != idempotency_key
+    assert "Private legacy conversation text." not in repr((first, replay, event, caplog.text))
+    audit_params = [
+        params
+        for query, params in legacy_session.calls
+        if "MERGE (a:FounderGraphAudit" in query
+    ]
+    assert len(audit_params) == 2
+    assert all("Private legacy conversation text." not in repr(params) for params in audit_params)
+
+
+def test_capture_idea_neo4j_transaction_rolls_back_chunks_when_audit_fails() -> None:
+    driver = FakeDriver()
+    driver.session_value = RollbackSession()
+    gateway = Neo4jGraphGateway(driver, "owner-1")
+    idea = Idea(owner_id="owner-1", id="idea-rollback", title="Rollback idea")
+    source = Source(
+        owner_id="owner-1",
+        id="source-rollback",
+        title="Rollback source",
+        kind="conversation",
+        revision=1,
+        current_revision_id="source-revision-rollback",
+    )
+    source_revision = SourceRevision(
+        owner_id="owner-1",
+        id="source-revision-rollback",
+        source_id=source.id,
+        content="Conversation text that would produce a chunk.",
+    )
+
+    with pytest.raises(Neo4jUnavailableError, match="operation failed"):
+        gateway.capture_idea(idea, source, source_revision, idempotency_key="capture-rollback")
+
+    assert driver.session_value.created_nodes == []
+    assert driver.session_value.audit_row is None
+    assert driver.session_value.calls == []
+
+
+def test_capture_idea_neo4j_transaction_rolls_back_source_nodes_when_chunk_creation_fails() -> None:
+    driver = FakeDriver()
+    driver.session_value = ChunkFailureSession()
+    gateway = Neo4jGraphGateway(driver, "owner-1")
+    idea = Idea(owner_id="owner-1", id="idea-chunk-failure", title="Chunk failure idea")
+    source = Source(
+        owner_id="owner-1",
+        id="source-chunk-failure",
+        title="Chunk failure source",
+        kind="conversation",
+        revision=1,
+        current_revision_id="source-revision-chunk-failure",
+    )
+    source_revision = SourceRevision(
+        owner_id="owner-1",
+        id="source-revision-chunk-failure",
+        source_id=source.id,
+        content="Conversation text that produces a chunk.",
+    )
+
+    with pytest.raises(Neo4jUnavailableError, match="operation failed"):
+        gateway.capture_idea(idea, source, source_revision, idempotency_key="capture-chunk-failure")
+
+    assert driver.session_value.created_nodes == []
+    assert driver.session_value.audit_row is None
+    assert driver.session_value.calls == []
 
 
 def test_link_entities_requires_existing_same_owner_endpoints_and_static_relation_type() -> None:

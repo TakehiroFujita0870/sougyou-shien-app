@@ -8,15 +8,23 @@ import pytest
 from dots.founder_graph import (
     Claim,
     Evidence,
+    Idea,
     NodeType,
     ReportSection,
     ReportStatus,
     ReportVersion,
     ResearchCampaign,
     ResearchRun,
+    Source,
+    SourceRevision,
 )
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_write import GraphWriteError, GraphWriteNotFoundError
+from dots.founder_graph_write import (
+    GraphWriteError,
+    GraphWriteNotFoundError,
+    IdempotencyConflictError,
+    InMemoryGraphWriteService,
+)
 
 
 @dataclass
@@ -89,6 +97,8 @@ class ReportReferenceSession:
                 "target_type": params.get("target_type"),
                 "revision": params.get("revision", 0),
                 "idempotency_key": params.get("idempotency_key"),
+                "source_revision_id": params.get("source_revision_id"),
+                "content_chunk_ids": params.get("content_chunk_ids"),
             }
             self.audit_rows[str(params["idempotency_key"])] = row
             return FakeResult()
@@ -272,3 +282,82 @@ def test_persistent_report_write_rejects_cross_owner_parent_before_create() -> N
 
     assert not any("CREATE (n:ReportVersion)" in query for query, _params in driver.session_value.calls)
     assert not driver.session_value.audit_rows
+
+
+def test_capture_idea_receipt_and_chunks_match_in_memory_and_neo4j_replay() -> None:
+    owner_id = "owner-1"
+    idea = Idea(owner_id=owner_id, id="capture-idea", title="Captured idea")
+    source = Source(
+        owner_id=owner_id,
+        id="capture-source",
+        title="Conversation",
+        kind="conversation",
+        revision=1,
+        current_revision_id="capture-revision",
+    )
+    revision = SourceRevision(
+        owner_id=owner_id,
+        id="capture-revision",
+        source_id=source.id,
+        content="😀" * 2_401 + "\n\n" + "source text",
+    )
+    memory = InMemoryGraphWriteService(owner_id)
+    driver = ReportReferenceDriver(owner_id)
+    gateway = Neo4jGraphGateway(driver, owner_id)
+
+    memory_first = memory.capture_idea(idea, source, revision, idempotency_key="capture")
+    neo_first = gateway.capture_idea(idea, source, revision, idempotency_key="capture")
+    memory_replay = memory.capture_idea(idea, source, revision, idempotency_key="capture")
+    neo_replay = gateway.capture_idea(idea, source, revision, idempotency_key="capture")
+
+    assert neo_first.target_id == memory_first.target_id == idea.id
+    assert neo_first.target_type == memory_first.target_type == NodeType.IDEA.value
+    assert neo_first.source_revision_id == memory_first.source_revision_id == revision.id
+    assert neo_first.content_chunk_ids == memory_first.content_chunk_ids
+    assert memory_replay.replayed is True
+    assert neo_replay.replayed is True
+    assert neo_replay.source_revision_id == neo_first.source_revision_id
+    assert neo_replay.content_chunk_ids == neo_first.content_chunk_ids
+    assert set(driver.session_value.nodes) == {idea.id, source.id, revision.id, *memory_first.content_chunk_ids}
+    assert memory.audit_events()[0].payload_fingerprint == driver.session_value.audit_rows["capture"]["payload_fingerprint"]
+
+    changed_revision = SourceRevision(
+        owner_id=owner_id,
+        id=revision.id,
+        source_id=source.id,
+        content=revision.content + " changed",
+    )
+    with pytest.raises(IdempotencyConflictError):
+        memory.capture_idea(idea, source, changed_revision, idempotency_key="capture")
+    with pytest.raises(IdempotencyConflictError):
+        gateway.capture_idea(idea, source, changed_revision, idempotency_key="capture")
+
+
+def test_capture_idea_empty_content_receipt_matches_in_memory_and_neo4j() -> None:
+    owner_id = "owner-1"
+    idea = Idea(owner_id=owner_id, id="empty-capture-idea", title="Empty source idea")
+    source = Source(
+        owner_id=owner_id,
+        id="empty-capture-source",
+        title="Empty conversation",
+        kind="conversation",
+        revision=1,
+        current_revision_id="empty-capture-revision",
+    )
+    revision = SourceRevision(
+        owner_id=owner_id,
+        id="empty-capture-revision",
+        source_id=source.id,
+        content="",
+    )
+    memory = InMemoryGraphWriteService(owner_id)
+    driver = ReportReferenceDriver(owner_id)
+    gateway = Neo4jGraphGateway(driver, owner_id)
+
+    memory_receipt = memory.capture_idea(idea, source, revision, idempotency_key="capture-empty")
+    neo4j_receipt = gateway.capture_idea(idea, source, revision, idempotency_key="capture-empty")
+
+    assert neo4j_receipt.source_revision_id == memory_receipt.source_revision_id == revision.id
+    assert neo4j_receipt.content_chunk_ids == memory_receipt.content_chunk_ids == ()
+    assert set(driver.session_value.nodes) == {idea.id, source.id, revision.id}
+    assert memory.audit_events()[0].payload_fingerprint == driver.session_value.audit_rows["capture-empty"]["payload_fingerprint"]

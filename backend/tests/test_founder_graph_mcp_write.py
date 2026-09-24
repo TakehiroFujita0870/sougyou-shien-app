@@ -19,6 +19,7 @@ from dots.founder_graph import (
     ResearchRun,
     Source,
     SourceRevision,
+    ContentChunk,
     Status,
     project_shareable,
 )
@@ -290,7 +291,11 @@ def test_capture_idea_persists_source_and_source_revision_atomically() -> None:
         owner_id="owner-1",
     )
     assert replay.replayed is True
-    assert len(writes.nodes()) == 3
+    chunks = tuple(node for node in writes.nodes() if isinstance(node, ContentChunk))
+    assert len(chunks) == 1
+    assert replay.source_revision_id == revisions[0].id
+    assert replay.content_chunk_ids == tuple(chunk.id for chunk in chunks)
+    assert len(writes.nodes()) == 4
 
 
 def test_link_entities_and_record_correction_use_domain_contracts() -> None:

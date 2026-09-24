@@ -17,6 +17,7 @@ from typing import Any, Mapping, Protocol
 
 from .founder_graph import (
     CampaignAuthorizationRegistry,
+    ContentChunk,
     DomainValidationError,
     Evidence,
     NodeType,
@@ -31,6 +32,7 @@ from .founder_graph import (
     SourceRevision,
     Status,
     _ALLOWED_RELATION_ENDPOINTS,
+    build_content_chunks,
     validate_report_references,
     validate_run_campaign_reference,
     validate_source_revision_history,
@@ -140,6 +142,8 @@ class WriteReceipt:
     revision: int
     idempotency_key: str
     replayed: bool = False
+    source_revision_id: str | None = None
+    content_chunk_ids: tuple[str, ...] = ()
 
 
 def _stable(value: Any) -> Any:
@@ -167,6 +171,18 @@ def _stable(value: Any) -> Any:
 def payload_fingerprint(*values: Any) -> str:
     encoded = json.dumps(_stable(values), ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def capture_idea_payload_fingerprint(
+    idea: Any,
+    source: Source,
+    source_revision: SourceRevision,
+    content_chunks: tuple[ContentChunk, ...],
+    owner_id: str,
+) -> str:
+    """Fingerprint capture_idea with the durable pre-ContentChunk contract."""
+
+    return payload_fingerprint("capture_idea", idea, source, source_revision, owner_id)
 
 
 def _required_text(value: Any, field_name: str) -> str:
@@ -290,16 +306,21 @@ class InMemoryGraphWriteService:
             raise GraphWriteError("capture_idea source revision does not match the Source current pointer")
         if any(getattr(node, "owner_id", None) != self.owner_id for node in nodes):
             raise GraphWriteError("capture_idea nodes must belong to the local owner")
+        content_chunks = build_content_chunks(source_revision)
+        if any(chunk.owner_id != self.owner_id for chunk in content_chunks):
+            raise GraphWriteError("capture_idea content chunks must belong to the local owner")
+        nodes = (*nodes, *content_chunks)
         node_ids = tuple(_required_text(getattr(node, "id", None), "node.id") for node in nodes)
         if len(set(node_ids)) != len(node_ids):
             raise GraphWriteError("capture_idea nodes must have distinct ids")
-        fingerprint = payload_fingerprint(operation, *nodes, self.owner_id)
+        fingerprint = capture_idea_payload_fingerprint(idea, source, source_revision, content_chunks, self.owner_id)
         with self._lock:
             replay = self._replay_or_raise(idempotency_key, fingerprint)
             if replay is not None:
                 return replay
             if any(node_id in self._nodes for node_id in node_ids):
                 raise NodeAlreadyExistsError("capture_idea node id is already registered")
+            audit_length = len(self._audit)
             try:
                 validate_source_revision_history(source, (source_revision,))
                 for node in nodes:
@@ -307,12 +328,21 @@ class InMemoryGraphWriteService:
                 for node in nodes:
                     self._nodes[node.id] = node
                     self._node_history[node.id] = [node]
-                receipt = WriteReceipt(operation, idea.id, NodeType.IDEA.value, self._revision(idea), idempotency_key)
+                receipt = WriteReceipt(
+                    operation,
+                    idea.id,
+                    NodeType.IDEA.value,
+                    self._revision(idea),
+                    idempotency_key,
+                    source_revision_id=source_revision.id,
+                    content_chunk_ids=tuple(chunk.id for chunk in content_chunks),
+                )
                 self._append_audit(receipt, actor, fingerprint)
             except Exception:
                 for node_id in node_ids:
                     self._nodes.pop(node_id, None)
                     self._node_history.pop(node_id, None)
+                del self._audit[audit_length:]
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt
@@ -504,6 +534,8 @@ class InMemoryGraphWriteService:
             receipt.revision,
             receipt.idempotency_key,
             replayed=True,
+            source_revision_id=receipt.source_revision_id,
+            content_chunk_ids=receipt.content_chunk_ids,
         )
 
     def _append_audit(self, receipt: WriteReceipt, actor: str, fingerprint: str) -> None:

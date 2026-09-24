@@ -55,6 +55,38 @@ def test_tools_call_delegates_read_and_idempotent_write() -> None:
     assert search["result"]["structuredContent"]["results"] == []
 
 
+def test_tools_call_capture_receipt_exposes_opaque_chunk_ids_without_source_text() -> None:
+    server = create_stdio_server("owner-a")
+    source_text = "Private source text must remain local to the Founder Graph."
+    captured = server.handle(
+        request(
+            "tools/call",
+            10,
+            {
+                "name": "capture_idea",
+                "arguments": {
+                    "title": "MCP captured idea",
+                    "source_text": source_text,
+                    "idempotency_key": "stdio-capture-1",
+                },
+            },
+        )
+    )
+
+    result = captured["result"]
+    receipt_text = result["content"][0]["text"]
+    receipt = result["structuredContent"]
+
+    assert receipt["target_type"] == "idea"
+    assert receipt["source_revision_id"].startswith("source-revision_")
+    assert len(receipt["content_chunk_ids"]) == 1
+    assert receipt["content_chunk_ids"][0].startswith("content-chunk_")
+    assert source_text not in receipt_text
+    assert source_text not in json.dumps(receipt, ensure_ascii=False)
+    assert "source_text" not in receipt
+    assert "content" not in receipt
+
+
 def test_tools_call_captures_and_reads_a_shareable_idea_without_source_text() -> None:
     """Exercise the three P5 synthetic MCP tools through one stdio session."""
 

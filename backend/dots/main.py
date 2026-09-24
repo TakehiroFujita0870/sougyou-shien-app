@@ -153,6 +153,8 @@ def create_app(
                 "revision": receipt.revision,
                 "idempotency_key": receipt.idempotency_key,
                 "replayed": receipt.replayed,
+                "source_revision_id": receipt.source_revision_id,
+                "content_chunk_ids": receipt.content_chunk_ids,
             }
         except McpWriteError as error:
             raise mcp_error(error) from error

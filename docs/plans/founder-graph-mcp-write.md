@@ -1,5 +1,7 @@
 # Founder Graph write MCP bounded plan
 
+この文書は初期8種類のwrite toolの入力制限・冪等性を定義する。現行write面へのEvidence作成とschema v2 RelationAssertion保存の追加仕様は[根拠付き関係保存計画](founder-graph-relationship-evidence-write.md)を正本とする。
+
 ## 目的と境界
 
 T-FG-09の第一sliceとして、ChatGPTの通常チャットからGraphWriteServiceへ渡す用途限定write surfaceを実装する。`capture_idea`、`capture_person`、`capture_organization`、`append_claim`、`link_entities`、`save_research_report`、`record_decision`、`record_correction`の8 toolだけを受け付け、idempotency key、入力上限、owner境界、domain validation、物理削除拒否を固定する。

@@ -92,6 +92,49 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     assert client.get("/v1/founder-graph/mcp/tools", headers={"X-Local-Owner-Id": "owner-2"}).status_code == 403
 
 
+def test_capture_idea_receipt_returns_opaque_source_refs_on_initial_write_and_replay() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    client = TestClient(create_app(founder_graph_write_service=writes, founder_graph_owner_id="owner-1"))
+    headers = {"X-Local-Owner-Id": "owner-1"}
+    arguments = {
+        "title": "Private conversation idea",
+        "source_text": "Private source text: owner@example.test, phone +81-90-1111-2222.",
+        "idempotency_key": "idea-source-receipt-1",
+    }
+
+    first = client.post("/v1/founder-graph/mcp/write/capture_idea", headers=headers, json=arguments)
+    replay = client.post("/v1/founder-graph/mcp/write/capture_idea", headers=headers, json=arguments)
+
+    assert first.status_code == replay.status_code == 200
+    initial_receipt = first.json()
+    replay_receipt = replay.json()
+    expected_fields = {
+        "operation",
+        "target_id",
+        "target_type",
+        "revision",
+        "idempotency_key",
+        "replayed",
+        "source_revision_id",
+        "content_chunk_ids",
+    }
+    assert set(initial_receipt) == expected_fields
+    assert set(replay_receipt) == expected_fields
+    assert initial_receipt["replayed"] is False
+    assert replay_receipt["replayed"] is True
+    assert initial_receipt["source_revision_id"].startswith("source-revision_")
+    assert replay_receipt["source_revision_id"] == initial_receipt["source_revision_id"]
+    assert len(initial_receipt["content_chunk_ids"]) == 1
+    assert initial_receipt["content_chunk_ids"][0].startswith("content-chunk_")
+    assert replay_receipt["content_chunk_ids"] == initial_receipt["content_chunk_ids"]
+    for receipt in (initial_receipt, replay_receipt):
+        serialized = str(receipt)
+        assert "Private source text" not in serialized
+        assert "owner@example.test" not in serialized
+        assert "+81-90-1111-2222" not in serialized
+        assert not {"source_text", "content", "contact", "private_notes", "locator"} & set(receipt)
+
+
 def test_founder_graph_mcp_read_route_returns_shareable_material_and_safe_errors() -> None:
     writes = InMemoryGraphWriteService("owner-1")
     material = ResearchMaterial(

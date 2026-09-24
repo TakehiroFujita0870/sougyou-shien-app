@@ -1,6 +1,6 @@
 # Dots 実装全体計画
 
-最終更新: 2026-09-23
+最終更新: 2026-09-24
 実行状態: Founder Graph MVPを自走中
 製品要件正本: [`founder-graph-pivot.md`](founder-graph-pivot.md)
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)
@@ -9,6 +9,7 @@ schema v2移行計画: [`founder-graph-schema-v2-migration.md`](founder-graph-sc
 schema v2 parity計画: [`founder-graph-v2-parity.md`](founder-graph-v2-parity.md)
 名寄せ候補評価計画: [`founder-graph-namesake-evaluation.md`](founder-graph-namesake-evaluation.md)
 Graph UI live read計画: [`founder-graph-live-ui-read.md`](founder-graph-live-ui-read.md)
+根拠付き関係保存計画: [founder-graph-relationship-evidence-write.md](founder-graph-relationship-evidence-write.md)
 
 ## 要望 / ゴール / 成功指標
 
@@ -151,11 +152,11 @@ execution ledgerはtask ID、status、owner task、branch、PR、head SHA、test
 
 ### 未完了
 
-- schema v2のstable anchor、immutable revision、RelationAssertion、ContentChunkの既存データ変換とwrite/read adapter。
-- UbuntuからDocker Desktop Engineを使う経路。
+- schema v2のdomain contract、migration、保存・読取parityは実装済み。既存v1 data変換は未完了。MCPのcapture_ideaは現在Idea / Source / SourceRevisionまででContentChunk IDを返さず、link_entitiesはv1 Relationshipを保存する。EvidenceとRelationAssertionのMCP→Neo4j→検索経路は根拠付き関係保存計画で実装する。
+- UbuntuからDocker Desktopへの接続は、WSL経由でDocker Engine 29.8.0とCompose 5.5.1の応答まで確認済み。Founder Graph用Composeのhealth確認とmanifest一致は未完了。
 - Compose live volumeのmanifest一致、Attachmentとmanifestの同generation restore。
-- FastAPI / stdioの既定runtimeをNeo4jへ切り替えるgate。
-- ChatGPT Secure MCP Tunnelのtool discoveryと代表会話。
+- FastAPI / stdioの既定runtime選択とNeo4j障害時のfail-closedは実装済み。Composeで選んだNeo4jの停止・再起動後に通常runtimeから確認するgateは未完了。
+- ChatGPT Secure MCP Tunnelの登録は合成DB限定で利用者が許可済み。tool discoveryのredacted evidenceと代表会話5件の記録は未完了。
 - Graph全体検索からResearchBriefを作り、許諾後にDeep Researchへ渡す実経路。
 - Deep Research完了後のRun、Evidence、ReportVersion write-back。
 - Graph UIの実backend接続、訂正、削除impact、実file export。
@@ -272,6 +273,8 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 | P3-02 | P2-04 | Graph RAG full-text + 2-hop candidate取得 | 検査: 代表10問で期待anchor top-10命中9件以上、private越境0件になる | 類推可能 |
 | P3-SP-03 | P3-02 | Luna rerank評価 | 検査: 固定20問でtop-5命中16件以上、invalid ID 0件、p95 30秒以下を記録する | 未知 |
 | P3-03 | P3-SP-03 | search / fetch MCPのsafe projection | 検査: local_only field 0件、pathとEvidence ID欠落0件になる | 類推可能 |
+| P3-04 | P3-01 | SourceRevisionの決定的ContentChunk生成とcapture receiptの参照ID | 検査: 根拠付き関係保存計画のGR-WR-01を満たし、本文なしの同じIDを再送時にも返す | 類推可能 |
+| P3-05 | P3-04 | Source / SourceRevision / ContentChunkのschema v2構造edge保存と既存graphの整合性検査・冪等補修 | 検査: in-memoryとNeo4jのHAS_SOURCE_REVISION、CURRENT_SOURCE_REVISION、HAS_CHUNKの向き・端点・重複数が一致し、owner / revision / current pointer / chunk ordinalの不整合は書込み前に停止する。既存データを事前検査後に補修し、再実行でedgeや監査が増えない | 類推可能 |
 
 ### P4 Assets / People
 
@@ -281,6 +284,9 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 | P4-02 | P3-01 | Person / Organization手入力とCSV取込 | 検査: 合成名刺10件でfield loss 0件、private投影0件になる | 類推可能 |
 | P4-SP-03 | P4-02 | Luna名寄せ候補評価 | 検査: top-3再現率0.90以上、誤自動merge 0件を記録する | 未知 |
 | P4-03 | P4-SP-03 | merge確認とRelationAssertion UI/API | 検査: 本人確認なしのconfirmed / MERGED_INTOが0件になる | 類推可能 |
+| P4-04 | P3-05,P4-02 | SourceRevisionとContentChunkに結び付くEvidenceの用途限定MCP write | 検査: 根拠のowner・型・存在を保存前に確認し、同一内容の再送は重複しない | 類推可能 |
+| P4-05 | P4-04 | link_entitiesのschema v2 RelationAssertion保存 | 検査: ASSERTS_FROM / ASSERTS_TO / EVIDENCED_BYと監査を一transactionで保存し、network relationをconfirmedにしない | 類推可能 |
+| P4-06 | P4-05 | RelationAssertionを通るGraph search / fetch | 検査: status、confidence、expiry、根拠IDが同じ安全な結果に残り、private fieldが0件になる | 類推可能 |
 
 ### P5 ChatGPT Synthetic Connection
 
@@ -333,7 +339,7 @@ Then: task packetの全AC、test、file ownership、handoff fieldが満たされ
 | ID | 判断 | 推奨既定 | 停止scope | 期限 |
 | --- | --- | --- | --- | --- |
 | Q-DM-01 | schema v2を採用するか | MVPの仮データ範囲でstable anchor + immutable revision + RelationAssertionを採用 | none（実データ投入前の安全確認は残す） | 2026-09-23 |
-| D-EXT-01 | ChatGPTへSecure MCP Tunnelを初回登録するか | 合成データだけで許可 | P5以降 | P5-SP-01前 |
+| D-EXT-01 | ChatGPTへSecure MCP Tunnelを初回登録するか | 合成データだけでの登録は利用者承認済み | P5の合成tool discoveryと証跡整理は継続、実データ・外部調査は別gate | P5-SP-01前 |
 | D-BACKUP-01 | private archive保護とartifact構成 | アプリ層暗号化、同generationの別artifact | P8-SP-01以降 | P8-SP-01前 |
 | D-DELETE-01 | Source delete後の過去Report | Reportを残しunavailable表示 | P8-02以降 | P8-02前 |
 | D-LEGACY-01 | 旧データの扱い | 実データが少ない間はJSON export + read-only archive | P9-02だけ | P9-SP-02後 |
@@ -388,6 +394,7 @@ CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../oper
 - [ ] Dots全体検索とResearchBriefがprivate fieldを外部へ出さない。
 - [ ] 許諾済みCampaignで複数Runと8章ReportVersionを保存・比較できる。
 - [ ] Person、Organization、Asset、名寄せ候補、RelationAssertionを確認できる。
+- [ ] 合成Person―Idea関係をChatGPT MCPからEvidence付きschema v2 RelationAssertionとして保存し、再起動後に根拠付きで検索できる。
 - [ ] Graph UIがlive data、訂正、履歴、unavailable、report差分を表示できる。
 - [ ] backup、isolated restore、soft delete、safe exportが同じfixtureで成功している。
 - [ ] 実データcanary一件が保存、再起動、検索、backup、delete rehearsalを通過している。
@@ -414,3 +421,5 @@ CIの通常運用と節目運用は[`../operations/ci-fast-and-full.md`](../oper
 | 2026-09-23 | schema v2 migrationと非破壊rollbackを実装し、空DB・v1合成ノードで実機確認 | v2構造をNeo4jへ安全に追加し、既存データ変換とは分けて次のwrite/read作業へ進めるため | DM-02、P1-03 |
 | 2026-09-23 | 合成MCP保存・検索・詳細取得と名刺CSV安全取込を反映 | 外部ChatGPT接続と自動名寄せを開始せず、P5/P4のローカル価値をmainで検証できるようにするため | P5-SP-01、P4-02 |
 | 2026-09-23 | 合成人物のローカル名寄せ候補と上位3件評価を追加 | 連絡先を外部送信せず、本人確定前の自動統合を防いだ品質基準を固定するため | P4-SP-03-A |
+| 2026-09-24 | SourceRevisionからContentChunk、Evidence、RelationAssertion、検索までの未完了経路を子計画へ分解 | 現在のMCP relation writeがv1 Relationshipであり、Evidence作成とNeo4j根拠検証がつながっていないことを監査で確認したため | P3-04、P4-04〜06 |
+| 2026-09-24 | schema v2が要求するSource / SourceRevision / ContentChunk間の構造edgeと既存graphの冪等補修をEvidence作成前のgateとして追加 | 現行保存はrevision pointerだけでGraph上の出典経路をたどれず、schema v2の契約を満たしていないため | P3-05、P4-04 |
