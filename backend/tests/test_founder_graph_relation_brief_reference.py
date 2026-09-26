@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from dots.founder_graph import (
@@ -6,6 +8,9 @@ from dots.founder_graph import (
     RelationAssertion,
     RelationType,
 )
+from dots.founder_graph_neo4j import _node_properties
+from dots.founder_graph_neo4j_read import _view_from_row
+from dots.founder_graph_read import _node_view
 
 
 def make_assertion(**overrides: object) -> RelationAssertion:
@@ -74,3 +79,56 @@ def test_relation_assertion_rejects_invalid_brief_section_index(section_index: o
 def test_relation_assertion_rejects_invalid_brief_identifier(brief_id: object) -> None:
     with pytest.raises(DomainValidationError, match="based_on_brief_id must be a non-empty string"):
         make_assertion(based_on_brief_id=brief_id, based_on_brief_section_index=0)
+
+
+def test_brief_reference_survives_json_payload_and_neo4j_safe_projection() -> None:
+    assertion = make_assertion(
+        based_on_brief_id="brief-1",
+        based_on_brief_section_index=7,
+    )
+    properties = _node_properties(assertion)
+    payload = json.loads(properties["payload_json"])
+
+    assert payload["based_on_brief_id"] == "brief-1"
+    assert payload["based_on_brief_section_index"] == 7
+
+    view = _view_from_row(
+        {
+            "id": assertion.id,
+            "owner_id": "owner-1",
+            "node_type": "relation_assertion",
+            "status": "proposed",
+            "revision": 1,
+            "payload_json": properties["payload_json"],
+        },
+        owner_id="owner-1",
+    )
+
+    assert view is not None
+    assert view.fields["based_on_brief_id"] == "brief-1"
+    assert view.fields["based_on_brief_section_index"] == 7
+    assert _node_view(assertion).fields["based_on_brief_id"] == "brief-1"
+
+
+def test_legacy_brief_reference_payload_stays_readable_without_new_fields() -> None:
+    assertion = make_assertion()
+    properties = _node_properties(assertion)
+    payload = json.loads(properties["payload_json"])
+    payload.pop("based_on_brief_id")
+    payload.pop("based_on_brief_section_index")
+
+    view = _view_from_row(
+        {
+            "id": assertion.id,
+            "owner_id": "owner-1",
+            "node_type": "relation_assertion",
+            "status": "proposed",
+            "revision": 1,
+            "payload_json": json.dumps(payload),
+        },
+        owner_id="owner-1",
+    )
+
+    assert view is not None
+    assert "based_on_brief_id" not in view.fields
+    assert "based_on_brief_section_index" not in view.fields
