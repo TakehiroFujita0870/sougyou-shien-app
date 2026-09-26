@@ -265,6 +265,85 @@ class Neo4jGraphGateway:
         )
         return _rows(result)
 
+    def _campaign_authorization_registry_tx(self, tx: Any, campaign_id: str) -> CampaignAuthorizationRegistry:
+        """Resolve a complete typed Campaign history inside the caller's transaction.
+
+        In a write transaction the caller must already hold the owner-scoped
+        Campaign lock. The current Campaign is returned separately from
+        immutable prior states, so no revision is counted twice.
+        """
+
+        campaign_label = self.label_for(NodeType.RESEARCH_CAMPAIGN)
+        current_record = _single(tx.run(
+            f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}) "
+            "RETURN c.id AS id, c.owner_id AS owner_id, c.node_type AS node_type, "
+            "c.revision AS revision, c.payload_json AS payload_json",
+            campaign_id=campaign_id,
+            owner_id=self.owner_id,
+        ))
+        if current_record is None:
+            raise GraphWriteNotFoundError("research campaign does not exist for the local owner")
+        try:
+            current = decode_persisted_research_campaign(current_record, owner_id=self.owner_id)
+        except CampaignDecodeError:
+            raise GraphWriteError("persisted campaign authorization is invalid") from None
+
+        prior_records = _rows(tx.run(
+            "MATCH (h:FounderGraphHistory {owner_id: $owner_id, target_id: $campaign_id}) "
+            "RETURN h.target_id AS id, h.owner_id AS owner_id, $node_type AS node_type, "
+            "h.revision AS revision, h.payload_json AS payload_json ORDER BY h.revision ASC",
+            owner_id=self.owner_id,
+            campaign_id=campaign_id,
+            node_type=NodeType.RESEARCH_CAMPAIGN.value,
+        ))
+        prior_campaigns = []
+        try:
+            for record in prior_records:
+                prior = decode_persisted_research_campaign(record, owner_id=self.owner_id)
+                if prior.id != current.id or prior.aggregate_revision >= current.aggregate_revision:
+                    raise CampaignDecodeError("persisted campaign history revision is invalid")
+                prior_campaigns.append(prior)
+        except CampaignDecodeError:
+            raise GraphWriteError("persisted campaign history is invalid") from None
+
+        campaigns = (*prior_campaigns, current)
+        revisions = tuple(campaign.aggregate_revision for campaign in campaigns)
+        if revisions != tuple(range(current.aggregate_revision + 1)):
+            raise GraphWriteError("persisted campaign history is incomplete")
+        try:
+            return CampaignAuthorizationRegistry.from_campaign_history(campaigns)
+        except DomainValidationError:
+            raise GraphWriteError("persisted campaign history is invalid") from None
+
+    def _store_prior_campaign_revision_tx(self, tx: Any, record: Any) -> None:
+        """Store the exact typed Campaign state being superseded by a writer."""
+
+        try:
+            campaign = decode_persisted_research_campaign(record, owner_id=self.owner_id)
+        except CampaignDecodeError:
+            raise GraphWriteError("persisted campaign authorization is invalid") from None
+        revision = _record_value(record, "revision")
+        payload_json = _record_value(record, "payload_json")
+        existing = _single(tx.run(
+            "MATCH (h:FounderGraphHistory {owner_id: $owner_id, target_id: $target_id, revision: $revision}) "
+            "RETURN h.id AS id",
+            owner_id=self.owner_id,
+            target_id=campaign.id,
+            revision=revision,
+        ))
+        if existing is not None:
+            raise GraphWriteError("persisted campaign history already contains the current revision")
+        history_id = f"history_{sha256(f'{campaign.id}:{revision}'.encode()).hexdigest()[:32]}"
+        tx.run(
+            "CREATE (h:FounderGraphHistory {id: $history_id, owner_id: $owner_id, "
+            "target_id: $target_id, revision: $revision, payload_json: $payload_json})",
+            history_id=history_id,
+            owner_id=self.owner_id,
+            target_id=campaign.id,
+            revision=revision,
+            payload_json=payload_json,
+        )
+
     def _lock_revisioned_node_tx(self, tx: Any, label: str, node_id: str) -> Any | None:
         """Lock an existing local Source/Campaign before reading its revision.
 
@@ -838,17 +917,7 @@ class Neo4jGraphGateway:
         if _single(tx.run("MATCH (n {id: $run_id}) RETURN n.id AS id", run_id=run.id)) is not None:
             raise NodeAlreadyExistsError("research run id is already registered")
 
-        revision = campaign.aggregate_revision
-        history_id = f"history_{sha256(f'{campaign.id}:{revision}'.encode()).hexdigest()[:32]}"
-        tx.run(
-            "CREATE (h:FounderGraphHistory {id: $history_id, owner_id: $owner_id, "
-            "target_id: $target_id, revision: $revision, payload_json: $payload_json})",
-            history_id=history_id, owner_id=self.owner_id, target_id=campaign.id, revision=revision,
-            payload_json=json.dumps(
-                {"id": campaign.id, "node_type": NodeType.RESEARCH_CAMPAIGN.value, "revision": revision},
-                sort_keys=True,
-            ),
-        )
+        self._store_prior_campaign_revision_tx(tx, record)
         tx.run(
             f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}) SET c = $properties",
             campaign_id=campaign.id, owner_id=self.owner_id, properties=_node_properties(updated_campaign),
@@ -1238,16 +1307,28 @@ class Neo4jGraphGateway:
                 raise NodeAlreadyExistsError(f"node id is already registered: {node.id}")
             if expected_revision != current_revision or _node_revision(node) != current_revision + 1:
                 raise RevisionConflictError("expected node revision does not match current revision")
-            history_id = f"history_{sha256(f'{node.id}:{current_revision}'.encode()).hexdigest()[:32]}"
-            tx.run(
-                "CREATE (h:FounderGraphHistory {id: $history_id, owner_id: $owner_id, "
-                "target_id: $target_id, revision: $revision, payload_json: $payload_json})",
-                history_id=history_id,
-                owner_id=self.owner_id,
-                target_id=str(node.id),
-                revision=current_revision,
-                payload_json=json.dumps({"id": str(node.id), "node_type": node_type.value, "revision": current_revision}, sort_keys=True),
-            )
+            if node_type is NodeType.RESEARCH_CAMPAIGN:
+                campaign_record = _single(tx.run(
+                    f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) "
+                    "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+                    "n.revision AS revision, n.payload_json AS payload_json",
+                    id=str(node.id),
+                    owner_id=self.owner_id,
+                ))
+                if campaign_record is None or _record_value(campaign_record, "revision") != current_revision:
+                    raise GraphWriteError("locked research campaign state is invalid")
+                self._store_prior_campaign_revision_tx(tx, campaign_record)
+            else:
+                history_id = f"history_{sha256(f'{node.id}:{current_revision}'.encode()).hexdigest()[:32]}"
+                tx.run(
+                    "CREATE (h:FounderGraphHistory {id: $history_id, owner_id: $owner_id, "
+                    "target_id: $target_id, revision: $revision, payload_json: $payload_json})",
+                    history_id=history_id,
+                    owner_id=self.owner_id,
+                    target_id=str(node.id),
+                    revision=current_revision,
+                    payload_json=json.dumps({"id": str(node.id), "node_type": node_type.value, "revision": current_revision}, sort_keys=True),
+                )
             tx.run(
                 f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
                 id=str(node.id), owner_id=self.owner_id, properties=_node_properties(node),
