@@ -61,8 +61,27 @@ def safe_network(record: Mapping[str, Any], *, name: str, run_id: str) -> bool:
     return (
         safe_labeled_resource(record, name=name, run_id=run_id)
         and record.get("Driver") == "bridge"
-        and record.get("Internal") is True
+        and record.get("Internal") is False
     )
+
+
+def loopback_bolt_port(port_map: Any) -> int:
+    """Require an actual single IPv4-loopback Bolt publication."""
+    if not isinstance(port_map, Mapping):
+        raise HarnessError("Docker returned invalid published-port metadata")
+    bindings = port_map.get("7687/tcp")
+    if not isinstance(bindings, list) or len(bindings) != 1:
+        raise HarnessError("Neo4j Bolt port is not published exactly once")
+    binding = bindings[0]
+    if not isinstance(binding, Mapping) or binding.get("HostIp") != "127.0.0.1":
+        raise HarnessError("Neo4j host port is not bound to loopback")
+    host_port = binding.get("HostPort")
+    if not isinstance(host_port, str) or not host_port.isdecimal():
+        raise HarnessError("Neo4j loopback port is invalid")
+    port = int(host_port)
+    if not 1 <= port <= 65535:
+        raise HarnessError("Neo4j loopback port is outside the valid range")
+    return port
 
 
 class Docker:
@@ -136,7 +155,7 @@ class DisposableNeo4j:
         if not server_version or server_version == "<no value>":
             raise HarnessError("Docker server version is unavailable")
         targets = self._image_volumes()  # inspect only; docker create never pulls
-        self.docker.call("network", "create", "--driver", "bridge", "--internal", *self._labels(), self.network_name)
+        self.docker.call("network", "create", "--driver", "bridge", *self._labels(), self.network_name)
         for target in targets:
             slug = re.sub(r"[^a-z0-9]+", "-", target.strip("/").lower()).strip("-")
             if not slug:
@@ -152,6 +171,8 @@ class DisposableNeo4j:
             "container", "create", "--name", self.name, *self._labels(),
             "--network", self.network_name, "--publish", "127.0.0.1::7687", "--pull=never",
             "--env", "NEO4J_AUTH=none",
+            "--env", "NEO4J_dbms_usage__report_enabled=false",
+            "--env", "NEO4J_server_bolt_telemetry_enabled=false",
         ]
         for target, volume_name in sorted(self.volume_names.items()):
             command.extend(("--mount", f"type=volume,src={volume_name},dst={target}"))
@@ -162,16 +183,7 @@ class DisposableNeo4j:
         self.container_id = created
         self.docker.call("container", "start", created)
         info = json_result(self.docker.call("container", "inspect", "--format", "{{json .NetworkSettings.Ports}}", created))
-        bolt = info.get("7687/tcp")
-        if not isinstance(bolt, list) or len(bolt) != 1 or bolt[0].get("HostIp") != "127.0.0.1":
-            raise HarnessError("Neo4j host port is not bound to loopback")
-        try:
-            port = int(bolt[0].get("HostPort"))
-        except (TypeError, ValueError) as error:
-            raise HarnessError("Neo4j loopback port is invalid") from error
-        if not 1 <= port <= 65535:
-            raise HarnessError("Neo4j loopback port is outside the valid range")
-        return port
+        return loopback_bolt_port(info)
 
     def _inspect_exact(self, kind: str, name: str) -> Mapping[str, Any] | None:
         raw = self.docker.call(kind, "inspect", "--format", "{{json .}}", name, allow_missing=True)

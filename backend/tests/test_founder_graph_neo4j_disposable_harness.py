@@ -16,6 +16,7 @@ from neo4j_disposable_harness import (
     safe_container_identity,
     safe_labeled_resource,
     safe_network,
+    loopback_bolt_port,
 )
 
 
@@ -47,16 +48,16 @@ def test_container_identity_requires_exact_run_image_network_mounts_and_loopback
         assert not safe_container_identity(changed, **expected)
 
 
-def test_cleanup_resource_guards_reject_wrong_labels_and_non_internal_networks():
+def test_cleanup_resource_guards_reject_wrong_labels_and_internal_networks():
     run_id = "a" * 32
     labels = {ROLE_LABEL: "neo4j-revision-lock", RUN_LABEL: run_id}
     assert safe_labeled_resource({"Name": "dots-rplock-a-data", "Labels": labels},
                                   name="dots-rplock-a-data", run_id=run_id)
     assert not safe_labeled_resource({"Name": "dots-rplock-a-data", "Labels": labels},
                                       name="dots-rplock-a-data", run_id="b" * 32)
-    network = {"Name": "dots-rplock-a-net", "Labels": labels, "Driver": "bridge", "Internal": True}
+    network = {"Name": "dots-rplock-a-net", "Labels": labels, "Driver": "bridge", "Internal": False}
     assert safe_network(network, name="dots-rplock-a-net", run_id=run_id)
-    assert not safe_network({**network, "Internal": False}, name="dots-rplock-a-net", run_id=run_id)
+    assert not safe_network({**network, "Internal": True}, name="dots-rplock-a-net", run_id=run_id)
     assert not safe_network({**network, "Driver": "overlay"}, name="dots-rplock-a-net", run_id=run_id)
 
 
@@ -154,9 +155,39 @@ def test_start_requests_pull_never_and_only_uses_fixed_lifecycle_commands():
 
     port = DisposableNeo4j(Docker(Path("/fixed/docker"), run), run_id).start()
     create = next(argv for argv in commands if argv[1:3] == ["container", "create"])
+    network_create = next(argv for argv in commands if argv[1:3] == ["network", "create"])
     assert "--pull=never" in create
+    assert "--publish" in create and "127.0.0.1::7687" in create
+    assert "--internal" not in network_create and "--driver" in network_create and "bridge" in network_create
+    assert "NEO4J_dbms_usage__report_enabled=false" in create
+    assert "NEO4J_server_bolt_telemetry_enabled=false" in create
     assert port == 43123
     assert all(argv[1] != "pull" for argv in commands)
+
+
+@pytest.mark.parametrize("port_map", [
+    None,
+    {},
+    {"7687/tcp": None},
+    {"7687/tcp": []},
+    {"7687/tcp": [{"HostIp": "0.0.0.0", "HostPort": "43123"}]},
+    {"7687/tcp": [{"HostIp": "192.0.2.1", "HostPort": "43123"}]},
+    {"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": "not-a-port"}]},
+    {"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": "0"}]},
+    {"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": "65536"}]},
+    {"7687/tcp": [
+        {"HostIp": "127.0.0.1", "HostPort": "43123"},
+        {"HostIp": "127.0.0.1", "HostPort": "43124"},
+    ]},
+])
+def test_loopback_port_parser_rejects_absent_or_unsafe_mappings(port_map):
+    with pytest.raises(RuntimeError):
+        loopback_bolt_port(port_map)
+
+
+@pytest.mark.parametrize("host_port,expected", [("1", 1), ("43123", 43123), ("65535", 65535)])
+def test_loopback_port_parser_accepts_exact_single_mapping(host_port, expected):
+    assert loopback_bolt_port({"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": host_port}]}) == expected
 
 
 def test_partial_volume_create_failure_tracks_and_exactly_cleans_candidates():
@@ -175,7 +206,7 @@ def test_partial_volume_create_failure_tracks_and_exactly_cleans_candidates():
             if args[:2] == ("image", "inspect"):
                 return json.dumps({"/data": {}, "/logs": {}})
             if args[:2] == ("network", "create"):
-                self.network = {"Name": args[-1], "Labels": labels, "Driver": "bridge", "Internal": True}
+                self.network = {"Name": args[-1], "Labels": labels, "Driver": "bridge", "Internal": False}
                 return "network-id"
             if args[:2] == ("volume", "create"):
                 name = args[-1]

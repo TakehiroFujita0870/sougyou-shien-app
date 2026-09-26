@@ -29,8 +29,11 @@ Then: 通常pytestはcallerがDocker CLI前にskipし、明示opt-inでもimage�
 | テスト資源 | exact opt-in、固定Windows Docker CLI、既ロード`neo4j:5.26-community`、`--pull=never`、UUID run label、internal bridge、127.0.0.1の動的port、image宣言named volumeを使う | 通常pytestでの起動、image pull、shared bridge、anonymous volume、広域pruneは誤対象/外部接続リスクを増やす | caller opt-in gateとstart引数・部分失敗cleanupをfakeで検査し、実daemonには接続しない |
 | packet分割 | lifecycle helperと安全fakeを先に配送し、その後に実競合テストとmetadata付きtransaction proxyを別packetにする | 全機能を一つにまとめると600行になり、独立レビュー境界を超える | 第2packetは第1packetのmerge後、別planと独立レビューを経る |
 
+後続の実競合packetでは、internal bridge上でloopback publish mappingを得られなかったため、bridge transportだけをUUID所有の通常bridgeへ変更する。上記internal選択は#262 helperの当時の設計記録であり、後続の実競合runnerには適用しない。通常bridgeのegress能力と抑制策は[`founder-graph-neo4j-revision-lock-real-test.md`](founder-graph-neo4j-revision-lock-real-test.md)に記録する。
+
 ## 変更履歴
 | 日時 | 変更 | 理由 | 影響タスク |
 | --- | --- | --- | --- |
 | 2026-09-26 | 600行の検証案をlifecycle安全helperと実競合検証に分割 | 安全ガードを先行レビュー可能にし、実Docker実行は依存配送と再承認まで止めるため | RP-NEO4J-REV-02A; 第2packet RP-NEO4J-REV-02B |
 | 2026-09-26 | `container create --pull=never`を必須化し、volume createの異常応答後にcandidateをexact inspect/cleanupするfake試験を追加。既定skipはcallerの責務と明記 | Docker CLIのdefaultは`missing`のためpull禁止を明示し、部分作成資源の安全な後片付けを確認する | RP-NEO4J-REV-02A |
+| 2026-09-26 | 後続実競合packetでinternal bridgeをUUID所有通常bridgeに置き換える。#262時点のinternal選択は履歴として保持 | 実競合packetの一回限定試験がrequired loopback port metadataを得られずwriter race前に停止したため | RP-NEO4J-REV-02B-SAFE-TRANSPORT |
