@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from .founder_graph import NodeType, Relationship, _ALLOWED_RELATION_ENDPOINTS
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 SCHEMA_NAME = "dots-founder-graph"
 
 
@@ -92,6 +92,15 @@ _MIGRATIONS = (
         # Brief text and claims stay out of the Neo4j search projection.
         queries=_create_queries(_V3_LABELS),
     ),
+    SchemaMigration(
+        version=4,
+        # Internal serialization anchor; not a domain node, search label, or read projection.
+        queries=(
+            "CREATE CONSTRAINT dots_assertion_family_lock_owner_key IF NOT EXISTS "
+            "FOR (node:FounderGraphAssertionFamilyLock) "
+            "REQUIRE (node.owner_id, node.family_key) IS UNIQUE",
+        ),
+    ),
 )
 
 
@@ -127,6 +136,8 @@ def rollback_queries(current_version: int = SCHEMA_VERSION, target_version: int 
     if target_version < 1:
         raise ValueError("rollback below schema v1 is not supported")
     queries: tuple[str, ...] = ()
+    if current_version >= 4 and target_version < 4:
+        queries += ("DROP CONSTRAINT dots_assertion_family_lock_owner_key IF EXISTS",)
     if current_version >= 3 and target_version < 3:
         queries += _drop_queries(_V3_LABELS)
     if current_version >= 2 and target_version < 2:

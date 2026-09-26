@@ -175,8 +175,8 @@ def test_schema_v3_adds_non_searchable_idea_brief_label_and_non_destructive_roll
     upgrade = migration_queries(2, 3)
     rollback = rollback_queries(3, 2)
 
-    assert SCHEMA_VERSION == 3
-    assert schema_manifest()["version"] == 3
+    assert SCHEMA_VERSION == 4
+    assert schema_manifest()["version"] == 4
     assert any("IdeaBriefVersion" in query and "REQUIRE node.id IS UNIQUE" in query for query in upgrade)
     assert any("IdeaBriefVersion" in query and "ON (node.owner_id)" in query for query in upgrade)
     assert not any("IdeaBriefVersion" in query and "search_text" in query for query in upgrade)
