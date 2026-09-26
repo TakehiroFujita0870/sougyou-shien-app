@@ -15,14 +15,15 @@ from .founder_graph import (
     EgressPolicy,
     Idea,
     MaterialKind,
+    NodeType,
     Organization,
     PersonAsset,
     Provenance,
     RelationAssertion,
+    RelationshipStatus,
     ReportSection,
     ReportStatus,
     ReportVersion,
-    Relationship,
     RelationType,
     Source,
     SourceRevision,
@@ -155,15 +156,22 @@ class McpWriteSurface:
             },
             "link_entities": {
                 "type": "object",
+                "description": "保存済みの記録同士を、根拠付きの未確定な関係として結びます。Ideaを含む場合は、調査済みBriefの章とEvidenceが必要です。",
                 "required": ["source_id", "target_id", "relation", "idempotency_key"],
                 "properties": {
                     "source_id": {**text, "minLength": 1},
                     "target_id": {**text, "minLength": 1},
                     "relation": {"type": "string", "enum": [relation.value for relation in RelationType]},
-                    "status": {"type": "string", "enum": [status.value for status in Status]},
+                    "status": {"type": "string", "enum": [RelationshipStatus.PROPOSED.value, RelationshipStatus.INFERRED.value]},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "expires_at": {"type": "string", "description": "ISO-8601 timestamp, if the relation should expire."},
                     "evidence_ids": ids,
+                    "egress_policy": {
+                        "type": "string",
+                        "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value],
+                    },
+                    "based_on_brief_id": {**text, "minLength": 1},
+                    "based_on_brief_section_index": {"type": "integer", "minimum": 0, "maximum": 7},
                     "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
@@ -252,6 +260,8 @@ class McpWriteSurface:
                     if name == "capture_person"
                     else "Capture an organization node without creating relationships."
                     if name == "capture_organization"
+                    else "保存済みの記録同士を、根拠付きの未確定な関係として結びます。Ideaを含む場合は、調査済みBriefの章とEvidenceが必要です。"
+                    if name == "link_entities"
                     else f"Purpose-limited Founder Graph write command: {name}. Provide the fields in the input schema and reuse idempotency_key on retries."
                 ),
                 "readOnly": False,
@@ -432,26 +442,87 @@ class McpWriteSurface:
         return self.writes.put_node(claim, idempotency_key=self._idempotency(arguments), operation="append_claim")
 
     def _link_entities(self, arguments: Mapping[str, Any]) -> WriteReceipt:
-        self._reject_unknown(arguments, {"source_id", "target_id", "relation", "status", "confidence", "expires_at", "evidence_ids", "idempotency_key"})
+        self._reject_unknown(arguments, {
+            "source_id", "target_id", "relation", "status", "confidence", "expires_at", "evidence_ids",
+            "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
+        })
+        save_assertion = getattr(self.writes, "save_relation_assertion", None)
+        if not callable(save_assertion):
+            raise McpWriteError("unavailable", "Formal relation writes are not available on this graph adapter.")
         source_id = self._text(arguments.get("source_id"), "source_id")
         target_id = self._text(arguments.get("target_id"), "target_id")
         source = self.writes.get_node(source_id)
         target = self.writes.get_node(target_id)
         if source is None or target is None:
-            raise McpWriteError("not_found", "relationship endpoints must already exist")
+            raise McpWriteError("not_found", "relation endpoints must already exist")
+        if getattr(source, "owner_id", None) != self.writes.owner_id or getattr(target, "owner_id", None) != self.writes.owner_id:
+            raise McpWriteError("not_found", "relation endpoints must already exist")
+        try:
+            source_kind = NodeType(source.node_type)
+            target_kind = NodeType(target.node_type)
+            predicate = RelationType(arguments.get("relation"))
+            status = RelationshipStatus(arguments.get("status", RelationshipStatus.PROPOSED.value))
+            egress_policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY.value))
+        except (AttributeError, TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "Relation type, status, or egress policy is invalid.") from error
+        if status not in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED}:
+            raise McpWriteError("invalid_input", "Model-generated relations may only be proposed or inferred.")
+        if egress_policy not in {EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE}:
+            raise McpWriteError("invalid_input", "Relation egress policy must be local_only or shareable.")
+        brief_id = arguments.get("based_on_brief_id")
+        section_index = arguments.get("based_on_brief_section_index")
+        has_idea_endpoint = isinstance(source, Idea) or isinstance(target, Idea)
+        if has_idea_endpoint:
+            brief_id = self._text(brief_id, "based_on_brief_id")
+            if type(section_index) is not int or not 0 <= section_index <= 7:
+                raise McpWriteError("invalid_input", "Idea relations require a Brief section index from 0 to 7.")
+        elif brief_id is not None or section_index is not None:
+            raise McpWriteError("invalid_input", "Brief references are accepted only for relations with an Idea endpoint.")
+        evidence_ids = self._ids(arguments.get("evidence_ids", ()), "evidence_ids")
         expires_at = arguments.get("expires_at")
         if isinstance(expires_at, str):
             expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        relationship = Relationship.from_entities(
-            source=source,
-            relation=RelationType(arguments.get("relation")),
-            target=target,
-            status=arguments.get("status", "proposed"),
+        elif expires_at is not None and not isinstance(expires_at, datetime):
+            raise McpWriteError("invalid_input", "expires_at must be an ISO-8601 timestamp string.")
+        idempotency_key = self._idempotency(arguments)
+        assertion_id = self._command_id("relation-assertion", idempotency_key)
+        assertion = RelationAssertion(
+            owner_id=self.writes.owner_id,
+            id=assertion_id,
+            source_id=source_id,
+            source_kind=source_kind,
+            target_id=target_id,
+            target_kind=target_kind,
+            predicate=predicate,
+            assertion_family_id=self._command_id("relation-family", idempotency_key),
+            status=status,
             confidence=arguments.get("confidence"),
             expires_at=expires_at,
-            evidence_ids=arguments.get("evidence_ids", ()),
+            evidence_ids=evidence_ids,
+            egress_policy=egress_policy,
+            based_on_brief_id=brief_id,
+            based_on_brief_section_index=section_index,
+            provenance=Provenance(
+                actor="local-owner",
+                operation="link_entities",
+                target_id=assertion_id,
+                idempotency_key=idempotency_key,
+            ),
         )
-        return self.writes.link_entities(relationship, idempotency_key=self._idempotency(arguments))
+        existing = self.writes.get_node(assertion_id)
+        if isinstance(existing, RelationAssertion) and existing.owner_id == self.writes.owner_id:
+            replay_candidate = replace(
+                existing,
+                valid_from=assertion.valid_from,
+                provenance=replace(existing.provenance, occurred_at=assertion.provenance.occurred_at),
+            )
+            if replay_candidate == assertion:
+                assertion = existing
+        return save_assertion(
+            assertion,
+            expected_family_revision=None,
+            idempotency_key=idempotency_key,
+        )
 
     def _confirm_person_merge(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {"winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"})
