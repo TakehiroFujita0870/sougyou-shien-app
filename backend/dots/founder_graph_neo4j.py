@@ -984,6 +984,25 @@ class Neo4jGraphGateway:
                 f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
                 id=str(node.id), owner_id=self.owner_id, properties=_node_properties(node),
             )
+            if node_type is NodeType.SOURCE:
+                tx.run(
+                    "MATCH (s:Source {id: $source_id, owner_id: $owner_id}) "
+                    "-[edge:CURRENT_SOURCE_REVISION]->() DELETE edge",
+                    source_id=str(node.id),
+                    owner_id=self.owner_id,
+                )
+                current_revision_id = getattr(node, "current_revision_id", None)
+                if current_revision_id is not None:
+                    linked = _single(tx.run(
+                        "MATCH (s:Source {id: $source_id, owner_id: $owner_id}), "
+                        "(r:SourceRevision {id: $source_revision_id, owner_id: $owner_id}) "
+                        "CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r) RETURN r.id AS id",
+                        source_id=str(node.id),
+                        source_revision_id=str(current_revision_id),
+                        owner_id=self.owner_id,
+                    ))
+                    if linked is None:
+                        raise GraphWriteNotFoundError("source current revision does not exist for the local owner")
         else:
             if expected_revision not in (None, 0):
                 raise RevisionConflictError("new nodes require expected_revision=0 or omitted")

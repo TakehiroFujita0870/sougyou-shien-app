@@ -6,7 +6,12 @@ import pytest
 from dots.founder_graph import ContentChunk, EgressPolicy, MaterialKind, NodeType, Source, SourceRevision
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_write import GraphWriteError, IdempotencyConflictError, InMemoryGraphWriteService
+from dots.founder_graph_write import (
+    GraphWriteError,
+    IdempotencyConflictError,
+    InMemoryGraphWriteService,
+    RevisionConflictError,
+)
 
 
 def bundle(*, key: str = "source-1", summary: str = "A short authored summary.", owner: str = "owner-1"):
@@ -48,7 +53,9 @@ def test_ingress_is_atomic_local_only_typed_and_replay_safe(monkeypatch: pytest.
     assert not any(edge[0] == other.id or edge[2] == other.id for edge in writes.structural_edges())
 
 
-def test_source_retry_after_revision_advance_returns_receipt_without_mutating_state() -> None:
+def test_source_retry_after_revision_advance_returns_receipt_without_mutating_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     writes = InMemoryGraphWriteService("owner-1")
     source, revision = bundle()
     original = writes.capture_source(source, revision, idempotency_key="source-advance")
@@ -63,7 +70,38 @@ def test_source_retry_after_revision_advance_returns_receipt_without_mutating_st
     )
     writes.put_node(next_revision, idempotency_key="source-revision-2", expected_revision=0)
     next_source = replace(source, current_revision_id=next_revision.id, revision=2)
+
+    nodes_before_failed_advance = writes.nodes()
+    history_before_failed_advance = writes.node_history(source.id)
+    edges_before_failed_advance = writes.structural_edges()
+    audit_before_failed_advance = writes.audit_events()
+    idempotency_before_failed_advance = dict(writes._idempotency)
+    with pytest.raises(RevisionConflictError):
+        writes.put_node(next_source, idempotency_key="stale-source-pointer", expected_revision=0)
+    assert writes.structural_edges() == edges_before_failed_advance
+    monkeypatch.setattr(
+        writes,
+        "_append_audit",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("audit failure")),
+    )
+    with pytest.raises(RuntimeError, match="audit failure"):
+        writes.put_node(next_source, idempotency_key="source-pointer-2", expected_revision=1)
+    monkeypatch.undo()
+    assert writes.nodes() == nodes_before_failed_advance
+    assert writes.node_history(source.id) == history_before_failed_advance
+    assert writes.structural_edges() == edges_before_failed_advance
+    assert writes.audit_events() == audit_before_failed_advance
+    assert writes._idempotency == idempotency_before_failed_advance
+
     writes.put_node(next_source, idempotency_key="source-pointer-2", expected_revision=1)
+    current_edges = tuple(
+        edge for edge in writes.structural_edges()
+        if edge[0] == source.id and edge[1] == "CURRENT_SOURCE_REVISION"
+    )
+    assert current_edges == ((source.id, "CURRENT_SOURCE_REVISION", next_revision.id),)
+    assert tuple(edge for edge in writes.structural_edges() if edge[1] != "CURRENT_SOURCE_REVISION") == tuple(
+        edge for edge in edges_before_failed_advance if edge[1] != "CURRENT_SOURCE_REVISION"
+    )
     nodes_before = writes.nodes()
     edges_before = writes.structural_edges()
     audit_before = writes.audit_events()
@@ -78,6 +116,17 @@ def test_source_retry_after_revision_advance_returns_receipt_without_mutating_st
     assert writes.structural_edges() == edges_before
     assert writes.audit_events() == audit_before
     assert writes.node_history(source.id) == history_before
+
+    source_without_current_revision = replace(next_source, current_revision_id=None, revision=3)
+    writes.put_node(
+        source_without_current_revision,
+        idempotency_key="source-clear-current-pointer",
+        expected_revision=2,
+    )
+    assert not any(
+        edge[0] == source.id and edge[1] == "CURRENT_SOURCE_REVISION"
+        for edge in writes.structural_edges()
+    )
 
 
 def test_ingress_rejects_foreign_owner_and_invalid_source_values() -> None:

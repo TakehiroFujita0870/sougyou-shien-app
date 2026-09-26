@@ -299,13 +299,24 @@ class InMemoryGraphWriteService:
                 ):
                     receipt = WriteReceipt(operation, node_id, node_type.value, self._revision(node), idempotency_key)
                     prior_history = list(self._node_history[node_id])
+                    prior_structural_edges = list(self._structural_edges)
                     self._nodes[node_id] = node
                     self._node_history[node_id].append(node)
+                    if node_type is NodeType.SOURCE:
+                        self._structural_edges = [
+                            edge for edge in self._structural_edges
+                            if not (edge[0] == node_id and edge[1] == "CURRENT_SOURCE_REVISION")
+                        ]
+                        if node.current_revision_id is not None:
+                            self._structural_edges.append(
+                                (node_id, "CURRENT_SOURCE_REVISION", node.current_revision_id)
+                            )
                     try:
                         self._append_audit(receipt, actor, fingerprint)
                     except Exception:
                         self._nodes[node_id] = current
                         self._node_history[node_id] = prior_history
+                        self._structural_edges = prior_structural_edges
                         raise
                     self._idempotency[idempotency_key] = (fingerprint, receipt)
                     return receipt
