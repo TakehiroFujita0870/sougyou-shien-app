@@ -18,6 +18,7 @@ EXPECTED_WRITE_TOOLS = {
     "capture_person",
     "capture_organization",
     "append_claim",
+    "capture_evidence",
     "link_entities",
     "save_research_report",
     "record_decision",

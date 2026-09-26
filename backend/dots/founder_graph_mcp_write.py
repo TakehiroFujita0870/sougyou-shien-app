@@ -13,6 +13,7 @@ from .founder_graph import (
     Decision,
     DomainValidationError,
     EgressPolicy,
+    EvidencePolarity,
     Idea,
     MaterialKind,
     NodeType,
@@ -59,6 +60,7 @@ class McpWriteSurface:
         "capture_person",
         "capture_organization",
         "append_claim",
+        "capture_evidence",
         "link_entities",
         "save_research_report",
         "record_decision",
@@ -71,6 +73,7 @@ class McpWriteSurface:
         "capture_person": False,
         "capture_organization": False,
         "append_claim": False,
+        "capture_evidence": False,
         "link_entities": False,
         "save_research_report": False,
         "record_decision": False,
@@ -150,6 +153,20 @@ class McpWriteSurface:
                         "type": "string",
                         "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value],
                     },
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "capture_evidence": {
+                "type": "object",
+                "description": "Attach a Claim to an already saved source chunk. Source text and excerpt are never accepted.",
+                "required": ["claim_id", "content_chunk_id", "idempotency_key"],
+                "properties": {
+                    "claim_id": {**text, "minLength": 1},
+                    "content_chunk_id": {**text, "minLength": 1},
+                    "polarity": {"type": "string", "enum": [item.value for item in EvidencePolarity]},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value]},
                     "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
@@ -440,6 +457,26 @@ class McpWriteSurface:
             egress_policy=egress_policy,
         )
         return self.writes.put_node(claim, idempotency_key=self._idempotency(arguments), operation="append_claim")
+
+    def _capture_evidence(self, arguments: Mapping[str, Any]) -> WriteReceipt:
+        self._reject_unknown(arguments, {"claim_id", "content_chunk_id", "polarity", "confidence", "egress_policy", "idempotency_key"})
+        if arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY) != EgressPolicy.LOCAL_ONLY.value:
+            raise McpWriteError("invalid_input", "capture_evidence is local_only.")
+        capture = getattr(self.writes, "capture_evidence", None)
+        if not callable(capture):
+            raise McpWriteError("unavailable", "Source-grounded evidence writes are not available on this graph adapter.")
+        try:
+            polarity = EvidencePolarity(arguments.get("polarity", EvidencePolarity.SUPPORTS.value))
+        except (TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "polarity must be supports, contradicts, or neutral.") from error
+        return capture(
+            self._text(arguments.get("claim_id"), "claim_id"),
+            self._text(arguments.get("content_chunk_id"), "content_chunk_id"),
+            polarity=polarity,
+            confidence=arguments.get("confidence", 1.0),
+            egress_policy=EgressPolicy.LOCAL_ONLY,
+            idempotency_key=self._idempotency(arguments),
+        )
 
     def _link_entities(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {
