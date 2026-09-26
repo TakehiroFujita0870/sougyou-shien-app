@@ -165,8 +165,7 @@ def _formal_fixture(*, assertion_brief_id: str | None = None, evidence_refs: tup
 
 def _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row):
     state = driver.session_value
-    state.search_rows, state.fetch_rows, state.formal_rows = [endpoint_rows[idea.id]], list(endpoint_rows.values()), formal_rows
-    state.idea_rows, state.brief_rows = [endpoint_rows[idea.id]], [brief_row]
+    state.search_rows, state.fetch_rows, state.formal_rows, state.idea_rows, state.brief_rows = [endpoint_rows[idea.id]], list(endpoint_rows.values()), formal_rows, [endpoint_rows[idea.id]], [brief_row]
 
 
 def test_fetch_hydrates_allowlisted_view_without_exposing_raw_payload() -> None:
@@ -262,19 +261,16 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     hit = next(item for item in page.hits if item.node.id == claim.id)
     assert hit.path == (idea.id, RelationType.ADDRESSES.value, claim.id) and len(hit.relation_path) == 1
     step = hit.relation_path[0]
-    assert (step.relation_assertion_id, step.evidence_ids, step.based_on_brief_id,
-            step.based_on_brief_section_index, step.traversal_direction) == (assertion.id, (evidence.id,), brief.id, 0, "outgoing")
+    assert (step.relation_assertion_id, step.evidence_ids, step.based_on_brief_id, step.based_on_brief_section_index, step.traversal_direction) == (assertion.id, (evidence.id,), brief.id, 0, "outgoing")
     assert driver.session_value.read_transactions == 1
     result = McpReadSurface(reads).call("search", {"query": "Foundry"}, owner_id="owner-1")
-    claim_result = next(item for item in result["results"] if item["id"] == claim.id)
-    semantic = claim_result["semantic_relation_path"][0]
+    semantic = next(item for item in result["results"] if item["id"] == claim.id)["semantic_relation_path"][0]
     assert (semantic["relation_assertion_id"], semantic["evidence_ids"], semantic["based_on_brief_id"], semantic["based_on_brief_section_index"]) == (assertion.id, [evidence.id], brief.id, 0)
     assert all(secret not in str(result) for secret in ("A researched section", "must never leave the adapter"))
 
 
 @pytest.mark.parametrize(("brief_ref", "evidence_refs", "field", "value", "stale_idea", "policy"), [
-    ("old-brief", None, None, None, False, EgressPolicy.SHAREABLE), (None, (), None, None, False, EgressPolicy.SHAREABLE),
-    (None, ("evidence-1", "extra"), None, None, False, EgressPolicy.SHAREABLE),
+    ("old-brief", None, None, None, False, EgressPolicy.SHAREABLE), (None, (), None, None, False, EgressPolicy.SHAREABLE), (None, ("evidence-1", "extra"), None, None, False, EgressPolicy.SHAREABLE),
     (None, None, "target_owner_id", "owner-2", False, EgressPolicy.SHAREABLE),
     (None, None, "target_node_type", NodeType.PERSON.value, False, EgressPolicy.SHAREABLE),
     (None, None, None, None, True, EgressPolicy.SHAREABLE),
@@ -288,16 +284,20 @@ def test_search_omits_formal_assertion_with_stale_or_malformed_refs(brief_ref, e
     if field:
         row = next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY")
         row[field] = value
-        if field == "target_status":
-            payload = json.loads(row["target_payload_json"])
-            payload["status"] = value
-            row["target_payload_json"] = json.dumps(payload)
+        if field == "target_status": row["target_payload_json"] = json.dumps({**json.loads(row["target_payload_json"]), "status": value})
     _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
     if stale_idea:
         child = _persisted_row(idea.revise(title="New leaf"))
         driver.session_value.idea_rows.append(child)
     hits = [item for item in reads.search("Foundry", owner_id="owner-1").hits if item.node.id == claim.id]
     assert not hits or hits[0].relation_path == ()
+
+
+def test_search_omits_formal_assertion_with_archived_claim_endpoint() -> None:
+    driver, reads = _gateway(); idea, claim, _evidence, _brief, _assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row); row = next(row for row in formal_rows if row["relation"] == "ASSERTS_TO"); payload = json.loads(row["target_payload_json"])
+    row["target_status"] = payload["status"] = "archived"; row["target_payload_json"] = json.dumps(payload)
+    hits = [item for item in reads.search("Foundry", owner_id="owner-1").hits if item.node.id == claim.id]; assert not hits or hits[0].relation_path == ()
 
 
 def test_search_paginates_with_stable_cursor() -> None:
