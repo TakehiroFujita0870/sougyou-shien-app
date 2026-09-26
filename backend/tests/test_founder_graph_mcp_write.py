@@ -15,6 +15,11 @@ from dots.founder_graph import (
     Provenance,
     ReportSection,
     ReportVersion,
+    RelationAssertion,
+    RelationAssertionEdgeType,
+    RelationType,
+    Relationship,
+    RelationshipStatus,
     ResearchCampaign,
     ResearchRun,
     Source,
@@ -24,7 +29,9 @@ from dots.founder_graph import (
     project_shareable,
 )
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_write import InMemoryGraphWriteService
+from dots.founder_graph_neo4j_write import PersistedNodeReference
+from dots.founder_graph_write import InMemoryGraphWriteService, WriteReceipt
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 def _surface() -> tuple[InMemoryGraphWriteService, McpWriteSurface]:
@@ -95,6 +102,73 @@ def _report_arguments(
     if parent_id is not None:
         arguments["parent_id"] = parent_id
     return arguments
+
+
+def _save_researched_brief(
+    writes: InMemoryGraphWriteService,
+    idea: Idea,
+    evidence: Evidence,
+) -> IdeaBriefVersion:
+    now = datetime.now(timezone.utc)
+    campaign = ResearchCampaign(
+        owner_id=idea.owner_id,
+        id=f"campaign-for-{idea.id}",
+        purpose="Synthetic relation evidence",
+        target_idea_id=idea.id,
+        allowed_categories=("idea.summary",),
+        trial_budget=1,
+        expires_at=now + timedelta(hours=1),
+        created_at=now - timedelta(minutes=10),
+        provenance=Provenance(
+            actor="synthetic-test", operation="create", target_id=f"campaign-for-{idea.id}",
+            occurred_at=now - timedelta(minutes=10),
+        ),
+    )
+    writes.put_node(campaign, idempotency_key=f"seed-{campaign.id}")
+    approved = campaign.approve(
+        approved_at=now - timedelta(minutes=5),
+        provenance=Provenance(
+            actor="synthetic-test", operation="approve", target_id=campaign.id,
+            occurred_at=now - timedelta(minutes=5),
+        ),
+    )
+    writes.put_node(
+        approved,
+        expected_revision=campaign.aggregate_revision,
+        idempotency_key=f"approve-{campaign.id}",
+    )
+    run = ResearchRun(
+        owner_id=idea.owner_id,
+        id=f"run-for-{idea.id}",
+        campaign_id=campaign.id,
+        authorization_snapshot_id=approved.authorization_snapshot_id,
+        authorization_revision=approved.authorization_revision,
+        input_snapshot={"query": "synthetic"},
+        model_snapshot="synthetic-model",
+        sources=("synthetic-source",),
+        evidence_ids=(evidence.id,),
+        results={"summary": "synthetic"},
+        status=Status.COMPLETED,
+        started_at=now - timedelta(minutes=3),
+        finished_at=now - timedelta(minutes=2),
+    )
+    writes.record_research_run(
+        run,
+        expected_campaign_revision=approved.aggregate_revision,
+        idempotency_key=f"record-{run.id}",
+    )
+    brief = IdeaBriefVersion(
+        owner_id=idea.owner_id,
+        idea_lineage_root_id=idea.id,
+        based_on_idea_id=idea.id,
+        research_run_ids=(run.id,),
+        sections=tuple(
+            IdeaBriefSection(index=index, content=f"Synthetic section {index}", evidence_ids=(evidence.id,))
+            for index in range(8)
+        ),
+    )
+    writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key=f"save-{brief.id}")
+    return brief
 
 
 def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
@@ -328,8 +402,10 @@ def test_capture_idea_persists_source_and_source_revision_atomically() -> None:
 def test_link_entities_and_record_correction_use_domain_contracts() -> None:
     writes, surface = _surface()
     person = PersonAsset(owner_id="owner-1", id="person-1", name="Potential partner")
+    other_person = PersonAsset(owner_id="owner-1", id="person-2", name="Another partner")
     evidence = Evidence(owner_id="owner-1", id="evidence-1", material_id="material-1", claim_id="claim-1")
     writes.put_node(person, idempotency_key="person")
+    writes.put_node(other_person, idempotency_key="person-2")
     writes.put_node(evidence, idempotency_key="evidence")
     idea_receipt = surface.call(
         "capture_idea",
@@ -340,8 +416,8 @@ def test_link_entities_and_record_correction_use_domain_contracts() -> None:
         "link_entities",
         {
             "source_id": person.id,
-            "target_id": idea_receipt.target_id,
-            "relation": "CAN_CONTRIBUTE_TO",
+            "target_id": other_person.id,
+            "relation": "INTRODUCED_BY",
             "evidence_ids": [evidence.id],
             "confidence": 0.8,
             "expires_at": "2027-01-01T00:00:00Z",
@@ -355,9 +431,367 @@ def test_link_entities_and_record_correction_use_domain_contracts() -> None:
         owner_id="owner-1",
     )
 
-    assert link.target_type == "relationship"
+    assertion = writes.get_node(link.target_id)
+    assert link.target_type == NodeType.RELATION_ASSERTION.value
+    assert isinstance(assertion, RelationAssertion)
+    assert assertion.source_kind is NodeType.PERSON
+    assert assertion.target_kind is NodeType.PERSON
+    assert assertion.status is RelationshipStatus.PROPOSED
+    assert assertion.egress_policy is EgressPolicy.LOCAL_ONLY
+    assert assertion.evidence_ids == (evidence.id,)
+    assert not any(isinstance(node, Relationship) for node in writes.nodes())
     assert writes.get_node(idea_receipt.target_id).title == "Partner idea"
     assert writes.get_node(correction.target_id).supersedes_id == idea_receipt.target_id
+
+
+def test_link_entities_retries_same_formal_assertion_without_duplicate_edges() -> None:
+    writes, surface = _surface()
+    first = PersonAsset(
+        owner_id="owner-1", id="introduced-person-1", name="First", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    second = PersonAsset(
+        owner_id="owner-1", id="introduced-person-2", name="Second", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    claim = Claim(
+        owner_id="owner-1", id="link-claim", text="Synthetic", confidence=0.8,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    evidence = Evidence(
+        owner_id="owner-1", id="link-evidence", material_id="link-material", claim_id=claim.id,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    for node in (first, second, claim, evidence):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    arguments = {
+        "source_id": first.id,
+        "target_id": second.id,
+        "relation": RelationType.INTRODUCED_BY.value,
+        "status": RelationshipStatus.INFERRED.value,
+        "confidence": 0.7,
+        "expires_at": "2099-01-01T00:00:00Z",
+        "evidence_ids": [evidence.id],
+        "egress_policy": EgressPolicy.SHAREABLE.value,
+        "idempotency_key": "same-formal-link",
+    }
+
+    first_receipt = surface.call("link_entities", arguments, owner_id="owner-1")
+    replay = surface.call("link_entities", arguments, owner_id="owner-1")
+    assertion = writes.get_node(first_receipt.target_id)
+
+    assert first_receipt.target_type == NodeType.RELATION_ASSERTION.value
+    assert replay.replayed is True and replay.target_id == first_receipt.target_id
+    assert assertion.egress_policy is EgressPolicy.SHAREABLE
+    assert all(writes.get_node(node_id).egress_policy is EgressPolicy.SHAREABLE for node_id in (first.id, second.id, evidence.id))
+    assert sum(1 for node in writes.nodes() if isinstance(node, RelationAssertion)) == 1
+    assert writes.structural_edges().count((assertion.id, RelationAssertionEdgeType.ASSERTS_FROM.value, first.id)) == 1
+    assert writes.structural_edges().count((assertion.id, RelationAssertionEdgeType.ASSERTS_TO.value, second.id)) == 1
+
+
+@pytest.mark.parametrize("private_component", ["evidence", "endpoint"])
+def test_link_entities_rejects_shareable_assertion_with_local_only_component_without_writes(
+    private_component: str,
+) -> None:
+    writes, surface = _surface()
+    first = PersonAsset(
+        owner_id="owner-1", id=f"private-check-first-{private_component}", name="First",
+        egress_policy=EgressPolicy.LOCAL_ONLY if private_component == "endpoint" else EgressPolicy.SHAREABLE,
+    )
+    second = PersonAsset(
+        owner_id="owner-1", id=f"private-check-second-{private_component}", name="Second",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    claim = Claim(
+        owner_id="owner-1", id=f"private-check-claim-{private_component}", text="Synthetic", confidence=0.8,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    evidence = Evidence(
+        owner_id="owner-1", id=f"private-check-evidence-{private_component}", material_id="private-check-material",
+        claim_id=claim.id,
+        egress_policy=EgressPolicy.LOCAL_ONLY if private_component == "evidence" else EgressPolicy.SHAREABLE,
+    )
+    for node in (first, second, claim, evidence):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before_nodes = writes.nodes()
+    before_edges = writes.structural_edges()
+    before_audit = writes.audit_events()
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": first.id,
+            "target_id": second.id,
+            "relation": RelationType.INTRODUCED_BY.value,
+            "status": RelationshipStatus.INFERRED.value,
+            "confidence": 0.7,
+            "expires_at": "2099-01-01T00:00:00Z",
+            "evidence_ids": [evidence.id],
+            "egress_policy": EgressPolicy.SHAREABLE.value,
+            "idempotency_key": f"shareable-private-component-{private_component}",
+        }, owner_id="owner-1")
+
+    assert writes.nodes() == before_nodes
+    assert writes.structural_edges() == before_edges
+    assert writes.audit_events() == before_audit
+
+
+@pytest.mark.parametrize("status", ["confirmed", "rejected", "superseded", "expired"])
+def test_link_entities_rejects_non_model_generated_status_without_writes(status: str) -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id="status-person-1", name="First")
+    second = PersonAsset(owner_id="owner-1", id="status-person-2", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before_nodes = writes.nodes()
+    before_edges = writes.structural_edges()
+    before_audit = writes.audit_events()
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": first.id, "target_id": second.id,
+            "relation": "USES_SKILL", "status": status,
+            "idempotency_key": f"bad-status-{status}",
+        }, owner_id="owner-1")
+
+    assert writes.nodes() == before_nodes
+    assert writes.structural_edges() == before_edges
+    assert writes.audit_events() == before_audit
+
+
+def test_link_entities_schema_is_closed_and_requires_idea_brief_pair() -> None:
+    writes, surface = _surface()
+    definition = next(tool for tool in surface.tool_definitions() if tool["name"] == "link_entities")
+    schema = definition["inputSchema"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == {
+        "source_id", "target_id", "relation", "status", "confidence", "expires_at",
+        "evidence_ids", "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
+    }
+    assert "evidence_ids" in schema["required"]
+    assert schema["properties"]["evidence_ids"]["minItems"] == 1
+    assert schema["properties"]["status"]["enum"] == ["proposed", "inferred"]
+    assert definition["annotations"]["destructiveHint"] is False
+
+    idea = Idea(owner_id="owner-1", id="idea-link-no-brief", title="Synthetic idea")
+    person = PersonAsset(owner_id="owner-1", id="person-link-no-brief", name="Synthetic person")
+    writes.put_node(idea, idempotency_key="seed-idea-link")
+    writes.put_node(person, idempotency_key="seed-person-link")
+    before = writes.nodes()
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": idea.id, "target_id": person.id, "relation": "REUSES",
+            "evidence_ids": ["not-used"], "idempotency_key": "idea-link-without-brief",
+        }, owner_id="owner-1")
+    assert writes.nodes() == before
+
+
+def test_link_entities_passes_exact_idea_brief_evidence_to_formal_adapter() -> None:
+    writes, surface = _surface()
+    idea = Idea(owner_id="owner-1", id="idea-link-researched", title="Synthetic idea")
+    claim = Claim(owner_id="owner-1", id="claim-link-researched", text="Synthetic claim", confidence=0.8)
+    evidence = Evidence(
+        owner_id="owner-1", id="evidence-link-researched", material_id="material-link-researched", claim_id=claim.id,
+    )
+    for node in (idea, claim, evidence):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    brief = _save_researched_brief(writes, idea, evidence)
+
+    receipt = surface.call("link_entities", {
+        "source_id": idea.id,
+        "target_id": claim.id,
+        "relation": RelationType.ADDRESSES.value,
+        "status": RelationshipStatus.INFERRED.value,
+        "evidence_ids": [evidence.id],
+        "based_on_brief_id": brief.id,
+        "based_on_brief_section_index": 1,
+        "idempotency_key": "idea-link-researched",
+    }, owner_id="owner-1")
+
+    assertion = writes.get_node(receipt.target_id)
+    assert isinstance(assertion, RelationAssertion)
+    assert assertion.based_on_brief_id == brief.id
+    assert assertion.based_on_brief_section_index == 1
+    assert assertion.evidence_ids == (evidence.id,)
+
+
+def test_link_entities_adapter_rejects_idea_brief_that_does_not_contain_evidence() -> None:
+    writes, surface = _surface()
+    idea = Idea(owner_id="owner-1", id="idea-link-evidence-check", title="Synthetic idea")
+    claim = Claim(owner_id="owner-1", id="claim-link-evidence-check", text="Synthetic claim", confidence=0.8)
+    cited = Evidence(owner_id="owner-1", id="evidence-cited", material_id="material-cited", claim_id=claim.id)
+    uncited = Evidence(owner_id="owner-1", id="evidence-uncited", material_id="material-uncited", claim_id=claim.id)
+    for node in (idea, claim, cited, uncited):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    brief = _save_researched_brief(writes, idea, cited)
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": idea.id,
+            "target_id": claim.id,
+            "relation": RelationType.ADDRESSES.value,
+            "status": RelationshipStatus.INFERRED.value,
+            "evidence_ids": [uncited.id],
+            "based_on_brief_id": brief.id,
+            "based_on_brief_section_index": 1,
+            "idempotency_key": "idea-link-uncited-evidence",
+        }, owner_id="owner-1")
+
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+def test_link_entities_uses_persisted_node_kinds_for_idea_brief_gate() -> None:
+    class Neo4jShapedAdapter:
+        owner_id = "owner-1"
+
+        def __init__(self) -> None:
+            self.saved: RelationAssertion | None = None
+            self.nodes = {
+                "persisted-idea": PersistedNodeReference(
+                    id="persisted-idea", owner_id=self.owner_id, node_type=NodeType.IDEA,
+                    revision=1, fields={},
+                ),
+                "persisted-claim": PersistedNodeReference(
+                    id="persisted-claim", owner_id=self.owner_id, node_type=NodeType.CLAIM,
+                    revision=1, fields={},
+                ),
+            }
+
+        def get_node(self, node_id: str):
+            return self.nodes.get(node_id)
+
+        def save_relation_assertion(self, assertion, *, expected_family_revision, idempotency_key):
+            self.saved = assertion
+            return WriteReceipt(
+                operation="save_relation_assertion", target_id=assertion.id,
+                target_type=NodeType.RELATION_ASSERTION.value, revision=1,
+                idempotency_key=idempotency_key,
+            )
+
+    adapter = Neo4jShapedAdapter()
+    surface = McpWriteSurface(adapter)  # type: ignore[arg-type]
+    base_arguments = {
+        "source_id": "persisted-idea", "target_id": "persisted-claim",
+        "relation": RelationType.ADDRESSES.value, "evidence_ids": ["persisted-evidence"],
+        "idempotency_key": "persisted-idea-link",
+    }
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", base_arguments, owner_id="owner-1")
+    assert adapter.saved is None
+
+    receipt = surface.call("link_entities", {
+        **base_arguments,
+        "based_on_brief_id": "persisted-brief",
+        "based_on_brief_section_index": 6,
+    }, owner_id="owner-1")
+
+    assert receipt.target_type == NodeType.RELATION_ASSERTION.value
+    assert adapter.saved is not None
+    assert adapter.saved.based_on_brief_id == "persisted-brief"
+    assert adapter.saved.based_on_brief_section_index == 6
+
+
+def test_link_entities_rejects_unknown_fields_before_mutation() -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id="unknown-person-1", name="First")
+    second = PersonAsset(owner_id="owner-1", id="unknown-person-2", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": first.id, "target_id": second.id, "relation": "USES_SKILL",
+            "idempotency_key": "unknown-field", "status_override": "confirmed",
+        }, owner_id="owner-1")
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+def test_link_entities_fails_closed_when_adapter_has_no_formal_writer() -> None:
+    class LegacyAdapter:
+        owner_id = "owner-1"
+        legacy_called = False
+
+        def get_node(self, _node_id: str):
+            return None
+
+        def link_entities(self, *_args, **_kwargs):
+            self.legacy_called = True
+
+    adapter = LegacyAdapter()
+    surface = McpWriteSurface(adapter)  # type: ignore[arg-type]
+
+    with pytest.raises(McpWriteError) as error:
+        surface.call("link_entities", {
+            "source_id": "legacy-source", "target_id": "legacy-target",
+            "relation": "USES_SKILL", "idempotency_key": "legacy-no-fallback",
+        }, owner_id="owner-1")
+
+    assert error.value.code == "unavailable"
+    assert adapter.legacy_called is False
+
+
+def test_link_entities_preserves_required_network_expiry_constraint() -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id="expiry-person-1", name="First")
+    second = PersonAsset(owner_id="owner-1", id="expiry-person-2", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": first.id, "target_id": second.id,
+            "relation": RelationType.INTRODUCED_BY.value,
+            "confidence": 0.8,
+            "idempotency_key": "network-without-expiry",
+        }, owner_id="owner-1")
+
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+@pytest.mark.parametrize("evidence_value", [None, []], ids=["omitted", "empty"])
+def test_link_entities_requires_evidence_without_mutation(evidence_value: object) -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id=f"evidence-person-1-{evidence_value}", name="First")
+    second = PersonAsset(owner_id="owner-1", id=f"evidence-person-2-{evidence_value}", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+    arguments = {
+        "source_id": first.id, "target_id": second.id,
+        "relation": RelationType.INTRODUCED_BY.value,
+        "confidence": 0.8, "expires_at": "2099-01-01T00:00:00Z",
+        "idempotency_key": f"missing-evidence-{evidence_value}",
+    }
+    if evidence_value is not None:
+        arguments["evidence_ids"] = evidence_value
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", arguments, owner_id="owner-1")
+
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+def test_link_entities_rejects_invalid_expiry_timestamp_without_mutation() -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id="invalid-expiry-person-1", name="First")
+    second = PersonAsset(owner_id="owner-1", id="invalid-expiry-person-2", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+
+    with pytest.raises(McpWriteError) as error:
+        surface.call("link_entities", {
+            "source_id": first.id,
+            "target_id": second.id,
+            "relation": RelationType.INTRODUCED_BY.value,
+            "confidence": 0.8,
+            "expires_at": "not-a-valid-timestamp",
+            "evidence_ids": ["synthetic-evidence"],
+            "idempotency_key": "invalid-expiry-time",
+        }, owner_id="owner-1")
+
+    assert error.value.code == "invalid_input"
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
 
 
 def test_save_report_and_decision_are_owner_scoped() -> None:
