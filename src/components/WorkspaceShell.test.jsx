@@ -1,13 +1,18 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceShell } from './WorkspaceShell';
 import { LocalGoogleSignIn } from './LocalGoogleSignIn';
 import { createLocalGoogleAuthAdapter } from '../auth/localAuthAdapter';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeEach(() => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+});
 
 function openAccount(container) {
   const trigger = container.querySelector('.workspace-shell__account-copy > button');
@@ -109,26 +114,19 @@ describe('WorkspaceShell', () => {
     await expect(restoredAdapter.hydrate()).resolves.toEqual(expect.objectContaining({ id: 'local-google-user' }));
     act(() => { root.unmount(); container.remove(); });
   });
-  it.each([
-    ['desktop account area', false],
-    ['390px mobile drawer account area', true],
-  ])('restores the signed-in principal after remount in the %s', async (_label, mobile) => {
+  it('restores the signed-in principal after remount in the PC account area', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     let root = createRoot(container);
 
-    function renderWithFreshAdapter(initialDrawerOpen = false) {
-      act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}} initialDrawerOpen={initialDrawerOpen}><h1>ページ</h1></WorkspaceShell>));
+    function renderWithFreshAdapter() {
+      act(() => root.render(<WorkspaceShell activePage="home" onSelect={() => {}}><h1>ページ</h1></WorkspaceShell>));
     }
 
     renderWithFreshAdapter();
-    if (mobile) {
-      act(() => container.querySelector('.workspace-shell__mobile-trigger').click());
-      expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
-    }
     act(() => root.unmount());
     root = createRoot(container);
-    renderWithFreshAdapter(mobile);
+    renderWithFreshAdapter();
     await act(async () => Promise.resolve());
     expect(container.textContent).toContain('タケヒロ');
     act(() => { root.unmount(); container.remove(); });
@@ -138,7 +136,6 @@ describe('WorkspaceShell', () => {
     const { container, cleanup } = mount();
     expect(container.querySelector('[aria-label="ワークスペースサイドバー"]')).toBeTruthy();
     expect(container.querySelectorAll('.workspace-shell__nav-item')).toHaveLength(4);
-    expect(container.querySelector('.workspace-shell__mobile-trigger').getAttribute('aria-controls')).toBe('workspace-sidebar');
     expect(container.querySelector('#workspace-sidebar')).toBeTruthy();
     expect(container.textContent).toContain('タケヒロ');
     expect(container.textContent).toContain('Free');
@@ -164,15 +161,11 @@ describe('WorkspaceShell', () => {
     cleanup();
   });
 
-  it('keeps the four-surface sidebar and closes the mobile drawer with Escape', () => {
+  it('keeps the four-surface PC sidebar and separates recent navigation items', () => {
     const { container, cleanup } = mount();
     expect([...container.querySelectorAll('nav[aria-label="主要ページ"] button')].map((button) => button.textContent)).toEqual(['ホーム', 'プロジェクト', 'ナレッジ', 'Graph']);
     expect(container.querySelector('[aria-label="最近の項目"]').textContent).not.toContain('Graph');
     expect(container.querySelector('.workspace-shell__collapse')).toBeNull();
-    act(() => container.querySelector('.workspace-shell__mobile-trigger').click());
-    expect(container.querySelector('.workspace-shell__sidebar').className).toContain('workspace-shell__sidebar--open');
-    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
-    expect(container.querySelector('.workspace-shell__sidebar').className).not.toContain('workspace-shell__sidebar--open');
     cleanup();
   });
 

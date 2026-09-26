@@ -15,6 +15,8 @@ function openAccount(trigger) {
 }
 
 async function mount() {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
   sessionStorage.setItem('dots:selected-surface', 'home');
   const container = document.createElement('div');
   document.body.append(container);
@@ -67,7 +69,7 @@ describe('App keyboard and accessibility quality', () => {
     await unmount();
   });
 
-  it('constrains the mobile shell and profile dialog instead of expanding the page width', async () => {
+  it('keeps the primary shell and composer available at 1280x720', async () => {
     const { container, unmount } = await mount();
     await act(async () => Promise.resolve());
 
@@ -75,7 +77,7 @@ describe('App keyboard and accessibility quality', () => {
 
     expect(container.querySelector('#home-supervisor-message')).not.toBeNull();
     expect(container.querySelector('header')).toBeNull();
-    expect(navigation.className).toContain('min-w-0');
+    expect(navigation.querySelectorAll('button')).toHaveLength(4);
     expect(container.querySelector('main').className).toContain('Dots-shell');
     await unmount();
   });
