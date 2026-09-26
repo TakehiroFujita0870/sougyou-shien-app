@@ -22,6 +22,7 @@ from .founder_graph import (
     EgressPolicy,
     DomainValidationError,
     Evidence,
+    Idea,
     NodeType,
     PersonAsset,
     RelationAssertion,
@@ -40,6 +41,7 @@ from .founder_graph import (
     validate_run_campaign_reference,
     validate_source_revision_history,
 )
+from .idea_brief import IdeaBriefVersion
 
 
 class GraphWriteError(DomainValidationError):
@@ -265,6 +267,7 @@ class InMemoryGraphWriteService:
         "capture_idea",
         "capture_source",
         "record_research_run",
+        "save_idea_brief",
         "capture_person",
         "capture_organization",
         "append_claim",
@@ -279,6 +282,8 @@ class InMemoryGraphWriteService:
         self.owner_id = _required_text(owner_id, "owner_id")
         self._nodes: dict[str, Any] = {}
         self._node_history: dict[str, list[Any]] = {}
+        self._idea_briefs: dict[str, IdeaBriefVersion] = {}
+        self._idea_brief_ids_by_root: dict[str, list[str]] = {}
         self._relations: dict[str, Relationship] = {}
         self._structural_edges: list[tuple[str, str, str]] = []
         self._idempotency: dict[str, tuple[str, WriteReceipt]] = {}
@@ -305,6 +310,8 @@ class InMemoryGraphWriteService:
             replay = self._replay_or_raise(idempotency_key, fingerprint)
             if replay is not None:
                 return replay
+            if node_id in self._idea_briefs:
+                raise NodeAlreadyExistsError("node id is already registered as an Idea brief")
             self._validate_report_references_locked(node)
             self._validate_source_reference_locked(node)
             current = self._nodes.get(node_id)
@@ -387,7 +394,7 @@ class InMemoryGraphWriteService:
             replay = self._replay_or_raise(idempotency_key, fingerprint)
             if replay is not None:
                 return replay
-            if any(node_id in self._nodes for node_id in node_ids):
+            if any(node_id in self._nodes or node_id in self._idea_briefs for node_id in node_ids):
                 raise NodeAlreadyExistsError("capture_idea node id is already registered")
             audit_length = len(self._audit)
             try:
@@ -429,7 +436,7 @@ class InMemoryGraphWriteService:
             replay = self._replay_or_raise(idempotency_key, fingerprint)
             if replay is not None:
                 return replay
-            if any(node_id in self._nodes for node_id in node_ids):
+            if any(node_id in self._nodes or node_id in self._idea_briefs for node_id in node_ids):
                 raise NodeAlreadyExistsError("capture_source node id is already registered")
             audit_length = len(self._audit)
             edge_length = len(self._structural_edges)
@@ -513,7 +520,7 @@ class InMemoryGraphWriteService:
             except DomainValidationError:
                 raise GraphWriteError("research campaign authorization or Run timing is invalid") from None
 
-            if run.id in self._nodes:
+            if run.id in self._nodes or run.id in self._idea_briefs:
                 raise NodeAlreadyExistsError("research run id is already registered")
 
             receipt = WriteReceipt(
@@ -543,6 +550,187 @@ class InMemoryGraphWriteService:
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt
+
+    def save_idea_brief(
+        self,
+        brief: IdeaBriefVersion,
+        *,
+        expected_latest_revision: int | None,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Save an immutable, owner-bound brief version in this memory adapter.
+
+        This concrete-only method is intentionally absent from GraphWritePort
+        until the persistent adapter implements the same command contract.
+        """
+        operation = self._validate_command("save_idea_brief", actor, idempotency_key)
+        if not isinstance(brief, IdeaBriefVersion):
+            raise GraphWriteError("save_idea_brief requires an IdeaBriefVersion")
+        if brief.owner_id != self.owner_id:
+            raise GraphWriteError("brief owner does not match the local owner")
+        if expected_latest_revision is not None and (
+            type(expected_latest_revision) is not int or expected_latest_revision < 1
+        ):
+            raise RevisionConflictError("expected latest brief revision must be a positive integer or None")
+        # The general node fingerprint excludes created_at as transport time;
+        # for a brief it bounds the accepted Run history and is part of intent.
+        fingerprint = payload_fingerprint(
+            operation, brief, brief.created_at, expected_latest_revision, self.owner_id
+        )
+
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+
+            current_idea = self._resolve_current_idea_locked(brief.idea_lineage_root_id)
+            if current_idea.id != brief.based_on_idea_id:
+                raise GraphWriteError("brief must reference the exact current Idea revision")
+            if current_idea.status in {Status.ARCHIVED, Status.SUPERSEDED, Status.RETRACTED}:
+                raise GraphWriteError("brief cannot reference an archived or superseded Idea")
+
+            lineage_ids = self._idea_brief_ids_by_root.get(brief.idea_lineage_root_id, [])
+            latest = self._idea_briefs[lineage_ids[-1]] if lineage_ids else None
+            actual_latest_revision = None if latest is None else latest.revision
+            if expected_latest_revision != actual_latest_revision:
+                raise RevisionConflictError("expected latest brief revision does not match the current version")
+            if latest is None:
+                if brief.revision != 1 or brief.supersedes_id is not None:
+                    raise GraphWriteError("first brief version must start a new lineage at revision one")
+            elif (
+                brief.idea_lineage_root_id != latest.idea_lineage_root_id
+                or brief.revision != latest.revision + 1
+                or brief.supersedes_id != latest.id
+            ):
+                raise GraphWriteError("brief revision must extend the exact latest version")
+            if brief.id in self._idea_briefs or brief.id in self._nodes:
+                raise NodeAlreadyExistsError("idea brief id is already registered")
+
+            self._validate_brief_research_locked(brief, current_idea)
+            receipt = WriteReceipt(
+                operation,
+                brief.id,
+                "idea_brief_version",
+                brief.revision,
+                idempotency_key,
+            )
+            lineage = self._idea_brief_ids_by_root.setdefault(brief.idea_lineage_root_id, [])
+            audit_length = len(self._audit)
+            try:
+                self._idea_briefs[brief.id] = brief
+                lineage.append(brief.id)
+                self._append_audit(receipt, actor, fingerprint)
+                self._idempotency[idempotency_key] = (fingerprint, receipt)
+            except Exception:
+                self._idea_briefs.pop(brief.id, None)
+                if lineage and lineage[-1] == brief.id:
+                    lineage.pop()
+                if not lineage:
+                    self._idea_brief_ids_by_root.pop(brief.idea_lineage_root_id, None)
+                del self._audit[audit_length:]
+                self._idempotency.pop(idempotency_key, None)
+                raise
+            return receipt
+
+    def get_idea_brief(self, brief_id: str) -> IdeaBriefVersion | None:
+        """Return one immutable brief value from this owner-bound adapter."""
+        with self._lock:
+            return self._idea_briefs.get(_required_text(brief_id, "brief_id"))
+
+    def get_latest_idea_brief(self, idea_lineage_root_id: str) -> IdeaBriefVersion | None:
+        """Resolve the authoritative newest brief for one Idea lineage."""
+        with self._lock:
+            lineage = self._idea_brief_ids_by_root.get(_required_text(idea_lineage_root_id, "idea_lineage_root_id"), ())
+            return None if not lineage else self._idea_briefs[lineage[-1]]
+
+    def _resolve_current_idea_locked(self, lineage_root_id: str) -> Idea:
+        root = self._nodes.get(_required_text(lineage_root_id, "idea_lineage_root_id"))
+        if not isinstance(root, Idea) or root.owner_id != self.owner_id or root.supersedes_id is not None:
+            raise GraphWriteNotFoundError("brief Idea lineage root does not resolve to an owned root Idea")
+        ideas_by_parent: dict[str, list[Idea]] = {}
+        for node in self._nodes.values():
+            if isinstance(node, Idea) and node.owner_id == self.owner_id and node.supersedes_id is not None:
+                ideas_by_parent.setdefault(node.supersedes_id, []).append(node)
+        current = root
+        seen = {current.id}
+        while True:
+            children = ideas_by_parent.get(current.id, [])
+            if len(children) > 1:
+                raise GraphWriteError("Idea lineage has multiple competing revisions")
+            if not children:
+                return current
+            child = children[0]
+            if child.id in seen or child.revision != current.revision + 1:
+                raise GraphWriteError("Idea lineage revision history is invalid")
+            seen.add(child.id)
+            current = child
+
+    def _validate_brief_research_locked(self, brief: IdeaBriefVersion, idea: Idea) -> None:
+        if not brief.research_run_ids:
+            return
+        runs: list[ResearchRun] = []
+        campaigns_by_id: dict[str, tuple[ResearchCampaign, ...]] = {}
+        for run_id in brief.research_run_ids:
+            run = self._nodes.get(run_id)
+            if not isinstance(run, ResearchRun) or run.owner_id != self.owner_id:
+                raise GraphWriteError("researched brief references an unregistered owner-scoped Run")
+            matching_edges = tuple(
+                edge for edge in self._structural_edges
+                if edge == (run.campaign_id, RelationType.HAS_RUN.value, run.id)
+            )
+            if len(matching_edges) != 1:
+                raise GraphWriteError("researched brief Run must have exactly one registered HAS_RUN edge")
+            receipt_entries = tuple(
+                (key, stored_fingerprint, receipt)
+                for key, (stored_fingerprint, receipt) in self._idempotency.items()
+                if receipt.operation == "record_research_run"
+                and receipt.target_id == run.id
+                and receipt.target_type == NodeType.RESEARCH_RUN.value
+                and receipt.revision == self._revision(run)
+            )
+            if len(receipt_entries) != 1:
+                raise GraphWriteError("researched brief Run must have exactly one write receipt")
+            receipt_key, stored_fingerprint, receipt = receipt_entries[0]
+            if receipt.idempotency_key != receipt_key:
+                raise GraphWriteError("researched brief Run receipt identity is inconsistent")
+            audits = tuple(
+                event for event in self._audit
+                if event.operation == "record_research_run"
+                and event.owner_id == self.owner_id
+                and event.idempotency_key == receipt_key
+                and event.target_id == run.id
+                and event.target_type == NodeType.RESEARCH_RUN.value
+                and event.payload_fingerprint == stored_fingerprint
+            )
+            if len(audits) != 1:
+                raise GraphWriteError("researched brief Run must have exactly one matching audit record")
+            campaign = self._nodes.get(run.campaign_id)
+            history = self._node_history.get(run.campaign_id, ())
+            if not isinstance(campaign, ResearchCampaign) or campaign.owner_id != self.owner_id or not history or not all(
+                isinstance(item, ResearchCampaign) and item.owner_id == self.owner_id for item in history
+            ):
+                raise GraphWriteError("researched brief Run requires authoritative typed Campaign history")
+            prior = campaigns_by_id.get(run.campaign_id)
+            if prior is not None and prior != tuple(history):
+                raise GraphWriteError("researched brief Campaign history is inconsistent")
+            campaigns_by_id[run.campaign_id] = tuple(history)
+            runs.append(run)
+
+        try:
+            from .founder_graph_historical_brief import (
+                HistoricalResearchValidationError,
+                validate_historical_researched_brief,
+            )
+
+            validate_historical_researched_brief(
+                brief,
+                idea,
+                tuple(runs),
+                tuple(campaign for history in campaigns_by_id.values() for campaign in history),
+            )
+        except HistoricalResearchValidationError:
+            raise GraphWriteError("researched brief authorization history is not proven") from None
 
     def link_entities(
         self,
@@ -638,7 +826,7 @@ class InMemoryGraphWriteService:
                 raise GraphWriteError("person merge endpoints must already be Person records")
             if loser.status is not Status.ACTIVE or winner.status is not Status.ACTIVE:
                 raise GraphWriteError("person merge endpoints must both be active")
-            if assertion.id in self._nodes:
+            if assertion.id in self._nodes or assertion.id in self._idea_briefs:
                 raise NodeAlreadyExistsError("relation assertion id is already registered")
             for evidence_id in assertion.evidence_ids:
                 evidence = self._nodes.get(evidence_id)
