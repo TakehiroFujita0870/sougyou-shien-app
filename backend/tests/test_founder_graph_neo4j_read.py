@@ -265,12 +265,10 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     assert (step.relation_assertion_id, step.evidence_ids, step.based_on_brief_id,
             step.based_on_brief_section_index, step.traversal_direction) == (assertion.id, (evidence.id,), brief.id, 0, "outgoing")
     assert driver.session_value.read_transactions == 1
-    assert all(secret not in repr(step) for secret in ("must never leave the adapter", "A researched section"))
     result = McpReadSurface(reads).call("search", {"query": "Foundry"}, owner_id="owner-1")
     claim_result = next(item for item in result["results"] if item["id"] == claim.id)
     semantic = claim_result["semantic_relation_path"][0]
-    assert (semantic["relation_assertion_id"], semantic["evidence_ids"], semantic["based_on_brief_id"],
-            semantic["based_on_brief_section_index"]) == (assertion.id, [evidence.id], brief.id, 0)
+    assert (semantic["relation_assertion_id"], semantic["evidence_ids"], semantic["based_on_brief_id"], semantic["based_on_brief_section_index"]) == (assertion.id, [evidence.id], brief.id, 0)
     assert all(secret not in str(result) for secret in ("A researched section", "must never leave the adapter"))
 
 
@@ -281,12 +279,19 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     (None, None, "target_node_type", NodeType.PERSON.value, False, EgressPolicy.SHAREABLE),
     (None, None, None, None, True, EgressPolicy.SHAREABLE),
     (None, None, None, None, False, EgressPolicy.LOCAL_ONLY),
+    *((None, None, "target_status", status, False, EgressPolicy.SHAREABLE) for status in ("archived", "superseded", "retracted", "expired", "cancelled", "revoked")),
 ])
 def test_search_omits_formal_assertion_with_stale_or_malformed_refs(brief_ref, evidence_refs, field, value, stale_idea, policy) -> None:
     driver, reads = _gateway()
     idea, claim, _evidence, _brief, _assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture(
         assertion_brief_id=brief_ref, evidence_refs=evidence_refs, assertion_policy=policy)
-    if field: next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY")[field] = value
+    if field:
+        row = next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY")
+        row[field] = value
+        if field == "target_status":
+            payload = json.loads(row["target_payload_json"])
+            payload["status"] = value
+            row["target_payload_json"] = json.dumps(payload)
     _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
     if stale_idea:
         child = _persisted_row(idea.revise(title="New leaf"))

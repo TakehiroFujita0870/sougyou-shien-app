@@ -400,7 +400,7 @@ class Neo4jGraphReadService:
                     continue
                 if source.node_type != assertion.source_kind.value or target.node_type != assertion.target_kind.value:
                     continue
-                if any(view.status == Status.FAILED.value for view in (source, target)):
+                if any(view.status in _NON_CURRENT for view in (source, target)):
                     continue
                 idea_ends = [view for view in (source, target) if view.node_type == NodeType.IDEA.value]
                 for idea in idea_ends:
