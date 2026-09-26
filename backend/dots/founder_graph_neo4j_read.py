@@ -196,9 +196,12 @@ def _view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: bool = 
     except (TypeError, ValueError) as error:
         raise GraphReadError("Neo4j node type is not in the Founder Graph allowlist") from error
 
+    field_names = _FIELD_ALLOWLIST[node_type]
+    if node_type is NodeType.EVIDENCE and payload.get("content_chunk_id") is not None:
+        field_names = ("polarity", "confidence", "content_hash", "status", "egress_policy")
     values = {
         field_name: payload[field_name]
-        for field_name in _FIELD_ALLOWLIST[node_type]
+        for field_name in field_names
         if field_name in payload
     }
     status = values.get("status", _row_value(row, f"{prefix}status"))

@@ -99,14 +99,15 @@ Then: The graph contains one Source-to-SourceRevision history edge, exactly one 
 | GR-WR-01 | capture_idea時の決定的ContentChunk生成と、SourceRevision / chunk IDだけを含む後方互換WriteReceipt | 検査: 4,000 Unicode文字上限、CRLF一つと空行CRLF二つの境界、連続offset、再構成hash、空本文、冪等再送、旧fingerprint監査からの安全なchunk backfill、本文非返却をin-memory / Neo4j parityで確認する | 類推可能 |
 | GR-WR-01A-MEM | in-memoryのsource-chain repair preview/apply契約、事前検査、focused test | 検査: `uv run pytest backend/tests/test_founder_graph_source_repair.py -q` で全件事前検査、preview無変更、不足edgeだけの追加、監査の重複防止、矛盾時停止を確認する | 類推可能 |
 | GR-WR-01A-N4J | Neo4j parityとtransactionalなsource-chain repair preview/apply。preflightの全read、不足edge、決定的auditをapplyの単一`execute_write` callback内で実行する | 検査: Neo4j source-repair testでpreview read-only、foreign/malformed/contradictory graphのfail-closed、edge/audit同一transaction、rollback、再実行時audit重複なしを確認する | 類推可能 |
-| GR-WR-02 | GR-WR-01A完了後に公開するv2 Evidence契約と用途限定capture_evidence MCP write | 検査: Claim、Chunk、SourceRevisionの型・存在・ownerを確認し、Evidenceと構造edgeを原子的・冪等に保存する。旧material参照はread-only互換とする | 類推可能 |
+| GR-WR-02A | GR-WR-01A完了後のv2 Evidence内部保存契約 | 検査: Claim、Chunk、SourceRevisionの型・存在・ownerとHAS_CHUNK lineageを確認し、呼出元にexcerpt / locator / source textを要求せず、Evidence、EVIDENCE_FROM、監査をmemory / Neo4jで原子的・冪等に保存する。same-key/same-payloadは同じreceipt、payload変更はconflict、foreign existenceは非開示。安全な内部read projectionにclaim/chunk/revision ID・locator・本文を含めず、旧material参照はread-only互換とする | 類推可能 |
+| GR-WR-02B | GR-WR-02A完了後に公開する用途限定capture_evidence MCP write | 検査: MCP / API / stdioの閉じた入力schemaからGR-WR-02Aだけを呼び、共通receiptを返す。ownerやexcerpt / locator / source textの入力を拒否し、tool discovery、再送、safe errorを確認する | 類推可能 |
 | GR-WR-03 | link_entitiesからのv2 RelationAssertion保存 | 検査: endpoint / Evidence検証、immutable revision、supersedes、status境界、監査をin-memory / Neo4jで一致させる。owner_id + assertion_family_id + revisionの重複をNeo4jでも拒否する | 類推可能 |
 | GR-WR-04 | assertionを通るsearch / fetchのsafe projection | 検査: status、confidence、expires_at、path、Evidence IDを保持し、local_only fieldの流出が0件になる | 類推可能 |
 | GR-WR-05 | stdioからNeo4j再起動後の統合保存・検索gate | 検査: 合成Idea、Claim、Evidence、RelationAssertionを保存し、同じvolume再起動後も同じIDと検索経路を得る。本文は応答artifactに0件とする | 類推可能 |
 
 ## 検査コマンド
 
-- Focused backend: uv run pytest backend/tests/test_founder_graph_source_capture.py backend/tests/test_founder_graph_mcp_write.py backend/tests/test_founder_graph_mcp_api.py backend/tests/test_founder_graph_write.py backend/tests/test_founder_graph_neo4j.py backend/tests/test_founder_graph_neo4j_write_parity.py backend/tests/test_founder_graph_read.py backend/tests/test_founder_graph_mcp_stdio.py -q
+- Focused backend: uv run pytest backend/tests/test_founder_graph_evidence_write.py backend/tests/test_founder_graph_mcp_write.py backend/tests/test_founder_graph_mcp_api.py backend/tests/test_founder_graph_write.py backend/tests/test_founder_graph_neo4j_write_parity.py backend/tests/test_founder_graph_read.py backend/tests/test_founder_graph_neo4j_read.py backend/tests/test_founder_graph_mcp_stdio.py -q
 - Full backend: uv run pytest
 - Static/runtime checks: python -m py_compile backend/dots/founder_graph.py backend/dots/founder_graph_mcp_write.py backend/dots/founder_graph_write.py backend/dots/founder_graph_neo4j.py
 - Patch check: git diff --check
@@ -131,3 +132,4 @@ Then: The graph contains one Source-to-SourceRevision history edge, exactly one 
 | 2026-09-24 | Evidenceの前にSource / Revision / Chunk構造edgeと既存graphの安全な補修を必須gateとして追加 | schema v2のedge契約がNeo4jとin-memoryのwrite実装にまだ存在しないことを監査で確認したため | GR-WR-01A、GR-WR-02 |
 | 2026-09-27 | GR-WR-01Aをin-memory契約とNeo4j transaction parityの独立packetに分割 | 全件preflightと同一transactionの補修・監査を500行以内で安全にレビューできる単位へ分けるため | GR-WR-01A-MEM、GR-WR-01A-N4J |
 | 2026-09-27 | Neo4j repairの全read/writeを一回のwrite transactionへ閉じ、foreign/不正record検査とrollback/replay検査を完了条件へ明記 | implementation時にread/write分離が契約の原子性を満たさないことを確認したため | GR-WR-01A-N4J |
+| 2026-09-27 | GR-WR-02を内部保存GR-WR-02AとMCP公開GR-WR-02Bへ分割し、両方の完了を元の受入条件とする | 完成実装が500行目安を超えたため、機能を削らず独立レビューできる順序へ分割するため | GR-WR-02A、GR-WR-02B |

@@ -123,7 +123,7 @@ Then: ローカル順位付けは全許可データを使い、MCP responseに�
 | SourceRevision | Source一件の一取得版または一編集版 | id, source_id, revision, locator, content_hash, captured_at, egress_policy |
 | ContentChunk | SourceRevision内の引用可能な一範囲 | id, source_revision_id, ordinal, char_start, char_end, text_hash, textまたはcontent locator |
 | Claim | 一つの主語・述語・目的語または一つの数値仮説 | id, claim_type, text, confidence, status, created_at |
-| Evidence | 一つのClaimと一つの引用範囲の対応 | id, polarity, source_revision_id, chunk_id, locator, excerpt_hash |
+| Evidence | 一つのClaimと一つの保存済みContentChunkの対応 | id, polarity, source_revision_id, content_chunk_id, char_start, char_end, content_hash, confidence, egress_policy |
 | RelationAssertion | sourceとtarget間の意味関係一件 | id, owner_id, assertion_family_id, revision, predicate, status, confidence, valid_from, expires_at, supersedes_id, provenance_id, egress_policy |
 | CampaignAuthorizationSnapshot | Campaignで本人が許諾した目的、範囲、送信field、試行予算の一版 | id, campaign_id, revision, purpose, scope_hash, field_categories, run_budget, expires_at, authorized_at |
 | ResearchRun | 一回の独立調査 | id, campaign_id, input_snapshot_hash, model_snapshot, status, started_at, completed_at |
