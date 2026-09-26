@@ -157,7 +157,7 @@ RP-08完成レポートの保存境界（2026-09-26監査追記）: `save_resear
 | RP-02 | 再開指示 | グラフ終了処理修正と画面例外の局所化。独立PR | 検査: US-RP-03のPC実ブラウザー試験。既存mockのみで合格にしない | 既知 |
 | RP-SP-03 | 再開指示 | 初回504のスパイク。中継readyと実requestの時刻、上流到達、session再接続の照合 | 検査: 故障層を特定。2時間上限。本文/鍵をログへ追加せず、モデル準備完了だけで解消扱いにしない | 未知 |
 | RP-03 | RP-SP-03の結論 | 初回接続障害に限定した修正または再接続手順 | 検査: 中継再起動後の最初のreadが3回連続成功。性能比較ではなく成功/失敗の機能検査 | 類推可能 |
-| RP-SP-04 | 再開指示 | 内容抽出のスパイク。entity/relation allowlist、粒度、根拠、訂正、分類階層、MCP最小入口を固定 | 検査: 人間向け5会話の期待graphを先に作り、既存domain/Assertionで表現できるか照合。2時間上限。新schema必要時は影響を記録して計画へ差し戻す | 未知 |
+| RP-SP-04 | 再開指示 | 調査後期待graphの表現可能性スパイク。架空5 fixtureの既存domain/Assertion照合と保存契約確認 | 検査: `backend/tests/test_founder_graph_rp_sp04_expected_graphs.py` 8 passed。関係固有の架空本文・Evidence根拠と同章distractor、初版と分離した新Source/Evidenceを使う完了Run/brief改訂を含む同一family訂正を確認。会話からの自然言語検出・抽出品質・実調査は未検証。Facet階層とEvidence.claim_id/Claim endpoint一致強制、MCP訂正入口は未解決。詳細: `docs/spikes/founder-graph-post-research-relation-extraction.md` | 部分検証済み。schema/API差分はRP-04着手前に再判断 |
 | RP-04 | RP-SP-04の結論 | ChatGPTからentity・根拠・関係候補を保存する最小経路。保存先のLLM常駐jobは追加しない | 検査: US-RP-04。全payload validatorと同一要求再送を検査し、privacy/safetyを回避しない | 類推可能 |
 | RP-05 | RP-04 | 意味関係を検索・再利用する実会話試験 | 検査: US-RP-05。旧固定20問を再測定せず、意味関係5組の機能確認を追加 | 類推可能 |
 | RP-06 | RP-02,RP-04 | semantic graphの通常表示と根拠・推測の表示。独立PR | 検査: US-RP-06、1280×720。履歴edge数を成功指標にしない | 類推可能 |
