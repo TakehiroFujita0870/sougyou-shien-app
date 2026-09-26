@@ -103,6 +103,24 @@ class McpReadSurface:
         if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 200:
             raise McpReadError("invalid_input", "id must be a non-empty string of at most 200 characters.")
         view = self.reads.fetch(identifier, owner_id=owner_id)
+        if view.node_type == NodeType.RELATION_ASSERTION.value:
+            fetch_assertion = getattr(self.reads, "fetch_relation_assertion", None)
+            if not callable(fetch_assertion):
+                raise McpReadError("not_found", "The requested graph result was not found.")
+            try:
+                step = fetch_assertion(identifier, owner_id=owner_id)
+            except GraphReadNotFoundError as error:
+                raise McpReadError("not_found", "The requested graph result was not found.") from error
+            return {
+                "id": step.relation_assertion_id,
+                "kind": NodeType.RELATION_ASSERTION.value,
+                "status": step.status,
+                "confidence": step.confidence,
+                "valid_from": step.valid_from,
+                "expires_at": step.expires_at,
+                "path": [step.source_id, step.predicate, step.target_id],
+                "evidence_ids": list(self._shareable_evidence_ids(step.evidence_ids, owner_id=owner_id)),
+            }
         result = self._project_view(view)
         if result is None:
             raise McpReadError("not_found", "The requested graph result was not found.")

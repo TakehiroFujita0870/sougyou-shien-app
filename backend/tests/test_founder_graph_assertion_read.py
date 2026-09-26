@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from threading import Event, Thread
 
 import pytest
@@ -15,6 +16,7 @@ from dots.founder_graph import (
     Status,
 )
 from dots.founder_graph_read import GraphReadService
+from dots.founder_graph_mcp import McpReadSurface, McpReadError
 from test_founder_graph_relation_assertion_write import _setup
 
 
@@ -36,6 +38,87 @@ def test_search_projects_exact_formal_assertion_path_with_brief_and_evidence():
     assert step.evidence_ids == assertion.evidence_ids
     assert step.based_on_brief_id == brief.id
     assert step.based_on_brief_section_index == assertion.based_on_brief_section_index
+
+
+def test_search_omits_local_only_assertion_from_formal_path():
+    writes, _, _, _, _, assertion = _setup()
+    writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="formal-read")
+    writes._nodes[assertion.id] = replace(assertion, egress_policy=EgressPolicy.LOCAL_ONLY)
+
+    hit = _assertion_hit(GraphReadService(writes), "Synthetic target")
+    assert all(step.relation_assertion_id != assertion.id for step in hit.relation_path)
+
+
+def test_search_omits_evidence_with_invalid_source_lineage():
+    writes, _, _, _, _, assertion = _setup()
+    writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="formal-read")
+    evidence = writes.get_node(assertion.evidence_ids[0])
+    chunk_edge = (evidence.id, "EVIDENCE_FROM", evidence.content_chunk_id)
+    writes._structural_edges.remove(chunk_edge)
+
+    hit = _assertion_hit(GraphReadService(writes), "Synthetic target")
+    assert all(step.relation_assertion_id != assertion.id for step in hit.relation_path)
+
+
+def test_equal_formal_paths_choose_lexically_first_assertion_id():
+    writes, _, _, _, _, first = _setup()
+    later_id = replace(first, id="assertion-z", assertion_family_id="family-z")
+    earlier_id = replace(first, id="assertion-a", assertion_family_id="family-a")
+    writes.save_relation_assertion(later_id, expected_family_revision=None, idempotency_key="formal-z")
+    writes.save_relation_assertion(earlier_id, expected_family_revision=None, idempotency_key="formal-a")
+
+    hit = _assertion_hit(GraphReadService(writes), "Synthetic target")
+
+    assert hit.relation_path[0].relation_assertion_id == "assertion-a"
+
+
+def test_mcp_fetch_returns_only_a_current_grounded_relation_projection():
+    writes, _, _, _, _, assertion = _setup()
+    writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="formal-read")
+
+    result = McpReadSurface(GraphReadService(writes)).call(
+        "fetch", {"id": assertion.id}, owner_id=writes.owner_id,
+    )
+
+    assert result == {
+        "id": assertion.id,
+        "kind": "relation_assertion",
+        "status": assertion.status.value,
+        "confidence": assertion.confidence,
+        "valid_from": assertion.valid_from.isoformat(),
+        "expires_at": assertion.expires_at.isoformat() if assertion.expires_at else None,
+        "path": [assertion.source_id, assertion.predicate.value, assertion.target_id],
+        "evidence_ids": list(assertion.evidence_ids),
+    }
+    assert not {"locator", "excerpt", "source_text", "content_chunk_id", "source_revision_id", "claim_id"}.intersection(result)
+
+
+def test_mcp_fetch_hides_expired_and_local_only_relation_assertions():
+    for override in (
+        {"egress_policy": EgressPolicy.LOCAL_ONLY},
+        {"status": RelationshipStatus.EXPIRED},
+    ):
+        writes, _, _, _, _, assertion = _setup()
+        writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="formal-read")
+        writes._nodes[assertion.id] = replace(assertion, **override)
+
+        with pytest.raises(McpReadError) as error:
+            McpReadSurface(GraphReadService(writes)).call(
+                "fetch", {"id": assertion.id}, owner_id=writes.owner_id,
+            )
+        assert error.value.code == "not_found"
+
+
+def test_search_and_fetch_hide_assertions_past_their_expiration_time():
+    writes, _, _, _, _, assertion = _setup()
+    now = datetime.now(timezone.utc)
+    expired = replace(assertion, valid_from=now - timedelta(days=2), expires_at=now - timedelta(days=1))
+    writes.save_relation_assertion(expired, expected_family_revision=None, idempotency_key="expired-read")
+
+    hit = _assertion_hit(GraphReadService(writes), "Synthetic target")
+    assert all(step.relation_assertion_id != expired.id for step in hit.relation_path)
+    with pytest.raises(McpReadError):
+        McpReadSurface(GraphReadService(writes)).call("fetch", {"id": expired.id}, owner_id=writes.owner_id)
 
 
 @pytest.mark.parametrize("successor_status", [RelationshipStatus.REJECTED, RelationshipStatus.EXPIRED])

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Evidence, Idea, NodeType, RelationAssertion
+from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, RelationAssertion, Source, SourceRevision
 from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
@@ -53,6 +54,12 @@ class FakeReadSession:
             return FakeResult(self.brief_rows)
         if "MATCH (i:Idea" in query:
             return FakeResult(self.idea_rows)
+        if "EVIDENCE_FROM" in query:
+            evidence_id = params.get("evidence_id")
+            for formal_row in self.formal_rows:
+                if formal_row.get("relation") == "EVIDENCED_BY" and formal_row.get("target_id") == evidence_id:
+                    return FakeResult([formal_row["_lineage"]])
+            return FakeResult([])
         if "RelationAssertion" in query:
             return FakeResult([row for row in self.formal_rows if row.get("target_owner_id") in (None, params.get("owner_id"))])
         if "MATCH (a)-[r]->(b)" in query and "matched_ids" in query:
@@ -149,12 +156,44 @@ def _formal_edge_row(assertion, relation: str, target: dict[str, object]) -> dic
 def _formal_fixture(*, assertion_brief_id: str | None = None, evidence_refs: tuple[str, ...] | None = None, assertion_policy=EgressPolicy.SHAREABLE):
     idea = Idea(owner_id="owner-1", id="idea-1", title="Foundry search seed", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
     claim = Claim(owner_id="owner-1", id="claim-1", text="A supported claim", egress_policy=EgressPolicy.SHAREABLE)
-    evidence = Evidence(owner_id="owner-1", id="evidence-1", material_id="material-1", claim_id=claim.id, excerpt="must never leave the adapter", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
+    revision = SourceRevision(owner_id="owner-1", id="revision-1", source_id="source-1", content="grounded synthetic source")
+    source = Source(owner_id="owner-1", id="source-1", title="Synthetic source",
+                    current_revision_id=revision.id, revision=1)
+    chunk = ContentChunk(owner_id="owner-1", id="chunk-1", source_revision_id=revision.id, ordinal=0,
+                         char_start=0, char_end=len(revision.content), text=revision.content)
+    evidence = Evidence(owner_id="owner-1", id="evidence-1", claim_id=claim.id,
+                        source_revision_id=revision.id, content_chunk_id=chunk.id,
+                        char_start=0, char_end=len(revision.content), locator=f"chars:0-{len(revision.content)}",
+                        content_hash=chunk.text_hash, status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
     brief = IdeaBriefVersion(owner_id="owner-1", idea_lineage_root_id=idea.id, based_on_idea_id=idea.id, id="brief-1", research_run_ids=("run-1",), egress_policy="shareable", sections=(IdeaBriefSection(index=0, content="A researched section", evidence_ids=(evidence.id,)),))
     assertion = RelationAssertion(owner_id="owner-1", id="assertion-1", source_id=idea.id, target_id=claim.id, source_kind=NodeType.IDEA, target_kind=NodeType.CLAIM, predicate=RelationType.ADDRESSES, assertion_family_id="family-1", status="inferred", confidence=0.8, evidence_ids=(evidence.id,), valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc), egress_policy=assertion_policy, based_on_brief_id=assertion_brief_id or brief.id, based_on_brief_section_index=0)
     endpoint_rows = {node.id: _persisted_row(node, search_text=getattr(node, "title", getattr(node, "text", ""))) for node in (idea, claim, evidence)}
     rows = [_formal_edge_row(assertion, relation, endpoint_rows[target_id])
             for _source_id, relation, target_id in relation_assertion_structural_edges(assertion)]
+    lineage = {
+        "evidence_owner_id": evidence.owner_id,
+        "evidence_status": evidence.status.value,
+        "evidence_egress_policy": evidence.egress_policy.value,
+        "evidence_payload_json": _persisted_row(evidence)["payload_json"],
+        "evidence_edge_count": 1,
+        "revision_edge_count": 1,
+        "source_history_edge_count": 1,
+        "source_current_edge_count": 1,
+        "source_current_edge_total": 1,
+        "lineages": [{
+            "chunk_id": chunk.id, "chunk_labels": ["ContentChunk"],
+            "chunk_owner_id": chunk.owner_id, "chunk_status": chunk.status.value,
+            "chunk_source_revision_id": chunk.source_revision_id,
+            "chunk_payload_json": _persisted_row(chunk)["payload_json"],
+            "revision_id": revision.id, "revision_owner_id": revision.owner_id,
+            "revision_status": revision.status.value, "revision_payload_json": _persisted_row(revision)["payload_json"],
+            "source_id": source.id, "source_owner_id": source.owner_id,
+            "source_status": source.status.value, "source_payload_json": _persisted_row(source)["payload_json"],
+        }],
+        "claim_id": claim.id, "claim_owner_id": claim.owner_id, "claim_status": claim.status.value,
+        "claim_payload_json": _persisted_row(claim)["payload_json"],
+    }
+    next(row for row in rows if row["relation"] == "EVIDENCED_BY")["_lineage"] = lineage
     if evidence_refs is not None:
         rows = [row for row in rows if row["relation"] != "EVIDENCED_BY"]
         for evidence_id in evidence_refs:
@@ -195,6 +234,70 @@ def test_fetch_hides_foreign_and_non_current_rows() -> None:
         reads.fetch("old", owner_id="owner-1")
 
     assert reads.search("anything", owner_id="owner-2").hits == ()
+
+
+def test_mcp_fetch_returns_validated_formal_relation_projection():
+    driver, reads = _gateway()
+    idea, _claim, _evidence, _brief, assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+    driver.session_value.fetch_rows.append(_persisted_row(assertion))
+
+    result = McpReadSurface(reads).call("fetch", {"id": assertion.id}, owner_id="owner-1")
+
+    assert result["id"] == assertion.id
+    assert result["status"] == assertion.status.value
+    assert result["confidence"] == assertion.confidence
+    assert result["valid_from"] == assertion.valid_from.isoformat()
+    assert result["path"] == [assertion.source_id, assertion.predicate.value, assertion.target_id]
+    assert result["evidence_ids"] == list(assertion.evidence_ids)
+    assert not {"excerpt", "locator", "content_chunk_id", "source_revision_id", "claim_id"}.intersection(result)
+
+
+def test_search_omits_formal_assertion_with_broken_source_lineage():
+    driver, reads = _gateway()
+    idea, claim, _evidence, _brief, _assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+    evidence_row = next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY")
+    evidence_row["_lineage"]["source_current_edge_total"] = 2
+
+    assert not any(item.node.id == claim.id for item in reads.search("Foundry", owner_id="owner-1").hits)
+
+
+def test_search_omits_expired_formal_assertion():
+    driver, reads = _gateway()
+    idea, claim, _evidence, _brief, _assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    for row in formal_rows:
+        payload = json.loads(row["assertion_payload_json"])
+        payload["expires_at"] = "2026-09-01T00:00:00+00:00"
+        row["assertion_payload_json"] = json.dumps(payload)
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+
+    assert not any(item.node.id == claim.id for item in reads.search("Foundry", owner_id="owner-1").hits)
+
+
+def test_search_chooses_lexically_first_assertion_for_equal_paths():
+    driver, reads = _gateway()
+    idea, claim, evidence, _brief, assertion, endpoint_rows, _rows, brief_row = _formal_fixture()
+    assertions = (
+        replace(assertion, id="assertion-z", assertion_family_id="family-z"),
+        replace(assertion, id="assertion-a", assertion_family_id="family-a"),
+    )
+    formal_rows = [
+        _formal_edge_row(item, relation, endpoint_rows[target_id])
+        for item in assertions
+        for _source_id, relation, target_id in relation_assertion_structural_edges(item)
+    ]
+    lineage = _formal_fixture()[6]
+    evidence_lineage = next(row["_lineage"] for row in lineage if row["relation"] == "EVIDENCED_BY")
+    for row in formal_rows:
+        if row["relation"] == "EVIDENCED_BY":
+            row["_lineage"] = evidence_lineage
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+
+    hit = next(item for item in reads.search("Foundry", owner_id="owner-1").hits if item.node.id == claim.id)
+
+    assert hit.evidence_ids == (evidence.id,)
+    assert hit.relation_path[0].relation_assertion_id == "assertion-a"
 
 
 def test_search_returns_neighbor_path_and_uses_parameterized_queries() -> None:
@@ -335,10 +438,9 @@ def test_higher_scoring_formal_path_replaces_all_winning_path_metadata() -> None
     source_low = PersonAsset(owner_id="owner-1", id="person-a", name="Foundry", egress_policy=EgressPolicy.SHAREABLE)
     source_high = PersonAsset(owner_id="owner-1", id="person-z", name="Foundry graph", egress_policy=EgressPolicy.SHAREABLE)
     asset = Asset(owner_id="owner-1", id="asset-1", name="Target", egress_policy=EgressPolicy.SHAREABLE)
-    evidence_low = Evidence(owner_id="owner-1", id="evidence-low", material_id="material-low", source_revision_id="revision-low", egress_policy=EgressPolicy.SHAREABLE)
-    evidence_high = Evidence(owner_id="owner-1", id="evidence-high", material_id="material-high", source_revision_id="revision-high", egress_policy=EgressPolicy.SHAREABLE)
-    nodes = (source_low, source_high, asset, evidence_low, evidence_high)
-    endpoint_rows = {node.id: _persisted_row(node, search_text=getattr(node, "name", "")) for node in nodes}
+    _, claim, evidence, _, _grounded_assertion, endpoint_rows, grounded_rows, _brief_row = _formal_fixture()
+    nodes = (source_low, source_high, asset)
+    endpoint_rows.update({node.id: _persisted_row(node, search_text=getattr(node, "name", "")) for node in nodes})
     assertions = tuple(
         RelationAssertion(
             owner_id="owner-1", id=f"assertion-{suffix}", source_id=source.id, target_id=asset.id,
@@ -347,13 +449,17 @@ def test_higher_scoring_formal_path_replaces_all_winning_path_metadata() -> None
             status="inferred", confidence=0.8, evidence_ids=(evidence.id,),
             valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc), egress_policy=EgressPolicy.SHAREABLE,
         )
-        for suffix, source, evidence in (("low", source_low, evidence_low), ("high", source_high, evidence_high))
+        for suffix, source in (("low", source_low), ("high", source_high))
     )
     formal_rows = [
         _formal_edge_row(assertion, relation, endpoint_rows[target_id])
         for assertion in assertions
         for _source_id, relation, target_id in relation_assertion_structural_edges(assertion)
     ]
+    grounded_lineage = next(row["_lineage"] for row in grounded_rows if row["relation"] == "EVIDENCED_BY")
+    for row in formal_rows:
+        if row["relation"] == "EVIDENCED_BY":
+            row["_lineage"] = grounded_lineage
     driver.session_value.search_rows = [
         {**endpoint_rows[source_low.id], "search_text": "foundry"},
         {**endpoint_rows[source_high.id], "search_text": "foundry graph"},
@@ -365,7 +471,7 @@ def test_higher_scoring_formal_path_replaces_all_winning_path_metadata() -> None
 
     assert hit.path == (source_high.id, RelationType.HAS_CAPABILITY.value, asset.id)
     assert [step.relation_assertion_id for step in hit.relation_path] == ["assertion-high"]
-    assert hit.evidence_ids == (evidence_high.id,)
+    assert hit.evidence_ids == (evidence.id,)
 
 
 def test_search_paginates_with_stable_cursor() -> None:
