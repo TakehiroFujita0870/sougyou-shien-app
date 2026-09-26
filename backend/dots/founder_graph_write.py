@@ -259,6 +259,7 @@ class InMemoryGraphWriteService:
         self._nodes: dict[str, Any] = {}
         self._node_history: dict[str, list[Any]] = {}
         self._relations: dict[str, Relationship] = {}
+        self._structural_edges: list[tuple[str, str, str]] = []
         self._idempotency: dict[str, tuple[str, WriteReceipt]] = {}
         self._audit: list[AuditEvent] = []
         self._lock = RLock()
@@ -399,10 +400,16 @@ class InMemoryGraphWriteService:
             if any(node_id in self._nodes for node_id in node_ids):
                 raise NodeAlreadyExistsError("capture_source node id is already registered")
             audit_length = len(self._audit)
+            edge_length = len(self._structural_edges)
             try:
                 for node in nodes:
                     self._nodes[node.id] = node
                     self._node_history[node.id] = [node]
+                self._structural_edges.extend((
+                    (source.id, "HAS_SOURCE_REVISION", source_revision.id),
+                    (source.id, "CURRENT_SOURCE_REVISION", source_revision.id),
+                    *((source_revision.id, "HAS_CHUNK", chunk.id) for chunk in chunks),
+                ))
                 receipt = WriteReceipt(operation, source.id, NodeType.SOURCE.value, 1, idempotency_key,
                     source_revision_id=source_revision.id, content_chunk_ids=tuple(chunk.id for chunk in chunks))
                 self._append_audit(receipt, actor, fingerprint)
@@ -410,6 +417,7 @@ class InMemoryGraphWriteService:
                 for node_id in node_ids:
                     self._nodes.pop(node_id, None)
                     self._node_history.pop(node_id, None)
+                del self._structural_edges[edge_length:]
                 del self._audit[audit_length:]
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
@@ -567,6 +575,10 @@ class InMemoryGraphWriteService:
     def nodes(self) -> tuple[Any, ...]:
         with self._lock:
             return tuple(self._nodes.values())
+
+    def structural_edges(self) -> tuple[tuple[str, str, str], ...]:
+        with self._lock:
+            return tuple(self._structural_edges)
 
     def node_history(self, node_id: str) -> tuple[Any, ...]:
         with self._lock:

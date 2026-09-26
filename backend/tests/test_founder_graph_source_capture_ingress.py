@@ -29,15 +29,55 @@ def test_ingress_is_atomic_local_only_typed_and_replay_safe(monkeypatch: pytest.
     assert replay.replayed and replay.content_chunk_ids == first.content_chunk_ids
     assert nodes[source.id].current_revision_id == revision.id and nodes[revision.id].source_id == source.id
     assert all(isinstance(nodes[item], ContentChunk) and nodes[item].egress_policy is EgressPolicy.LOCAL_ONLY for item in first.content_chunk_ids)
+    assert set(writes.structural_edges()) == {
+        (source.id, "HAS_SOURCE_REVISION", revision.id),
+        (source.id, "CURRENT_SOURCE_REVISION", revision.id),
+        *((revision.id, "HAS_CHUNK", chunk_id) for chunk_id in first.content_chunk_ids),
+    }
     changed_source, changed_revision = bundle(summary="Changed summary.")
     with pytest.raises(IdempotencyConflictError):
         writes.capture_source(changed_source, changed_revision, idempotency_key="source-1")
 
     other, other_revision = bundle(key="rollback")
+    edges_before_failure = writes.structural_edges()
     monkeypatch.setattr(writes, "_append_audit", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("audit failure")))
     with pytest.raises(RuntimeError):
         writes.capture_source(other, other_revision, idempotency_key="rollback")
     assert other.id not in {node.id for node in writes.nodes()}
+    assert writes.structural_edges() == edges_before_failure
+    assert not any(edge[0] == other.id or edge[2] == other.id for edge in writes.structural_edges())
+
+
+def test_source_retry_after_revision_advance_returns_receipt_without_mutating_state() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    source, revision = bundle()
+    original = writes.capture_source(source, revision, idempotency_key="source-advance")
+    next_revision = SourceRevision(
+        owner_id="owner-1",
+        id=f"{source.id}-revision-2",
+        source_id=source.id,
+        revision=2,
+        supersedes_id=revision.id,
+        locator=revision.locator,
+        content="A later owner-authored source summary.",
+    )
+    writes.put_node(next_revision, idempotency_key="source-revision-2", expected_revision=0)
+    next_source = replace(source, current_revision_id=next_revision.id, revision=2)
+    writes.put_node(next_source, idempotency_key="source-pointer-2", expected_revision=1)
+    nodes_before = writes.nodes()
+    edges_before = writes.structural_edges()
+    audit_before = writes.audit_events()
+    history_before = writes.node_history(source.id)
+
+    replay = writes.capture_source(source, revision, idempotency_key="source-advance")
+
+    assert replay.replayed and replay.target_id == original.target_id
+    assert replay.source_revision_id == original.source_revision_id
+    assert replay.content_chunk_ids == original.content_chunk_ids
+    assert writes.nodes() == nodes_before
+    assert writes.structural_edges() == edges_before
+    assert writes.audit_events() == audit_before
+    assert writes.node_history(source.id) == history_before
 
 
 def test_ingress_rejects_foreign_owner_and_invalid_source_values() -> None:
@@ -72,7 +112,11 @@ class _Result:
 
 
 class _Session:
-    def __init__(self): self.calls = []; self.audit = None
+    def __init__(self):
+        self.calls = []
+        self.audit = None
+        self.source_edges = set()
+        self.current_revision_id = None
     def __enter__(self): return self
     def __exit__(self, *_args): return False
     def close(self): pass
@@ -85,6 +129,13 @@ class _Session:
             self.audit = {"idempotency_key": params["idempotency_key"], "payload_fingerprint": params["fingerprint"],
                 "target_id": params["target_id"], "target_type": params["target_type"], "revision": 1,
                 "source_revision_id": params["revision_id"], "content_chunk_ids": params["chunk_ids"]}
+        if "CREATE (s)-[:HAS_SOURCE_REVISION]" in query:
+            source_id, revision_id = params["source_id"], params["revision_id"]
+            self.source_edges.add((source_id, "HAS_SOURCE_REVISION", revision_id))
+            self.source_edges.add((source_id, "CURRENT_SOURCE_REVISION", revision_id))
+            self.current_revision_id = revision_id
+        if "CREATE (r)-[:HAS_CHUNK]" in query:
+            self.source_edges.add((params["revision_id"], "HAS_CHUNK", params["chunk_id"]))
         return _Result()
 
 
@@ -98,11 +149,42 @@ def test_neo4j_source_write_is_single_callback_with_replay_before_create() -> No
     gateway = Neo4jGraphGateway(driver, "owner-1")
     source, revision = bundle()
     first = gateway.capture_source(source, revision, idempotency_key="source-1")
+    driver.value.source_edges = {
+        edge for edge in driver.value.source_edges if edge[1] != "CURRENT_SOURCE_REVISION"
+    }
+    driver.value.source_edges.add((source.id, "CURRENT_SOURCE_REVISION", "later-revision"))
+    driver.value.current_revision_id = "later-revision"
+    edges_before_replay = set(driver.value.source_edges)
+    calls_before_replay = len(driver.value.calls)
     replay = gateway.capture_source(source, revision, idempotency_key="source-1")
     assert replay.replayed and replay.target_id == first.target_id
     queries = [query for query, _params in driver.value.calls]
     assert queries[0].startswith("MATCH (a:FounderGraphAudit")
     assert next(i for i, query in enumerate(queries) if "CREATE (a:FounderGraphAudit" in query) > 1
+    assert sum("CREATE (s)-[:HAS_SOURCE_REVISION]->(r)" in query for query in queries) == 1
+    assert sum("[:CURRENT_SOURCE_REVISION]->(r)" in query for query in queries) == 1
+    assert sum("CREATE (r)-[:HAS_CHUNK]->(c)" in query for query in queries) == len(first.content_chunk_ids)
+    source_edge_query, source_edge_params = next(
+        (query, params) for query, params in driver.value.calls if "CREATE (s)-[:HAS_SOURCE_REVISION]" in query
+    )
+    assert "owner_id: $owner_id" in source_edge_query
+    assert source_edge_params == {
+        "source_id": source.id,
+        "revision_id": revision.id,
+        "owner_id": "owner-1",
+    }
+    chunk_edge_calls = [
+        (query, params) for query, params in driver.value.calls if "CREATE (r)-[:HAS_CHUNK]" in query
+    ]
+    assert [params["chunk_id"] for _query, params in chunk_edge_calls] == list(first.content_chunk_ids)
+    assert all(params["owner_id"] == "owner-1" for _query, params in chunk_edge_calls)
+    mutation_queries = [query for query in queries if "CREATE " in query or " SET " in query]
+    assert len(mutation_queries) == 5 + (2 * len(first.content_chunk_ids))
+    replay_calls = driver.value.calls[calls_before_replay:]
+    assert len(replay_calls) == 1
+    assert replay_calls[0][0].startswith("MATCH (a:FounderGraphAudit")
+    assert driver.value.source_edges == edges_before_replay
+    assert driver.value.current_revision_id == "later-revision"
 
 
 @pytest.mark.parametrize("kwargs", [{"idempotency_key": ""}, {"actor": "  "}])
