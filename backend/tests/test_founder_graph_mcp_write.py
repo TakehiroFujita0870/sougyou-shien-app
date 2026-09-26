@@ -9,6 +9,7 @@ from dots.founder_graph import (
     EgressPolicy,
     Evidence,
     Idea,
+    MaterialKind,
     NodeType,
     Organization,
     PersonAsset,
@@ -37,6 +38,23 @@ from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 def _surface() -> tuple[InMemoryGraphWriteService, McpWriteSurface]:
     writes = InMemoryGraphWriteService("owner-1")
     return writes, McpWriteSurface(writes)
+
+
+def _capture_link_evidence(
+    writes: InMemoryGraphWriteService, claim_id: str, *, key: str,
+    egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY,
+) -> Evidence:
+    source = Source(owner_id=writes.owner_id, id=f"source-{key}", title="Synthetic source",
+                    kind=MaterialKind.WEB, locator=f"https://example.test/{key}",
+                    current_revision_id=f"revision-{key}", revision=1)
+    revision = SourceRevision(owner_id=writes.owner_id, id=source.current_revision_id,
+                              source_id=source.id, content="Synthetic source text", locator=source.locator)
+    receipt = writes.capture_source(source, revision, idempotency_key=f"source-{key}")
+    evidence_receipt = writes.capture_evidence(
+        claim_id, receipt.content_chunk_ids[0], egress_policy=egress_policy,
+        idempotency_key=f"evidence-{key}",
+    )
+    return writes.get_node(evidence_receipt.target_id)
 
 
 def _seed_report_dependencies(
@@ -404,10 +422,11 @@ def test_link_entities_and_record_correction_use_domain_contracts() -> None:
     writes, surface = _surface()
     person = PersonAsset(owner_id="owner-1", id="person-1", name="Potential partner")
     other_person = PersonAsset(owner_id="owner-1", id="person-2", name="Another partner")
-    evidence = Evidence(owner_id="owner-1", id="evidence-1", material_id="material-1", claim_id="claim-1")
+    claim = Claim(owner_id="owner-1", id="claim-1", text="Synthetic claim")
     writes.put_node(person, idempotency_key="person")
     writes.put_node(other_person, idempotency_key="person-2")
-    writes.put_node(evidence, idempotency_key="evidence")
+    writes.put_node(claim, idempotency_key="claim")
+    evidence = _capture_link_evidence(writes, claim.id, key="link-entities")
     idea_receipt = surface.call(
         "capture_idea",
         {"title": "Partner idea", "idempotency_key": "idea"},
@@ -457,12 +476,9 @@ def test_link_entities_retries_same_formal_assertion_without_duplicate_edges() -
         owner_id="owner-1", id="link-claim", text="Synthetic", confidence=0.8,
         egress_policy=EgressPolicy.SHAREABLE,
     )
-    evidence = Evidence(
-        owner_id="owner-1", id="link-evidence", material_id="link-material", claim_id=claim.id,
-        egress_policy=EgressPolicy.SHAREABLE,
-    )
-    for node in (first, second, claim, evidence):
+    for node in (first, second, claim):
         writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    evidence = _capture_link_evidence(writes, claim.id, key="shareable-link", egress_policy=EgressPolicy.SHAREABLE)
     arguments = {
         "source_id": first.id,
         "target_id": second.id,
@@ -588,11 +604,9 @@ def test_link_entities_passes_exact_idea_brief_evidence_to_formal_adapter() -> N
     writes, surface = _surface()
     idea = Idea(owner_id="owner-1", id="idea-link-researched", title="Synthetic idea")
     claim = Claim(owner_id="owner-1", id="claim-link-researched", text="Synthetic claim", confidence=0.8)
-    evidence = Evidence(
-        owner_id="owner-1", id="evidence-link-researched", material_id="material-link-researched", claim_id=claim.id,
-    )
-    for node in (idea, claim, evidence):
+    for node in (idea, claim):
         writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    evidence = _capture_link_evidence(writes, claim.id, key="idea-link-researched")
     brief = _save_researched_brief(writes, idea, evidence)
 
     receipt = surface.call("link_entities", {

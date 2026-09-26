@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from .founder_graph import NodeType, Relationship, _ALLOWED_RELATION_ENDPOINTS
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 SCHEMA_NAME = "dots-founder-graph"
 
 
@@ -101,6 +101,15 @@ _MIGRATIONS = (
             "REQUIRE (node.owner_id, node.family_key) IS UNIQUE",
         ),
     ),
+    SchemaMigration(
+        version=5,
+        # Defense in depth for immutable assertion-family revisions.
+        queries=(
+            "CREATE CONSTRAINT dots_relationassertion_owner_family_revision IF NOT EXISTS "
+            "FOR (node:RelationAssertion) "
+            "REQUIRE (node.owner_id, node.assertion_family_id, node.revision) IS UNIQUE",
+        ),
+    ),
 )
 
 
@@ -138,6 +147,8 @@ def rollback_queries(current_version: int = SCHEMA_VERSION, target_version: int 
     queries: tuple[str, ...] = ()
     if current_version >= 4 and target_version < 4:
         queries += ("DROP CONSTRAINT dots_assertion_family_lock_owner_key IF EXISTS",)
+    if current_version >= 5 and target_version < 5:
+        queries = ("DROP CONSTRAINT dots_relationassertion_owner_family_revision IF EXISTS",) + queries
     if current_version >= 3 and target_version < 3:
         queries += _drop_queries(_V3_LABELS)
     if current_version >= 2 and target_version < 2:

@@ -505,7 +505,7 @@ def test_migrate_executes_only_versioned_schema_queries() -> None:
     assert all(query.startswith("CREATE ") for query, _params in driver.session_value.calls)
 
 
-def test_default_migrate_targets_schema_v4_and_rollback_drops_only_v4_v3_and_v2_structure() -> None:
+def test_default_migrate_targets_schema_v5_and_rollback_drops_only_schema_structure() -> None:
     driver = FakeDriver()
     gateway = Neo4jGraphGateway(driver, "owner-1")
 
@@ -513,7 +513,7 @@ def test_default_migrate_targets_schema_v4_and_rollback_drops_only_v4_v3_and_v2_
     rolled_back = gateway.rollback()
 
     assert migrated > rolled_back
-    assert rolled_back == 16
+    assert rolled_back == 17
     rollback_queries = [query for query, _params in driver.session_value.calls[-rolled_back:]]
     assert all(query.startswith("DROP ") for query in rollback_queries)
     assert all("IF EXISTS" in query for query in rollback_queries)

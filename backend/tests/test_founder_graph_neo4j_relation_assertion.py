@@ -9,6 +9,7 @@ import pytest
 
 from dots.founder_graph import (
     Claim,
+    ContentChunk,
     EgressPolicy,
     Evidence,
     Idea,
@@ -20,6 +21,7 @@ from dots.founder_graph import (
     RelationType,
     RelationshipStatus,
     Status,
+    SourceRevision,
     relation_assertion_structural_edges,
 )
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
@@ -48,6 +50,20 @@ class RelationTx:
         self.nodes = {node.id: _node_properties(node) for node in nodes}
         self.audits = {}
         self.edges = []
+        for node in nodes:
+            if isinstance(node, Evidence) and node.content_chunk_id is None:
+                revision = SourceRevision(owner_id=node.owner_id, id=f"{node.id}-revision",
+                                          source_id=f"{node.id}-source", content="Synthetic evidence source")
+                chunk = ContentChunk(owner_id=node.owner_id, id=f"{node.id}-chunk",
+                                     source_revision_id=revision.id, ordinal=0, char_start=0,
+                                     char_end=len(revision.content), text=revision.content)
+                grounded = replace(node, material_id=None, source_revision_id=revision.id,
+                                   content_chunk_id=chunk.id, char_start=0, char_end=len(revision.content),
+                                   locator=f"chars:0-{len(revision.content)}", content_hash=chunk.text_hash)
+                self.nodes[node.id] = _node_properties(grounded)
+                self.nodes[revision.id] = _node_properties(revision)
+                self.nodes[chunk.id] = _node_properties(chunk)
+                self.edges.extend(((revision.id, "HAS_CHUNK", chunk.id), (node.id, "EVIDENCE_FROM", chunk.id)))
         self.locks = set()
         self.fail_after_audit = False
         self.fail_after_commit = False
@@ -108,6 +124,35 @@ class RelationTx:
             return Result({"id": row["id"]} for row in self.nodes.values()
                           if row["owner_id"] == owner and row["node_type"] == NodeType.RELATION_ASSERTION.value
                           and row.get("supersedes_id") == params.get("predecessor_id"))
+        if "e.content_chunk_id AS content_chunk_id" in query:
+            row = self.nodes.get(params["evidence_id"])
+            evidence_edge_count = sum(edge[0] == params["evidence_id"] and edge[1] == "EVIDENCE_FROM" for edge in self.edges)
+            chunk_id = row.get("content_chunk_id") if row else None
+            chunk = self.nodes.get(chunk_id) if chunk_id else None
+            revision_id = row.get("source_revision_id") if row else None
+            revision = self.nodes.get(revision_id) if revision_id else None
+            expected_evidence_edge_count = sum(
+                edge[0] == params["evidence_id"] and edge[1] == "EVIDENCE_FROM" and edge[2] == chunk_id
+                and chunk is not None and chunk.get("owner_id") == owner
+                and chunk.get("node_type") == NodeType.CONTENT_CHUNK.value
+                for edge in self.edges
+            )
+            expected_chunk_edge_count = sum(
+                edge[1] == "HAS_CHUNK" and edge[2] == chunk_id and edge[0] == revision_id
+                and revision is not None and revision.get("owner_id") == owner
+                and revision.get("node_type") == NodeType.SOURCE_REVISION.value
+                for edge in self.edges
+            )
+            return Result(({
+                "content_chunk_id": chunk_id, "source_revision_id": revision_id,
+                "chunk_id": chunk.get("id") if chunk else None, "chunk_type": chunk.get("node_type") if chunk else None,
+                "chunk_status": chunk.get("status") if chunk else None,
+                "revision_id": revision.get("id") if revision else None, "revision_type": revision.get("node_type") if revision else None,
+                "revision_status": revision.get("status") if revision else None,
+                "evidence_edge_count": evidence_edge_count, "expected_evidence_edge_count": expected_evidence_edge_count,
+                "chunk_edge_count": sum(edge[1] == "HAS_CHUNK" and edge[2] == chunk_id for edge in self.edges),
+                "expected_chunk_edge_count": expected_chunk_edge_count,
+            },))
         if "MATCH (e:Evidence" in query:
             row = self.nodes.get(params["id"])
             return Result(({"owner_id": row["owner_id"], "node_type": row["node_type"], "status": row["status"],
@@ -223,7 +268,7 @@ def test_persistent_assertion_writes_node_canonical_edges_audit_and_receipt_only
     persisted = state.nodes[assertion.id]
     assert persisted["assertion_family_id"] == assertion.assertion_family_id
     assert persisted.get("supersedes_id") is None
-    assert tuple(state.edges) == relation_assertion_structural_edges(assertion)
+    assert tuple(state.edges[-3:]) == relation_assertion_structural_edges(assertion)
     assert state.audits["assertion-key"]["operation"] == "save_relation_assertion"
     assert state.audits["assertion-key"]["target_id"] == assertion.id
     assert writer.get_node(assertion.id) == assertion
@@ -273,7 +318,7 @@ def test_persistent_idea_assertion_calls_authoritative_brief_and_research_gate()
 
     assert receipt.target_id == assertion.id
     assert history_calls == [(brief.id, idea.id)]
-    assert tuple(state.edges) == relation_assertion_structural_edges(assertion)
+    assert tuple(state.edges[-3:]) == relation_assertion_structural_edges(assertion)
 
 
 @pytest.mark.parametrize("person_policy", [EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE])
@@ -303,15 +348,16 @@ def test_shareable_person_assertion_requires_shareable_endpoint(person_policy):
             assertion, expected_family_revision=None, idempotency_key="shareable-person",
         )
         assert receipt.target_id == assertion.id
-        assert tuple(state.edges) == relation_assertion_structural_edges(assertion)
+        assert tuple(state.edges[-3:]) == relation_assertion_structural_edges(assertion)
 
 
 def test_persistent_assertion_revision_cas_and_idempotency_conflicts_are_write_free():
     state, gateway, assertion = fixture()
     writer = Neo4jGraphWriteService(gateway)
+    before = state.snapshot()
     with pytest.raises(RevisionConflictError):
         writer.save_relation_assertion(assertion, expected_family_revision=1, idempotency_key="stale")
-    assert assertion.id not in state.nodes and not state.edges and not state.audits
+    assert state.snapshot() == before
 
     writer.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="key")
     before = state.snapshot()
@@ -320,7 +366,7 @@ def test_persistent_assertion_revision_cas_and_idempotency_conflicts_are_write_f
     assert state.snapshot() == before
 
 
-@pytest.mark.parametrize("case", ["foreign_endpoint", "wrong_endpoint_type", "inactive_endpoint", "superseded_endpoint", "foreign_evidence", "inactive_evidence"])
+@pytest.mark.parametrize("case", ["foreign_endpoint", "wrong_endpoint_type", "inactive_endpoint", "superseded_endpoint", "foreign_evidence", "inactive_evidence", "missing_evidence_lineage", "missing_chunk_lineage", "evidence_to_wrong_label", "evidence_to_foreign_owner", "wrong_label_into_chunk", "foreign_owner_into_chunk"])
 def test_persistent_assertion_rejects_invalid_owner_type_or_status_without_partial_write(case):
     state, gateway, assertion = fixture()
     if case == "foreign_endpoint":
@@ -335,6 +381,31 @@ def test_persistent_assertion_rejects_invalid_owner_type_or_status_without_parti
         state.nodes[successor.id] = _node_properties(successor)
     elif case == "foreign_evidence":
         state.nodes[assertion.evidence_ids[0]]["owner_id"] = "foreign-owner"
+    elif case == "missing_evidence_lineage":
+        evidence = state.nodes[assertion.evidence_ids[0]]
+        state.edges.remove((assertion.evidence_ids[0], "EVIDENCE_FROM", evidence["content_chunk_id"]))
+    elif case == "missing_chunk_lineage":
+        evidence = state.nodes[assertion.evidence_ids[0]]
+        state.edges.remove((evidence["source_revision_id"], "HAS_CHUNK", evidence["content_chunk_id"]))
+    elif case == "evidence_to_wrong_label":
+        target = Claim(owner_id=assertion.owner_id, id="extra-claim-target", text="Synthetic")
+        state.nodes[target.id] = _node_properties(target)
+        state.edges.append((assertion.evidence_ids[0], "EVIDENCE_FROM", target.id))
+    elif case == "evidence_to_foreign_owner":
+        target = Claim(owner_id="foreign-owner", id="extra-foreign-target", text="Synthetic")
+        state.nodes[target.id] = _node_properties(target)
+        state.edges.append((assertion.evidence_ids[0], "EVIDENCE_FROM", target.id))
+    elif case == "wrong_label_into_chunk":
+        origin = Claim(owner_id=assertion.owner_id, id="extra-claim-origin", text="Synthetic")
+        state.nodes[origin.id] = _node_properties(origin)
+        chunk_id = state.nodes[assertion.evidence_ids[0]]["content_chunk_id"]
+        state.edges.append((origin.id, "HAS_CHUNK", chunk_id))
+    elif case == "foreign_owner_into_chunk":
+        origin = SourceRevision(owner_id="foreign-owner", id="extra-foreign-origin",
+                                source_id="foreign-source", content="Synthetic")
+        state.nodes[origin.id] = _node_properties(origin)
+        chunk_id = state.nodes[assertion.evidence_ids[0]]["content_chunk_id"]
+        state.edges.append((origin.id, "HAS_CHUNK", chunk_id))
     else:
         state.nodes[assertion.evidence_ids[0]]["status"] = Status.RETRACTED.value
     before = state.snapshot()
@@ -443,13 +514,13 @@ def test_typed_get_node_rejects_malformed_persisted_assertion_payload(case):
 
 def test_persistent_assertion_late_failure_rolls_back_node_edges_and_audit():
     state, gateway, assertion = fixture()
+    before = state.snapshot()
     state.fail_after_audit = True
 
     with pytest.raises(Exception):
         gateway.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="fault")
 
-    assert assertion.id not in state.nodes
-    assert not state.edges and not state.audits
+    assert state.snapshot() == before
 
 
 def test_unknown_commit_recovers_only_the_exact_persisted_receipt():
@@ -460,7 +531,7 @@ def test_unknown_commit_recovers_only_the_exact_persisted_receipt():
 
     assert receipt.replayed is True
     assert state.audits["unknown-commit"]["target_id"] == assertion.id
-    assert tuple(state.edges) == relation_assertion_structural_edges(assertion)
+    assert tuple(state.edges[-3:]) == relation_assertion_structural_edges(assertion)
 
 
 def test_relation_family_scalar_properties_are_added_to_node_projection():

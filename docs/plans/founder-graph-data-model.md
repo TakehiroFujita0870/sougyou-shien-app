@@ -1,7 +1,7 @@
 # Founder Graph データモデル正本
 
 最終更新: 2026-09-24
-状態: schema v2 domain contract、migration、fixture parityを実装済み。MCPの意味関係writeはまだschema v1形式のため、Neo4j既定化の意味整合gateは継続中
+状態: schema v2 domain contract、migration、fixture parityを実装済み。MCPの関係writeはv2 RelationAssertionとsource-grounded Evidenceを使用し、read/searchと通常DB migrationのgateは別途継続中
 
 ## 要望 / ゴール / 成功指標
 
@@ -13,9 +13,9 @@
 
 ## 現行schema v1の扱い
 
-2026-09-24の実装監査で、v2のRelationAssertion / ContentChunk型と検索fixtureは存在する一方、MCPのcapture_ideaはContentChunkを作成せず、link_entitiesはv1 Relationshipを保存することを確認した。Evidence新規作成もMCP経由ではできない。これらの実装契約は[根拠付き関係保存計画](founder-graph-relationship-evidence-write.md)に従い、v2へ接続する。v2 Evidenceの新規writeはSourceRevisionとContentChunkを参照し、旧material_idは既存データの読取・変換互換だけに残す。
+2026-09-24の実装監査ではMCPのcapture_ideaがContentChunkを作成せず、link_entitiesがv1 Relationshipを保存し、Evidence新規作成もMCP経由ではできないことを確認した。その後の根拠付き関係保存計画に従い、現行write経路はv2 RelationAssertionとsource-grounded Evidenceを使用する。旧material_id参照は既存データの読取・変換互換に限り、新しい関係の根拠には使用しない。
 
-現行コードは、`Idea`と`Claim`の訂正を新しい同種ノードで表し、Neo4jの主要fieldを`payload_json`にも保持する。`Relationship`はNeo4j relationshipへ直接保存し、根拠IDをJSON配列propertyに置く。この実装は契約試験用のschema v1であり、本書のschema v2を満たしていない。
+2026-09-24時点の実装では`Idea`と`Claim`の訂正を新しい同種ノードで表し、`Relationship`をNeo4j relationshipへ直接保存していた。これはschema v1の履歴記録であり、現行関係writeはRelationAssertionとsource-grounded Evidenceのschema v2契約を使う。
 
 2026-09-23時点で、schema v2へ移行するためのdomain contractとして`EntityRevision`、`RelationAssertion`、`ContentChunk`、`Facet`とpredicate allowlistを追加し、Neo4jへv2の制約・索引を追加するmigrationと非破壊rollbackを実装した。空のNeo4jとv1合成ノードで、移行、同じ移行の再実行、rollback後のデータ保持を実機確認済みである。さらにv2全node typeの一時保存・Neo4j保存・安全なfetch/searchのparityを合成fixtureで確認した。既存データの変換、既定保存先の切替は未完了である。
 

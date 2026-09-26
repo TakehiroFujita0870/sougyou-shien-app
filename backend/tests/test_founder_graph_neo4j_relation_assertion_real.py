@@ -18,11 +18,13 @@ import pytest
 
 from dots.founder_graph import (
     Claim,
+    ContentChunk,
     Evidence,
     NodeType,
     RelationAssertion,
     RelationType,
     RelationshipStatus,
+    SourceRevision,
 )
 from dots.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
 from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
@@ -58,16 +60,28 @@ def _poll_until_ready(driver, timeout_seconds: float = 90) -> bool:
 def _fixture(driver, owner: str, suffix: str) -> tuple[str, str, str]:
     source = Claim(owner_id=owner, id=f"claim-source-{suffix}", text="Synthetic source claim")
     target = Claim(owner_id=owner, id=f"claim-target-{suffix}", text="Synthetic target claim")
+    revision = SourceRevision(owner_id=owner, id=f"source-revision-{suffix}", source_id=f"source-{suffix}",
+                              content="Synthetic evidence source.")
+    chunk = ContentChunk(owner_id=owner, id=f"content-chunk-{suffix}", source_revision_id=revision.id,
+                         ordinal=0, char_start=0, char_end=len(revision.content), text=revision.content)
     evidence = Evidence(
-        owner_id=owner, id=f"evidence-{suffix}", material_id=f"material-{suffix}",
-        claim_id=source.id, excerpt="Synthetic evidence only.",
+        owner_id=owner, id=f"evidence-{suffix}", claim_id=source.id,
+        source_revision_id=revision.id, content_chunk_id=chunk.id,
+        char_start=chunk.char_start, char_end=chunk.char_end, locator=f"chars:{chunk.char_start}-{chunk.char_end}",
+        content_hash=chunk.text_hash,
     )
     with driver.session(database="neo4j") as session:
-        for node, label in ((source, "Claim"), (target, "Claim"), (evidence, "Evidence")):
+        for node, label in ((source, "Claim"), (target, "Claim"), (revision, "SourceRevision"),
+                            (chunk, "ContentChunk"), (evidence, "Evidence")):
             session.run(
                 f"CREATE (n:{label}) SET n = $properties",
                 properties=_node_properties(node),
             ).consume()
+        session.run(
+            "MATCH (r:SourceRevision {id: $revision}), (ch:ContentChunk {id: $chunk}), "
+            "(e:Evidence {id: $evidence}) CREATE (r)-[:HAS_CHUNK]->(ch), (e)-[:EVIDENCE_FROM]->(ch)",
+            revision=revision.id, chunk=chunk.id, evidence=evidence.id,
+        ).consume()
     return source.id, target.id, evidence.id
 
 
@@ -221,6 +235,7 @@ def test_real_neo4j_relation_assertion_atomicity_and_family_races():
     try:
         port = disposable.start()
         from neo4j import GraphDatabase
+        from neo4j.exceptions import ConstraintError
         driver = GraphDatabase.driver(f"bolt://127.0.0.1:{port}", auth=None)
         assert _poll_until_ready(driver), "disposable Neo4j did not pass bounded readiness queries"
         owner = f"owner-{run_id[:12]}"
@@ -239,6 +254,16 @@ def test_real_neo4j_relation_assertion_atomicity_and_family_races():
         assert len(after_first["assertions"]) == 1
         assert len(after_first["structural_edges"]) == 3
         assert len(after_first["audits"]) == len(after_first["receipts"]) == 1
+
+        # The database constraint must reject a second immutable node at the same family revision.
+        with pytest.raises(ConstraintError):
+            with driver.session(database="neo4j") as session:
+                session.run(
+                    "CREATE (:RelationAssertion {id: $id, owner_id: $owner, assertion_family_id: $family, revision: 1})",
+                    id=f"duplicate-revision-{run_id[:12]}", owner=owner,
+                    family=first.assertion_family_id,
+                ).consume()
+        assert _snapshot(driver, owner) == after_first
 
         replay = writer.save_relation_assertion(
             first, expected_family_revision=None, idempotency_key=f"initial-{run_id}",
