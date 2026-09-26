@@ -28,6 +28,7 @@ from .founder_graph import (
     SourceRevision,
     Status,
 )
+from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_neo4j import Neo4jUnavailableError
 from .founder_graph_write import (
     GraphWriteError,
@@ -63,6 +64,18 @@ class McpWriteSurface:
         "record_correction",
         "confirm_person_merge",
     )
+    _DESTRUCTIVE_TOOL_HINTS = {
+        "capture_idea": False,
+        "capture_source": False,
+        "capture_person": False,
+        "capture_organization": False,
+        "append_claim": False,
+        "link_entities": False,
+        "save_research_report": False,
+        "record_decision": False,
+        "record_correction": True,
+        "confirm_person_merge": True,
+    }
 
     def tool_definitions(self) -> tuple[Mapping[str, Any], ...]:
         text = {"type": "string"}
@@ -238,6 +251,10 @@ class McpWriteSurface:
                     else f"Purpose-limited Founder Graph write command: {name}. Provide the fields in the input schema and reuse idempotency_key on retries."
                 ),
                 "readOnly": False,
+                "annotations": mcp_tool_annotations(
+                    read_only=False,
+                    destructive=self._DESTRUCTIVE_TOOL_HINTS[name],
+                ),
                 "inputSchema": schemas.get(name, {"type": "object", "additionalProperties": False}),
             }
             for name in self._TOOL_NAMES
