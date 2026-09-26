@@ -157,6 +157,17 @@ class WriteReceipt:
     content_chunk_ids: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class GraphReadSnapshot:
+    """Coherent immutable collection of values consumed by the memory reader."""
+
+    nodes: tuple[Any, ...]
+    relations: tuple[Relationship, ...]
+    structural_edges: tuple[tuple[str, str, str], ...]
+    idea_briefs: tuple[IdeaBriefVersion, ...]
+    latest_idea_briefs: tuple[tuple[str, IdeaBriefVersion], ...]
+
+
 def _stable(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
@@ -1104,6 +1115,22 @@ class InMemoryGraphWriteService:
     def nodes(self) -> tuple[Any, ...]:
         with self._lock:
             return tuple(self._nodes.values())
+
+    def read_snapshot(self) -> GraphReadSnapshot:
+        """Return all memory read inputs from one lock-held point in time."""
+        with self._lock:
+            latest_briefs = tuple(
+                (root_id, self._idea_briefs[brief_ids[-1]])
+                for root_id, brief_ids in self._idea_brief_ids_by_root.items()
+                if brief_ids
+            )
+            return GraphReadSnapshot(
+                nodes=tuple(self._nodes.values()),
+                relations=tuple(self._relations.values()),
+                structural_edges=tuple(self._structural_edges),
+                idea_briefs=tuple(self._idea_briefs.values()),
+                latest_idea_briefs=latest_briefs,
+            )
 
     def structural_edges(self) -> tuple[tuple[str, str, str], ...]:
         with self._lock:
