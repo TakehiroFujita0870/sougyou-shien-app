@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from urllib.parse import quote
 
 from .founder_graph import NodeType, RelationType, SHAREABLE_PROJECTION_ALLOWLIST
+from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_read import (
     GraphReadError,
     GraphReadPort,
@@ -35,6 +36,7 @@ class McpReadSurface:
                 "name": "search",
                 "description": "Search the local Founder Graph and return safe shareable result summaries.",
                 "readOnly": True,
+                "annotations": mcp_tool_annotations(read_only=True),
                 "inputSchema": {
                     "type": "object",
                     "required": ["query"],
@@ -50,6 +52,7 @@ class McpReadSurface:
                 "name": "fetch",
                 "description": "Fetch one safe shareable Founder Graph result by canonical id.",
                 "readOnly": True,
+                "annotations": mcp_tool_annotations(read_only=True),
                 "inputSchema": {
                     "type": "object",
                     "required": ["id"],

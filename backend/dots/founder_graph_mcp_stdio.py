@@ -51,11 +51,14 @@ def _error(request_id: Any, code: int, message: str, *, data: Mapping[str, Any] 
 def _tool_definition(definition: Mapping[str, Any]) -> dict[str, Any]:
     """Convert the internal definition to the MCP tool shape."""
 
+    annotations = definition.get("annotations")
+    if not isinstance(annotations, Mapping):
+        raise ValueError("MCP tool definition must include annotations")
     return {
         "name": str(definition.get("name", "")),
         "description": str(definition.get("description", "")),
         "inputSchema": _json_value(definition.get("inputSchema", {"type": "object"})),
-        "annotations": {"readOnlyHint": bool(definition.get("readOnly", False))},
+        "annotations": _json_value(annotations),
     }
 
 
