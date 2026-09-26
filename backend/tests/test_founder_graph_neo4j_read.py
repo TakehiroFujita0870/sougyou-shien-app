@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from dots.founder_graph import EgressPolicy, Evidence, Idea, NodeType, RelationAssertion
-from dots.founder_graph import Claim, RelationType, Status, relation_assertion_structural_edges
+from dots.founder_graph import Claim, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
@@ -54,7 +54,7 @@ class FakeReadSession:
         if "MATCH (i:Idea" in query:
             return FakeResult(self.idea_rows)
         if "RelationAssertion" in query:
-            return FakeResult(self.formal_rows)
+            return FakeResult([row for row in self.formal_rows if row.get("target_owner_id") in (None, params.get("owner_id"))])
         if "MATCH (a)-[r]->(b)" in query and "matched_ids" in query:
             if self.search_relation_rows_by_call:
                 index = min(self.search_relation_call_count, len(self.search_relation_rows_by_call) - 1)
@@ -298,6 +298,20 @@ def test_search_omits_formal_assertion_with_archived_claim_endpoint() -> None:
     _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row); row = next(row for row in formal_rows if row["relation"] == "ASSERTS_TO"); payload = json.loads(row["target_payload_json"])
     row["target_status"] = payload["status"] = "archived"; row["target_payload_json"] = json.dumps(payload)
     hits = [item for item in reads.search("Foundry", owner_id="owner-1").hits if item.node.id == claim.id]; assert not hits or hits[0].relation_path == ()
+
+
+@pytest.mark.parametrize(("successor_owner", "visible"), [("owner-2", True), ("owner-1", False)])
+def test_foreign_successor_does_not_hide_local_relation(successor_owner: str, visible: bool) -> None:
+    driver, reads = _gateway()
+    idea, claim, _evidence, _brief, assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+    successor = dict(endpoint_rows[claim.id], id="successor-1", owner_id=successor_owner,
+                     node_type=NodeType.RELATION_ASSERTION.value, revision=2, status="inferred")
+    incoming = _formal_edge_row(assertion, RelationAssertionEdgeType.SUPERSEDES.value, successor)
+    formal_rows.append(incoming | {"is_outgoing": False})
+
+    hits = [item for item in reads.search("Foundry", owner_id="owner-1").hits if item.node.id == claim.id]
+    assert bool(hits and hits[0].relation_path) is visible
 
 
 def test_search_paginates_with_stable_cursor() -> None:

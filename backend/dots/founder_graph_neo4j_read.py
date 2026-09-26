@@ -100,6 +100,7 @@ _SEARCH_RELATIONS_QUERY = (
 _SEARCH_FORMAL_ASSERTIONS_QUERY = (
     "MATCH (a:RelationAssertion {owner_id: $owner_id}) "
     "OPTIONAL MATCH (a)-[r]-(b) "
+    "WHERE b.owner_id = $owner_id "
     "RETURN a.id AS assertion_id, a.owner_id AS assertion_owner_id, "
     "a.node_type AS assertion_node_type, a.revision AS assertion_revision, "
     "a.status AS assertion_status, a.egress_policy AS assertion_egress_policy, "
