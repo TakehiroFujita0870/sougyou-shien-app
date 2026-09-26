@@ -35,7 +35,8 @@ from dots.founder_graph_write import (
 def _setup():
     now = datetime.now(timezone.utc)
     writes = InMemoryGraphWriteService("owner-memory")
-    idea = Idea(id="idea-relation", owner_id=writes.owner_id, title="Synthetic target")
+    idea = Idea(id="idea-relation", owner_id=writes.owner_id, title="Synthetic target",
+                egress_policy=EgressPolicy.SHAREABLE)
     claim = Claim(
         id="claim-relation", owner_id=writes.owner_id, text="Synthetic claim", confidence=0.8,
         evidence_ids=("evidence-relation",), egress_policy=EgressPolicy.SHAREABLE,
@@ -142,9 +143,25 @@ def test_save_assertion_checks_researched_brief_and_replays_without_repair():
     assert writes.get_node(evidence.id) is evidence
 
 
+def test_local_only_assertion_may_cite_local_only_endpoints_and_evidence():
+    writes, idea, claim, evidence, _, assertion = _setup()
+    writes._nodes[idea.id] = replace(idea, egress_policy=EgressPolicy.LOCAL_ONLY)
+    writes._nodes[claim.id] = replace(claim, egress_policy=EgressPolicy.LOCAL_ONLY)
+    writes._nodes[evidence.id] = replace(evidence, egress_policy=EgressPolicy.LOCAL_ONLY)
+    local_assertion = replace(assertion, egress_policy=EgressPolicy.LOCAL_ONLY)
+
+    receipt = writes.save_relation_assertion(
+        local_assertion, expected_family_revision=None, idempotency_key="local-only-assertion",
+    )
+
+    assert receipt.target_id == local_assertion.id
+    assert writes.get_node(local_assertion.id) is local_assertion
+
+
 @pytest.mark.parametrize(
     "case",
-    ["wrong_kind", "foreign_endpoint", "archived_endpoint", "superseded_endpoint", "inactive_evidence", "foreign_evidence", "missing_brief",
+    ["wrong_kind", "foreign_endpoint", "archived_endpoint", "superseded_endpoint", "private_endpoint",
+     "inactive_evidence", "foreign_evidence", "private_evidence", "missing_brief",
      "wrong_section_evidence", "empty_runs", "latest_brief", "missing_run_receipt"],
 )
 def test_invalid_assertion_provenance_fails_without_mutation(case: str):
@@ -157,10 +174,14 @@ def test_invalid_assertion_provenance_fails_without_mutation(case: str):
         writes._nodes[idea.id] = replace(idea, status=Status.ARCHIVED)
     elif case == "superseded_endpoint":
         writes.put_node(claim.revise(text="Superseding claim"), idempotency_key="seed-claim-successor")
+    elif case == "private_endpoint":
+        writes._nodes[idea.id] = replace(idea, egress_policy=EgressPolicy.LOCAL_ONLY)
     elif case == "inactive_evidence":
         writes._nodes[evidence.id] = replace(evidence, status=Status.RETRACTED)
     elif case == "foreign_evidence":
         writes._nodes[evidence.id] = replace(evidence, owner_id="owner-foreign")
+    elif case == "private_evidence":
+        writes._nodes[evidence.id] = replace(evidence, egress_policy=EgressPolicy.LOCAL_ONLY)
     elif case == "missing_brief":
         assertion = replace(assertion, based_on_brief_id="brief-missing")
     elif case == "wrong_section_evidence":
@@ -251,7 +272,8 @@ def test_assertion_cannot_be_created_already_superseded():
 def test_same_family_correction_and_changed_target_family_use_cas_and_one_successor():
     writes, _, claim, _, _, first = _setup()
     writes.save_relation_assertion(first, expected_family_revision=None, idempotency_key="first")
-    other_claim = Claim(id="claim-other", owner_id=writes.owner_id, text="Other target", confidence=0.7)
+    other_claim = Claim(id="claim-other", owner_id=writes.owner_id, text="Other target", confidence=0.7,
+                        egress_policy=EgressPolicy.SHAREABLE)
     writes.put_node(other_claim, idempotency_key="seed-other-claim")
     changed_same_family = replace(first, id="same-family-bad-target", target_id=other_claim.id, revision=2,
                                   supersedes_id=first.id)
