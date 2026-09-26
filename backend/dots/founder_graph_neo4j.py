@@ -662,6 +662,23 @@ class Neo4jGraphGateway:
             tx.run(f"CREATE (n:{chunk_label}) SET n = $properties", properties=_node_properties(chunk))
         tx.run(f"MATCH (n:{source_label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
                id=source.id, owner_id=self.owner_id, properties=_node_properties(source))
+        tx.run(
+            f"MATCH (s:{source_label} {{id: $source_id, owner_id: $owner_id}}), "
+            f"(r:{revision_label} {{id: $revision_id, owner_id: $owner_id}}) "
+            "CREATE (s)-[:HAS_SOURCE_REVISION]->(r), (s)-[:CURRENT_SOURCE_REVISION]->(r)",
+            source_id=source.id,
+            revision_id=revision.id,
+            owner_id=self.owner_id,
+        )
+        for chunk in chunks:
+            tx.run(
+                f"MATCH (r:{revision_label} {{id: $revision_id, owner_id: $owner_id}}), "
+                f"(c:{self.label_for(NodeType.CONTENT_CHUNK)} {{id: $chunk_id, owner_id: $owner_id}}) "
+                "CREATE (r)-[:HAS_CHUNK]->(c)",
+                revision_id=revision.id,
+                chunk_id=chunk.id,
+                owner_id=self.owner_id,
+            )
         receipt = WriteReceipt("capture_source", source.id, NodeType.SOURCE.value, 1, idempotency_key,
                                source_revision_id=revision.id, content_chunk_ids=tuple(chunk.id for chunk in chunks))
         audit_id = f"audit_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
