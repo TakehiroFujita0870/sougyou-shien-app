@@ -80,3 +80,51 @@ def test_explicit_empty_revision_values_do_not_silently_reuse_old_values():
         brief.revise(based_on_idea_id="")
     with pytest.raises(IdeaBriefValidationError):
         brief.revise(egress_policy="")  # type: ignore[arg-type]
+
+
+def test_research_run_ids_are_empty_by_default_and_normalized_to_immutable_tuple():
+    legacy = IdeaBriefVersion(owner_id="owner-test", idea_lineage_root_id="idea-root", based_on_idea_id="idea-current")
+    brief = IdeaBriefVersion(
+        owner_id="owner-test",
+        idea_lineage_root_id="idea-root",
+        based_on_idea_id="idea-current",
+        research_run_ids=["run-one", "run-two"],
+    )
+
+    assert legacy.research_run_ids == ()
+    assert brief.research_run_ids == ("run-one", "run-two")
+    assert isinstance(brief.research_run_ids, tuple)
+
+
+def test_research_run_ids_are_preserved_updated_and_cleared_by_revision():
+    brief = IdeaBriefVersion(
+        owner_id="owner-test",
+        idea_lineage_root_id="idea-root",
+        based_on_idea_id="idea-current",
+        research_run_ids=("run-one",),
+    )
+
+    assert brief.revise().research_run_ids == ("run-one",)
+    assert brief.revise(research_run_ids=["run-two"]).research_run_ids == ("run-two",)
+    assert brief.revise(research_run_ids=()).research_run_ids == ()
+
+
+@pytest.mark.parametrize(
+    "run_ids",
+    [
+        ("",),
+        (" ",),
+        (None,),
+        ("r" * 201,),
+        tuple(f"run-{index}" for index in range(33)),
+        ("run-one", "run-one"),
+    ],
+)
+def test_research_run_ids_reject_invalid_or_unbounded_references(run_ids):
+    with pytest.raises(IdeaBriefValidationError):
+        IdeaBriefVersion(
+            owner_id="owner-test",
+            idea_lineage_root_id="idea-root",
+            based_on_idea_id="idea-current",
+            research_run_ids=run_ids,
+        )

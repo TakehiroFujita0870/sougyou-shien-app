@@ -37,7 +37,7 @@ def _identifier(value: str, name: str) -> str:
     return value.strip()
 
 
-def _strings(values: tuple[str, ...], name: str, *, limit: int = 32) -> tuple[str, ...]:
+def _strings(values: tuple[str, ...] | list[str], name: str, *, limit: int = 32) -> tuple[str, ...]:
     if not isinstance(values, (tuple, list)) or len(values) > limit:
         raise IdeaBriefValidationError(f"{name} must be a bounded sequence")
     result = tuple(_identifier(value, name) for value in values)
@@ -72,6 +72,7 @@ class IdeaBriefVersion:
     idea_lineage_root_id: str
     based_on_idea_id: str
     sections: tuple[IdeaBriefSection, ...] = ()
+    research_run_ids: tuple[str, ...] | list[str] = ()
     id: str = field(default_factory=lambda: f"idea-brief_{uuid4().hex}")
     revision: int = 1
     supersedes_id: str | None = None
@@ -102,6 +103,7 @@ class IdeaBriefVersion:
         if len(by_index) != len(self.sections):
             raise IdeaBriefValidationError("section indexes must be unique")
         object.__setattr__(self, "sections", tuple(by_index.get(index, IdeaBriefSection(index=index)) for index in range(len(SECTION_TITLES))))
+        object.__setattr__(self, "research_run_ids", _strings(self.research_run_ids, "research_run_ids"))
 
     def revise(
         self,
@@ -109,6 +111,7 @@ class IdeaBriefVersion:
         sections: tuple[IdeaBriefSection, ...] = (),
         change_reason: str = "revision",
         based_on_idea_id: str | None = None,
+        research_run_ids: tuple[str, ...] | list[str] | None = None,
         egress_policy: EgressPolicy | None = None,
     ) -> IdeaBriefVersion:
         """Create a new version; omitted sections keep their prior content."""
@@ -124,6 +127,7 @@ class IdeaBriefVersion:
             revision=self.revision + 1,
             supersedes_id=self.id,
             based_on_idea_id=self.based_on_idea_id if based_on_idea_id is None else based_on_idea_id,
+            research_run_ids=self.research_run_ids if research_run_ids is None else research_run_ids,
             sections=tuple(merged.values()),
             change_reason=change_reason,
             egress_policy=self.egress_policy if egress_policy is None else egress_policy,
