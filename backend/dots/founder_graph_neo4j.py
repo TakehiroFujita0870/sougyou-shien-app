@@ -33,6 +33,7 @@ from .founder_graph import (
     ResearchRun,
     Source,
     SourceRevision,
+    MaterialKind,
     Status,
     build_content_chunks,
     validate_run_campaign_reference,
@@ -47,6 +48,8 @@ from .founder_graph_write import (
     NodeAlreadyExistsError,
     RevisionConflictError,
     WriteReceipt,
+    SourceChainRepairPlan,
+    _source_chain_repair_plan,
     capture_idea_payload_fingerprint,
     capture_source_payload_fingerprint,
     validate_capture_source,
@@ -969,6 +972,145 @@ class Neo4jGraphGateway:
             return self._execute_write(session, lambda tx: self._capture_source_tx(
                 tx, source, source_revision, chunks, idempotency_key, actor, fingerprint
             ))
+
+    @staticmethod
+    def _source_chain_node_from_record(record: Any, expected_owner: str) -> Any:
+        """Hydrate only the three typed records used by the repair contract."""
+
+        identifier = _record_value(record, "id")
+        owner_id = _record_value(record, "owner_id")
+        node_type = _record_value(record, "node_type")
+        raw = _record_value(record, "payload_json")
+        if not isinstance(identifier, str) or not isinstance(owner_id, str) or not isinstance(node_type, str):
+            raise GraphWriteError("source-chain node record is malformed")
+        if owner_id != expected_owner:
+            raise GraphWriteError("source-chain node does not belong to the local owner")
+        if not isinstance(raw, str) or not raw.strip():
+            raise GraphWriteError("source-chain node payload is missing")
+        try:
+            payload = json.loads(raw)
+            if not isinstance(payload, dict) or payload.get("id") != identifier or payload.get("owner_id") != owner_id:
+                raise ValueError("identity mismatch")
+            for field_name in ("created_at", "retrieved_at"):
+                if isinstance(payload.get(field_name), str):
+                    payload[field_name] = datetime.fromisoformat(payload[field_name].replace("Z", "+00:00"))
+            provenance = payload.get("provenance")
+            if isinstance(provenance, dict) and isinstance(provenance.get("occurred_at"), str):
+                provenance["occurred_at"] = datetime.fromisoformat(provenance["occurred_at"].replace("Z", "+00:00"))
+            if isinstance(provenance, dict):
+                payload["provenance"] = Provenance(**provenance)
+            if node_type == NodeType.SOURCE.value:
+                payload["kind"] = MaterialKind(payload["kind"])
+                payload["status"] = Status(payload["status"])
+                payload["egress_policy"] = EgressPolicy(payload["egress_policy"])
+                return Source(**payload)
+            if node_type == NodeType.SOURCE_REVISION.value:
+                payload["status"] = Status(payload["status"])
+                payload["egress_policy"] = EgressPolicy(payload["egress_policy"])
+                return SourceRevision(**payload)
+            if node_type == NodeType.CONTENT_CHUNK.value:
+                payload["status"] = Status(payload["status"])
+                payload["egress_policy"] = EgressPolicy(payload["egress_policy"])
+                return ContentChunk(**payload)
+        except (KeyError, TypeError, ValueError, DomainValidationError) as error:
+            raise GraphWriteError("source-chain node payload is malformed") from error
+        raise GraphWriteError("source-chain record has an invalid node type")
+
+    def _source_chain_repair_snapshot_tx(self, tx: Any) -> tuple[int, int, int, tuple[tuple[str, str, str], ...]]:
+        labels = (NodeType.SOURCE, NodeType.SOURCE_REVISION, NodeType.CONTENT_CHUNK)
+        label_clause = " OR ".join(f"n:{self.label_for(value)}" for value in labels)
+        rows = _rows(tx.run(
+            f"MATCH (n) WHERE (n.owner_id = $owner_id OR n.owner_id IS NULL) AND ({label_clause}) "
+            "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, n.payload_json AS payload_json",
+            owner_id=self.owner_id,
+        ))
+        nodes: dict[str, Any] = {}
+        for row in rows:
+            node = self._source_chain_node_from_record(row, self.owner_id)
+            if node.id in nodes:
+                raise GraphWriteError("source-chain node identity is duplicated")
+            nodes[node.id] = node
+        edges: list[tuple[str, str, str]] = []
+        if nodes:
+            edge_rows = _rows(tx.run(
+                "MATCH (a)-[e]->(b) WHERE a.id IN $node_ids OR b.id IN $node_ids "
+                "RETURN a.id AS start_id, type(e) AS edge_type, b.id AS end_id, "
+                "a.owner_id AS start_owner, b.owner_id AS end_owner",
+                node_ids=sorted(nodes),
+            ))
+            for row in edge_rows:
+                start, edge_type, end = (_record_value(row, key) for key in ("start_id", "edge_type", "end_id"))
+                start_owner, end_owner = _record_value(row, "start_owner"), _record_value(row, "end_owner")
+                if start_owner != self.owner_id or end_owner != self.owner_id:
+                    raise GraphWriteError("source-chain edge crosses local owner boundaries")
+                edges.append((start, edge_type, end))
+        return _source_chain_repair_plan(self.owner_id, nodes, edges)
+
+    def preview_source_chain_repair(self) -> SourceChainRepairPlan:
+        """Read and validate all owner source chains without changing Neo4j."""
+
+        with self._session() as session:
+            source_count, revision_count, chunk_count, missing = self._execute_read(
+                session, self._source_chain_repair_snapshot_tx,
+            )
+        return SourceChainRepairPlan(self.owner_id, source_count, revision_count, chunk_count, missing)
+
+    def _apply_source_chain_repair_tx(self, tx: Any, actor: str) -> SourceChainRepairPlan:
+        source_count, revision_count, chunk_count, missing = self._source_chain_repair_snapshot_tx(tx)
+        if not missing:
+            return SourceChainRepairPlan(self.owner_id, source_count, revision_count, chunk_count, ())
+        fingerprint = payload_fingerprint("repair_source_chain_edges", self.owner_id, missing)
+        key = f"source-chain-repair:{fingerprint[:32]}"
+        audit_id = f"audit_{sha256(f'{self.owner_id}:{key}'.encode()).hexdigest()[:32]}"
+        prior_audits = _rows(tx.run(
+            "MATCH (a:FounderGraphAudit {id: $audit_id}) "
+            "RETURN a.owner_id AS owner_id, a.operation AS operation, a.target_id AS target_id, "
+            "a.target_type AS target_type, a.idempotency_key AS idempotency_key, "
+            "a.payload_fingerprint AS payload_fingerprint",
+            audit_id=audit_id,
+        ))
+        if len(prior_audits) > 1:
+            raise GraphWriteError("source-chain repair has duplicate deterministic audit events")
+        prior_audit = prior_audits[0] if prior_audits else None
+        if prior_audit is not None and any(
+            _record_value(prior_audit, field_name) != expected
+            for field_name, expected in (
+                ("owner_id", self.owner_id), ("operation", "repair_source_chain_edges"),
+                ("target_id", self.owner_id), ("target_type", "source_chain"),
+                ("idempotency_key", key), ("payload_fingerprint", fingerprint),
+            )
+        ):
+            raise GraphWriteError("source-chain repair audit conflicts with the deterministic event")
+        for start_id, edge_type, end_id in missing:
+            start_label = self.label_for(NodeType.SOURCE if edge_type != "HAS_CHUNK" else NodeType.SOURCE_REVISION)
+            end_label = self.label_for(
+                NodeType.SOURCE_REVISION
+                if edge_type in {"HAS_SOURCE_REVISION", "CURRENT_SOURCE_REVISION"}
+                else NodeType.CONTENT_CHUNK
+            )
+            result = tx.run(
+                f"MATCH (a:{start_label} {{id: $start_id, owner_id: $owner_id}}), "
+                f"(b:{end_label} {{id: $end_id, owner_id: $owner_id}}) "
+                f"MERGE (a)-[:{edge_type}]->(b) RETURN count(*) AS matched",
+                start_id=start_id, end_id=end_id, owner_id=self.owner_id,
+            )
+            if _record_value(_single(result), "matched", 0) != 1:
+                raise GraphWriteError("source-chain edge target disappeared during repair")
+        tx.run(
+            "MERGE (a:FounderGraphAudit {id: $audit_id}) "
+            "ON CREATE SET a.owner_id = $owner_id, a.actor = $actor, a.operation = $operation, "
+            "a.target_id = $target_id, a.target_type = $target_type, a.revision = 0, "
+            "a.idempotency_key = $key, a.payload_fingerprint = $fingerprint",
+            audit_id=audit_id, owner_id=self.owner_id, actor=actor, operation="repair_source_chain_edges",
+            target_id=self.owner_id, target_type="source_chain", key=key, fingerprint=fingerprint,
+        )
+        return SourceChainRepairPlan(self.owner_id, source_count, revision_count, chunk_count, missing, missing)
+
+    def apply_source_chain_repair(self, *, actor: str = "local-owner") -> SourceChainRepairPlan:
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        with self._session() as session:
+            return self._execute_write(session, lambda tx: self._apply_source_chain_repair_tx(tx, actor.strip()))
 
     def record_research_run(
         self,

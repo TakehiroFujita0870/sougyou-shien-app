@@ -32,6 +32,7 @@ from .founder_graph_write import (
     GraphWriteNotFoundError,
     GraphWritePort,
     RevisionConflictError,
+    SourceChainRepairPlan,
     WriteReceipt,
 )
 
@@ -172,6 +173,12 @@ class Neo4jGraphWriteService(GraphWritePort):
 
     def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
         return self.gateway.capture_source(source, source_revision, idempotency_key=idempotency_key, actor=actor)
+
+    def preview_source_chain_repair(self) -> SourceChainRepairPlan:
+        return self.gateway.preview_source_chain_repair()
+
+    def apply_source_chain_repair(self, *, actor: str = "local-owner") -> SourceChainRepairPlan:
+        return self.gateway.apply_source_chain_repair(actor=actor)
 
     def record_research_run(
         self,

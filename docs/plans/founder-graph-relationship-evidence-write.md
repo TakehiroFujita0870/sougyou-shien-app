@@ -98,7 +98,7 @@ Then: The graph contains one Source-to-SourceRevision history edge, exactly one 
 |---|---|---|---|
 | GR-WR-01 | capture_idea時の決定的ContentChunk生成と、SourceRevision / chunk IDだけを含む後方互換WriteReceipt | 検査: 4,000 Unicode文字上限、CRLF一つと空行CRLF二つの境界、連続offset、再構成hash、空本文、冪等再送、旧fingerprint監査からの安全なchunk backfill、本文非返却をin-memory / Neo4j parityで確認する | 類推可能 |
 | GR-WR-01A-MEM | in-memoryのsource-chain repair preview/apply契約、事前検査、focused test | 検査: `uv run pytest backend/tests/test_founder_graph_source_repair.py -q` で全件事前検査、preview無変更、不足edgeだけの追加、監査の重複防止、矛盾時停止を確認する | 類推可能 |
-| GR-WR-01A-N4J | Neo4j parityとtransactionalなsource-chain repair preview/apply | 検査: `uv run pytest backend/tests/test_founder_graph_source_repair.py -q` で永続backendの事前検査parity、edge/監査の同一transaction書込、rollback、再実行を確認する | 類推可能 |
+| GR-WR-01A-N4J | Neo4j parityとtransactionalなsource-chain repair preview/apply。preflightの全read、不足edge、決定的auditをapplyの単一`execute_write` callback内で実行する | 検査: Neo4j source-repair testでpreview read-only、foreign/malformed/contradictory graphのfail-closed、edge/audit同一transaction、rollback、再実行時audit重複なしを確認する | 類推可能 |
 | GR-WR-02 | GR-WR-01A完了後に公開するv2 Evidence契約と用途限定capture_evidence MCP write | 検査: Claim、Chunk、SourceRevisionの型・存在・ownerを確認し、Evidenceと構造edgeを原子的・冪等に保存する。旧material参照はread-only互換とする | 類推可能 |
 | GR-WR-03 | link_entitiesからのv2 RelationAssertion保存 | 検査: endpoint / Evidence検証、immutable revision、supersedes、status境界、監査をin-memory / Neo4jで一致させる。owner_id + assertion_family_id + revisionの重複をNeo4jでも拒否する | 類推可能 |
 | GR-WR-04 | assertionを通るsearch / fetchのsafe projection | 検査: status、confidence、expires_at、path、Evidence IDを保持し、local_only fieldの流出が0件になる | 類推可能 |
@@ -130,3 +130,4 @@ Then: The graph contains one Source-to-SourceRevision history edge, exactly one 
 | 2026-09-24 | capture_ideaのfingerprintを履歴互換に戻し、receipt参照のない旧監査からのtransactional backfillとCRLF境界検査を追加 | GR-WR-01 reviewで永続再送の旧fingerprint不一致とCRLF誤分割を検出したため | GR-WR-01 |
 | 2026-09-24 | Evidenceの前にSource / Revision / Chunk構造edgeと既存graphの安全な補修を必須gateとして追加 | schema v2のedge契約がNeo4jとin-memoryのwrite実装にまだ存在しないことを監査で確認したため | GR-WR-01A、GR-WR-02 |
 | 2026-09-27 | GR-WR-01Aをin-memory契約とNeo4j transaction parityの独立packetに分割 | 全件preflightと同一transactionの補修・監査を500行以内で安全にレビューできる単位へ分けるため | GR-WR-01A-MEM、GR-WR-01A-N4J |
+| 2026-09-27 | Neo4j repairの全read/writeを一回のwrite transactionへ閉じ、foreign/不正record検査とrollback/replay検査を完了条件へ明記 | implementation時にread/write分離が契約の原子性を満たさないことを確認したため | GR-WR-01A-N4J |
