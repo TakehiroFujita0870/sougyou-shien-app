@@ -337,12 +337,22 @@ def test_capture_person_and_organization_are_idempotent_and_keep_relationships_e
     assert isinstance(person, PersonAsset)
     assert person.owner_id == "owner-1"
     assert person.egress_policy is EgressPolicy.LOCAL_ONLY
+    assert person.provenance.operation == "capture_person"
+    assert person.provenance.target_id == person.id
     assert dict(person.contact) == person_args["contact"]
     assert person.private_notes == person_args["private_notes"]
     assert isinstance(organization, Organization)
     assert organization.owner_id == "owner-1"
     assert organization.egress_policy is EgressPolicy.SHAREABLE
+    assert organization.provenance.operation == "capture_organization"
+    assert organization.provenance.target_id == organization.id
     assert project_shareable(organization)["name"] == organization.name
+    reader = McpReadSurface(GraphReadService(writes))
+    organization_projection = reader.call("fetch", {"id": organization.id}, owner_id="owner-1")
+    assert organization_projection["id"] == organization.id
+    assert "provenance" not in str(organization_projection)
+    with pytest.raises(McpReadError):
+        reader.call("fetch", {"id": person.id}, owner_id="owner-1")
     assert replay_person.target_id == first_person.target_id
     assert replay_person.replayed is True
     assert replay_organization.target_id == first_organization.target_id
