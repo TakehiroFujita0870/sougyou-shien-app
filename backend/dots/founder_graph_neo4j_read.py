@@ -591,7 +591,8 @@ class Neo4jGraphReadService:
                         continue
                     scores[neighbor_id] = candidate_score
                     paths[neighbor_id] = candidate_path
-                    relation_paths[neighbor_id] = (*relation_paths.get(current_id, ()), step)
+                    prior_steps = relation_paths.get(current_id, ())
+                    relation_paths[neighbor_id] = (*prior_steps, step) if not current_path or len(prior_steps) == (len(current_path) - 1) // 2 else ()
                     evidence_by_node[neighbor_id] = tuple(dict.fromkeys((*evidence_by_node.get(current_id, ()), *step.evidence_ids)))
                     next_frontier.add(neighbor_id)
             relation_rows = _rows(tx.run(
@@ -625,6 +626,7 @@ class Neo4jGraphReadService:
                         continue
                     scores[neighbor.id] = candidate_score
                     paths[neighbor.id] = candidate_path
+                    relation_paths[neighbor.id] = ()
                     evidence_by_node[neighbor.id] = tuple(dict.fromkeys((*evidence_by_node.get(current.id, ()), *edge_evidence)))
                     next_frontier.add(neighbor.id)
             frontier = next_frontier

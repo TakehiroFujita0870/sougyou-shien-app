@@ -314,6 +314,22 @@ def test_foreign_successor_does_not_hide_local_relation(successor_owner: str, vi
     assert bool(hits and hits[0].relation_path) is visible
 
 
+def test_higher_scoring_legacy_path_replaces_formal_path_provenance() -> None:
+    driver, reads = _gateway(); idea, claim, _evidence, _brief, _assertion, rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, rows, formal_rows, brief_row)
+    idea_row = {**rows[idea.id], "search_text": "foundry"}
+    person = _node_row("person-1", node_type=NodeType.PERSON.value, title="Foundry graph", search_text="Foundry graph")
+    driver.session_value.search_rows = [idea_row, person]; driver.session_value.fetch_rows.append(person)
+    driver.session_value.search_relation_rows = [_relation_row(person, rows[claim.id], RelationType.USES_SKILL.value)]
+
+    page = reads.search("Foundry graph", owner_id="owner-1")
+    hit = next(item for item in page.hits if item.node.id == claim.id)
+    assert hit.path == (person["id"], RelationType.USES_SKILL.value, claim.id) and hit.relation_path == ()
+    result = McpReadSurface(reads).call("search", {"query": "Foundry graph"}, owner_id="owner-1")
+    claim_result = next(item for item in result["results"] if item["id"] == claim.id)
+    assert claim_result["relation_path"] == list(hit.path) and "semantic_relation_path" not in claim_result
+
+
 def test_search_paginates_with_stable_cursor() -> None:
     driver, reads = _gateway()
     driver.session_value.search_rows = [
