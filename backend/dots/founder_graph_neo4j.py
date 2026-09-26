@@ -22,6 +22,8 @@ from .founder_graph import (
     ContentChunk,
     DomainValidationError,
     EgressPolicy,
+    Evidence,
+    EvidencePolarity,
     NodeType,
     Provenance,
     ReportVersion,
@@ -909,6 +911,8 @@ class Neo4jGraphGateway:
     ) -> WriteReceipt:
         if getattr(node, "owner_id", None) != self.owner_id:
             raise GraphWriteError("node owner does not match the local owner")
+        if isinstance(node, Evidence) and node.content_chunk_id is not None:
+            raise GraphWriteError("source-grounded Evidence must be saved with capture_evidence")
         node_type = node.node_type if isinstance(node.node_type, NodeType) else NodeType(node.node_type)
         label = self.label_for(node_type)
         fingerprint = payload_fingerprint(operation, node, expected_revision, self.owner_id)
@@ -972,6 +976,97 @@ class Neo4jGraphGateway:
             return self._execute_write(session, lambda tx: self._capture_source_tx(
                 tx, source, source_revision, chunks, idempotency_key, actor, fingerprint
             ))
+
+    def capture_evidence(self, claim_id: str, content_chunk_id: str, *, polarity: EvidencePolarity | str | None = None,
+                         confidence: float = 1.0, egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY,
+                         idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        if not isinstance(claim_id, str) or not claim_id.strip() or not isinstance(content_chunk_id, str) or not content_chunk_id.strip():
+            raise GraphWriteError("capture_evidence requires Claim and ContentChunk ids")
+        claim_id, content_chunk_id = claim_id.strip(), content_chunk_id.strip()
+        try:
+            polarity = EvidencePolarity.SUPPORTS if polarity is None else EvidencePolarity(polarity)
+            policy = EgressPolicy(egress_policy)
+        except (TypeError, ValueError) as error:
+            raise GraphWriteError("capture_evidence arguments are invalid") from error
+        fingerprint = payload_fingerprint("capture_evidence", claim_id, content_chunk_id, polarity, confidence, policy, self.owner_id)
+        evidence_id = f"evidence-{sha256((self.owner_id + ':' + idempotency_key).encode()).hexdigest()[:24]}"
+        with self._session() as session:
+            def write(tx: Any) -> WriteReceipt:
+                replay = self._put_node_replay_tx(
+                    tx, operation="capture_evidence", idempotency_key=idempotency_key, fingerprint=fingerprint,
+                )
+                if replay is not None:
+                    if replay.target_type != NodeType.EVIDENCE.value or replay.target_id != evidence_id:
+                        raise IdempotencyConflictError("idempotency key was reused with a different payload")
+                    return replay
+                row = _single(tx.run(
+                    "MATCH (c:Claim {id: $claim_id, owner_id: $owner_id}), "
+                    "(ch:ContentChunk {id: $chunk_id, owner_id: $owner_id}) "
+                    "RETURN c.node_type AS claim_type, c.status AS claim_status, "
+                    "ch.node_type AS chunk_type, ch.status AS chunk_status, ch.payload_json AS chunk_payload",
+                    claim_id=claim_id.strip(), chunk_id=content_chunk_id.strip(), owner_id=self.owner_id,
+                ))
+                if row is None:
+                    raise GraphWriteNotFoundError("claim or content chunk does not exist")
+                if (_record_value(row, "claim_type") != NodeType.CLAIM.value
+                    or _record_value(row, "chunk_type") != NodeType.CONTENT_CHUNK.value
+                    or any(_record_value(row, name) != Status.ACTIVE.value for name in ("claim_status", "chunk_status"))):
+                    raise GraphWriteNotFoundError("claim or content chunk does not exist")
+                raw_chunk = _record_value(row, "chunk_payload")
+                try:
+                    chunk = json.loads(raw_chunk) if isinstance(raw_chunk, str) else None
+                except (TypeError, ValueError) as error:
+                    raise GraphWriteError("content chunk payload is malformed") from error
+                if not isinstance(chunk, dict) or chunk.get("id") != content_chunk_id or chunk.get("owner_id") != self.owner_id:
+                    raise GraphWriteError("content chunk payload is malformed")
+                revision_id = chunk.get("source_revision_id")
+                char_start, char_end = chunk.get("char_start"), chunk.get("char_end")
+                chunk_text, chunk_hash = chunk.get("text"), chunk.get("text_hash")
+                if (not isinstance(revision_id, str) or not isinstance(char_start, int) or isinstance(char_start, bool)
+                    or not isinstance(char_end, int) or isinstance(char_end, bool) or not isinstance(chunk_text, str)
+                    or not isinstance(chunk_hash, str) or char_start < 0 or char_end <= char_start
+                    or char_end - char_start != len(chunk_text)
+                    or sha256(chunk_text.encode("utf-8")).hexdigest() != chunk_hash):
+                    raise GraphWriteError("content chunk range or hash is invalid")
+                lineage = _single(tx.run(
+                    "MATCH (r:SourceRevision {id: $revision_id, owner_id: $owner_id}), "
+                    "(ch:ContentChunk {id: $chunk_id, owner_id: $owner_id}) "
+                    "OPTIONAL MATCH (r)-[edge:HAS_CHUNK]->(ch) "
+                    "RETURN r.node_type AS revision_type, r.status AS revision_status, count(edge) AS lineage_count",
+                    revision_id=revision_id, chunk_id=content_chunk_id, owner_id=self.owner_id,
+                ))
+                if lineage is None or _record_value(lineage, "revision_type") != NodeType.SOURCE_REVISION.value:
+                    raise GraphWriteNotFoundError("content chunk source revision does not exist")
+                if _record_value(lineage, "revision_status") != Status.ACTIVE.value:
+                    raise GraphWriteError("source revision must be active")
+                if _record_value(lineage, "lineage_count") != 1:
+                    raise GraphWriteError("content chunk source lineage is invalid")
+                evidence_value = Evidence(
+                    owner_id=self.owner_id, id=evidence_id, material_id=None, claim_id=claim_id,
+                    source_revision_id=revision_id, content_chunk_id=content_chunk_id,
+                    char_start=char_start, char_end=char_end,
+                    locator=f"chars:{char_start}-{char_end}",
+                    excerpt="", polarity=polarity, confidence=confidence,
+                    content_hash=chunk_hash, egress_policy=policy,
+                )
+                receipt = self._put_node_tx(
+                    tx, evidence_value, NodeType.EVIDENCE, self.label_for(NodeType.EVIDENCE),
+                    idempotency_key, None, "capture_evidence", actor, fingerprint,
+                )
+                linked = _single(tx.run(
+                    "MATCH (e:Evidence {id: $evidence_id, owner_id: $owner_id}), "
+                    "(ch:ContentChunk {id: $chunk_id, owner_id: $owner_id}) "
+                    "MERGE (e)-[:EVIDENCE_FROM]->(ch) RETURN e.id AS id",
+                    evidence_id=evidence_value.id, chunk_id=content_chunk_id, owner_id=self.owner_id,
+                ))
+                if linked is None:
+                    raise GraphWriteNotFoundError("content chunk does not exist")
+                return receipt
+            return self._execute_write(session, write)
 
     @staticmethod
     def _source_chain_node_from_record(record: Any, expected_owner: str) -> Any:

@@ -18,10 +18,13 @@ from urllib.parse import urlsplit
 
 from .founder_graph import (
     CampaignAuthorizationRegistry,
+    Claim,
     ContentChunk,
     EgressPolicy,
     DomainValidationError,
     Evidence,
+    EvidenceEdgeType,
+    EvidencePolarity,
     Idea,
     NodeType,
     PersonAsset,
@@ -98,6 +101,11 @@ class GraphWritePort(Protocol):
 
     def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> "WriteReceipt":
         """Persist one local-only web source, its authored revision, and chunks atomically."""
+
+    def capture_evidence(self, claim_id: str, content_chunk_id: str, *, polarity: EvidencePolarity | str | None = None,
+                         confidence: float = 1.0, egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY,
+                         idempotency_key: str, actor: str = "local-owner") -> "WriteReceipt":
+        """Cite a persisted same-owner ContentChunk without accepting source text."""
 
     def link_entities(
         self,
@@ -396,6 +404,7 @@ class InMemoryGraphWriteService:
         "put_node",
         "capture_idea",
         "capture_source",
+        "capture_evidence",
         "record_research_run",
         "save_idea_brief",
         "capture_person",
@@ -438,6 +447,8 @@ class InMemoryGraphWriteService:
             raise GraphWriteError("node owner does not match the local owner")
         if isinstance(node, RelationAssertion):
             raise GraphWriteError("RelationAssertion must be saved with save_relation_assertion")
+        if isinstance(node, Evidence) and node.content_chunk_id is not None:
+            raise GraphWriteError("source-grounded Evidence must be saved with capture_evidence")
         fingerprint = payload_fingerprint(operation, node, expected_revision, self.owner_id)
         with self._lock:
             replay = self._replay_or_raise(idempotency_key, fingerprint)
@@ -589,6 +600,59 @@ class InMemoryGraphWriteService:
                 for node_id in node_ids:
                     self._nodes.pop(node_id, None)
                     self._node_history.pop(node_id, None)
+                del self._structural_edges[edge_length:]
+                del self._audit[audit_length:]
+                raise
+            self._idempotency[idempotency_key] = (fingerprint, receipt)
+            return receipt
+
+    def capture_evidence(self, claim_id: str, content_chunk_id: str, *, polarity: EvidencePolarity | str | None = None,
+                         confidence: float = 1.0, egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY,
+                         idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        operation = self._validate_command("capture_evidence", actor, idempotency_key)
+        try:
+            polarity = EvidencePolarity.SUPPORTS if polarity is None else EvidencePolarity(polarity)
+            policy = EgressPolicy(egress_policy)
+            claim_id = _required_text(claim_id, "claim_id")
+            content_chunk_id = _required_text(content_chunk_id, "content_chunk_id")
+        except (ValueError, TypeError) as error:
+            raise GraphWriteError("capture_evidence arguments are invalid") from error
+        fingerprint = payload_fingerprint(operation, claim_id, content_chunk_id, polarity, confidence, policy, self.owner_id)
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            claim, chunk = self._nodes.get(claim_id), self._nodes.get(content_chunk_id)
+            if not isinstance(claim, Claim) or claim.owner_id != self.owner_id or claim.status is not Status.ACTIVE:
+                raise GraphWriteNotFoundError("claim does not exist")
+            if not isinstance(chunk, ContentChunk) or chunk.owner_id != self.owner_id or chunk.status is not Status.ACTIVE:
+                raise GraphWriteNotFoundError("content chunk does not exist")
+            revision = self._nodes.get(chunk.source_revision_id)
+            if not isinstance(revision, SourceRevision) or revision.owner_id != self.owner_id or revision.status is not Status.ACTIVE:
+                raise GraphWriteNotFoundError("content chunk does not exist")
+            required_edge = (revision.id, "HAS_CHUNK", chunk.id)
+            if self._structural_edges.count(required_edge) != 1:
+                raise GraphWriteError("content chunk source lineage is invalid")
+            evidence_id = f"evidence-{sha256((self.owner_id + ':' + idempotency_key).encode()).hexdigest()[:24]}"
+            evidence = Evidence(
+                owner_id=self.owner_id, id=evidence_id, material_id=None, claim_id=claim.id,
+                source_revision_id=revision.id, content_chunk_id=chunk.id, excerpt="",
+                locator=f"chars:{chunk.char_start}-{chunk.char_end}", char_start=chunk.char_start,
+                char_end=chunk.char_end, polarity=polarity, confidence=confidence,
+                content_hash=chunk.text_hash, egress_policy=policy,
+            )
+            receipt = WriteReceipt(operation, evidence.id, NodeType.EVIDENCE.value, 1, idempotency_key)
+            audit_length, edge_length = len(self._audit), len(self._structural_edges)
+            try:
+                if evidence.id in self._nodes:
+                    raise NodeAlreadyExistsError("evidence id is already registered")
+                self._nodes[evidence.id] = evidence
+                self._node_history[evidence.id] = [evidence]
+                self._structural_edges.append((evidence.id, EvidenceEdgeType.EVIDENCE_FROM.value, chunk.id))
+                self._append_audit(receipt, actor, fingerprint)
+            except Exception:
+                self._nodes.pop(evidence.id, None)
+                self._node_history.pop(evidence.id, None)
                 del self._structural_edges[edge_length:]
                 del self._audit[audit_length:]
                 raise

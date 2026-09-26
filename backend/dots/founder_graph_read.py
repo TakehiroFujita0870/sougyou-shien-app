@@ -216,6 +216,8 @@ def _json_value(value: Any) -> Any:
 def _node_view(node: Any) -> NodeView:
     node_type = node.node_type if isinstance(node.node_type, NodeType) else NodeType(node.node_type)
     fields_to_copy = _FIELD_ALLOWLIST[node_type]
+    if node_type is NodeType.EVIDENCE and getattr(node, "content_chunk_id", None) is not None:
+        fields_to_copy = ("polarity", "confidence", "content_hash", "status", "egress_policy")
     values = {
         field_name: _json_value(getattr(node, field_name))
         for field_name in fields_to_copy

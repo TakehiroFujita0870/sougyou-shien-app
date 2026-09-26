@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from .founder_graph import (
     Claim,
     EgressPolicy,
+    EvidencePolarity,
     Idea,
     NodeType,
     Provenance,
@@ -173,6 +174,14 @@ class Neo4jGraphWriteService(GraphWritePort):
 
     def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
         return self.gateway.capture_source(source, source_revision, idempotency_key=idempotency_key, actor=actor)
+
+    def capture_evidence(self, claim_id: str, content_chunk_id: str, *, polarity: EvidencePolarity | str | None = None,
+                         confidence: float = 1.0, egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY,
+                         idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.capture_evidence(
+            claim_id, content_chunk_id, polarity=polarity, confidence=confidence,
+            egress_policy=egress_policy, idempotency_key=idempotency_key, actor=actor,
+        )
 
     def preview_source_chain_repair(self) -> SourceChainRepairPlan:
         return self.gateway.preview_source_chain_repair()

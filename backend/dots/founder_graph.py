@@ -358,6 +358,10 @@ class RelationAssertionEdgeType(StrEnum):
     SUPERSEDES = "SUPERSEDES"
 
 
+class EvidenceEdgeType(StrEnum):
+    EVIDENCE_FROM = "EVIDENCE_FROM"
+
+
 RelationshipType = RelationType
 
 
@@ -815,7 +819,7 @@ class ResearchMaterial:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Evidence:
-    material_id: str
+    material_id: str | None = None
     owner_id: str | None = None
     id: str = field(default_factory=lambda: new_id("evidence"))
     claim_id: str | None = None
@@ -825,6 +829,9 @@ class Evidence:
     polarity: EvidencePolarity = EvidencePolarity.SUPPORTS
     confidence: float = 1.0
     content_hash: str | None = None
+    content_chunk_id: str | None = None
+    char_start: int | None = None
+    char_end: int | None = None
     status: Status = Status.ACTIVE
     egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
     provenance: Provenance = field(default_factory=Provenance)
@@ -832,22 +839,47 @@ class Evidence:
     def __post_init__(self) -> None:
         object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
         object.__setattr__(self, "id", _identifier(self.id, "id"))
-        object.__setattr__(self, "material_id", _identifier(self.material_id, "material_id"))
+        if self.material_id is not None:
+            object.__setattr__(self, "material_id", _identifier(self.material_id, "material_id"))
         if self.claim_id is not None:
             object.__setattr__(self, "claim_id", _identifier(self.claim_id, "claim_id"))
         if self.source_revision_id is not None:
             object.__setattr__(self, "source_revision_id", _identifier(self.source_revision_id, "source_revision_id"))
+        if self.content_chunk_id is not None:
+            object.__setattr__(self, "content_chunk_id", _identifier(self.content_chunk_id, "content_chunk_id"))
+        if (self.char_start is None) != (self.char_end is None):
+            raise DomainValidationError("evidence locator offsets must be supplied together")
+        if self.char_start is not None and (
+            not isinstance(self.char_start, int) or isinstance(self.char_start, bool)
+            or not isinstance(self.char_end, int) or isinstance(self.char_end, bool)
+            or self.char_start < 0 or self.char_end <= self.char_start
+        ):
+            raise DomainValidationError("evidence locator offsets are invalid")
         if self.claim_id is None and self.source_revision_id is None:
             raise DomainValidationError("evidence must link a claim or source revision")
+        if self.content_chunk_id is None and self.material_id is None:
+            raise DomainValidationError("evidence must link a legacy material or content chunk")
+        if self.content_chunk_id is not None and (self.claim_id is None or self.source_revision_id is None):
+            raise DomainValidationError("source-grounded evidence requires a claim and source revision")
         object.__setattr__(self, "excerpt", _text(self.excerpt, "excerpt", allow_empty=True))
         if self.locator is not None:
             object.__setattr__(self, "locator", _identifier(self.locator, "locator"))
+        if self.content_chunk_id is not None:
+            if self.material_id is not None or self.excerpt or self.char_start is None:
+                raise DomainValidationError("source-grounded evidence cannot copy material or excerpt text")
+            expected_locator = f"chars:{self.char_start}-{self.char_end}"
+            if self.locator != expected_locator:
+                raise DomainValidationError("source-grounded evidence locator must match its stored range")
+            if self.content_hash is None or len(self.content_hash) != 64 or any(
+                char not in "0123456789abcdefABCDEF" for char in self.content_hash
+            ):
+                raise DomainValidationError("source-grounded evidence requires a SHA-256 content hash")
         object.__setattr__(self, "polarity", _enum(self.polarity, EvidencePolarity, "polarity"))
         object.__setattr__(self, "confidence", _confidence(self.confidence))
         if self.content_hash is not None:
             content_hash = _identifier(self.content_hash, "content_hash").lower()
             digest = sha256(self.excerpt.encode("utf-8")).hexdigest()
-            if content_hash != digest:
+            if self.content_chunk_id is None and content_hash != digest:
                 raise DomainValidationError("content_hash must match content")
             object.__setattr__(self, "content_hash", content_hash)
         object.__setattr__(self, "status", _enum(self.status, Status, "status"))
@@ -2889,7 +2921,10 @@ def _safe_projection(value: Any) -> tuple[dict[str, object], dict[str, str]] | N
         category_prefix = "claim"
     elif isinstance(value, Evidence):
         node_type = NodeType.EVIDENCE
-        result = {"id": value.id, "material_id": value.material_id, "claim_id": value.claim_id, "source_revision_id": value.source_revision_id, "excerpt": value.excerpt, "locator": value.locator, "polarity": value.polarity.value, "confidence": value.confidence, "content_hash": value.content_hash, "status": value.status.value}
+        if value.content_chunk_id is not None:
+            result = {"id": value.id, "polarity": value.polarity.value, "confidence": value.confidence, "content_hash": value.content_hash, "status": value.status.value}
+        else:
+            result = {"id": value.id, "material_id": value.material_id, "claim_id": value.claim_id, "source_revision_id": value.source_revision_id, "excerpt": value.excerpt, "locator": value.locator, "polarity": value.polarity.value, "confidence": value.confidence, "content_hash": value.content_hash, "status": value.status.value}
         category_prefix = "evidence"
     elif isinstance(value, ResearchCampaign):
         node_type = NodeType.RESEARCH_CAMPAIGN
