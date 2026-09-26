@@ -195,6 +195,26 @@ def capture_source_payload_fingerprint(source: Source, revision: SourceRevision,
     return payload_fingerprint("capture_source", source, revision, owner_id)
 
 
+def research_run_payload_fingerprint(
+    run: ResearchRun,
+    expected_campaign_revision: int,
+    owner_id: str,
+) -> str:
+    """Fingerprint Run intent while ignoring regenerated event timestamps only."""
+
+    stable_run = {
+        field.name: getattr(run, field.name)
+        for field in fields(run)
+        if field.name not in {"started_at", "finished_at", "provenance"}
+    }
+    stable_run["provenance"] = {
+        field.name: getattr(run.provenance, field.name)
+        for field in fields(run.provenance)
+        if field.name != "occurred_at"
+    }
+    return payload_fingerprint("record_research_run", stable_run, expected_campaign_revision, owner_id)
+
+
 def validate_capture_source(source: Source, revision: SourceRevision, owner_id: str) -> None:
     if not isinstance(source, Source) or not isinstance(revision, SourceRevision):
         raise GraphWriteError("capture_source requires a Source and SourceRevision")
@@ -244,6 +264,7 @@ class InMemoryGraphWriteService:
         "put_node",
         "capture_idea",
         "capture_source",
+        "record_research_run",
         "capture_person",
         "capture_organization",
         "append_claim",
@@ -430,6 +451,95 @@ class InMemoryGraphWriteService:
                     self._node_history.pop(node_id, None)
                 del self._structural_edges[edge_length:]
                 del self._audit[audit_length:]
+                raise
+            self._idempotency[idempotency_key] = (fingerprint, receipt)
+            return receipt
+
+    def record_research_run(
+        self,
+        run: ResearchRun,
+        *,
+        expected_campaign_revision: int,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Persist a terminal Run and consume one Campaign trial atomically."""
+
+        operation = self._validate_command("record_research_run", actor, idempotency_key)
+        if not isinstance(run, ResearchRun):
+            raise GraphWriteError("record_research_run requires a ResearchRun")
+        if (
+            not isinstance(expected_campaign_revision, int)
+            or isinstance(expected_campaign_revision, bool)
+            or expected_campaign_revision < 0
+        ):
+            raise RevisionConflictError("expected campaign revision must be a non-negative integer")
+        fingerprint = research_run_payload_fingerprint(run, expected_campaign_revision, self.owner_id)
+
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            campaign = self._nodes.get(run.campaign_id)
+            if campaign is None:
+                raise GraphWriteNotFoundError("research campaign does not exist")
+            if not isinstance(campaign, ResearchCampaign):
+                raise GraphWriteError("research run campaign has an invalid type")
+            if campaign.owner_id != self.owner_id or run.owner_id != self.owner_id:
+                raise GraphWriteError("research run and campaign must belong to the local owner")
+            if self._revision(campaign) != expected_campaign_revision:
+                raise RevisionConflictError("expected campaign revision does not match current revision")
+            if type(run.authorization_revision) is not int or run.authorization_revision < 1:
+                raise GraphWriteError("research run authorization revision must be a positive integer")
+            if run.status not in {Status.COMPLETED, Status.PARTIAL, Status.FAILED, Status.CANCELLED}:
+                raise GraphWriteError("only terminal research runs can be recorded")
+
+            now = datetime.now(timezone.utc)
+            try:
+                from .founder_graph_research_run import validate_research_run_timing
+
+                validate_research_run_timing(run, campaign, at=now)
+                registry = CampaignAuthorizationRegistry.from_campaign_history(self._node_history[campaign.id])
+                validate_run_campaign_reference(
+                    run,
+                    campaign,
+                    campaign.authorization_snapshot,
+                    authorization_registry=registry,
+                    at=now,
+                )
+                if not campaign.can_start_run(at=now):
+                    raise DomainValidationError("campaign is not authorized for another run")
+                updated_campaign = campaign.register_run(at=now)
+            except DomainValidationError:
+                raise GraphWriteError("research campaign authorization or Run timing is invalid") from None
+
+            if run.id in self._nodes:
+                raise NodeAlreadyExistsError("research run id is already registered")
+
+            receipt = WriteReceipt(
+                operation,
+                run.id,
+                NodeType.RESEARCH_RUN.value,
+                self._revision(run),
+                idempotency_key,
+            )
+            previous_campaign_history = list(self._node_history[campaign.id])
+            previous_audit_count = len(self._audit)
+            previous_edge_count = len(self._structural_edges)
+            self._nodes[campaign.id] = updated_campaign
+            self._node_history[campaign.id].append(updated_campaign)
+            self._nodes[run.id] = run
+            self._node_history[run.id] = [run]
+            self._structural_edges.append((campaign.id, RelationType.HAS_RUN.value, run.id))
+            try:
+                self._append_audit(receipt, actor, fingerprint)
+            except Exception:
+                self._nodes[campaign.id] = campaign
+                self._node_history[campaign.id] = previous_campaign_history
+                self._nodes.pop(run.id, None)
+                self._node_history.pop(run.id, None)
+                del self._structural_edges[previous_edge_count:]
+                del self._audit[previous_audit_count:]
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt
