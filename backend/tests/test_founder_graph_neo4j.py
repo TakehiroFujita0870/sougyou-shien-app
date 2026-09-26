@@ -516,3 +516,142 @@ def test_default_migrate_targets_schema_v2_and_rollback_drops_only_v2_structure(
     assert all(query.startswith("DROP ") for query in rollback_queries)
     assert all("IF EXISTS" in query for query in rollback_queries)
     assert any("EntityRevision" in query for query, _params in driver.session_value.calls[migrated - rolled_back : migrated])
+
+
+def test_neo4j_source_expected_revision_update_replaces_owner_scoped_current_edge() -> None:
+    source = Source(
+        owner_id="owner-1",
+        id="source-current-edge",
+        title="Source",
+        revision=2,
+        current_revision_id="source-revision-2",
+    )
+    revision_rows = (
+        {
+            "id": "source-revision-1",
+            "owner_id": "owner-1",
+            "node_type": NodeType.SOURCE_REVISION.value,
+            "source_id": source.id,
+            "revision": 1,
+            "supersedes_id": None,
+        },
+        {
+            "id": "source-revision-2",
+            "owner_id": "owner-1",
+            "node_type": NodeType.SOURCE_REVISION.value,
+            "source_id": source.id,
+            "revision": 2,
+            "supersedes_id": "source-revision-1",
+        },
+    )
+
+    class SourceUpdateSession(FakeSession):
+        def __init__(self, *, target_exists: bool = True, fail_audit: bool = False) -> None:
+            super().__init__()
+            self.target_exists = target_exists
+            self.fail_audit = fail_audit
+            self.execute_write_calls = 0
+            self.existing_row = {
+                "owner_id": "owner-1", "node_type": NodeType.SOURCE.value, "revision": 1,
+            }
+            self.source_revision_rows = revision_rows
+
+        def execute_write(self, callback):
+            self.execute_write_calls += 1
+            return callback(self)
+
+        def run(self, query: str, **params):
+            if "CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query:
+                self.calls.append((query, params))
+                return FakeResult({"id": params.get("source_revision_id")} if self.target_exists else None)
+            if "CREATE (a:FounderGraphAudit" in query and self.fail_audit:
+                self.calls.append((query, params))
+                raise RuntimeError("audit write failed")
+            return super().run(query, **params)
+
+    driver = FakeDriver()
+    driver.session_value = SourceUpdateSession()
+    gateway = Neo4jGraphGateway(driver, "owner-1")
+    receipt = gateway.put_node(source, idempotency_key="source-pointer-2", expected_revision=1)
+
+    calls = driver.session_value.calls
+    delete_call = next(
+        (index, query, params) for index, (query, params) in enumerate(calls)
+        if "CURRENT_SOURCE_REVISION" in query and "DELETE edge" in query
+    )
+    create_call = next(
+        (index, query, params) for index, (query, params) in enumerate(calls)
+        if "CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query
+    )
+    set_index = next(index for index, (query, _params) in enumerate(calls) if "SET n = $properties" in query)
+    audit_index = next(
+        index for index, (query, _params) in enumerate(calls)
+        if "CREATE (a:FounderGraphAudit" in query
+    )
+    assert receipt.revision == 2
+    assert delete_call[2] == {"source_id": source.id, "owner_id": "owner-1"}
+    assert create_call[2] == {
+        "source_id": source.id, "source_revision_id": "source-revision-2", "owner_id": "owner-1",
+    }
+    assert set_index < delete_call[0] < create_call[0] < audit_index
+    assert sum("CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query for query, _params in calls) == 1
+    assert driver.session_value.execute_write_calls == 1
+
+
+@pytest.mark.parametrize("failure", ["missing-target", "audit"])
+def test_neo4j_source_expected_revision_update_propagates_edge_or_audit_failure(failure: str) -> None:
+    source = Source(
+        owner_id="owner-1",
+        id="source-current-edge",
+        title="Source",
+        revision=2,
+        current_revision_id="source-revision-2",
+    )
+    revision_rows = (
+        {"id": "source-revision-1", "owner_id": "owner-1", "node_type": NodeType.SOURCE_REVISION.value,
+         "source_id": source.id, "revision": 1, "supersedes_id": None},
+        {"id": "source-revision-2", "owner_id": "owner-1", "node_type": NodeType.SOURCE_REVISION.value,
+         "source_id": source.id, "revision": 2, "supersedes_id": "source-revision-1"},
+    )
+
+    class FailingSourceUpdateSession(FakeSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.existing_row = {
+                "owner_id": "owner-1", "node_type": NodeType.SOURCE.value, "revision": 1,
+            }
+            self.source_revision_rows = revision_rows
+            self.execute_write_calls = 0
+
+        def execute_write(self, callback):
+            self.execute_write_calls += 1
+            return callback(self)
+
+        def run(self, query: str, **params):
+            if "CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query and failure == "missing-target":
+                self.calls.append((query, params))
+                return FakeResult()
+            if "CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query:
+                self.calls.append((query, params))
+                return FakeResult({"id": params.get("source_revision_id")})
+            if "CREATE (a:FounderGraphAudit" in query and failure == "audit":
+                self.calls.append((query, params))
+                raise RuntimeError("audit write failed")
+            return super().run(query, **params)
+
+    driver = FakeDriver()
+    driver.session_value = FailingSourceUpdateSession()
+    gateway = Neo4jGraphGateway(driver, "owner-1")
+    expected_error = GraphWriteNotFoundError if failure == "missing-target" else Neo4jUnavailableError
+    with pytest.raises(expected_error) as error:
+        gateway.put_node(source, idempotency_key="source-pointer-2", expected_revision=1)
+
+    calls = driver.session_value.calls
+    assert driver.session_value.execute_write_calls == 1
+    assert any("DELETE edge" in query for query, _params in calls)
+    assert any("CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query for query, _params in calls)
+    if failure == "audit":
+        assert isinstance(error.value.__cause__, RuntimeError)
+        assert any("CREATE (a:FounderGraphAudit" in query for query, _params in calls)
+    else:
+        assert not any("CREATE (a:FounderGraphAudit" in query for query, _params in calls)
