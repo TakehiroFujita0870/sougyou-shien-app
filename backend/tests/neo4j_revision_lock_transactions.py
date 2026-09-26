@@ -23,6 +23,11 @@ class TaggedSession:
     def __exit__(self, *args: Any):
         return self._session.__exit__(*args)
 
+    def close(self) -> None:
+        close = getattr(self._session, "close", None)
+        if callable(close):
+            close()
+
     def execute_write(self, work: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         transaction = self._session.begin_transaction(metadata=self._metadata)
         try:
@@ -35,12 +40,12 @@ class TaggedSession:
 
 
 class TaggedDriver:
-    def __init__(self, driver: Any, run_id: str, writer: str):
-        self.driver, self.run_id, self.writer = driver, run_id, writer
+    def __init__(self, driver: Any, run_id: str, writer: str, purpose: str = "revision_lock"):
+        self.driver, self.run_id, self.writer, self.purpose = driver, run_id, writer, purpose
 
     def session(self, *, database: str):
         metadata = {
-            "dots_revision_lock_run": self.run_id,
-            "dots_revision_lock_writer": self.writer,
+            f"dots_{self.purpose}_run": self.run_id,
+            f"dots_{self.purpose}_writer": self.writer,
         }
         return TaggedSession(self.driver.session(database=database), metadata)

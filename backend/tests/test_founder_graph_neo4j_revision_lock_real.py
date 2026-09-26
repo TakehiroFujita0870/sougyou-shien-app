@@ -38,12 +38,25 @@ class _PausedGateway(Neo4jGraphGateway):
         return row
 
 
-def _tagged_gateway(driver: Any, run_id: str, writer: str, owner: str, **kwargs: Any) -> _PausedGateway:
+def _tagged_gateway(
+    driver: Any, run_id: str, writer: str, owner: str, *,
+    purpose: str = "revision_lock", **kwargs: Any,
+) -> _PausedGateway:
     """Build a race gateway through the same path exercised by the real test."""
-    return _PausedGateway(TaggedDriver(driver, run_id, writer), owner, **kwargs)
+    return _PausedGateway(TaggedDriver(driver, run_id, writer, purpose=purpose), owner, **kwargs)
 
 
-def test_race_gateway_factory_uses_tagged_driver_transaction_path():
+@pytest.mark.parametrize("purpose,metadata", [
+    ("revision_lock", {
+        "dots_revision_lock_run": "b" * 32,
+        "dots_revision_lock_writer": "writer-a",
+    }),
+    ("relation_assertion", {
+        "dots_relation_assertion_run": "b" * 32,
+        "dots_relation_assertion_writer": "writer-a",
+    }),
+])
+def test_race_gateway_factory_uses_purpose_tagged_transaction_path(purpose, metadata):
     class Transaction:
         def __init__(self):
             self.committed = False
@@ -71,13 +84,10 @@ def test_race_gateway_factory_uses_tagged_driver_transaction_path():
             return self.value
 
     driver = Driver()
-    gateway = _tagged_gateway(driver, "b" * 32, "writer-a", "owner-synthetic")
+    gateway = _tagged_gateway(driver, "b" * 32, "writer-a", "owner-synthetic", purpose=purpose)
     with gateway._session() as session:
         assert gateway._execute_write(session, lambda _tx: "written") == "written"
-    assert driver.value.metadata == {
-        "dots_revision_lock_run": "b" * 32,
-        "dots_revision_lock_writer": "writer-a",
-    }
+    assert driver.value.metadata == metadata
     assert driver.value.tx.committed
 
 

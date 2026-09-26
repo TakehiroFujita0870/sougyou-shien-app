@@ -19,6 +19,8 @@ class _Session:
         return self
     def __exit__(self, *_args):
         self.closed = True
+    def close(self):
+        self.closed = True
     def begin_transaction(self, *, metadata):
         self.metadata = metadata
         return self.transaction
@@ -43,6 +45,13 @@ def test_transaction_metadata_uses_public_begin_transaction_and_commits():
     }
     assert driver.session_value.transaction.committed
     assert not driver.session_value.transaction.rolled_back
+    assert driver.session_value.closed
+
+
+def test_tagged_session_close_delegates_to_driver_session():
+    driver = _Driver()
+    session = TaggedDriver(driver, "a" * 32, "writer-a").session(database="neo4j")
+    session.close()
     assert driver.session_value.closed
 
 

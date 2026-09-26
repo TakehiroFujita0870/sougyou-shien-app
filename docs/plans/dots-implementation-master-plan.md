@@ -1,9 +1,9 @@
 # Dots 実装全体計画
 
-最終更新: 2026-09-26
+最終更新: 2026-09-27
 現行実行状態: 2026-09-26の「では進めていいですよ」により再開済み。以下の待機に関する時点記録より、この状態を優先する。
 実装開始条件: 2026-09-26、利用者の「では進めていいですよ」で再開。下書き→許諾済み調査→正式な意味分割の追補を含むRP計画を実行する。一般公開・安全保護回避・保存データ削除は許可されていない。不要な検証用登録の解除は正本の全受入完了後に限る。
-進捗記録: [`dots-execution-ledger.md`](../operations/dots-execution-ledger.md)。現行の配送状態は下記の配送順を優先する。PR #246–259をmainへ反映済み。通常接続では下書き→許諾済み調査→根拠付き概要・意味関係保存→別会話の新規検索を1組確認し、正確な関係ID・状態・根拠IDも一致した。一方、代表5組・訂正後再利用・Neo4j実同時保存・歴史的許諾の証明・スマホ拒否後の書込み・本人限定の最終監査・残差分の配送・最終起動は未完了。MVP完成とは扱わない。再開前の記録は[`dots-mvp-completion-2026-09-25.md`](dots-mvp-completion-2026-09-25.md)を参照する。
+進捗記録: [`dots-execution-ledger.md`](../operations/dots-execution-ledger.md)。現行の配送状態は下記の配送順を優先する。PR #246–279内の現存PRはmainへ反映済み（main SHA `60b8731857ac`）。通常接続では下書き→許諾済み調査→根拠付き概要・意味関係保存→別会話の新規検索を1組確認し、正確な関係ID・状態・根拠IDも一致した。一方、代表5組・訂正後再利用・Neo4j実同時保存・歴史的許諾の証明・スマホ拒否後の書込み・本人限定の最終監査・残差分の配送・最終起動は未完了。2026-09-27、T-NRA-07の隔離実Neo4j writer gateはtopic branch上で合格したがmain未反映であり、ChatGPT/MCP経由の検索や再起動後の再利用を証明するものではない。合成Tunnelは専用owner `dots-synthetic-test`、`127.0.0.1:7688`、専用Neo4j volumeへ接続することを構成とDocker metadataで確認したが、MCP commandのsourceは未配送の`/home/hp/projects/dots-live` worktreeであるため、main版runtimeの受入証拠には数えない。MVP完成とは扱わない。再開前の記録は[`dots-mvp-completion-2026-09-25.md`](dots-mvp-completion-2026-09-25.md)を参照する。
 残変更の配送順: [`dots-mvp-delivery-packets-20260926.md`](dots-mvp-delivery-packets-20260926.md)。古いlive基点の大量差分を一括配送せず、清潔なmain基点から目的別に選別する。完成条件はこの分割では縮小しない。
 製品要件正本: [`founder-graph-pivot.md`](founder-graph-pivot.md)
 データモデル正本: [`founder-graph-data-model.md`](founder-graph-data-model.md)

@@ -19,26 +19,28 @@ DOCKER_CLI_CANDIDATES = (
 )
 _RUN_RE = re.compile(r"^[0-9a-f]{32}$")
 _ID_RE = re.compile(r"^[0-9a-f]{64}$")
+_ROLE_RE = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+_PREFIX_RE = re.compile(r"^dots-[a-z0-9-]{1,32}$")
 
 
 class HarnessError(RuntimeError):
     pass
 
 
-def is_opted_in(environ: Mapping[str, str]) -> bool:
-    return environ.get(OPT_IN) == "1"
+def is_opted_in(environ: Mapping[str, str], variable: str = OPT_IN) -> bool:
+    return environ.get(variable) == "1"
 
 
 def safe_container_identity(
     record: Mapping[str, Any], *, name: str, run_id: str,
-    volume_names: set[str], network_name: str,
+    volume_names: set[str], network_name: str, role: str = "neo4j-revision-lock",
 ) -> bool:
     labels = (record.get("Config") or {}).get("Labels") or {}
     mounts = record.get("Mounts") or []
     published = ((record.get("HostConfig") or {}).get("PortBindings") or {}).get("7687/tcp") or []
     return (
         record.get("Name") == f"/{name}"
-        and labels.get(ROLE_LABEL) == "neo4j-revision-lock"
+        and labels.get(ROLE_LABEL) == role
         and labels.get(RUN_LABEL) == run_id
         and (record.get("Config") or {}).get("Image") == IMAGE
         and (record.get("HostConfig") or {}).get("NetworkMode") == network_name
@@ -48,18 +50,24 @@ def safe_container_identity(
     )
 
 
-def safe_labeled_resource(record: Mapping[str, Any], *, name: str, run_id: str) -> bool:
+def safe_labeled_resource(
+    record: Mapping[str, Any], *, name: str, run_id: str,
+    role: str = "neo4j-revision-lock",
+) -> bool:
     labels = record.get("Labels") or {}
     return (
         record.get("Name") == name
-        and labels.get(ROLE_LABEL) == "neo4j-revision-lock"
+        and labels.get(ROLE_LABEL) == role
         and labels.get(RUN_LABEL) == run_id
     )
 
 
-def safe_network(record: Mapping[str, Any], *, name: str, run_id: str) -> bool:
+def safe_network(
+    record: Mapping[str, Any], *, name: str, run_id: str,
+    role: str = "neo4j-revision-lock",
+) -> bool:
     return (
-        safe_labeled_resource(record, name=name, run_id=run_id)
+        safe_labeled_resource(record, name=name, run_id=run_id, role=role)
         and record.get("Driver") == "bridge"
         and record.get("Internal") is False
     )
@@ -124,16 +132,22 @@ def json_result(value: str | None) -> Mapping[str, Any]:
 
 
 class DisposableNeo4j:
-    def __init__(self, docker: Docker, run_id: str):
+    def __init__(
+        self, docker: Docker, run_id: str, *,
+        role: str = "neo4j-revision-lock", name_prefix: str = "dots-rplock",
+    ):
+        if not _ROLE_RE.fullmatch(role) or not _PREFIX_RE.fullmatch(name_prefix):
+            raise HarnessError("disposable Neo4j role or name prefix is invalid")
         self.docker = docker
         self.run_id = run_id
-        self.name = f"dots-rplock-{run_id[:16]}"
+        self.role = role
+        self.name = f"{name_prefix}-{run_id[:16]}"
         self.network_name = f"{self.name}-net"
         self.volume_names: dict[str, str] = {}
         self.container_id: str | None = None
 
     def _labels(self) -> tuple[str, ...]:
-        return ("--label", f"{ROLE_LABEL}=neo4j-revision-lock", "--label", f"{RUN_LABEL}={self.run_id}")
+        return ("--label", f"{ROLE_LABEL}={self.role}", "--label", f"{RUN_LABEL}={self.run_id}")
 
     def _image_volumes(self) -> tuple[str, ...]:
         raw = self.docker.call("image", "inspect", "--format", "{{json .Config.Volumes}}", IMAGE)
@@ -194,7 +208,7 @@ class DisposableNeo4j:
         if record is None:
             return
         if not safe_container_identity(
-            record, name=self.name, run_id=self.run_id,
+            record, name=self.name, run_id=self.run_id, role=self.role,
             volume_names=set(self.volume_names.values()), network_name=self.network_name,
         ):
             raise HarnessError("refusing to remove a container outside this test run")
@@ -207,7 +221,11 @@ class DisposableNeo4j:
         record = self._inspect_exact(kind, name)
         if record is None:
             return
-        owned = safe_network(record, name=name, run_id=self.run_id) if kind == "network" else safe_labeled_resource(record, name=name, run_id=self.run_id)
+        owned = (
+            safe_network(record, name=name, run_id=self.run_id, role=self.role)
+            if kind == "network"
+            else safe_labeled_resource(record, name=name, run_id=self.run_id, role=self.role)
+        )
         if not owned:
             raise HarnessError(f"refusing to remove an unowned {kind}")
         self.docker.call(kind, "rm", name)
@@ -227,7 +245,7 @@ class DisposableNeo4j:
             self._remove_owned_resource("network", self.network_name)
         except HarnessError as error:
             errors.append(str(error))
-        filters = ("--filter", f"label={ROLE_LABEL}=neo4j-revision-lock", "--filter", f"label={RUN_LABEL}={self.run_id}")
+        filters = ("--filter", f"label={ROLE_LABEL}={self.role}", "--filter", f"label={RUN_LABEL}={self.run_id}")
         try:
             containers = self.docker.call("container", "ls", "--all", "--quiet", *filters) or ""
             volumes = self.docker.call("volume", "ls", "--quiet", *filters) or ""
