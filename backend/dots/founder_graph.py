@@ -2201,6 +2201,8 @@ class RelationAssertion:
     egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
     provenance_id: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
+    based_on_brief_id: str | None = None
+    based_on_brief_section_index: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
@@ -2242,6 +2244,12 @@ class RelationAssertion:
             if supersedes_id == self.id:
                 raise DomainValidationError("relation assertion cannot supersede itself")
             object.__setattr__(self, "supersedes_id", supersedes_id)
+        if (self.based_on_brief_id is None) != (self.based_on_brief_section_index is None):
+            raise DomainValidationError("based_on_brief_id and section index must be provided together")
+        if self.based_on_brief_id is not None:
+            object.__setattr__(self, "based_on_brief_id", _identifier(self.based_on_brief_id, "based_on_brief_id"))
+            if type(self.based_on_brief_section_index) is not int or not 0 <= self.based_on_brief_section_index <= 7:
+                raise DomainValidationError("brief section index must be an integer from 0 to 7")
         object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
         if not isinstance(self.provenance, Provenance):
             raise DomainValidationError("provenance must be a Provenance")
