@@ -15,6 +15,7 @@ from hashlib import sha256
 import json
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
+from uuid import uuid4
 
 from .founder_graph import (
     ContentChunk,
@@ -255,6 +256,50 @@ class Neo4jGraphGateway:
             source_id=source_id,
         )
         return _rows(result)
+
+    def _lock_revisioned_node_tx(self, tx: Any, label: str, node_id: str) -> Any | None:
+        """Lock an existing local Source/Campaign before reading its revision.
+
+        The temporary property write acquires a Neo4j node write lock before
+        the returned revision is read. REMOVE runs in the same statement; the
+        lock itself is retained by Neo4j until the surrounding transaction
+        commits or rolls back.
+        """
+
+        return _single(tx.run(
+            f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) "
+            "SET n._dots_revision_write_lock = $lock_token "
+            "REMOVE n._dots_revision_write_lock "
+            "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+            "n.revision AS revision",
+            id=node_id,
+            owner_id=self.owner_id,
+            lock_token=uuid4().hex,
+        ))
+
+    def _put_node_replay_tx(
+        self, tx: Any, *, operation: str, idempotency_key: str, fingerprint: str,
+    ) -> WriteReceipt | None:
+        replay = _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
+            "RETURN a.payload_fingerprint AS payload_fingerprint, a.target_id AS target_id, "
+            "a.target_type AS target_type, a.revision AS revision",
+            owner_id=self.owner_id,
+            idempotency_key=idempotency_key,
+        ))
+        if replay is None:
+            return None
+        prior = _record_value(replay, "payload_fingerprint")
+        if prior != fingerprint:
+            raise IdempotencyConflictError("idempotency key was reused with a different payload")
+        return WriteReceipt(
+            operation,
+            _record_value(replay, "target_id"),
+            _record_value(replay, "target_type"),
+            _record_value(replay, "revision", 0),
+            idempotency_key,
+            replayed=True,
+        )
 
     def _report_node_rows(self, tx: Any, node_ids: set[str]) -> dict[str, Any]:
         """Resolve report references inside the same owner-scoped transaction."""
@@ -933,30 +978,54 @@ class Neo4jGraphGateway:
         return receipt
 
     def _put_node_tx(self, tx: Any, node: Any, node_type: NodeType, label: str, idempotency_key: str, expected_revision: int | None, operation: str, actor: str, fingerprint: str) -> WriteReceipt:
-        replay = _single(tx.run(
-            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
-            "RETURN a.payload_fingerprint AS payload_fingerprint, a.target_id AS target_id, "
-            "a.target_type AS target_type, a.revision AS revision",
-            owner_id=self.owner_id,
-            idempotency_key=idempotency_key,
-        ))
+        replay = self._put_node_replay_tx(
+            tx, operation=operation, idempotency_key=idempotency_key, fingerprint=fingerprint,
+        )
         if replay is not None:
-            prior = replay.get("payload_fingerprint") if isinstance(replay, Mapping) else replay["payload_fingerprint"]
-            if prior != fingerprint:
-                raise IdempotencyConflictError("idempotency key was reused with a different payload")
-            target_id = replay.get("target_id") if isinstance(replay, Mapping) else replay["target_id"]
-            target_type = replay.get("target_type") if isinstance(replay, Mapping) else replay["target_type"]
-            revision = replay.get("revision", 0) if isinstance(replay, Mapping) else replay.get("revision", 0)
-            return WriteReceipt(operation, target_id, target_type, revision, idempotency_key, replayed=True)
+            return replay
 
-        self._validate_source_reference_tx(tx, node, node_type)
-        self._validate_report_references_tx(tx, node)
+        revisioned_types = {NodeType.RESEARCH_CAMPAIGN, NodeType.SOURCE}
+        existing = None
+        if node_type in revisioned_types:
+            existing = self._lock_revisioned_node_tx(tx, label, str(node.id))
+            lock_acquired = existing is not None
+            if existing is None:
+                # Preserve the existing cross-owner/type collision check, but
+                # do not take a lock on a node outside the caller's boundary.
+                existing = _single(tx.run(
+                    "MATCH (n {id: $id}) RETURN n.owner_id AS owner_id, n.node_type AS node_type, "
+                    "n.revision AS revision",
+                    id=str(node.id),
+                ))
+            else:
+                # Another same-key transaction may have committed while this
+                # request waited for the node lock. Recheck before validation
+                # or history/payload writes so its exact replay stays a no-op.
+                replay = self._put_node_replay_tx(
+                    tx, operation=operation, idempotency_key=idempotency_key, fingerprint=fingerprint,
+                )
+                if replay is not None:
+                    return replay
+            if existing is not None:
+                existing_owner = _record_value(existing, "owner_id")
+                existing_type = _record_value(existing, "node_type")
+                if existing_owner != self.owner_id:
+                    raise GraphWriteError("node owner does not match the local owner")
+                if existing_type != node_type.value:
+                    raise NodeAlreadyExistsError("node id is already registered with another type")
+                if not lock_acquired:
+                    raise GraphWriteError("revisioned node could not be locked by its expected type label")
+            self._validate_source_reference_tx(tx, node, node_type)
+            self._validate_report_references_tx(tx, node)
+        else:
+            self._validate_source_reference_tx(tx, node, node_type)
+            self._validate_report_references_tx(tx, node)
+            existing = _single(tx.run(
+                "MATCH (n {id: $id}) RETURN n.owner_id AS owner_id, n.node_type AS node_type, "
+                "n.revision AS revision",
+                id=str(node.id),
+            ))
 
-        existing = _single(tx.run(
-            "MATCH (n {id: $id}) RETURN n.owner_id AS owner_id, n.node_type AS node_type, "
-            "n.revision AS revision",
-            id=str(node.id),
-        ))
         current_revision = 0
         if existing is not None:
             owner = existing.get("owner_id") if isinstance(existing, Mapping) else existing["owner_id"]
