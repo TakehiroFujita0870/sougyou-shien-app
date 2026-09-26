@@ -71,6 +71,8 @@ class FakeSession:
             if self.audit_row is not None and self.audit_row.get("idempotency_key") == params.get("idempotency_key"):
                 return FakeResult(self.audit_row)
             return FakeResult()
+        if "_dots_revision_write_lock" in query:
+            return FakeResult(self.existing_row)
         if "MATCH (n {id: $id})" in query:
             return FakeResult(self.existing_row)
         if "MATCH (s:Source {id: $source_id})" in query:
