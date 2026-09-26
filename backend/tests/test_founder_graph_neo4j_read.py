@@ -165,6 +165,7 @@ def test_search_returns_neighbor_path_and_uses_parameterized_queries() -> None:
     assert page.hits[0].node.id == person["id"]
     idea_hit = next(hit for hit in page.hits if hit.node.id == idea["id"])
     assert idea_hit.path == ("person-1", RelationType.CAN_CONTRIBUTE_TO.value, "idea-1")
+    assert idea_hit.relation_path == ()
     assert idea_hit.score < page.hits[0].score
     assert all("Founder ) MATCH (n)" not in query for query, _params in driver.session_value.calls)
     assert any(params.get("tokens") for _query, params in driver.session_value.calls)

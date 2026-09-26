@@ -10,7 +10,7 @@ from time import monotonic
 from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
-from .founder_graph import NodeType
+from .founder_graph import NodeType, Relationship
 from .founder_graph_write import InMemoryGraphWriteService
 
 
@@ -43,11 +43,56 @@ class NodeView:
 
 
 @dataclass(frozen=True, slots=True)
+class RelationPathStep:
+    """One traversed edge, retaining its stored direction and optional identity."""
+
+    from_id: str
+    to_id: str
+    source_id: str
+    predicate: str
+    target_id: str
+    traversal_direction: str
+    evidence_ids: tuple[str, ...] = ()
+    status: str | None = None
+    confidence: float | None = None
+    valid_from: str | None = None
+    expires_at: str | None = None
+    relation_assertion_id: str | None = None
+
+    @classmethod
+    def from_relationship(
+        cls,
+        relationship: Relationship,
+        *,
+        from_id: str,
+        to_id: str,
+    ) -> "RelationPathStep":
+        """Describe a legacy Relationship without inventing an assertion ID."""
+
+        status = relationship.status.value if isinstance(relationship.status, Enum) else relationship.status
+        return cls(
+            from_id=from_id,
+            to_id=to_id,
+            source_id=relationship.source_id,
+            predicate=relationship.relation.value,
+            target_id=relationship.target_id,
+            traversal_direction="outgoing" if from_id == relationship.source_id else "incoming",
+            evidence_ids=tuple(relationship.evidence_ids),
+            status=status,
+            confidence=relationship.confidence,
+            valid_from=None,
+            expires_at=relationship.expires_at.isoformat() if relationship.expires_at is not None else None,
+            relation_assertion_id=None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SearchHit:
     node: NodeView
     score: float
     path: tuple[str, ...] = ()
     evidence_ids: tuple[str, ...] = ()
+    relation_path: tuple[RelationPathStep, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +274,7 @@ class GraphReadService:
         scores: dict[str, float] = {}
         paths: dict[str, tuple[str, ...]] = {}
         evidence_by_node: dict[str, tuple[str, ...]] = {}
+        relation_paths: dict[str, tuple[RelationPathStep, ...]] = {}
         for node in node_by_id.values():
             self._check_timeout(started, timeout_ms)
             if not self._visible(node, owner):
@@ -239,18 +285,23 @@ class GraphReadService:
             if matched:
                 scores[node.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack.casefold() else 0.0)
 
-        adjacency: dict[str, list[tuple[str, str, tuple[str, ...]]]] = {}
+        adjacency: dict[str, list[tuple[str, RelationPathStep]]] = {}
         for relation in self._writes.relations():
             self._check_timeout(started, timeout_ms)
-            if not relation.is_active():
+            if relation.owner_id != owner or not relation.is_active():
                 continue
             source = node_by_id.get(relation.source_id)
             target = node_by_id.get(relation.target_id)
             if source is None or target is None or not self._visible(source, owner) or not self._visible(target, owner):
                 continue
-            edge = (relation.relation.value, tuple(relation.evidence_ids))
-            adjacency.setdefault(relation.source_id, []).append((relation.target_id, *edge))
-            adjacency.setdefault(relation.target_id, []).append((relation.source_id, *edge))
+            adjacency.setdefault(relation.source_id, []).append((
+                relation.target_id,
+                RelationPathStep.from_relationship(relation, from_id=source.id, to_id=target.id),
+            ))
+            adjacency.setdefault(relation.target_id, []).append((
+                relation.source_id,
+                RelationPathStep.from_relationship(relation, from_id=target.id, to_id=source.id),
+            ))
 
         frontier = set(scores)
         for _depth in range(1, 3):
@@ -260,20 +311,24 @@ class GraphReadService:
                 current_score = scores[current_id]
                 current_path = paths.get(current_id, ())
                 current_evidence = evidence_by_node.get(current_id, ())
-                for neighbor_id, relation_name, edge_evidence in sorted(adjacency.get(current_id, ()), key=lambda item: (item[0], item[1], item[2])):
+                for neighbor_id, step in sorted(
+                    adjacency.get(current_id, ()),
+                    key=lambda item: (item[0], item[1].predicate, item[1].evidence_ids),
+                ):
                     if neighbor_id in current_path[0::2]:
                         continue
                     neighbor = node_by_id.get(neighbor_id)
                     if neighbor is None or not self._visible(neighbor, owner):
                         continue
                     candidate_score = current_score * 0.5
-                    candidate_path = current_path + (relation_name, neighbor_id) if current_path else (current_id, relation_name, neighbor_id)
+                    candidate_path = current_path + (step.predicate, neighbor_id) if current_path else (current_id, step.predicate, neighbor_id)
                     previous_score = scores.get(neighbor_id)
                     if previous_score is not None and candidate_score <= previous_score:
                         continue
                     scores[neighbor_id] = candidate_score
                     paths[neighbor_id] = candidate_path
-                    evidence_by_node[neighbor_id] = tuple(dict.fromkeys((*current_evidence, *edge_evidence)))
+                    relation_paths[neighbor_id] = (*relation_paths.get(current_id, ()), step)
+                    evidence_by_node[neighbor_id] = tuple(dict.fromkeys((*current_evidence, *step.evidence_ids)))
                     next_frontier.add(neighbor_id)
             frontier = next_frontier
             if not frontier:
@@ -289,6 +344,7 @@ class GraphReadService:
                     scores[node_id],
                     paths.get(node_id, ()),
                     evidence_by_node.get(node_id, ()),
+                    relation_paths.get(node_id, ()),
                 )
                 for node_id in page_ids
             ),
