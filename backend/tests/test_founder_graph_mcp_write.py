@@ -29,7 +29,8 @@ from dots.founder_graph import (
     project_shareable,
 )
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_write import InMemoryGraphWriteService
+from dots.founder_graph_neo4j_write import PersistedNodeReference
+from dots.founder_graph_write import InMemoryGraphWriteService, WriteReceipt
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
@@ -578,6 +579,58 @@ def test_link_entities_adapter_rejects_idea_brief_that_does_not_contain_evidence
         }, owner_id="owner-1")
 
     assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+def test_link_entities_uses_persisted_node_kinds_for_idea_brief_gate() -> None:
+    class Neo4jShapedAdapter:
+        owner_id = "owner-1"
+
+        def __init__(self) -> None:
+            self.saved: RelationAssertion | None = None
+            self.nodes = {
+                "persisted-idea": PersistedNodeReference(
+                    id="persisted-idea", owner_id=self.owner_id, node_type=NodeType.IDEA,
+                    revision=1, fields={},
+                ),
+                "persisted-claim": PersistedNodeReference(
+                    id="persisted-claim", owner_id=self.owner_id, node_type=NodeType.CLAIM,
+                    revision=1, fields={},
+                ),
+            }
+
+        def get_node(self, node_id: str):
+            return self.nodes.get(node_id)
+
+        def save_relation_assertion(self, assertion, *, expected_family_revision, idempotency_key):
+            self.saved = assertion
+            return WriteReceipt(
+                operation="save_relation_assertion", target_id=assertion.id,
+                target_type=NodeType.RELATION_ASSERTION.value, revision=1,
+                idempotency_key=idempotency_key,
+            )
+
+    adapter = Neo4jShapedAdapter()
+    surface = McpWriteSurface(adapter)  # type: ignore[arg-type]
+    base_arguments = {
+        "source_id": "persisted-idea", "target_id": "persisted-claim",
+        "relation": RelationType.ADDRESSES.value, "evidence_ids": ["persisted-evidence"],
+        "idempotency_key": "persisted-idea-link",
+    }
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", base_arguments, owner_id="owner-1")
+    assert adapter.saved is None
+
+    receipt = surface.call("link_entities", {
+        **base_arguments,
+        "based_on_brief_id": "persisted-brief",
+        "based_on_brief_section_index": 6,
+    }, owner_id="owner-1")
+
+    assert receipt.target_type == NodeType.RELATION_ASSERTION.value
+    assert adapter.saved is not None
+    assert adapter.saved.based_on_brief_id == "persisted-brief"
+    assert adapter.saved.based_on_brief_section_index == 6
 
 
 def test_link_entities_rejects_unknown_fields_before_mutation() -> None:

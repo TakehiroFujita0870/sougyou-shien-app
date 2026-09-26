@@ -471,7 +471,7 @@ class McpWriteSurface:
             raise McpWriteError("invalid_input", "Relation egress policy must be local_only or shareable.")
         brief_id = arguments.get("based_on_brief_id")
         section_index = arguments.get("based_on_brief_section_index")
-        has_idea_endpoint = isinstance(source, Idea) or isinstance(target, Idea)
+        has_idea_endpoint = source_kind is NodeType.IDEA or target_kind is NodeType.IDEA
         if has_idea_endpoint:
             brief_id = self._text(brief_id, "based_on_brief_id")
             if type(section_index) is not int or not 0 <= section_index <= 7:
