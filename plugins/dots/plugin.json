@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "dots",
+  "version": "1.0.5",
+  "description": "個人用の創業知識グラフDots。アイデア・人脈・資料を保存、検索、関連づけます。",
+  "author": {
+    "name": "Takehiro Fujita"
+  },
+  "extensions": {
+    "com.openai": {
+      "apps": "./.app.json",
+      "interface": {
+        "displayName": "Dots",
+        "shortDescription": "アイデア・人脈・資料を蓄積する創業知識グラフ。",
+        "longDescription": "Dotsは個人用の創業知識グラフです。ChatGPTとの会話からアイデア・人脈・資料を保存、検索、関連づけて活用できます。通常用の保存先に接続し、共有可能な記録だけをChatGPTへ返します。",
+        "developerName": "Takehiro Fujita",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "composerIcon": "./assets/dots-icon.png",
+        "logo": "./assets/dots-icon.png"
+      }
+    }
+  }
+}
