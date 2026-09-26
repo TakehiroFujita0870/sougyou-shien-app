@@ -8,7 +8,7 @@ driver-like object so contract tests do not need a running database; the real
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from hashlib import sha256
@@ -50,7 +50,12 @@ from .founder_graph_write import (
 from .founder_graph_schema import SCHEMA_VERSION, migration_queries, rollback_queries
 from .founder_graph_read import _FIELD_ALLOWLIST
 from .founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
+from .founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
+from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief, _serialize_persisted_idea_brief
+from .founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
 from .founder_graph_research_run import validate_research_run_timing
+from .idea_brief import IdeaBriefValidationError, IdeaBriefVersion
+from .founder_graph_historical_brief import HistoricalResearchValidationError, validate_historical_researched_brief
 
 
 class Neo4jGatewayError(GraphWriteError):
@@ -63,6 +68,18 @@ class Neo4jUnavailableError(Neo4jGatewayError):
 
 class Neo4jQueryContractError(Neo4jGatewayError):
     """A gateway operation would require a query outside the static contract."""
+
+
+@dataclass(frozen=True, slots=True)
+class AcceptedIdeaBriefProof:
+    """Minimal internal proof for a same-transaction relation assertion."""
+
+    brief_id: str
+    brief_revision: int
+    section_index: int | None
+    idea_root_ids: tuple[str, ...]
+    idea_leaf_ids: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
 
 
 _LABEL_BY_NODE_TYPE: Mapping[NodeType, str] = MappingProxyType({
@@ -363,6 +380,163 @@ class Neo4jGraphGateway:
             owner_id=self.owner_id,
             lock_token=uuid4().hex,
         ))
+
+    def _idea_record_tx(self, tx: Any, idea_id: str) -> Any | None:
+        label = self.label_for(NodeType.IDEA)
+        return _single(tx.run(
+            f"MATCH (i:{label} {{id: $id, owner_id: $owner_id}}) "
+            "RETURN i.id AS id, i.owner_id AS owner_id, i.node_type AS node_type, "
+            "i.revision AS revision, i.payload_json AS payload_json",
+            id=idea_id, owner_id=self.owner_id,
+        ))
+
+    def _decode_idea_record(self, record: Any, *, expected_id: str | None = None) -> Any:
+        try:
+            return decode_persisted_idea({
+                key: _record_value(record, key)
+                for key in ("id", "owner_id", "node_type", "revision", "payload_json")
+            }, owner_id=self.owner_id, expected_id=expected_id)
+        except IdeaDecodeError:
+            raise GraphWriteError("persisted Idea authorization state is invalid") from None
+
+    def _idea_children_tx(self, tx: Any, parent_id: str) -> tuple[Any, ...]:
+        label = self.label_for(NodeType.IDEA)
+        rows = _rows(tx.run(
+            f"MATCH (i:{label} {{owner_id: $owner_id, supersedes_id: $parent_id}}) "
+            "RETURN i.id AS id, i.owner_id AS owner_id, i.node_type AS node_type, "
+            "i.revision AS revision, i.payload_json AS payload_json",
+            owner_id=self.owner_id, parent_id=parent_id,
+        ))
+        return tuple(self._decode_idea_record(row) for row in rows)
+
+    def _idea_chain_tx(self, tx: Any, root_id: str) -> tuple[Any, ...]:
+        root_record = self._idea_record_tx(tx, root_id)
+        if root_record is None:
+            raise GraphWriteNotFoundError("Idea lineage root does not exist for the local owner")
+        root = self._decode_idea_record(root_record, expected_id=root_id)
+        if root.supersedes_id is not None:
+            raise GraphWriteError("Idea lineage root is invalid")
+        chain = [root]
+        seen = {root.id}
+        while True:
+            children = self._idea_children_tx(tx, chain[-1].id)
+            if len(children) > 1:
+                raise GraphWriteError("Idea lineage has multiple competing revisions")
+            if not children:
+                return tuple(chain)
+            child = children[0]
+            if child.id in seen or child.revision != chain[-1].revision + 1:
+                raise GraphWriteError("Idea lineage revision history is invalid")
+            seen.add(child.id)
+            chain.append(child)
+
+    def _lock_idea_tx(self, tx: Any, idea_id: str) -> Any:
+        label = self.label_for(NodeType.IDEA)
+        locked = _single(tx.run(
+            f"MATCH (i:{label} {{id: $id, owner_id: $owner_id}}) "
+            "SET i._dots_idea_write_lock = $lock_token REMOVE i._dots_idea_write_lock "
+            "RETURN i.id AS id, i.owner_id AS owner_id, i.node_type AS node_type, i.revision AS revision",
+            id=idea_id, owner_id=self.owner_id, lock_token=uuid4().hex,
+        ))
+        if locked is None:
+            raise GraphWriteNotFoundError("Idea does not exist for the local owner")
+        return locked
+
+    def _idea_root_for_tx(self, tx: Any, idea_id: str) -> str:
+        current = self._decode_idea_record(self._idea_record_tx(tx, idea_id), expected_id=idea_id)
+        seen = {current.id}
+        while current.supersedes_id is not None:
+            parent_id = current.supersedes_id
+            if parent_id in seen:
+                raise GraphWriteError("Idea lineage contains a cycle")
+            parent = self._decode_idea_record(self._idea_record_tx(tx, parent_id), expected_id=parent_id)
+            if current.revision != parent.revision + 1:
+                raise GraphWriteError("Idea lineage revision history is invalid")
+            current = parent
+            seen.add(current.id)
+        return current.id
+
+    def _lock_idea_successor_tx(self, tx: Any, idea: Any) -> tuple[Any, ...] | None:
+        if idea.supersedes_id is None:
+            return None
+        root_id = self._idea_root_for_tx(tx, idea.supersedes_id)
+        self._lock_idea_tx(tx, root_id)
+        chain = self._idea_chain_tx(tx, root_id)
+        parent = chain[-1]
+        if parent.id != idea.supersedes_id or idea.revision != parent.revision + 1:
+            raise RevisionConflictError("Idea correction must extend the current leaf revision")
+        if parent.id != root_id:
+            self._lock_idea_tx(tx, parent.id)
+        confirmed = self._idea_chain_tx(tx, root_id)
+        if confirmed[-1].id != parent.id:
+            raise RevisionConflictError("Idea correction lost the current leaf revision")
+        return confirmed
+
+    def _lock_current_idea_tx(self, tx: Any, root_id: str) -> tuple[Any, ...]:
+        self._lock_idea_tx(tx, root_id)
+        chain = self._idea_chain_tx(tx, root_id)
+        leaf = chain[-1]
+        if leaf.id != root_id:
+            self._lock_idea_tx(tx, leaf.id)
+        confirmed = self._idea_chain_tx(tx, root_id)
+        if tuple(item.id for item in confirmed) != tuple(item.id for item in chain):
+            raise RevisionConflictError("Idea lineage changed during brief validation")
+        return confirmed
+
+    def _idea_brief_replay_tx(self, tx: Any, *, key: str, fingerprint: str, brief_id: str,
+                              expected_revision: int) -> WriteReceipt | None:
+        record = _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $key}) "
+            "RETURN a.operation AS operation, a.payload_fingerprint AS payload_fingerprint, "
+            "a.target_id AS target_id, a.target_type AS target_type, a.revision AS revision",
+            owner_id=self.owner_id, key=key,
+        ))
+        return self._idea_brief_receipt_from_record(
+            record, key=key, fingerprint=fingerprint, brief_id=brief_id,
+            expected_revision=expected_revision,
+        )
+
+    def _idea_brief_audit_tx(self, tx: Any, key: str) -> Any | None:
+        return _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $key}) "
+            "RETURN a.operation AS operation, a.payload_fingerprint AS payload_fingerprint, "
+            "a.target_id AS target_id, a.target_type AS target_type, a.revision AS revision",
+            owner_id=self.owner_id, key=key,
+        ))
+
+    def _recover_idea_brief_receipt(self, brief: IdeaBriefVersion, key: str, fingerprint: str, failure: Neo4jUnavailableError) -> WriteReceipt:
+        try:
+            with self._session() as session:
+                row = self._execute_read(session, lambda tx: self._idea_brief_audit_tx(tx, key))
+        except Exception:
+            raise failure from None
+        replay = self._idea_brief_receipt_from_record(
+            row, key=key, fingerprint=fingerprint, brief_id=brief.id,
+            expected_revision=brief.revision,
+        )
+        if replay is None:
+            raise failure from None
+        return replay
+
+    def _idea_brief_receipt_from_record(
+        self, record: Any | None, *, key: str, fingerprint: str, brief_id: str,
+        expected_revision: int,
+    ) -> WriteReceipt | None:
+        if record is None:
+            return None
+        if (
+            _record_value(record, "operation") != "save_idea_brief"
+            or _record_value(record, "payload_fingerprint") != fingerprint
+            or _record_value(record, "target_id") != brief_id
+            or _record_value(record, "target_type") != "idea_brief_version"
+        ):
+            raise IdempotencyConflictError("idempotency key was reused with a different payload")
+        revision = _record_value(record, "revision")
+        if type(revision) is not int:
+            raise GraphWriteError("persisted IdeaBrief receipt is invalid")
+        if revision != expected_revision:
+            raise IdempotencyConflictError("idempotency key was reused with a different payload")
+        return WriteReceipt("save_idea_brief", brief_id, "idea_brief_version", revision, key, replayed=True)
 
     def _put_node_replay_tx(
         self, tx: Any, *, operation: str, idempotency_key: str, fingerprint: str,
@@ -809,6 +983,237 @@ class Neo4jGraphGateway:
                 run, idempotency_key, fingerprint, Neo4jUnavailableError("Neo4j operation failed"),
             )
 
+    def save_idea_brief(
+        self, brief: IdeaBriefVersion, *, expected_latest_revision: int | None,
+        idempotency_key: str, actor: str = "local-owner",
+    ) -> WriteReceipt:
+        if not isinstance(brief, IdeaBriefVersion) or brief.owner_id != self.owner_id:
+            raise GraphWriteError("brief owner does not match the local owner")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        if expected_latest_revision is not None and (type(expected_latest_revision) is not int or expected_latest_revision < 1):
+            raise RevisionConflictError("expected latest brief revision must be positive or None")
+        fingerprint = payload_fingerprint(
+            "save_idea_brief", brief, brief.created_at, expected_latest_revision, self.owner_id,
+        )
+        try:
+            with self._session() as session:
+                return self._execute_write(session, lambda tx: self._save_idea_brief_tx(
+                    tx, brief, expected_latest_revision, idempotency_key, actor, fingerprint,
+                ))
+        except Neo4jUnavailableError as error:
+            return self._recover_idea_brief_receipt(brief, idempotency_key, fingerprint, error)
+        except GraphWriteError:
+            raise
+        except Exception:
+            return self._recover_idea_brief_receipt(
+                brief, idempotency_key, fingerprint, Neo4jUnavailableError("Neo4j operation failed"),
+            )
+
+    def _save_idea_brief_tx(self, tx: Any, brief: IdeaBriefVersion, expected_revision: int | None,
+                            key: str, actor: str, fingerprint: str) -> WriteReceipt:
+        replay = self._idea_brief_replay_tx(tx, key=key, fingerprint=fingerprint, brief_id=brief.id,
+                                            expected_revision=brief.revision)
+        if replay is not None:
+            return replay
+        chain = self._lock_current_idea_tx(tx, brief.idea_lineage_root_id)
+        idea = chain[-1]
+        if brief.based_on_idea_id != idea.id or idea.status in {Status.ARCHIVED, Status.SUPERSEDED, Status.RETRACTED}:
+            raise GraphWriteError("brief must reference the exact current active Idea revision")
+        replay = self._idea_brief_replay_tx(tx, key=key, fingerprint=fingerprint, brief_id=brief.id,
+                                            expected_revision=brief.revision)
+        if replay is not None:
+            return replay
+        existing = self._idea_briefs_for_root_tx(tx, brief.idea_lineage_root_id)
+        latest = existing[-1] if existing else None
+        actual_revision = None if latest is None else latest.revision
+        if expected_revision != actual_revision:
+            raise RevisionConflictError("expected latest brief revision does not match the current version")
+        if latest is None:
+            if brief.revision != 1 or brief.supersedes_id is not None:
+                raise GraphWriteError("first brief version must start a lineage at revision one")
+        elif brief.revision != latest.revision + 1 or brief.supersedes_id != latest.id:
+            raise GraphWriteError("brief revision must extend the exact latest version")
+        if brief.research_run_ids:
+            self._validate_latest_researched_brief_tx(
+                tx, primary_idea_id=idea.id, owner_id=self.owner_id, brief_id=brief.id,
+                section_index=None, evidence_ids=(), locked_ideas=(idea,), brief_override=brief,
+            )
+        collision = _single(tx.run("MATCH (n {id: $id}) RETURN n.id AS id", id=brief.id))
+        if collision is not None:
+            raise NodeAlreadyExistsError("idea brief id is already registered")
+        properties = _serialize_persisted_idea_brief(brief)
+        tx.run("CREATE (b:IdeaBriefVersion) SET b = $properties", properties=properties)
+        receipt = WriteReceipt("save_idea_brief", brief.id, "idea_brief_version", brief.revision, key)
+        audit_id = f"audit_{sha256(f'{self.owner_id}:{key}'.encode()).hexdigest()[:32]}"
+        tx.run(
+            "CREATE (a:FounderGraphAudit {id: $audit_id, owner_id: $owner_id, actor: $actor, "
+            "operation: $operation, target_id: $target_id, target_type: $target_type, revision: $revision, "
+            "idempotency_key: $key, payload_fingerprint: $fingerprint})",
+            audit_id=audit_id, owner_id=self.owner_id, actor=actor, operation=receipt.operation,
+            target_id=receipt.target_id, target_type=receipt.target_type, revision=receipt.revision,
+            key=key, fingerprint=fingerprint,
+        )
+        return receipt
+
+    def get_idea_brief(self, brief_id: str) -> IdeaBriefVersion | None:
+        if not isinstance(brief_id, str) or not brief_id.strip():
+            raise GraphWriteError("brief_id must be a non-empty string")
+        label = "IdeaBriefVersion"
+        with self._session() as session:
+            row = self._execute_read(session, lambda tx: _single(tx.run(
+                f"MATCH (b:{label} {{id: $id, owner_id: $owner_id}}) "
+                "RETURN b.id AS id, b.owner_id AS owner_id, b.node_type AS node_type, b.revision AS revision, "
+                "b.idea_lineage_root_id AS idea_lineage_root_id, b.supersedes_id AS supersedes_id, "
+                "b.payload_json AS payload_json",
+                id=brief_id.strip(), owner_id=self.owner_id,
+            )))
+        return None if row is None else self._decode_idea_brief(row)
+
+    def get_latest_idea_brief(self, idea_lineage_root_id: str) -> IdeaBriefVersion | None:
+        if not isinstance(idea_lineage_root_id, str) or not idea_lineage_root_id.strip():
+            raise GraphWriteError("idea_lineage_root_id must be a non-empty string")
+        with self._session() as session:
+            rows = self._execute_read(session, lambda tx: _rows(tx.run(
+                "MATCH (b:IdeaBriefVersion {owner_id: $owner_id, idea_lineage_root_id: $root_id}) "
+                "RETURN b.id AS id, b.owner_id AS owner_id, b.node_type AS node_type, b.revision AS revision, "
+                "b.idea_lineage_root_id AS idea_lineage_root_id, b.supersedes_id AS supersedes_id, "
+                "b.payload_json AS payload_json ORDER BY b.revision ASC",
+                owner_id=self.owner_id, root_id=idea_lineage_root_id.strip(),
+            )))
+        briefs = tuple(self._decode_idea_brief(row) for row in rows)
+        if not briefs:
+            return None
+        self._validate_idea_brief_chain(briefs, idea_lineage_root_id.strip())
+        return briefs[-1]
+
+    def _decode_idea_brief(self, row: Any) -> IdeaBriefVersion:
+        try:
+            return _decode_persisted_idea_brief({
+                key: _record_value(row, key) for key in (
+                    "id", "owner_id", "node_type", "revision", "idea_lineage_root_id", "supersedes_id", "payload_json",
+                )
+            }, owner_id=self.owner_id)
+        except (IdeaBriefValidationError, TypeError, ValueError):
+            raise GraphWriteError("persisted IdeaBrief is invalid") from None
+
+    def _idea_briefs_for_root_tx(self, tx: Any, root_id: str) -> tuple[IdeaBriefVersion, ...]:
+        rows = _rows(tx.run(
+            "MATCH (b:IdeaBriefVersion {owner_id: $owner_id, idea_lineage_root_id: $root_id}) "
+            "RETURN b.id AS id, b.owner_id AS owner_id, b.node_type AS node_type, b.revision AS revision, "
+            "b.idea_lineage_root_id AS idea_lineage_root_id, b.supersedes_id AS supersedes_id, "
+            "b.payload_json AS payload_json ORDER BY b.revision ASC",
+            owner_id=self.owner_id, root_id=root_id,
+        ))
+        briefs = tuple(self._decode_idea_brief(row) for row in rows)
+        if briefs:
+            self._validate_idea_brief_chain(briefs, root_id)
+        return briefs
+
+    @staticmethod
+    def _validate_idea_brief_chain(briefs: tuple[IdeaBriefVersion, ...], root_id: str) -> None:
+        if any(brief.idea_lineage_root_id != root_id for brief in briefs):
+            raise GraphWriteError("persisted IdeaBrief lineage is invalid")
+        if briefs[0].revision != 1 or briefs[0].supersedes_id is not None:
+            raise GraphWriteError("persisted IdeaBrief lineage is incomplete")
+        for prior, current in zip(briefs, briefs[1:]):
+            if current.revision != prior.revision + 1 or current.supersedes_id != prior.id:
+                raise GraphWriteError("persisted IdeaBrief lineage is ambiguous")
+
+    def _validate_latest_researched_brief_tx(
+        self, tx: Any, *, primary_idea_id: str, owner_id: str, brief_id: str,
+        section_index: int | None, evidence_ids: tuple[str, ...], locked_ideas: tuple[Any, ...],
+        brief_override: IdeaBriefVersion | None = None,
+    ) -> AcceptedIdeaBriefProof:
+        if owner_id != self.owner_id or not locked_ideas:
+            raise GraphWriteError("researched IdeaBrief proof requires locked owner-scoped Ideas")
+        root_ids: list[str] = []
+        leaves: list[Any] = []
+        for locked_idea in locked_ideas:
+            root_id = self._idea_root_for_tx(tx, locked_idea.id)
+            chain = self._idea_chain_tx(tx, root_id)
+            if chain[-1] != locked_idea:
+                raise RevisionConflictError("Idea endpoint is no longer the current leaf")
+            root_ids.append(root_id)
+            leaves.append(chain[-1])
+        primary = next((idea for idea in leaves if idea.id == primary_idea_id), None)
+        if primary is None:
+            raise GraphWriteError("researched IdeaBrief source endpoint is not locked")
+        brief = brief_override
+        if brief is None:
+            rows = self._idea_briefs_for_root_tx(tx, self._idea_root_for_tx(tx, primary.id))
+            brief = next((item for item in rows if item.id == brief_id), None)
+            if brief is None or not rows or rows[-1].id != brief_id:
+                raise GraphWriteError("relation requires the latest researched IdeaBrief")
+        if brief.id != brief_id or brief.based_on_idea_id != primary.id:
+            raise GraphWriteError("researched IdeaBrief does not match the current Idea")
+        selected_evidence = tuple(evidence_ids)
+        if section_index is not None:
+            if type(section_index) is not int or not 0 <= section_index < 8:
+                raise GraphWriteError("researched IdeaBrief section is invalid")
+            section = brief.sections[section_index]
+            if not section.content.strip() or not set(selected_evidence).issubset(section.evidence_ids):
+                raise GraphWriteError("evidence is outside the selected researched section")
+        if brief.research_run_ids:
+            self._validate_brief_run_history_tx(tx, brief, primary)
+        elif section_index is not None:
+            raise GraphWriteError("relation requires a researched IdeaBrief")
+        return AcceptedIdeaBriefProof(
+            brief.id, brief.revision, section_index, tuple(sorted(set(root_ids))),
+            tuple(sorted(idea.id for idea in leaves)), selected_evidence,
+        )
+
+    def _validate_brief_run_history_tx(self, tx: Any, brief: IdeaBriefVersion, idea: Any) -> None:
+        run_label = self.label_for(NodeType.RESEARCH_RUN)
+        runs = []
+        campaign_ids: set[str] = set()
+        for run_id in brief.research_run_ids:
+            row = _single(tx.run(
+                f"MATCH (r:{run_label} {{id: $id, owner_id: $owner_id}}) "
+                "RETURN r.id AS id, r.owner_id AS owner_id, r.node_type AS node_type, "
+                "r.revision AS revision, r.payload_json AS payload_json",
+                id=run_id, owner_id=self.owner_id,
+            ))
+            if row is None:
+                raise GraphWriteError("researched IdeaBrief references an unregistered Run")
+            try:
+                run = decode_persisted_research_run(row, owner_id=self.owner_id, expected_id=run_id)
+            except ResearchRunDecodeError:
+                raise GraphWriteError("persisted research Run is invalid") from None
+            edge_rows = _rows(tx.run(
+                "MATCH (c:ResearchCampaign)-[:HAS_RUN]->(r:ResearchRun {id: $run_id, owner_id: $owner_id}) "
+                "RETURN c.id AS campaign_id, c.owner_id AS owner_id",
+                run_id=run.id, owner_id=self.owner_id,
+            ))
+            if len(edge_rows) != 1 or _record_value(edge_rows[0], "campaign_id") != run.campaign_id or _record_value(edge_rows[0], "owner_id") != self.owner_id:
+                raise GraphWriteError("researched Run must have exactly one matching HAS_RUN edge")
+            audits = _rows(tx.run(
+                "MATCH (a:FounderGraphAudit {owner_id: $owner_id, operation: 'record_research_run', target_id: $run_id}) "
+                "RETURN a.idempotency_key AS idempotency_key, a.target_type AS target_type, "
+                "a.revision AS revision, a.payload_fingerprint AS payload_fingerprint",
+                owner_id=self.owner_id, run_id=run.id,
+            ))
+            if len(audits) != 1 or _record_value(audits[0], "target_type") != NodeType.RESEARCH_RUN.value or _record_value(audits[0], "revision") != 0 or not _record_value(audits[0], "idempotency_key") or not _record_value(audits[0], "payload_fingerprint"):
+                raise GraphWriteError("researched Run must have exactly one matching audit receipt")
+            runs.append(run)
+            campaign_ids.add(run.campaign_id)
+        histories = []
+        campaign_label = self.label_for(NodeType.RESEARCH_CAMPAIGN)
+        for campaign_id in sorted(campaign_ids):
+            if self._lock_revisioned_node_tx(tx, campaign_label, campaign_id) is None:
+                raise GraphWriteNotFoundError("research campaign does not exist for the local owner")
+            try:
+                registry = self._campaign_authorization_registry_tx(tx, campaign_id)
+            except DomainValidationError:
+                raise GraphWriteError("persisted campaign authorization history is invalid") from None
+            histories.extend(registry.campaigns)
+        try:
+            validate_historical_researched_brief(brief, idea, tuple(runs), tuple(histories))
+        except HistoricalResearchValidationError:
+            raise GraphWriteError("researched IdeaBrief authorization proof is invalid") from None
+
     def _research_run_audit_tx(self, tx: Any, idempotency_key: str) -> Any | None:
         return _single(tx.run(
             "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
@@ -1190,6 +1595,11 @@ class Neo4jGraphGateway:
                 content_chunk_ids=replay_chunk_ids,
             )
 
+        if idea.supersedes_id is not None:
+            self._lock_idea_successor_tx(tx, idea)
+        elif idea.revision != 0:
+            raise GraphWriteError("new Idea lineage must start at revision zero")
+
         validate_source_revision_history(source, (source_revision,))
         node_ids = [str(idea.id), str(source.id), str(source_revision.id), *(str(chunk.id) for chunk in content_chunks)]
         existing = _rows(tx.run(
@@ -1251,6 +1661,9 @@ class Neo4jGraphGateway:
         )
         if replay is not None:
             return replay
+
+        if node_type is NodeType.IDEA:
+            self._lock_idea_successor_tx(tx, node)
 
         revisioned_types = {NodeType.RESEARCH_CAMPAIGN, NodeType.SOURCE}
         existing = None
