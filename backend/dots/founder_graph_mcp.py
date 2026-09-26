@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Mapping
 from urllib.parse import quote
 
-from .founder_graph import NodeType, RelationType, SHAREABLE_PROJECTION_ALLOWLIST
+from .founder_graph import NodeType, RelationType, RelationshipStatus, SHAREABLE_PROJECTION_ALLOWLIST
 from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_read import (
     GraphReadError,
@@ -14,6 +15,7 @@ from .founder_graph_read import (
     GraphReadNotFoundError,
     GraphReadTimeoutError,
     GraphReadUnavailableError,
+    RelationPathStep,
 )
 
 
@@ -114,12 +116,126 @@ class McpReadSurface:
 
     def _project_hit(self, hit, *, owner_id: str) -> dict[str, Any] | None:
         result = self._project_view(hit.node)
-        if result is not None and hit.path and self._shareable_relation_path(hit, owner_id=owner_id):
+        if result is None:
+            return None
+        if hit.path and self._shareable_relation_path(hit, owner_id=owner_id):
+            # Keep the legacy string path byte-for-byte compatible. Formal
+            # assertion identity and brief provenance are an additive field.
             result["relation_path"] = list(hit.path)
             evidence_ids = self._shareable_evidence_ids(hit.evidence_ids, owner_id=owner_id)
             if evidence_ids:
                 result["evidence_ids"] = list(evidence_ids)
+        semantic_path = self._project_semantic_relation_path(hit, owner_id=owner_id)
+        if semantic_path:
+            result["semantic_relation_path"] = semantic_path
         return result
+
+    def _project_semantic_relation_path(self, hit, *, owner_id: str) -> list[dict[str, Any]]:
+        steps = getattr(hit, "relation_path", ())
+        path = getattr(hit, "path", ())
+        if (
+            not isinstance(steps, (tuple, list))
+            or not isinstance(path, (tuple, list))
+            or len(path) < 3
+            or len(path) % 2 == 0
+            or len(steps) != (len(path) - 1) // 2
+        ):
+            return []
+        projected: list[dict[str, Any]] = []
+        for index, step in enumerate(steps):
+            if not isinstance(step, RelationPathStep):
+                return []
+            path_from, predicate, path_to = path[index * 2 : index * 2 + 3]
+            if (
+                step.from_id != path_from
+                or step.to_id != path_to
+                or step.predicate != predicate
+                or step.traversal_direction not in {"outgoing", "incoming"}
+                or not all(isinstance(value, str) and value.strip() for value in (
+                    step.from_id, step.to_id, step.source_id, step.predicate, step.target_id,
+                ))
+            ):
+                return []
+            if step.relation_assertion_id is None:
+                continue
+            if not isinstance(step.relation_assertion_id, str) or not step.relation_assertion_id.strip():
+                return []
+            if step.status not in {
+                RelationshipStatus.PROPOSED.value,
+                RelationshipStatus.INFERRED.value,
+                RelationshipStatus.CONFIRMED.value,
+            }:
+                return []
+            if step.confidence is not None and (
+                isinstance(step.confidence, bool)
+                or not isinstance(step.confidence, (int, float))
+                or not math.isfinite(step.confidence)
+                or not 0 <= step.confidence <= 1
+            ):
+                return []
+            if not isinstance(step.valid_from, str) or not step.valid_from.strip():
+                return []
+            if step.expires_at is not None and (not isinstance(step.expires_at, str) or not step.expires_at.strip()):
+                return []
+            if not isinstance(step.evidence_ids, (tuple, list)) or not all(
+                isinstance(evidence_id, str) and evidence_id.strip() for evidence_id in step.evidence_ids
+            ):
+                return []
+            if (
+                (step.based_on_brief_id is None) != (step.based_on_brief_section_index is None)
+                or (step.based_on_brief_id is not None and (
+                    not isinstance(step.based_on_brief_id, str)
+                    or not step.based_on_brief_id.strip()
+                    or type(step.based_on_brief_section_index) is not int
+                    or not 0 <= step.based_on_brief_section_index <= 7
+                ))
+            ):
+                return []
+            if (
+                step.traversal_direction == "outgoing"
+                and (step.from_id != step.source_id or step.to_id != step.target_id)
+            ) or (
+                step.traversal_direction == "incoming"
+                and (step.from_id != step.target_id or step.to_id != step.source_id)
+            ):
+                return []
+            try:
+                RelationType(step.predicate)
+                source = self.reads.fetch(step.source_id, owner_id=owner_id)
+                target = self.reads.fetch(step.target_id, owner_id=owner_id)
+                if self._project_view(source) is None or self._project_view(target) is None:
+                    return []
+                involves_idea = NodeType.IDEA.value in {source.node_type, target.node_type}
+                if involves_idea != (step.based_on_brief_id is not None):
+                    return []
+                evidence_ids: list[str] = []
+                for evidence_id in step.evidence_ids:
+                    evidence = self.reads.fetch(evidence_id, owner_id=owner_id)
+                    if (
+                        evidence.node_type == NodeType.EVIDENCE.value
+                        and evidence.status == "active"
+                        and self._project_view(evidence) is not None
+                    ):
+                        evidence_ids.append(evidence_id)
+            except (GraphReadError, TypeError, ValueError):
+                return []
+            projected.append({
+                "relation_assertion_id": step.relation_assertion_id,
+                "from_id": step.from_id,
+                "to_id": step.to_id,
+                "source_id": step.source_id,
+                "predicate": step.predicate,
+                "target_id": step.target_id,
+                "traversal_direction": step.traversal_direction,
+                "status": step.status,
+                "confidence": step.confidence,
+                "valid_from": step.valid_from,
+                "expires_at": step.expires_at,
+                "based_on_brief_id": step.based_on_brief_id,
+                "based_on_brief_section_index": step.based_on_brief_section_index,
+                "evidence_ids": list(dict.fromkeys(evidence_ids)),
+            })
+        return projected
 
     def _shareable_relation_path(self, hit, *, owner_id: str) -> bool:
         path = hit.path
