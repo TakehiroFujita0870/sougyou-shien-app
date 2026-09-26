@@ -223,6 +223,40 @@ def test_fetch_hydrates_allowlisted_view_without_exposing_raw_payload() -> None:
     assert params["node_id"] == "idea-1"
 
 
+def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evidence_only() -> None:
+    driver, reads = _gateway()
+    idea, _claim, evidence, _brief, _assertion, _endpoints, rows, brief_row = _formal_fixture()
+    driver.session_value.idea_rows = [_persisted_row(idea)]
+    driver.session_value.brief_rows = [brief_row]
+    driver.session_value.formal_rows = rows
+
+    result = reads.fetch_idea_brief(idea.id, owner_id="owner-1")
+
+    assert result["brief_id"] == "brief-1"
+    assert result["idea_id"] == idea.id
+    assert len(result["sections"]) == 8
+    assert result["sections"][0] == {
+        "index": 0,
+        "title": "エグゼクティブサマリー",
+        "content": "A researched section",
+        "evidence_ids": [evidence.id],
+    }
+    assert all("run-1" not in str(section) and "owner_decisions" not in section for section in result["sections"])
+    assert all("IdeaBriefVersion" not in query or params["owner_id"] == "owner-1" for query, params in driver.session_value.calls)
+
+
+def test_fetch_idea_brief_rejects_a_stale_idea_revision() -> None:
+    _driver, reads = _gateway()
+    idea, _claim, _evidence, _brief, _assertion, _endpoints, _rows, _brief_row = _formal_fixture()
+    child = idea.revise(title="Current corrected idea")
+    driver = reads._gateway.driver
+    driver.session_value.idea_rows = [_persisted_row(idea), _persisted_row(child)]
+    driver.session_value.brief_rows = [_serialize_persisted_idea_brief(_brief)]
+
+    with pytest.raises(GraphReadNotFoundError):
+        reads.fetch_idea_brief(idea.id, owner_id="owner-1")
+
+
 def test_fetch_hides_foreign_and_non_current_rows() -> None:
     driver, reads = _gateway()
     driver.session_value.fetch_rows = [_node_row("foreign", owner_id="owner-2")]

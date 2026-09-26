@@ -28,6 +28,7 @@ from .founder_graph import (
     relation_assertion_structural_edges,
 )
 from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
+from .idea_brief import SECTION_TITLES
 
 
 class GraphReadError(Exception):
@@ -139,6 +140,9 @@ class GraphReadPort(Protocol):
 
     def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
         """Fetch one owner-scoped node view."""
+
+    def fetch_idea_brief(self, idea_id: str, *, owner_id: str) -> dict[str, Any]:
+        """Fetch the latest shareable brief for one current Idea revision."""
 
     def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
         """Fetch one current, grounded, shareable relation assertion."""
@@ -393,6 +397,126 @@ class GraphReadService:
         if node is None or not self._visible(node, owner_id):
             raise GraphReadNotFoundError("node was not found")
         return _node_view(node)
+
+    def fetch_idea_brief(self, idea_id: str, *, owner_id: str) -> dict[str, Any]:
+        identifier = idea_id.strip() if isinstance(idea_id, str) else ""
+        if not identifier:
+            raise GraphReadError("idea_id is required")
+        owner = owner_id.strip() if isinstance(owner_id, str) else ""
+        if not owner:
+            raise GraphReadError("owner_id is required")
+        if owner != self.owner_id:
+            raise GraphReadNotFoundError("idea brief was not found")
+
+        snapshot = self._writes.read_snapshot()
+        ideas = {
+            node.id: node for node in snapshot.nodes
+            if isinstance(node, Idea) and node.owner_id == owner
+        }
+        idea = ideas.get(identifier)
+        if (
+            idea is None
+            or not self._visible(idea, owner)
+            or idea.egress_policy is not EgressPolicy.SHAREABLE
+            or any(candidate.supersedes_id == idea.id for candidate in ideas.values())
+        ):
+            raise GraphReadNotFoundError("idea brief was not found")
+
+        root = idea
+        seen = {root.id}
+        while root.supersedes_id is not None:
+            parent = ideas.get(root.supersedes_id)
+            if parent is None or parent.id in seen or root.revision != parent.revision + 1:
+                raise GraphReadNotFoundError("idea brief was not found")
+            seen.add(parent.id)
+            root = parent
+
+        latest = dict(snapshot.latest_idea_briefs).get(root.id)
+        if (
+            latest is None
+            or latest.owner_id != owner
+            or latest.idea_lineage_root_id != root.id
+            or latest.based_on_idea_id != idea.id
+            or latest.egress_policy != EgressPolicy.SHAREABLE.value
+        ):
+            raise GraphReadNotFoundError("idea brief was not found")
+
+        node_by_id = {node.id: node for node in snapshot.nodes}
+        sections = [
+            {
+                "index": section.index,
+                "title": SECTION_TITLES[section.index],
+                "content": section.content,
+                "evidence_ids": [
+                    evidence_id for evidence_id in section.evidence_ids
+                    if self._shareable_current_brief_evidence(
+                        evidence_id, owner_id=owner, node_by_id=node_by_id, edges=snapshot.structural_edges,
+                    )
+                ],
+            }
+            for section in latest.sections
+        ]
+        return {"brief_id": latest.id, "idea_id": idea.id, "sections": sections}
+
+    @staticmethod
+    def _shareable_current_brief_evidence(
+        evidence_id: str,
+        *,
+        owner_id: str,
+        node_by_id: Mapping[str, Any],
+        edges: tuple[tuple[str, str, str], ...],
+    ) -> bool:
+        evidence = node_by_id.get(evidence_id)
+        if (
+            not isinstance(evidence, Evidence)
+            or evidence.owner_id != owner_id
+            or evidence.status is not Status.ACTIVE
+            or evidence.egress_policy is not EgressPolicy.SHAREABLE
+            or evidence.claim_id is None
+            or evidence.content_chunk_id is None
+            or evidence.source_revision_id is None
+            or evidence.material_id is not None
+            or evidence.excerpt
+        ):
+            return False
+        claim = node_by_id.get(evidence.claim_id)
+        chunk = node_by_id.get(evidence.content_chunk_id)
+        revision = node_by_id.get(evidence.source_revision_id)
+        source = node_by_id.get(revision.source_id) if isinstance(revision, SourceRevision) else None
+        if (
+            not isinstance(claim, Claim)
+            or claim.owner_id != owner_id
+            or claim.status is not Status.ACTIVE
+            or not isinstance(chunk, ContentChunk)
+            or chunk.owner_id != owner_id
+            or chunk.status is not Status.ACTIVE
+            or not isinstance(revision, SourceRevision)
+            or revision.owner_id != owner_id
+            or revision.status is not Status.ACTIVE
+            or chunk.source_revision_id != revision.id
+            or not isinstance(source, Source)
+            or source.owner_id != owner_id
+            or source.status is not Status.ACTIVE
+            or source.current_revision_id != revision.id
+            or evidence.locator != f"chars:{evidence.char_start}-{evidence.char_end}"
+            or evidence.content_hash != chunk.text_hash
+        ):
+            return False
+        edge_counts: dict[tuple[str, str, str], int] = {}
+        for edge in edges:
+            edge_counts[edge] = edge_counts.get(edge, 0) + 1
+        expected = (
+            (evidence.id, "EVIDENCE_FROM", chunk.id),
+            (revision.id, "HAS_CHUNK", chunk.id),
+            (source.id, "HAS_SOURCE_REVISION", revision.id),
+            (source.id, "CURRENT_SOURCE_REVISION", revision.id),
+        )
+        return (
+            all(edge_counts.get(edge) == 1 for edge in expected)
+            and not any(edge[0] == evidence.id and edge[1] == "EVIDENCE_FROM" and edge[2] != chunk.id for edge in edges)
+            and not any(edge[1] == "HAS_CHUNK" and edge[2] == chunk.id and edge[0] != revision.id for edge in edges)
+            and not any(edge[0] == source.id and edge[1] == "CURRENT_SOURCE_REVISION" and edge[2] != revision.id for edge in edges)
+        )
 
     def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
         snapshot = self._writes.read_snapshot()

@@ -11,7 +11,7 @@ EXPECTED_DESTRUCTIVE_HINTS = {
     "record_correction": True,
     "confirm_person_merge": True,
 }
-EXPECTED_READ_TOOLS = {"search", "fetch"}
+EXPECTED_READ_TOOLS = {"search", "fetch", "fetch_idea_brief"}
 EXPECTED_WRITE_TOOLS = {
     "capture_idea",
     "capture_source",
