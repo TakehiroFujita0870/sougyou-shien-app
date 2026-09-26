@@ -181,6 +181,7 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "capture_person",
         "capture_organization",
         "append_claim",
+        "capture_evidence",
         "link_entities",
         "save_research_report",
         "record_decision",

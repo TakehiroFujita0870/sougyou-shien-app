@@ -215,6 +215,7 @@ def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
     assert response["result"]["tools"]
     assert {tool["name"] for tool in response["result"]["tools"]} == {
         "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
+        "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
     assert session.calls == []

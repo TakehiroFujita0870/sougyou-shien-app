@@ -26,6 +26,7 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
     tools = listed["result"]["tools"]
     assert {tool["name"] for tool in tools} == {
         "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
+        "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
     assert len(tools) == len({tool["name"] for tool in tools})
@@ -42,6 +43,8 @@ def test_write_tools_publish_actionable_input_contracts() -> None:
     assert tools["save_research_report"]["inputSchema"]["properties"]["sections"]["items"]["properties"]["content"]
     assert tools["record_correction"]["inputSchema"]["required"] == ["previous_id", "idempotency_key"]
     assert tools["confirm_person_merge"]["inputSchema"]["required"] == ["winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"]
+    assert tools["capture_evidence"]["inputSchema"]["required"] == ["claim_id", "content_chunk_id", "idempotency_key"]
+    assert "excerpt" not in tools["capture_evidence"]["inputSchema"]["properties"]
 
 
 def test_tools_call_delegates_read_and_idempotent_write() -> None:
@@ -53,6 +56,29 @@ def test_tools_call_delegates_read_and_idempotent_write() -> None:
     assert json.loads(write["result"]["content"][0]["text"])["target_type"] == "idea"
     assert json.loads(replay["result"]["content"][0]["text"])["replayed"] is True
     assert search["result"]["structuredContent"]["results"] == []
+
+
+def test_stdio_source_grounded_evidence_returns_common_receipt_only() -> None:
+    server = create_stdio_server("owner-evidence")
+    source = server.handle(request("tools/call", 31, {"name": "capture_source", "arguments": {
+        "url": "https://example.test/stdio", "title": "Synthetic", "summary": "Private source phrase.",
+        "idempotency_key": "stdio-source",
+    }}))
+    claim = server.handle(request("tools/call", 32, {"name": "append_claim", "arguments": {
+        "text": "A synthetic claim", "idempotency_key": "stdio-claim",
+    }}))
+    source_receipt = source["result"]["structuredContent"]
+    claim_receipt = claim["result"]["structuredContent"]
+    captured = server.handle(request("tools/call", 33, {"name": "capture_evidence", "arguments": {
+        "claim_id": claim_receipt["target_id"], "content_chunk_id": source_receipt["content_chunk_ids"][0],
+        "idempotency_key": "stdio-evidence",
+    }}))
+    projection = captured["result"]["structuredContent"]
+    assert projection["target_type"] == "evidence"
+    assert set(projection) == {"operation", "target_id", "target_type", "revision", "idempotency_key", "replayed", "source_revision_id", "content_chunk_ids"}
+    serialized = captured["result"]["content"][0]["text"]
+    assert "Private source phrase." not in serialized
+    assert "claim_id" not in serialized and source_receipt["content_chunk_ids"][0] not in serialized
 
 
 def test_tools_call_capture_receipt_exposes_opaque_chunk_ids_without_source_text() -> None:

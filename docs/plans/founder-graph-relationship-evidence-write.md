@@ -133,3 +133,4 @@ Then: The graph contains one Source-to-SourceRevision history edge, exactly one 
 | 2026-09-27 | GR-WR-01Aをin-memory契約とNeo4j transaction parityの独立packetに分割 | 全件preflightと同一transactionの補修・監査を500行以内で安全にレビューできる単位へ分けるため | GR-WR-01A-MEM、GR-WR-01A-N4J |
 | 2026-09-27 | Neo4j repairの全read/writeを一回のwrite transactionへ閉じ、foreign/不正record検査とrollback/replay検査を完了条件へ明記 | implementation時にread/write分離が契約の原子性を満たさないことを確認したため | GR-WR-01A-N4J |
 | 2026-09-27 | GR-WR-02を内部保存GR-WR-02AとMCP公開GR-WR-02Bへ分割し、両方の完了を元の受入条件とする | 完成実装が500行目安を超えたため、機能を削らず独立レビューできる順序へ分割するため | GR-WR-02A、GR-WR-02B |
+| 2026-09-27 | capture_evidenceをMCP / API / stdioへ公開し、閉じた入力schema、共通receipt、extra field拒否を確認。focused 79 passed、全backend 882 passed / 5 skipped | 保存済み根拠だけをChatGPTから指定でき、本文やlocatorを入力・応答へ出さない公開境界を完成させるため | GR-WR-02B |

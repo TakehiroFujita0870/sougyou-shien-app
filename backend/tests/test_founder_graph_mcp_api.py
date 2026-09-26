@@ -75,6 +75,7 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     write_names = {item["name"] for item in tools.json()["write"]}
     assert write_names == {
         "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
+        "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
 
@@ -257,3 +258,30 @@ def test_capture_idea_can_explicitly_opt_into_shareable_projection_without_sourc
     assert "source_text" not in body["fields"]
     assert "private conversational context" not in body["snippet"]
     assert isinstance(writes.get_node(idea_id), Idea)
+
+
+def test_capture_evidence_api_accepts_only_persisted_references_and_returns_common_receipt() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    client = TestClient(create_app(founder_graph_write_service=writes, founder_graph_owner_id="owner-1"))
+    headers = {"X-Local-Owner-Id": "owner-1"}
+    source = client.post("/v1/founder-graph/mcp/write/capture_source", headers=headers, json={
+        "url": "https://example.test/api", "title": "Synthetic", "summary": "Local source text.",
+        "idempotency_key": "api-source",
+    }).json()
+    claim = client.post("/v1/founder-graph/mcp/write/append_claim", headers=headers, json={
+        "text": "A synthetic claim", "idempotency_key": "api-claim",
+    }).json()
+    response = client.post("/v1/founder-graph/mcp/write/capture_evidence", headers=headers, json={
+        "claim_id": claim["target_id"], "content_chunk_id": source["content_chunk_ids"][0],
+        "idempotency_key": "api-evidence",
+    })
+    assert response.status_code == 200
+    assert response.json()["target_type"] == "evidence"
+    assert response.json()["source_revision_id"] is None and response.json()["content_chunk_ids"] == []
+    assert not {"claim_id", "locator", "excerpt"} & set(response.json())
+    assert source["content_chunk_ids"][0] not in response.text
+    rejected = client.post("/v1/founder-graph/mcp/write/capture_evidence", headers=headers, json={
+        "claim_id": claim["target_id"], "content_chunk_id": source["content_chunk_ids"][0],
+        "excerpt": "caller text", "idempotency_key": "api-evidence-extra",
+    })
+    assert rejected.status_code == 422
