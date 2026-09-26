@@ -23,6 +23,24 @@ from neo4j_disposable_harness import (
 def test_real_gate_requires_exact_opt_in_without_invoking_docker():
     assert not is_opted_in({}) and not is_opted_in({"DOTS_NEO4J_REVISION_LOCK_REAL": "true"})
     assert is_opted_in({"DOTS_NEO4J_REVISION_LOCK_REAL": "1"})
+    assert not is_opted_in({"DOTS_NEO4J_RELATION_ASSERTION_REAL": "true"}, "DOTS_NEO4J_RELATION_ASSERTION_REAL")
+    assert is_opted_in({"DOTS_NEO4J_RELATION_ASSERTION_REAL": "1"}, "DOTS_NEO4J_RELATION_ASSERTION_REAL")
+
+
+def test_disposable_harness_can_use_a_distinct_relation_assertion_identity():
+    helper = DisposableNeo4j(
+        None, "a" * 32, role="neo4j-relation-assertion", name_prefix="dots-relassert",
+    )
+    assert helper.name == "dots-relassert-aaaaaaaaaaaaaaaa"
+    assert helper.network_name == "dots-relassert-aaaaaaaaaaaaaaaa-net"
+    assert helper._labels() == (
+        "--label", f"{ROLE_LABEL}=neo4j-relation-assertion",
+        "--label", f"{RUN_LABEL}={'a' * 32}",
+    )
+    assert not safe_labeled_resource(
+        {"Name": helper.name, "Labels": {ROLE_LABEL: "neo4j-revision-lock", RUN_LABEL: "a" * 32}},
+        name=helper.name, run_id="a" * 32, role="neo4j-relation-assertion",
+    )
 
 
 def test_container_identity_requires_exact_run_image_network_mounts_and_loopback():

@@ -1,7 +1,7 @@
 # Dots implementation execution ledger
 
-最終更新: 2026-09-24
-main SHA: `7186d88fb617`
+最終更新: 2026-09-27
+main SHA: `60b8731857ac`
 active goal: Founder Graph MVP
 
 ## 運用
@@ -17,13 +17,13 @@ active goal: Founder Graph MVP
 | Field | Value |
 | --- | --- |
 | Objective | `docs/plans/dots-implementation-master-plan.md`のDefinition of Doneを全て満たす |
-| Model | `gpt-5.6-luna` |
-| Reasoning | `max` |
+| Model | `gpt-6-luna` |
+| Reasoning | `medium` |
 | Coordinator slots | 1 |
 | Worker slots | 最大3 |
 | Current phase | P1/P3/P4/P5/P8 MVP vertical slice |
-| Last merged PR | #241 |
-| Last main smoke | main `7186d88fb617`上のbackend全体: 413 passed / 2 skipped (4.32s)、frontend全47 files / 327 tests passed (29.00s)、production build passed、Storybook build passed (17.23s)、git show --check passed。production / Storybook buildは大きなbundle警告のみで成功。PR #240: backend focused 24 passed、full 398 passed / 17 skipped、py_compileとdiff check passed; PR #241: frontend full 47 files / 327 tests passed、buildとStorybook build passed、diff check passed。 |
+| Last merged PR | #278 (PR #279 is also in main history; its recorded merge time precedes #278) |
+| Last main smoke | clean main `60b8731857ac`: backend 837 passed / 4 skipped; 7 warnings. |
 
 ## Task ledger
 
