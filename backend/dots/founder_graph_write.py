@@ -109,6 +109,16 @@ class GraphWritePort(Protocol):
     ) -> "WriteReceipt":
         """Persist one owner-scoped relationship."""
 
+    def save_relation_assertion(
+        self,
+        assertion: RelationAssertion,
+        *,
+        expected_family_revision: int | None,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Atomically persist one formal assertion and its canonical references."""
+
     def confirm_person_merge(
         self,
         assertion: RelationAssertion,
@@ -718,6 +728,10 @@ class InMemoryGraphWriteService:
                     Status.EXPIRED, Status.CANCELLED, Status.REVOKED, Status.FAILED,
                 }:
                     raise GraphWriteError("relation assertion endpoint is not current and active")
+                if assertion.egress_policy is EgressPolicy.SHAREABLE and getattr(
+                    node, "egress_policy", None
+                ) is not EgressPolicy.SHAREABLE:
+                    raise GraphWriteError("shareable relation assertion requires shareable endpoints")
                 if any(
                     getattr(candidate, "owner_id", None) == self.owner_id
                     and getattr(candidate, "supersedes_id", None) == node_id
@@ -740,6 +754,8 @@ class InMemoryGraphWriteService:
                     raise GraphWriteError("relation assertion Evidence must belong to the local owner")
                 if evidence.status is not Status.ACTIVE:
                     raise GraphWriteError("relation assertion Evidence must be active")
+                if assertion.egress_policy is EgressPolicy.SHAREABLE and evidence.egress_policy is not EgressPolicy.SHAREABLE:
+                    raise GraphWriteError("shareable relation assertion requires shareable Evidence")
 
             idea_nodes = tuple(node for node in resolved.values() if isinstance(node, Idea))
             if idea_nodes:

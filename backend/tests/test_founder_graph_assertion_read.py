@@ -6,6 +6,7 @@ from threading import Event, Thread
 import pytest
 
 from dots.founder_graph import (
+    EgressPolicy,
     Idea,
     NodeType,
     RelationAssertionEdgeType,
@@ -100,7 +101,8 @@ def test_ambiguous_successors_suppress_predecessor_and_all_successor_paths():
 
 def test_idea_endpoints_both_current_but_only_primary_idea_requires_brief():
     writes, _, _, _, brief, assertion = _setup()
-    second_idea = Idea(id="idea-second", owner_id=writes.owner_id, title="Second idea")
+    second_idea = Idea(id="idea-second", owner_id=writes.owner_id, title="Second idea",
+                       egress_policy=EgressPolicy.SHAREABLE)
     writes.put_node(second_idea, idempotency_key="second-idea")
     both_ideas = replace(
         assertion,

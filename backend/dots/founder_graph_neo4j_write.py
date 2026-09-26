@@ -193,6 +193,21 @@ class Neo4jGraphWriteService(GraphWritePort):
             raise RevisionConflictError("relationships do not have mutable revisions")
         return self.gateway.link_entities(relationship, idempotency_key=idempotency_key, actor=actor)
 
+    def save_relation_assertion(
+        self,
+        assertion: RelationAssertion,
+        *,
+        expected_family_revision: int | None,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self.gateway.save_relation_assertion(
+            assertion,
+            expected_family_revision=expected_family_revision,
+            idempotency_key=idempotency_key,
+            actor=actor,
+        )
+
     def confirm_person_merge(self, assertion: RelationAssertion, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
         """Fail closed until the persistent adapter can archive and assert atomically."""
 
@@ -219,9 +234,11 @@ class Neo4jGraphWriteService(GraphWritePort):
         if record is None:
             return None
         node_type, payload = _payload(record, self.owner_id)
-        hydrated = _hydrate_correction(node_type, payload)
+        hydrated = _hydrate_correction(node_type, payload) if node_type in {NodeType.IDEA, NodeType.CLAIM} else None
         if hydrated is not None:
             return hydrated
+        if node_type is NodeType.RELATION_ASSERTION:
+            return self.gateway._decode_relation_assertion_record(record)
         revision = record.get("revision", 0)
         if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
             raise GraphWriteError("persisted node revision is invalid")
