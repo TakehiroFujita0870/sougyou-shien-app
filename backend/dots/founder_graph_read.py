@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, is_dataclass
-from datetime import datetime
+from dataclasses import dataclass, fields, is_dataclass, replace
+from datetime import datetime, timezone
 from enum import Enum
 import json
 from time import monotonic
 from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
-from .founder_graph import NodeType, Relationship
-from .founder_graph_write import InMemoryGraphWriteService
+from .founder_graph import (
+    Evidence,
+    Idea,
+    NodeType,
+    RelationAssertion,
+    RelationAssertionEdgeType,
+    Relationship,
+    RelationshipStatus,
+    Status,
+    DomainValidationError,
+    relation_assertion_structural_edges,
+)
+from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
 
 
 class GraphReadError(Exception):
@@ -58,6 +69,8 @@ class RelationPathStep:
     valid_from: str | None = None
     expires_at: str | None = None
     relation_assertion_id: str | None = None
+    based_on_brief_id: str | None = None
+    based_on_brief_section_index: int | None = None
 
     @classmethod
     def from_relationship(
@@ -270,13 +283,16 @@ class GraphReadService:
         if not owner:
             raise GraphReadError("owner_id is required")
         tokens = _tokens(query)
-        node_by_id = {node.id: node for node in self._writes.nodes()}
+        snapshot = self._writes.read_snapshot()
+        node_by_id = {node.id: node for node in snapshot.nodes}
         scores: dict[str, float] = {}
         paths: dict[str, tuple[str, ...]] = {}
         evidence_by_node: dict[str, tuple[str, ...]] = {}
         relation_paths: dict[str, tuple[RelationPathStep, ...]] = {}
         for node in node_by_id.values():
             self._check_timeout(started, timeout_ms)
+            if isinstance(node, RelationAssertion):
+                continue
             if not self._visible(node, owner):
                 continue
             view = _node_view(node)
@@ -286,13 +302,17 @@ class GraphReadService:
                 scores[node.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack.casefold() else 0.0)
 
         adjacency: dict[str, list[tuple[str, RelationPathStep]]] = {}
-        for relation in self._writes.relations():
+        for relation in snapshot.relations:
             self._check_timeout(started, timeout_ms)
             if relation.owner_id != owner or not relation.is_active():
                 continue
             source = node_by_id.get(relation.source_id)
             target = node_by_id.get(relation.target_id)
-            if source is None or target is None or not self._visible(source, owner) or not self._visible(target, owner):
+            if (
+                source is None or target is None
+                or isinstance(source, RelationAssertion) or isinstance(target, RelationAssertion)
+                or not self._visible(source, owner) or not self._visible(target, owner)
+            ):
                 continue
             adjacency.setdefault(relation.source_id, []).append((
                 relation.target_id,
@@ -302,6 +322,10 @@ class GraphReadService:
                 relation.source_id,
                 RelationPathStep.from_relationship(relation, from_id=target.id, to_id=source.id),
             ))
+
+        self._add_formal_assertion_edges(
+            adjacency, snapshot, node_by_id, owner, datetime.now(timezone.utc), started, timeout_ms,
+        )
 
         frontier = set(scores)
         for _depth in range(1, 3):
@@ -364,6 +388,190 @@ class GraphReadService:
         status = getattr(node, "status", None)
         value = status.value if isinstance(status, Enum) else status
         return value not in _NON_CURRENT
+
+    def _add_formal_assertion_edges(
+        self,
+        adjacency: dict[str, list[tuple[str, RelationPathStep]]],
+        snapshot: GraphReadSnapshot,
+        node_by_id: Mapping[str, Any],
+        owner_id: str,
+        at: datetime,
+        started: float,
+        timeout_ms: int,
+    ) -> None:
+        assertions = {
+            node.id: node for node in snapshot.nodes
+            if isinstance(node, RelationAssertion) and node.owner_id == owner_id
+        }
+        edges = snapshot.structural_edges
+        edge_labels = {edge.value for edge in RelationAssertionEdgeType}
+        outgoing_lists: dict[str, list[tuple[str, str, str]]] = {assertion_id: [] for assertion_id in assertions}
+        for edge in edges:
+            if edge[0] in outgoing_lists and edge[1] in edge_labels:
+                outgoing_lists[edge[0]].append(edge)
+        outgoing = {assertion_id: tuple(values) for assertion_id, values in outgoing_lists.items()}
+        successor_ids: dict[str, set[str]] = {}
+        for assertion in assertions.values():
+            if assertion.supersedes_id is not None:
+                successor_ids.setdefault(assertion.supersedes_id, set()).add(assertion.id)
+        for source_id, label, predecessor_id in edges:
+            if label != RelationAssertionEdgeType.SUPERSEDES.value:
+                continue
+            successor = assertions.get(source_id)
+            if successor is not None and predecessor_id in assertions:
+                successor_ids.setdefault(predecessor_id, set()).add(successor.id)
+
+        latest_briefs = dict(snapshot.latest_idea_briefs)
+        for assertion in assertions.values():
+            self._check_timeout(started, timeout_ms)
+            # Any same-owner successor suppresses the predecessor, even when
+            # the successor is rejected/expired or its two references disagree.
+            if successor_ids.get(assertion.id):
+                continue
+            if not self._assertion_current(assertion, node_by_id, owner_id, at):
+                continue
+            if assertion.supersedes_id is not None and len(successor_ids.get(assertion.supersedes_id, ())) != 1:
+                continue
+            try:
+                expected_edges = relation_assertion_structural_edges(assertion)
+            except (DomainValidationError, TypeError, ValueError):
+                continue
+            actual_edges = outgoing.get(assertion.id, ())
+            if len(actual_edges) != len(set(actual_edges)) or set(actual_edges) != set(expected_edges):
+                continue
+            source = node_by_id.get(assertion.source_id)
+            target = node_by_id.get(assertion.target_id)
+            if not self._current_endpoint(source, owner_id, node_by_id) or not self._current_endpoint(target, owner_id, node_by_id):
+                continue
+            if getattr(source, "node_type", None) is not assertion.source_kind:
+                continue
+            if getattr(target, "node_type", None) is not assertion.target_kind:
+                continue
+            valid_brief_id, valid_section = self._assertion_brief_reference(
+                assertion, source, target, latest_briefs, node_by_id, owner_id,
+            )
+            if valid_brief_id is False:
+                continue
+            valid_evidence = True
+            for evidence_id in assertion.evidence_ids:
+                evidence = node_by_id.get(evidence_id)
+                if not isinstance(evidence, Evidence) or evidence.owner_id != owner_id or evidence.status is not Status.ACTIVE:
+                    valid_evidence = False
+                    break
+            if not valid_evidence:
+                continue
+            step = RelationPathStep(
+                from_id=source.id,
+                to_id=target.id,
+                source_id=source.id,
+                predicate=assertion.predicate.value,
+                target_id=target.id,
+                traversal_direction="outgoing",
+                evidence_ids=tuple(assertion.evidence_ids),
+                status=assertion.status.value,
+                confidence=assertion.confidence,
+                valid_from=assertion.valid_from.isoformat(),
+                expires_at=assertion.expires_at.isoformat() if assertion.expires_at is not None else None,
+                relation_assertion_id=assertion.id,
+                based_on_brief_id=valid_brief_id,
+                based_on_brief_section_index=valid_section,
+            )
+            adjacency.setdefault(source.id, []).append((target.id, step))
+            adjacency.setdefault(target.id, []).append((source.id, replace(step, from_id=target.id, to_id=source.id, traversal_direction="incoming")))
+
+    @staticmethod
+    def _assertion_current(assertion: RelationAssertion, node_by_id: Mapping[str, Any], owner_id: str, at: datetime) -> bool:
+        if assertion.status not in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED, RelationshipStatus.CONFIRMED}:
+            return False
+        if assertion.valid_from.tzinfo is None or (assertion.expires_at is not None and assertion.expires_at.tzinfo is None):
+            return False
+        if assertion.valid_from > at or (assertion.expires_at is not None and assertion.expires_at <= at):
+            return False
+        return not any(
+            isinstance(candidate, RelationAssertion)
+            and candidate.owner_id == owner_id
+            and candidate.supersedes_id == assertion.id
+            for candidate in node_by_id.values()
+        )
+
+    @classmethod
+    def _current_endpoint(cls, node: Any, owner_id: str, node_by_id: Mapping[str, Any]) -> bool:
+        if node is None or not cls._visible(node, owner_id):
+            return False
+        status = getattr(node, "status", None)
+        status_value = status.value if isinstance(status, Enum) else status
+        if status_value in {"failed"}:
+            return False
+        if isinstance(node, Idea):
+            root = node
+            seen = {root.id}
+            while root.supersedes_id is not None:
+                parent = node_by_id.get(root.supersedes_id)
+                if not isinstance(parent, Idea) or parent.owner_id != owner_id or parent.id in seen:
+                    return False
+                if root.revision != parent.revision + 1:
+                    return False
+                seen.add(parent.id)
+                root = parent
+            current = root
+            while True:
+                children = [
+                    candidate for candidate in node_by_id.values()
+                    if isinstance(candidate, Idea) and candidate.owner_id == owner_id and candidate.supersedes_id == current.id
+                ]
+                if len(children) > 1:
+                    return False
+                if not children:
+                    return current.id == node.id
+                child = children[0]
+                if child.revision != current.revision + 1 or child.id in seen:
+                    return False
+                seen.add(child.id)
+                current = child
+        return not any(
+            getattr(candidate, "owner_id", None) == owner_id
+            and getattr(candidate, "supersedes_id", None) == getattr(node, "id", None)
+            for candidate in node_by_id.values()
+        )
+
+    @classmethod
+    def _assertion_brief_reference(
+        cls,
+        assertion: RelationAssertion,
+        source: Any,
+        target: Any,
+        latest_briefs: Mapping[str, Any],
+        node_by_id: Mapping[str, Any],
+        owner_id: str,
+    ) -> tuple[str | None | bool, int | None]:
+        idea_ends = [node for node in (source, target) if isinstance(node, Idea)]
+        if not idea_ends:
+            return (None, None) if assertion.based_on_brief_id is None and assertion.based_on_brief_section_index is None else (False, None)
+        if assertion.based_on_brief_id is None or assertion.based_on_brief_section_index is None:
+            return False, None
+        primary = source if isinstance(source, Idea) else target
+        root = primary
+        seen = {root.id}
+        while root.supersedes_id is not None:
+            parent = node_by_id.get(root.supersedes_id)
+            if not isinstance(parent, Idea) or parent.owner_id != owner_id or parent.id in seen:
+                return False, None
+            root = parent
+            seen.add(root.id)
+        latest = latest_briefs.get(root.id)
+        if (
+            latest is None or latest.owner_id != owner_id or latest.idea_lineage_root_id != root.id
+            or latest.id != assertion.based_on_brief_id
+            or latest.based_on_idea_id != primary.id or not latest.research_run_ids
+        ):
+            return False, None
+        section_index = assertion.based_on_brief_section_index
+        if type(section_index) is not int or not 0 <= section_index < len(latest.sections):
+            return False, None
+        section = latest.sections[section_index]
+        if not set(assertion.evidence_ids).issubset(section.evidence_ids):
+            return False, None
+        return latest.id, section_index
 
     @staticmethod
     def _cursor(cursor: str | None) -> int:
