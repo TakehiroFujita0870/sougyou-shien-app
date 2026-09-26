@@ -446,10 +446,20 @@ def test_link_entities_and_record_correction_use_domain_contracts() -> None:
 
 def test_link_entities_retries_same_formal_assertion_without_duplicate_edges() -> None:
     writes, surface = _surface()
-    first = PersonAsset(owner_id="owner-1", id="introduced-person-1", name="First")
-    second = PersonAsset(owner_id="owner-1", id="introduced-person-2", name="Second")
-    claim = Claim(owner_id="owner-1", id="link-claim", text="Synthetic", confidence=0.8)
-    evidence = Evidence(owner_id="owner-1", id="link-evidence", material_id="link-material", claim_id=claim.id)
+    first = PersonAsset(
+        owner_id="owner-1", id="introduced-person-1", name="First", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    second = PersonAsset(
+        owner_id="owner-1", id="introduced-person-2", name="Second", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    claim = Claim(
+        owner_id="owner-1", id="link-claim", text="Synthetic", confidence=0.8,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    evidence = Evidence(
+        owner_id="owner-1", id="link-evidence", material_id="link-material", claim_id=claim.id,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
     for node in (first, second, claim, evidence):
         writes.put_node(node, idempotency_key=f"seed-{node.id}")
     arguments = {
@@ -471,6 +481,7 @@ def test_link_entities_retries_same_formal_assertion_without_duplicate_edges() -
     assert first_receipt.target_type == NodeType.RELATION_ASSERTION.value
     assert replay.replayed is True and replay.target_id == first_receipt.target_id
     assert assertion.egress_policy is EgressPolicy.SHAREABLE
+    assert all(writes.get_node(node_id).egress_policy is EgressPolicy.SHAREABLE for node_id in (first.id, second.id, evidence.id))
     assert sum(1 for node in writes.nodes() if isinstance(node, RelationAssertion)) == 1
     assert writes.structural_edges().count((assertion.id, RelationAssertionEdgeType.ASSERTS_FROM.value, first.id)) == 1
     assert writes.structural_edges().count((assertion.id, RelationAssertionEdgeType.ASSERTS_TO.value, second.id)) == 1
