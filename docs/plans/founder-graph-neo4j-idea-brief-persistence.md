@@ -63,7 +63,8 @@ Then: identical replay is checked before current Idea/Campaign expiry or latest-
 | ID | 成果物 | 完了判定（検査:） | 不確実性 |
 |---|---|---|---|
 | T-IBP-01 | `founder_graph_neo4j_idea_brief.py`のstrict Brief serializer/decoder helpers、`founder_graph_schema.py` v3 migration、`test_founder_graph_neo4j_idea_brief.py`と既存schema/gateway migration tests | 検査: draft/8章/full-field/timezone roundtrip、空section draft、exact key/metadata検査、nullable以外の欠落/余分/不正型/空白正規化拒否、migration v1→v3・rollback queryおよびoffline gateway migrate/rollback契約を確認。save/read/store APIやincomplete stubは公開しない。変更量目標450行以内 | 類推可能 |
-| T-IBP-02 | `founder_graph_neo4j.py`のIdea successor leaf-lock hook、Brief lineage/latest CAS、atomic save/read/replay/audit、Run/Campaign historical proofと専用testの拡張 | 検査: Run hydrateもexact full-key/type/owner/revision検査でdefaults/新timestampを生成しないこと、memory parity (initial/revision/get/latest/stale CAS/replay/fingerprint/created_at)、root→leaf lock下のconcurrent Brief/Idea revision winner-or-conflict、static node-label全域のID collision、multi-Run same/different Campaign `.campaigns`、exact edge/receipt/audit、invalid history no-mutation、fake rollback-boundaryを確認し、`uv run pytest backend/tests -q`と`git diff --check`を実施。T-IBP-01 merged後に別packetとして実施し、変更量目標480行以内 | 類推可能 |
+| T-IBP-02A | `founder_graph_neo4j_idea.py`のstrict Idea decoderと専用pure tests。gateway/store接続なし | 検査: complete roundtrip、欠落/余分/型/owner/id/revision/duplicate JSON/nonfinite/timestamp/normalization拒否を専用pytestと`git diff --check`で確認 | 類推可能 |
+| T-IBP-02 | `founder_graph_neo4j.py`のIdea successor root/leaf lock、Brief lineage/latest CAS、atomic save/read/replay/audit、Run/Campaign historical proofと専用testの拡張 | 検査: memory parity (initial/revision/get/latest/stale CAS/replay/fingerprint/created_at)、root→leaf lock下のconcurrent Brief/Idea revision winner-or-conflict、static node-label全域のID collision、multi-Run same/different Campaign `.campaigns`、exact edge/receipt/audit、invalid history no-mutation、fake rollback-boundaryを確認し、`uv run pytest backend/tests -q`と`git diff --check`を実施。02Aとstrict Run decoder merge後に別packetとして実施。650行上限を監視し、安全negativeを省かない | 類推可能 |
 | T-IBP-03 | C所有、30分上限の既存disposable Neo4j harness read-only確認 | 検査: merged revision-lock transaction harnessでBrief write中断の注入点、safe failure分類、loopback/container/volume境界とcleanup検証方法を特定する。ここでは実Brief DB runを行わない。通常DB/service不使用 | 未知 |
 | T-IBP-04 | C所有の隔離Neo4j persistence/rollback proof | 検査: T-IBP-02 merged後、T-IBP-03 spikeと独立review/実行許可後にsynthetic-only disposable Neo4jでdraft/researched save/replay/CAS/rollback/readbackを確認し、exact container/volume cleanupとzero residueを検査。通常DB/service不使用 | 未知・T-IBP-03先行 |
 
@@ -79,6 +80,7 @@ Then: identical replay is checked before current Idea/Campaign expiry or latest-
 ## 変更履歴
 | 日時 | 変更 | 理由 | 影響タスク |
 |---|---|---|---|
+| 2026-09-26 | main 3057772997a2を基準にstrict Idea decoderをT-IBP-02Aとして分離し、atomic store/shared locksをT-IBP-02へ依存させた | malformed Ideaを不完全なdefault付きdecoderで扱わず、store APIを実装前に独立検査できる | T-IBP-02A〜04 |
 | 2026-09-26 | main memory implementationとschema v2を監査し、永続Brief、Run登録証明、full Campaign history、CAS/fingerprint、schema migration境界を計画 | Neo4j adapterのIdeaBrief機能はmainに存在せず、memory-only契約を安全に永続層へ移す必要がある | T-IBP-01〜03 |
 | 2026-09-26 | 実装境界を厳密Brief serialization/schema v3 packetとatomic store/proof packetに分割し、T-IBP-01はserializerとschemaのみでsave stub/APIを含めない。T-IBP-04はT-IBP-02のmerge後のみ実行する | T-IBP-01単独の意味単位を限定し、incomplete persistenceを利用可能に見せない | T-IBP-01〜04 |
 | 2026-09-26 | T-IBP-01成果物の既存migration integration testsを計画のファイル範囲へ明記 | SCHEMA_VERSION変更時にoffline gateway rollback expectationも同一packetで更新する | T-IBP-01 |
