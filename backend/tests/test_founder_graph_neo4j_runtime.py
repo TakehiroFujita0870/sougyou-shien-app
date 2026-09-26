@@ -51,6 +51,12 @@ class _Session:
         if "MATCH (i:Idea" in query and "supersedes_id: $parent_id" in query:
             return _Result()
         if "MATCH (i:Idea" in query and "payload_json" in query:
+            if "owner_id: $owner_id}" in query:
+                record = next((
+                    value for value in self.records.values()
+                    if value["owner_id"] == params["owner_id"]
+                ), None)
+                return _Result(record)
             record = self.records.get(params["id"])
             return _Result(record)
         if "MATCH (n {id: $node_id, owner_id: $owner_id})" in query:

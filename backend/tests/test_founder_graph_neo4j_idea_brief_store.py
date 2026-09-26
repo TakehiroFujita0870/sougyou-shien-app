@@ -79,8 +79,6 @@ class BriefTx:
             return Result()
         if "MATCH (i:Idea" in query and "payload_json" in query:
             rows = (node for node in self.nodes.values() if node["owner_id"] == params["owner_id"])
-            if "supersedes_id: $parent_id" in query:
-                rows = (node for node in rows if node.get("supersedes_id") == params["parent_id"])
             return Result(self._record(node) for node in rows)
         if "MATCH (n) WHERE n.id = $id" in query:
             row = self.nodes.get(params["id"]) or self.briefs.get(params["id"])
@@ -101,7 +99,9 @@ class BriefTx:
 
     @staticmethod
     def _record(node):
-        return {name: node[name] for name in ("id", "owner_id", "node_type", "revision", "payload_json")}
+        return {name: node[name] for name in ("id", "owner_id", "node_type", "revision", "payload_json")} | {
+            "supersedes_id": node.get("supersedes_id")
+        }
 
 
 class Session(BriefTx):
@@ -233,6 +233,12 @@ def test_idea_scalar_successor_chain_selects_brief_leaf_and_rejects_sibling_fork
     store.save(child_brief, expected_latest_revision=None, idempotency_key="brief-child")
     assert tuple(value.id for value in store.gateway._idea_chain_tx(state, idea.id)) == (idea.id, child.id)
     assert store.get_latest(idea.id) == child_brief
+    state.nodes[child.id].pop("supersedes_id")  # legacy payload-only Idea correction
+    assert tuple(value.id for value in store.gateway._idea_chain_tx(state, idea.id)) == (idea.id, child.id)
+    state.nodes[child.id]["supersedes_id"] = "mismatched-parent"
+    with pytest.raises(GraphWriteError, match="persisted Idea lineage is invalid"):
+        store.gateway._idea_chain_tx(state, idea.id)
+    state.nodes[child.id]["supersedes_id"] = idea.id
 
     sibling = idea.revise(title="synthetic competing Idea")
     state.nodes[sibling.id] = _node_properties(sibling)

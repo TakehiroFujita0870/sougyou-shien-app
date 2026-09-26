@@ -406,12 +406,20 @@ class Neo4jGraphGateway:
     def _idea_children_tx(self, tx: Any, parent_id: str) -> tuple[Any, ...]:
         label = self.label_for(NodeType.IDEA)
         rows = _rows(tx.run(
-            f"MATCH (i:{label} {{owner_id: $owner_id, supersedes_id: $parent_id}}) "
+            f"MATCH (i:{label} {{owner_id: $owner_id}}) "
             "RETURN i.id AS id, i.owner_id AS owner_id, i.node_type AS node_type, "
-            "i.revision AS revision, i.payload_json AS payload_json",
-            owner_id=self.owner_id, parent_id=parent_id,
+            "i.revision AS revision, i.supersedes_id AS supersedes_id, i.payload_json AS payload_json",
+            owner_id=self.owner_id,
         ))
-        return tuple(self._decode_idea_record(row) for row in rows)
+        children = []
+        for row in rows:
+            idea = self._decode_idea_record(row)
+            scalar_parent = _record_value(row, "supersedes_id")
+            if scalar_parent is not None and scalar_parent != idea.supersedes_id:
+                raise GraphWriteError("persisted Idea lineage is invalid")
+            if idea.supersedes_id == parent_id:
+                children.append(idea)
+        return tuple(children)
 
     def _idea_chain_tx(self, tx: Any, root_id: str) -> tuple[Any, ...]:
         root_record = self._idea_record_tx(tx, root_id)
