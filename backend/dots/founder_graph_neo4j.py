@@ -165,6 +165,8 @@ def _node_properties(node: Any) -> dict[str, Any]:
         supersedes_id = getattr(node, "supersedes_id", None)
         if supersedes_id is not None:
             properties["supersedes_id"] = str(supersedes_id)
+    elif node_type is NodeType.CONTENT_CHUNK:
+        properties["source_revision_id"] = str(node.source_revision_id)
     elif node_type is NodeType.CLAIM:
         supersedes_id = getattr(node, "supersedes_id", None)
         if supersedes_id is not None:
@@ -1011,7 +1013,7 @@ class Neo4jGraphGateway:
                 row = _single(tx.run(
                     "MATCH (c:Claim {id: $claim_id, owner_id: $owner_id}), "
                     "(ch:ContentChunk {id: $chunk_id, owner_id: $owner_id}) "
-                    "RETURN c.node_type AS claim_type, c.status AS claim_status, "
+                    "RETURN c.node_type AS claim_type, c.status AS claim_status, c.payload_json AS claim_payload, "
                     "ch.node_type AS chunk_type, ch.status AS chunk_status, ch.payload_json AS chunk_payload",
                     claim_id=claim_id.strip(), chunk_id=content_chunk_id.strip(), owner_id=self.owner_id,
                 ))
@@ -1021,6 +1023,13 @@ class Neo4jGraphGateway:
                     or _record_value(row, "chunk_type") != NodeType.CONTENT_CHUNK.value
                     or any(_record_value(row, name) != Status.ACTIVE.value for name in ("claim_status", "chunk_status"))):
                     raise GraphWriteNotFoundError("claim or content chunk does not exist")
+                if policy is EgressPolicy.SHAREABLE:
+                    try:
+                        claim_payload = json.loads(_record_value(row, "claim_payload"))
+                    except (TypeError, ValueError) as error:
+                        raise GraphWriteError("claim payload is malformed") from error
+                    if not isinstance(claim_payload, dict) or claim_payload.get("egress_policy") != EgressPolicy.SHAREABLE.value:
+                        raise GraphWriteError("shareable Evidence requires an active shareable Claim")
                 raw_chunk = _record_value(row, "chunk_payload")
                 try:
                     chunk = json.loads(raw_chunk) if isinstance(raw_chunk, str) else None

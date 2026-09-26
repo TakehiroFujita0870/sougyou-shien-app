@@ -275,6 +275,47 @@ def test_search_omits_expired_formal_assertion():
     assert not any(item.node.id == claim.id for item in reads.search("Foundry", owner_id="owner-1").hits)
 
 
+def test_search_ignores_known_source_chain_edges_but_rejects_unknown_domain_edges():
+    driver, reads = _gateway()
+    source = _node_row("source-1", node_type=NodeType.SOURCE.value, search_text="needle")
+    revision = _node_row("revision-1", node_type=NodeType.SOURCE_REVISION.value, search_text="private")
+    driver.session_value.search_rows = [source]
+    driver.session_value.search_relation_rows = [_relation_row(source, revision, "HAS_SOURCE_REVISION")]
+
+    page = reads.search("needle", owner_id="owner-1")
+
+    assert [hit.node.id for hit in page.hits] == [source["id"]]
+    relation_call = next(call for call in driver.session_value.calls if "matched_ids" in call[1])
+    assert "HAS_SOURCE_REVISION" in relation_call[1]["internal_edge_types"]
+    assert "CURRENT_SOURCE_REVISION" in relation_call[1]["internal_edge_types"]
+    assert "HAS_CHUNK" in relation_call[1]["internal_edge_types"]
+    assert "EVIDENCE_FROM" in relation_call[1]["internal_edge_types"]
+
+    driver, reads = _gateway()
+    driver.session_value.search_rows = [source]
+    driver.session_value.search_relation_rows = [_relation_row(source, revision, "UNKNOWN_DOMAIN_EDGE")]
+    with pytest.raises(GraphReadError):
+        reads.search("needle", owner_id="owner-1")
+
+
+def test_evidence_lineage_accepts_legacy_missing_chunk_reference_but_rejects_conflict():
+    driver, reads = _gateway()
+    _idea, _claim, evidence, _brief, _assertion, _endpoints, formal_rows, _brief_row = _formal_fixture()
+    evidence_row = next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY")
+    evidence_row["_lineage"]["lineages"][0]["chunk_source_revision_id"] = None
+    driver.session_value.formal_rows = formal_rows
+
+    assert reads._evidence_lineage_valid(driver.session_value, evidence_id=evidence.id, owner_id="owner-1")
+
+    driver, reads = _gateway()
+    _idea, _claim, evidence, _brief, _assertion, _endpoints, formal_rows, _brief_row = _formal_fixture()
+    evidence_row = next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY")
+    evidence_row["_lineage"]["lineages"][0]["chunk_source_revision_id"] = "conflicting-revision"
+    driver.session_value.formal_rows = formal_rows
+
+    assert not reads._evidence_lineage_valid(driver.session_value, evidence_id=evidence.id, owner_id="owner-1")
+
+
 def test_search_chooses_lexically_first_assertion_for_equal_paths():
     driver, reads = _gateway()
     idea, claim, evidence, _brief, assertion, endpoint_rows, _rows, brief_row = _formal_fixture()

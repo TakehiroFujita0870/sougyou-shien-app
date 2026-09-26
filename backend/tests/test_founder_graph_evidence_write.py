@@ -60,6 +60,13 @@ def test_source_grounded_evidence_domain_rejects_copied_excerpt_and_bad_range_ha
         Evidence(**{**common, "content_hash": "bad"})
 
 
+def test_neo4j_chunk_stores_source_revision_reference_for_lineage_validation() -> None:
+    chunk = ContentChunk(owner_id="owner-1", id="chunk-queryable", source_revision_id="revision-queryable",
+                         ordinal=0, char_start=0, char_end=3, text="abc")
+
+    assert _node_properties(chunk)["source_revision_id"] == "revision-queryable"
+
+
 def test_capture_evidence_rejects_changed_replay() -> None:
     writes, claim_id, chunk_id = _seed()
     writes.capture_evidence(claim_id, chunk_id, idempotency_key="ev-2")
@@ -67,6 +74,23 @@ def test_capture_evidence_rejects_changed_replay() -> None:
         writes.capture_evidence(
             claim_id, chunk_id, polarity="contradicts", idempotency_key="ev-2"
         )
+
+
+def test_shareable_evidence_requires_shareable_claim_but_keeps_local_source_chain() -> None:
+    writes, claim_id, chunk_id = _seed()
+    with pytest.raises(GraphWriteError, match="shareable Claim"):
+        writes.capture_evidence(
+            claim_id, chunk_id, egress_policy=EgressPolicy.SHAREABLE, idempotency_key="ev-private-claim",
+        )
+    shared_claim = Claim(owner_id="owner-1", id="claim-shareable", text="A shareable claim",
+                         egress_policy=EgressPolicy.SHAREABLE)
+    writes.put_node(shared_claim, idempotency_key="claim-shareable-seed", operation="append_claim")
+    receipt = writes.capture_evidence(
+        shared_claim.id, chunk_id, egress_policy=EgressPolicy.SHAREABLE, idempotency_key="ev-shareable",
+    )
+    evidence = writes.get_node(receipt.target_id)
+    assert evidence.egress_policy is EgressPolicy.SHAREABLE
+    assert writes.get_node(evidence.source_revision_id).egress_policy is EgressPolicy.LOCAL_ONLY
 
 
 def test_capture_evidence_hides_foreign_owner_and_requires_structural_lineage() -> None:

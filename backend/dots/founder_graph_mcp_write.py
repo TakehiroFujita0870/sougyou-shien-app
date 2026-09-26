@@ -166,7 +166,7 @@ class McpWriteSurface:
                     "content_chunk_id": {**text, "minLength": 1},
                     "polarity": {"type": "string", "enum": [item.value for item in EvidencePolarity]},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value]},
+                    "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
@@ -460,8 +460,10 @@ class McpWriteSurface:
 
     def _capture_evidence(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {"claim_id", "content_chunk_id", "polarity", "confidence", "egress_policy", "idempotency_key"})
-        if arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY) != EgressPolicy.LOCAL_ONLY.value:
-            raise McpWriteError("invalid_input", "capture_evidence is local_only.")
+        try:
+            egress_policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY.value))
+        except (TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "egress_policy must be local_only or shareable.") from error
         capture = getattr(self.writes, "capture_evidence", None)
         if not callable(capture):
             raise McpWriteError("unavailable", "Source-grounded evidence writes are not available on this graph adapter.")
@@ -474,7 +476,7 @@ class McpWriteSurface:
             self._text(arguments.get("content_chunk_id"), "content_chunk_id"),
             polarity=polarity,
             confidence=arguments.get("confidence", 1.0),
-            egress_policy=EgressPolicy.LOCAL_ONLY,
+            egress_policy=egress_policy,
             idempotency_key=self._idempotency(arguments),
         )
 

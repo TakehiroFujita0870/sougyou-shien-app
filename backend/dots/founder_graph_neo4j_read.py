@@ -86,7 +86,7 @@ _SEARCH_RELATIONS_QUERY = (
     "AND NOT coalesce(a.status, '') IN $non_current "
     "AND NOT coalesce(b.status, '') IN $non_current "
     "AND a.node_type IN $searchable_node_types AND b.node_type IN $searchable_node_types "
-    "AND NOT type(r) IN $assertion_edge_types "
+    "AND NOT type(r) IN $assertion_edge_types AND NOT type(r) IN $internal_edge_types "
     "AND (a.id IN $matched_ids OR b.id IN $matched_ids) "
     "RETURN a.id AS source_id, type(r) AS relation, r.evidence_ids_json AS evidence_ids_json, b.id AS target_id, "
     "a.owner_id AS source_owner_id, a.node_type AS source_node_type, "
@@ -96,6 +96,10 @@ _SEARCH_RELATIONS_QUERY = (
     "b.status AS target_status, b.revision AS target_revision, "
     "b.payload_json AS target_payload_json, b.search_text AS target_search_text"
 )
+
+_INTERNAL_GRAPH_EDGES = frozenset({
+    "HAS_SOURCE_REVISION", "CURRENT_SOURCE_REVISION", "HAS_CHUNK", "EVIDENCE_FROM",
+})
 
 _SEARCH_FORMAL_ASSERTIONS_QUERY = (
     "MATCH (a:RelationAssertion {owner_id: $owner_id}) "
@@ -551,7 +555,8 @@ class Neo4jGraphReadService:
             and "ContentChunk" in lineage.get("chunk_labels", ())
             and lineage.get("chunk_owner_id") == owner_id == chunk.get("owner_id")
             and lineage.get("chunk_status") == Status.ACTIVE.value == chunk.get("status")
-            and lineage.get("chunk_source_revision_id") == revision_id == chunk.get("source_revision_id")
+            and (lineage.get("chunk_source_revision_id") is None or lineage.get("chunk_source_revision_id") == revision_id)
+            and revision_id == chunk.get("source_revision_id")
             and lineage.get("revision_id") == revision_id == revision.get("id")
             and lineage.get("revision_owner_id") == owner_id == revision.get("owner_id")
             and lineage.get("revision_status") == Status.ACTIVE.value == revision.get("status")
@@ -730,6 +735,7 @@ class Neo4jGraphReadService:
                 _SEARCH_RELATIONS_QUERY, owner_id=owner_id, matched_ids=sorted(frontier),
                 non_current=sorted(_NON_CURRENT), searchable_node_types=searchable_types,
                 assertion_edge_types=[edge.value for edge in RelationAssertionEdgeType],
+                internal_edge_types=sorted(_INTERNAL_GRAPH_EDGES),
             ))
             for row in relation_rows:
                 self._check_timeout(started, timeout_ms)
@@ -740,6 +746,8 @@ class Neo4jGraphReadService:
                 views[source.id] = source
                 views[target.id] = target
                 relation = _row_value(row, "relation")
+                if relation in _INTERNAL_GRAPH_EDGES:
+                    continue
                 try:
                     relation_name = Neo4jGraphGateway.relation_type_for(relation)
                     edge_evidence = _parse_evidence_ids(row)

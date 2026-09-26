@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import json
+from hashlib import sha256
 
 import pytest
 
 from dots.founder_graph import (
     Claim,
+    EgressPolicy,
     Evidence,
     Idea,
     NodeType,
@@ -17,6 +20,7 @@ from dots.founder_graph import (
     ResearchRun,
     Source,
     SourceRevision,
+    Status,
 )
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_write import (
@@ -60,6 +64,15 @@ class ReportReferenceSession:
 
     def run(self, query: str, **params):
         self.calls.append((query, params))
+        if "MATCH (c:Claim" in query and "ContentChunk" in query:
+            claim = self.nodes[params["claim_id"]]
+            chunk = self.nodes[params["chunk_id"]]
+            return FakeResult(dict(claim_type=claim["node_type"], claim_status=claim["status"], claim_payload=claim["payload_json"],
+                chunk_type=chunk["node_type"], chunk_status=chunk["status"], chunk_payload=chunk["payload_json"]))
+        if "OPTIONAL MATCH (r)-[edge:HAS_CHUNK]" in query:
+            return FakeResult(dict(revision_type=NodeType.SOURCE_REVISION.value, revision_status=Status.ACTIVE.value, lineage_count=1))
+        if "MERGE (e)-[:EVIDENCE_FROM]->(ch)" in query:
+            return FakeResult({"id": params["evidence_id"]})
         if "MATCH (a:FounderGraphAudit" in query:
             for row in self.audit_rows.values():
                 if row.get("idempotency_key") == params.get("idempotency_key"):
@@ -184,6 +197,28 @@ def test_persistent_report_write_validates_authorized_run_and_references() -> No
     assert driver.session_value.nodes["report-1"]["node_type"] == NodeType.REPORT_VERSION.value
     assert any("CREATE (n:ReportVersion)" in query for query, _params in driver.session_value.calls)
     assert "report-valid" in driver.session_value.audit_rows
+
+
+@pytest.mark.parametrize("claim_policy,accepted", [(EgressPolicy.LOCAL_ONLY, False), (EgressPolicy.SHAREABLE, True)])
+def test_persistent_evidence_shareability_requires_shareable_claim(claim_policy, accepted) -> None:
+    owner = "owner-evidence"
+    driver = ReportReferenceDriver(owner)
+    claim = Claim(owner_id=owner, id="claim-evidence", text="claim", confidence=0.9, egress_policy=claim_policy)
+    chunk_text = "source passage"
+    revision_id, chunk_id = "revision-evidence", "chunk-evidence"
+    driver.session_value.nodes[claim.id] = _node_properties(claim)
+    payload = dict(id=chunk_id, owner_id=owner, source_revision_id=revision_id, char_start=0,
+        char_end=len(chunk_text), text=chunk_text, text_hash=sha256(chunk_text.encode()).hexdigest())
+    driver.session_value.nodes[chunk_id] = dict(id=chunk_id, owner_id=owner, node_type=NodeType.CONTENT_CHUNK.value,
+        status=Status.ACTIVE.value, payload_json=json.dumps(payload))
+    gateway = Neo4jGraphGateway(driver, owner)
+    if accepted:
+        receipt = gateway.capture_evidence(claim.id, chunk_id, egress_policy=EgressPolicy.SHAREABLE, idempotency_key="shareable-evidence")
+        assert receipt.target_type == NodeType.EVIDENCE.value
+    else:
+        with pytest.raises(GraphWriteError, match="shareable Evidence requires an active shareable Claim"):
+            gateway.capture_evidence(claim.id, chunk_id, egress_policy=EgressPolicy.SHAREABLE, idempotency_key="private-claim-evidence")
+        assert not any("CREATE (n:Evidence)" in query for query, _ in driver.session_value.calls)
 
 
 def test_persistent_report_write_rejects_missing_campaign_before_create() -> None:

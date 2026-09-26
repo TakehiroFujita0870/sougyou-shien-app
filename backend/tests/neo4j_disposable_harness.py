@@ -162,9 +162,11 @@ class DisposableNeo4j:
             raise HarnessError("Neo4j image volume targets are outside the expected contract")
         return targets
 
-    def start(self) -> int:
+    def start(self, *, auth: str = "none") -> int:
         if not _RUN_RE.fullmatch(self.run_id):
             raise HarnessError("run identifier is invalid")
+        if auth != "none" and not re.fullmatch(r"neo4j/[A-Za-z0-9_-]{16,128}", auth):
+            raise HarnessError("disposable Neo4j authentication value is invalid")
         server_version = self.docker.call("version", "--format", "{{.Server.Version}}")
         if not server_version or server_version == "<no value>":
             raise HarnessError("Docker server version is unavailable")
@@ -184,7 +186,7 @@ class DisposableNeo4j:
         command = [
             "container", "create", "--name", self.name, *self._labels(),
             "--network", self.network_name, "--publish", "127.0.0.1::7687", "--pull=never",
-            "--env", "NEO4J_AUTH=none",
+            "--env", f"NEO4J_AUTH={auth}",
             "--env", "NEO4J_dbms_usage__report_enabled=false",
             "--env", "NEO4J_server_bolt_telemetry_enabled=false",
         ]
@@ -198,6 +200,28 @@ class DisposableNeo4j:
         self.docker.call("container", "start", created)
         info = json_result(self.docker.call("container", "inspect", "--format", "{{json .NetworkSettings.Ports}}", created))
         return loopback_bolt_port(info)
+
+    def restart(self) -> int:
+        """Restart this exact owned container without replacing its volumes."""
+        if not isinstance(self.container_id, str) or not _ID_RE.fullmatch(self.container_id):
+            raise HarnessError("refusing restart without the exact disposable container id")
+        record = self._inspect_exact("container", self.container_id)
+        if record is None or not safe_container_identity(
+            record, name=self.name, run_id=self.run_id, role=self.role,
+            volume_names=set(self.volume_names.values()), network_name=self.network_name,
+        ):
+            raise HarnessError("refusing to restart a container outside this test run")
+        if record.get("Id") != self.container_id or (record.get("State") or {}).get("Running") is not True:
+            raise HarnessError("refusing restart unless the exact disposable container is running")
+        self.docker.call("container", "stop", self.container_id)
+        self.docker.call("container", "start", self.container_id)
+        restarted = self._inspect_exact("container", self.container_id)
+        if restarted is None or not safe_container_identity(
+            restarted, name=self.name, run_id=self.run_id, role=self.role,
+            volume_names=set(self.volume_names.values()), network_name=self.network_name,
+        ) or restarted.get("Id") != self.container_id or (restarted.get("State") or {}).get("Running") is not True:
+            raise HarnessError("disposable container identity changed during restart")
+        return loopback_bolt_port((restarted.get("NetworkSettings") or {}).get("Ports"))
 
     def _inspect_exact(self, kind: str, name: str) -> Mapping[str, Any] | None:
         raw = self.docker.call(kind, "inspect", "--format", "{{json .}}", name, allow_missing=True)

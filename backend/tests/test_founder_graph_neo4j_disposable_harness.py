@@ -152,6 +152,54 @@ def test_cleanup_removes_owned_container_by_inspected_id_only():
     ]
 
 
+def test_restart_stops_and_starts_only_exact_owned_container_with_same_volumes():
+    run_id = "a" * 32
+    helper = DisposableNeo4j(None, run_id)
+    volume_name = f"{helper.name}-data"
+    identity = "b" * 64
+    helper.volume_names = {"/data": volume_name}
+    helper.container_id = identity
+    record = {
+        "Id": identity, "Name": f"/{helper.name}", "State": {"Running": True},
+        "NetworkSettings": {"Ports": {"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": "43123"}]}},
+        "Config": {"Labels": {ROLE_LABEL: helper.role, RUN_LABEL: run_id}, "Image": IMAGE},
+        "Mounts": [{"Type": "volume", "Name": volume_name}],
+        "HostConfig": {"NetworkMode": helper.network_name,
+                       "PortBindings": {"7687/tcp": [{"HostIp": "127.0.0.1"}]}},
+    }
+
+    class FakeDocker:
+        def __init__(self, inspected):
+            self.record, self.commands = inspected, []
+        def call(self, *args, **_kwargs):
+            self.commands.append(args)
+            return json.dumps(self.record) if args[1] == "inspect" else ""
+
+    helper.docker = FakeDocker(record)
+    assert helper.restart() == 43123
+    assert helper.docker.commands == [
+        ("container", "inspect", "--format", "{{json .}}", identity),
+        ("container", "stop", identity),
+        ("container", "start", identity),
+        ("container", "inspect", "--format", "{{json .}}", identity),
+    ]
+
+
+def test_restart_refuses_unowned_container_before_lifecycle_commands():
+    helper = DisposableNeo4j(None, "a" * 32)
+    helper.container_id = "b" * 64
+    class FakeDocker:
+        def __init__(self):
+            self.commands = []
+        def call(self, *args, **_kwargs):
+            self.commands.append(args)
+            return json.dumps({"Id": "c" * 64, "Name": "/other"})
+    helper.docker = FakeDocker()
+    with pytest.raises(RuntimeError, match="outside this test run"):
+        helper.restart()
+    assert len(helper.docker.commands) == 1
+
+
 def test_start_requests_pull_never_and_only_uses_fixed_lifecycle_commands():
     run_id = "a" * 32
     commands = []
@@ -179,6 +227,7 @@ def test_start_requests_pull_never_and_only_uses_fixed_lifecycle_commands():
     assert "--internal" not in network_create and "--driver" in network_create and "bridge" in network_create
     assert "NEO4J_dbms_usage__report_enabled=false" in create
     assert "NEO4J_server_bolt_telemetry_enabled=false" in create
+    assert "NEO4J_AUTH=none" in create
     assert port == 43123
     assert all(argv[1] != "pull" for argv in commands)
 
