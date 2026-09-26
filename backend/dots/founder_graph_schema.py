@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from .founder_graph import NodeType, Relationship, _ALLOWED_RELATION_ENDPOINTS
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SCHEMA_NAME = "dots-founder-graph"
 
 
@@ -38,7 +38,8 @@ _V1_LABELS = (
     "InstructionArtifact",
 )
 _V2_LABELS = ("EntityRevision", "RelationAssertion", "ContentChunk", "Facet")
-_LABELS = _V1_LABELS + _V2_LABELS
+_V3_LABELS = ("IdeaBriefVersion",)
+_LABELS = _V1_LABELS + _V2_LABELS + _V3_LABELS
 
 
 def _create_queries(labels: tuple[str, ...]) -> tuple[str, ...]:
@@ -86,6 +87,11 @@ _MIGRATIONS = (
         version=2,
         queries=_create_queries(_V2_LABELS) + _search_queries(_V2_LABELS),
     ),
+    SchemaMigration(
+        version=3,
+        # Brief text and claims stay out of the Neo4j search projection.
+        queries=_create_queries(_V3_LABELS),
+    ),
 )
 
 
@@ -106,7 +112,7 @@ def migration_queries(current_version: int = 0, target_version: int = SCHEMA_VER
 def rollback_queries(current_version: int = SCHEMA_VERSION, target_version: int = 1) -> tuple[str, ...]:
     """Return non-destructive schema rollback queries for v2 and later.
 
-    Rollback removes only v2 constraints and indexes. It never deletes graph
+    Rollback removes only constraints and indexes. It never deletes graph
     nodes, relationships, payloads, audit records, or history.
     """
 
@@ -120,7 +126,12 @@ def rollback_queries(current_version: int = SCHEMA_VERSION, target_version: int 
         raise ValueError("current_version is newer than this application")
     if target_version < 1:
         raise ValueError("rollback below schema v1 is not supported")
-    return _drop_queries(_V2_LABELS) if current_version >= 2 and target_version < 2 else ()
+    queries: tuple[str, ...] = ()
+    if current_version >= 3 and target_version < 3:
+        queries += _drop_queries(_V3_LABELS)
+    if current_version >= 2 and target_version < 2:
+        queries += _drop_queries(_V2_LABELS)
+    return queries
 
 
 def validate_import_batch(nodes: Iterable[Any], relationships: Iterable[Relationship]) -> dict[str, int]:

@@ -41,8 +41,8 @@ def test_schema_plan_is_idempotent_and_versioned() -> None:
     assert migration_plan(1, 1) == ()
     assert migration_plan(1, 2)
     assert all("IF NOT EXISTS" in query for query in migration_queries())
-    assert schema_manifest()["version"] == 2
-    assert schema_manifest()["rollback_query_count"] == 12
+    assert schema_manifest()["version"] == 3
+    assert schema_manifest()["rollback_query_count"] == 15
 
 
 def test_schema_v2_adds_only_new_labels_and_rollback_keeps_data_contract() -> None:
