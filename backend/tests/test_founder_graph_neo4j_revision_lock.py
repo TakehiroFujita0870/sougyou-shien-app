@@ -28,9 +28,10 @@ class Result:
 
 
 class RevisionLockSession:
-    def __init__(self, *, existing_row, source_revision_rows=(), replay=None, replay_after_lock=None, lock_match=True):
+    def __init__(self, *, existing_row, source_revision_rows=(), campaign_record=None, replay=None, replay_after_lock=None, lock_match=True):
         self.existing_row = existing_row
         self.source_revision_rows = tuple(source_revision_rows)
+        self.campaign_record = campaign_record
         self.replay = replay
         self.replay_after_lock = replay_after_lock
         self.lock_match = lock_match
@@ -65,6 +66,10 @@ class RevisionLockSession:
             return Result(self.existing_row)
         if "MATCH (r:SourceRevision {source_id: $source_id})" in query:
             return Result(rows=self.source_revision_rows)
+        if "MATCH (n:ResearchCampaign" in query and "payload_json" in query:
+            return Result(self.campaign_record)
+        if "MATCH (h:FounderGraphHistory" in query:
+            return Result()
         if "CREATE (s)-[:CURRENT_SOURCE_REVISION]->(r)" in query:
             return Result({"id": params.get("source_revision_id")})
         return Result()
@@ -114,7 +119,17 @@ def test_existing_revisioned_node_locks_owner_target_before_validation_and_histo
     node, node_type, current_revision, history,
 ):
     existing = {"owner_id": "owner-local", "node_type": node_type.value, "revision": current_revision}
-    session = RevisionLockSession(existing_row=existing, source_revision_rows=history)
+    campaign_record = None
+    if node_type is NodeType.RESEARCH_CAMPAIGN:
+        from dots.founder_graph_neo4j import _node_properties
+
+        current = _campaign(aggregate_revision=current_revision)
+        properties = _node_properties(current)
+        campaign_record = {
+            "id": current.id, "owner_id": current.owner_id, "node_type": node_type.value,
+            "revision": current_revision, "payload_json": properties["payload_json"],
+        }
+    session = RevisionLockSession(existing_row=existing, source_revision_rows=history, campaign_record=campaign_record)
     gateway = Neo4jGraphGateway(Driver(session), "owner-local")
 
     receipt = gateway.put_node(node, idempotency_key=f"update-{node_type.value}", expected_revision=current_revision)
