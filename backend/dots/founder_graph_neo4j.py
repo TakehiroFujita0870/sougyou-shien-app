@@ -36,6 +36,8 @@ from .founder_graph_write import (
     RevisionConflictError,
     WriteReceipt,
     capture_idea_payload_fingerprint,
+    capture_source_payload_fingerprint,
+    validate_capture_source,
     payload_fingerprint,
 )
 from .founder_graph_schema import SCHEMA_VERSION, migration_queries, rollback_queries
@@ -618,6 +620,58 @@ class Neo4jGraphGateway:
                     fingerprint,
                 ),
             )
+
+    def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        validate_capture_source(source, source_revision, self.owner_id)
+        chunks = build_content_chunks(source_revision, operation="capture_source")
+        fingerprint = capture_source_payload_fingerprint(source, source_revision, self.owner_id)
+        with self._session() as session:
+            return self._execute_write(session, lambda tx: self._capture_source_tx(
+                tx, source, source_revision, chunks, idempotency_key, actor, fingerprint
+            ))
+
+    def _capture_source_tx(self, tx: Any, source: Source, revision: SourceRevision, chunks: tuple[ContentChunk, ...],
+                           idempotency_key: str, actor: str, fingerprint: str) -> WriteReceipt:
+        replay = _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
+            "RETURN a.payload_fingerprint AS payload_fingerprint, a.target_id AS target_id, a.target_type AS target_type, "
+            "a.revision AS revision, a.source_revision_id AS source_revision_id, a.content_chunk_ids AS content_chunk_ids",
+            owner_id=self.owner_id, idempotency_key=idempotency_key))
+        if replay is not None:
+            if _record_value(replay, "payload_fingerprint") != fingerprint or _record_value(replay, "target_id") != source.id or _record_value(replay, "target_type") != NodeType.SOURCE.value:
+                raise IdempotencyConflictError("idempotency key was reused with a different payload")
+            replay_chunks = _content_chunk_ids(_record_value(replay, "content_chunk_ids"))
+            expected = tuple(chunk.id for chunk in chunks)
+            if _record_value(replay, "source_revision_id") != revision.id or replay_chunks != expected:
+                raise GraphWriteError("capture audit references do not match the retry")
+            return WriteReceipt("capture_source", source.id, NodeType.SOURCE.value, 1, idempotency_key,
+                                replayed=True, source_revision_id=revision.id, content_chunk_ids=expected)
+        node_ids = [source.id, revision.id, *(chunk.id for chunk in chunks)]
+        if len(set(node_ids)) != len(node_ids):
+            raise GraphWriteError("capture_source nodes must have distinct ids")
+        if _rows(tx.run("MATCH (n) WHERE n.id IN $node_ids RETURN n.id AS id", node_ids=node_ids)):
+            raise NodeAlreadyExistsError("capture_source node id is already registered")
+        source_label, revision_label, chunk_label = (self.label_for(NodeType.SOURCE), self.label_for(NodeType.SOURCE_REVISION), self.label_for(NodeType.CONTENT_CHUNK))
+        tx.run(f"CREATE (n:{source_label}) SET n = $properties", properties=_node_properties(replace(source, current_revision_id=None)))
+        tx.run(f"CREATE (n:{revision_label}) SET n = $properties", properties=_node_properties(revision))
+        for chunk in chunks:
+            tx.run(f"CREATE (n:{chunk_label}) SET n = $properties", properties=_node_properties(chunk))
+        tx.run(f"MATCH (n:{source_label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
+               id=source.id, owner_id=self.owner_id, properties=_node_properties(source))
+        receipt = WriteReceipt("capture_source", source.id, NodeType.SOURCE.value, 1, idempotency_key,
+                               source_revision_id=revision.id, content_chunk_ids=tuple(chunk.id for chunk in chunks))
+        audit_id = f"audit_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        tx.run("CREATE (a:FounderGraphAudit {id: $audit_id, owner_id: $owner_id, actor: $actor, operation: $operation, "
+               "target_id: $target_id, target_type: $target_type, revision: 1, idempotency_key: $idempotency_key, "
+               "payload_fingerprint: $fingerprint, source_revision_id: $revision_id, content_chunk_ids: $chunk_ids})",
+               audit_id=audit_id, owner_id=self.owner_id, actor=actor, operation="capture_source", target_id=source.id,
+               target_type=NodeType.SOURCE.value, idempotency_key=idempotency_key, fingerprint=fingerprint,
+               revision_id=revision.id, chunk_ids=list(receipt.content_chunk_ids))
+        return receipt
 
     def _backfill_legacy_capture_idea_tx(
         self,

@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from hashlib import sha256
 from typing import Any, Mapping
+from urllib.parse import urlsplit
 
 from .founder_graph import (
     Claim,
@@ -52,6 +53,7 @@ class McpWriteSurface:
 
     _TOOL_NAMES = (
         "capture_idea",
+        "capture_source",
         "capture_person",
         "capture_organization",
         "append_claim",
@@ -67,6 +69,18 @@ class McpWriteSurface:
         ids = {"type": "array", "items": {"type": "string", "minLength": 1}}
         idempotency = {"type": "string", "minLength": 1, "description": "A stable key reused when the same request is retried."}
         schemas: dict[str, Mapping[str, Any]] = {
+            "capture_source": {
+                "type": "object",
+                "description": "URLと自分で書いた短い要約をローカルに保存します。ページ取得や調査の許可にはなりません。",
+                "required": ["url", "title", "summary", "idempotency_key"],
+                "properties": {
+                    "url": {"type": "string", "minLength": 1, "maxLength": 2048, "description": "HTTPまたはHTTPSの出典URL。ページ本文は取得しません。"},
+                    "title": {"type": "string", "minLength": 1, "maxLength": 500, "description": "出典のタイトル。"},
+                    "summary": {"type": "string", "minLength": 1, "maxLength": 4000, "description": "出典について自分で作成した1〜4000文字の要約。"},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
             "capture_idea": {
                 "type": "object",
                 "description": "Save one founder idea. Use shareable only when the private MCP may return the text to ChatGPT.",
@@ -317,6 +331,28 @@ class McpWriteSurface:
             idempotency_key=idempotency_key,
         )
 
+    def _capture_source(self, arguments: Mapping[str, Any]) -> WriteReceipt:
+        self._reject_unknown(arguments, {"url", "title", "summary", "idempotency_key"})
+        idempotency_key = self._idempotency(arguments)
+        url = self._text(arguments.get("url"), "url", max_length=2048)
+        title = self._text(arguments.get("title"), "title", max_length=500)
+        summary = self._text(arguments.get("summary"), "summary", max_length=4000)
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise McpWriteError("invalid_input", "url must be an absolute HTTP(S) URL without credentials")
+        source_id = self._command_id("source", idempotency_key)
+        revision_id = self._command_id("source-revision", idempotency_key)
+        provenance = Provenance(actor="local-owner", operation="capture_source", target_id=source_id,
+            source_id=revision_id, idempotency_key=f"{idempotency_key}:source")
+        revision_provenance = replace(provenance, target_id=revision_id, idempotency_key=f"{idempotency_key}:source-revision")
+        revision = SourceRevision(owner_id=self.writes.owner_id, id=revision_id, source_id=source_id,
+            content=summary, locator=url, revision=1, egress_policy=EgressPolicy.LOCAL_ONLY,
+            provenance=revision_provenance)
+        source = Source(owner_id=self.writes.owner_id, id=source_id, title=title, kind=MaterialKind.WEB,
+            locator=url, current_revision_id=revision_id, revision=1,
+            egress_policy=EgressPolicy.LOCAL_ONLY, provenance=provenance)
+        return self.writes.capture_source(source, revision, idempotency_key=idempotency_key)
+
     def _capture_person(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(
             arguments,
@@ -515,10 +551,13 @@ class McpWriteSurface:
         return f"{prefix}_{sha256(idempotency_key.encode('utf-8')).hexdigest()[:32]}"
 
     @staticmethod
-    def _text(value: Any, field_name: str) -> str:
+    def _text(value: Any, field_name: str, *, max_length: int | None = None) -> str:
         if not isinstance(value, str) or not value.strip():
             raise McpWriteError("invalid_input", f"{field_name} must be a non-empty string")
-        return value.strip()
+        normalized = value.strip()
+        if max_length is not None and len(normalized) > max_length:
+            raise McpWriteError("invalid_input", f"{field_name} exceeds the allowed length")
+        return normalized
 
     @staticmethod
     def _ids(value: Any, field_name: str) -> tuple[str, ...]:

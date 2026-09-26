@@ -2109,7 +2109,7 @@ def split_source_content(
     return tuple(chunks)
 
 
-def build_content_chunks(source_revision: SourceRevision) -> tuple[ContentChunk, ...]:
+def build_content_chunks(source_revision: SourceRevision, *, operation: str = "capture_idea") -> tuple[ContentChunk, ...]:
     """Build deterministic, local-only chunks for one immutable revision."""
 
     if not isinstance(source_revision, SourceRevision):
@@ -2130,7 +2130,7 @@ def build_content_chunks(source_revision: SourceRevision) -> tuple[ContentChunk,
                 created_at=source_revision.retrieved_at,
                 provenance=Provenance(
                     actor="local-owner",
-                    operation="capture_idea",
+                    operation=operation,
                     target_id=chunk_id,
                     source_id=source_revision.id,
                     occurred_at=source_revision.retrieved_at,

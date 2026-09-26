@@ -14,10 +14,12 @@ from hashlib import sha256
 import json
 from threading import RLock
 from typing import Any, Mapping, Protocol
+from urllib.parse import urlsplit
 
 from .founder_graph import (
     CampaignAuthorizationRegistry,
     ContentChunk,
+    EgressPolicy,
     DomainValidationError,
     Evidence,
     NodeType,
@@ -30,6 +32,7 @@ from .founder_graph import (
     ResearchRun,
     Source,
     SourceRevision,
+    MaterialKind,
     Status,
     _ALLOWED_RELATION_ENDPOINTS,
     build_content_chunks,
@@ -87,6 +90,9 @@ class GraphWritePort(Protocol):
         actor: str = "local-owner",
     ) -> "WriteReceipt":
         """Persist an idea and its conversation source in one write boundary."""
+
+    def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> "WriteReceipt":
+        """Persist one local-only web source, its authored revision, and chunks atomically."""
 
     def link_entities(
         self,
@@ -185,6 +191,35 @@ def capture_idea_payload_fingerprint(
     return payload_fingerprint("capture_idea", idea, source, source_revision, owner_id)
 
 
+def capture_source_payload_fingerprint(source: Source, revision: SourceRevision, owner_id: str) -> str:
+    return payload_fingerprint("capture_source", source, revision, owner_id)
+
+
+def validate_capture_source(source: Source, revision: SourceRevision, owner_id: str) -> None:
+    if not isinstance(source, Source) or not isinstance(revision, SourceRevision):
+        raise GraphWriteError("capture_source requires a Source and SourceRevision")
+    if source.owner_id != owner_id or revision.owner_id != owner_id:
+        raise GraphWriteError("capture_source nodes must belong to the local owner")
+    if source.kind is not MaterialKind.WEB or source.egress_policy is not EgressPolicy.LOCAL_ONLY or revision.egress_policy is not EgressPolicy.LOCAL_ONLY:
+        raise GraphWriteError("captured research sources must be local-only web sources")
+    if source.status.value != "active" or revision.status.value != "active":
+        raise GraphWriteError("captured research source and revision must be active")
+    if source.id == revision.id or source.revision != 1 or revision.revision != 1 or source.current_revision_id != revision.id or revision.source_id != source.id:
+        raise GraphWriteError("capture_source requires a matching initial Source revision")
+    if not isinstance(revision.content, str) or not revision.content.strip() or len(revision.content) > 4000:
+        raise GraphWriteError("authored summary must contain 1 to 4000 characters")
+    for value, field in ((source.locator, "url"), (revision.locator, "url"), (source.title, "title")):
+        if not isinstance(value, str) or not value.strip() or any(ord(char) < 32 for char in value):
+            raise GraphWriteError(f"{field} is invalid")
+    if len(source.title) > 500:
+        raise GraphWriteError("title exceeds the allowed length")
+    if source.locator != revision.locator or len(source.locator) > 2048:
+        raise GraphWriteError("Source URL must match its revision URL")
+    parsed = urlsplit(source.locator)
+    if any(char.isspace() for char in source.locator) or parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise GraphWriteError("url must be an absolute HTTP(S) URL without credentials")
+
+
 def _required_text(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise GraphWriteError(f"{field_name} must be a non-empty string")
@@ -208,6 +243,7 @@ class InMemoryGraphWriteService:
     _OPERATIONS = frozenset({
         "put_node",
         "capture_idea",
+        "capture_source",
         "capture_person",
         "capture_organization",
         "append_claim",
@@ -337,6 +373,38 @@ class InMemoryGraphWriteService:
                     source_revision_id=source_revision.id,
                     content_chunk_ids=tuple(chunk.id for chunk in content_chunks),
                 )
+                self._append_audit(receipt, actor, fingerprint)
+            except Exception:
+                for node_id in node_ids:
+                    self._nodes.pop(node_id, None)
+                    self._node_history.pop(node_id, None)
+                del self._audit[audit_length:]
+                raise
+            self._idempotency[idempotency_key] = (fingerprint, receipt)
+            return receipt
+
+    def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        operation = self._validate_command("capture_source", actor, idempotency_key)
+        validate_capture_source(source, source_revision, self.owner_id)
+        chunks = build_content_chunks(source_revision, operation=operation)
+        nodes = (source, source_revision, *chunks)
+        node_ids = tuple(_required_text(node.id, "node.id") for node in nodes)
+        if len(set(node_ids)) != len(node_ids):
+            raise GraphWriteError("capture_source nodes must have distinct ids")
+        fingerprint = capture_source_payload_fingerprint(source, source_revision, self.owner_id)
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            if any(node_id in self._nodes for node_id in node_ids):
+                raise NodeAlreadyExistsError("capture_source node id is already registered")
+            audit_length = len(self._audit)
+            try:
+                for node in nodes:
+                    self._nodes[node.id] = node
+                    self._node_history[node.id] = [node]
+                receipt = WriteReceipt(operation, source.id, NodeType.SOURCE.value, 1, idempotency_key,
+                    source_revision_id=source_revision.id, content_chunk_ids=tuple(chunk.id for chunk in chunks))
                 self._append_audit(receipt, actor, fingerprint)
             except Exception:
                 for node_id in node_ids:

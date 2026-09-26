@@ -168,6 +168,9 @@ class Neo4jGraphWriteService(GraphWritePort):
             actor=actor,
         )
 
+    def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.capture_source(source, source_revision, idempotency_key=idempotency_key, actor=actor)
+
     def link_entities(self, relationship: Any, *, idempotency_key: str, expected_revision: int | None = None, actor: str = "local-owner") -> WriteReceipt:
         if expected_revision not in (None, 0):
             raise RevisionConflictError("relationships do not have mutable revisions")
