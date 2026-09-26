@@ -46,7 +46,30 @@ def test_search_returns_keyword_and_one_hop_graph_hits() -> None:
     assert page.hits[0].node.id == person.id
     idea_hit = next(hit for hit in page.hits if hit.node.id == idea.id)
     assert idea_hit.path == (person.id, RelationType.CAN_CONTRIBUTE_TO.value, idea.id)
+    assert len(idea_hit.relation_path) == 1
+    step = idea_hit.relation_path[0]
+    assert step.from_id == person.id
+    assert step.to_id == idea.id
+    assert step.source_id == person.id
+    assert step.target_id == idea.id
+    assert step.predicate == RelationType.CAN_CONTRIBUTE_TO.value
+    assert step.traversal_direction == "outgoing"
+    assert step.evidence_ids == (evidence.id,)
+    assert step.status == "proposed"
+    assert step.confidence == 0.8
+    assert step.expires_at == "2027-01-01T00:00:00+00:00"
+    assert step.relation_assertion_id is None
     assert idea_hit.score < page.hits[0].score
+
+    incoming_page = reads.search("Circular materials", owner_id="owner-1")
+    person_hit = next(hit for hit in incoming_page.hits if hit.node.id == person.id)
+    incoming_step = person_hit.relation_path[0]
+    assert incoming_step.from_id == idea.id
+    assert incoming_step.to_id == person.id
+    assert incoming_step.source_id == person.id
+    assert incoming_step.target_id == idea.id
+    assert incoming_step.traversal_direction == "incoming"
+    assert incoming_step.relation_assertion_id is None
 
 
 def test_search_expands_to_two_hops_but_not_three() -> None:
@@ -89,6 +112,9 @@ def test_search_expands_to_two_hops_but_not_three() -> None:
         RelationType.DERIVED_FROM.value,
         "leaf",
     )
+    assert [step.from_id for step in page.hits[2].relation_path] == ["root", "middle"]
+    assert [step.to_id for step in page.hits[2].relation_path] == ["middle", "leaf"]
+    assert [step.relation_assertion_id for step in page.hits[2].relation_path] == [None, None]
     assert page.hits[0].score > page.hits[1].score > page.hits[2].score
 
 
