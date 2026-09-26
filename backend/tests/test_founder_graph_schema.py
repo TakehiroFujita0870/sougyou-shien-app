@@ -41,8 +41,25 @@ def test_schema_plan_is_idempotent_and_versioned() -> None:
     assert migration_plan(1, 1) == ()
     assert migration_plan(1, 2)
     assert all("IF NOT EXISTS" in query for query in migration_queries())
-    assert schema_manifest()["version"] == 3
-    assert schema_manifest()["rollback_query_count"] == 15
+    assert schema_manifest()["version"] == 4
+    assert schema_manifest()["rollback_query_count"] == 16
+
+
+def test_schema_v4_adds_only_internal_assertion_family_lock_uniqueness() -> None:
+    v4_queries = migration_queries(3, 4)
+    rollback = rollback_queries(4, 3)
+
+    assert schema_manifest()["version"] == 4
+    assert len(v4_queries) == 1
+    assert "FounderGraphAssertionFamilyLock" in v4_queries[0]
+    assert "(node.owner_id, node.family_key) IS UNIQUE" in v4_queries[0]
+    assert "IF NOT EXISTS" in v4_queries[0]
+    assert "CREATE INDEX" not in v4_queries[0]
+    assert len(rollback) == 1
+    assert rollback[0] == "DROP CONSTRAINT dots_assertion_family_lock_owner_key IF EXISTS"
+    assert "DELETE" not in rollback[0]
+    assert "FounderGraphAssertionFamilyLock" not in " ".join(migration_queries(0, 3))
+    assert all(node_type.value != "founder_graph_assertion_family_lock" for node_type in NodeType)
 
 
 def test_schema_v2_adds_only_new_labels_and_rollback_keeps_data_contract() -> None:
