@@ -168,6 +168,16 @@ class WriteReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceChainRepairPlan:
+    owner_id: str
+    source_count: int
+    revision_count: int
+    chunk_count: int
+    edges_to_add: tuple[tuple[str, str, str], ...]
+    edges_added: tuple[tuple[str, str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class GraphReadSnapshot:
     """Coherent immutable collection of values consumed by the memory reader."""
 
@@ -203,6 +213,102 @@ def _stable(value: Any) -> Any:
 def payload_fingerprint(*values: Any) -> str:
     encoded = json.dumps(_stable(values), ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _source_chain_repair_plan(
+    owner_id: str,
+    nodes_by_id: Mapping[str, Any],
+    structural_edges: tuple[tuple[str, str, str], ...] | list[tuple[str, str, str]],
+) -> tuple[int, int, int, tuple[tuple[str, str, str], ...]]:
+    """Validate the complete local source graph before deriving safe edge repairs."""
+
+    sources: dict[str, Source] = {}
+    revisions: dict[str, SourceRevision] = {}
+    chunks: dict[str, ContentChunk] = {}
+    for key, node in nodes_by_id.items():
+        if isinstance(node, (Source, SourceRevision, ContentChunk)):
+            if key != getattr(node, "id", None):
+                raise GraphWriteError("source-chain node identity does not match its stored key")
+            if node.owner_id != owner_id:
+                raise GraphWriteError("source-chain node does not belong to the local owner")
+            target = sources if isinstance(node, Source) else revisions if isinstance(node, SourceRevision) else chunks
+            if node.id in target:
+                raise GraphWriteError("source-chain node identity is duplicated")
+            target[node.id] = node
+        elif getattr(node, "node_type", None) in (
+            NodeType.SOURCE, NodeType.SOURCE_REVISION, NodeType.CONTENT_CHUNK,
+            NodeType.SOURCE.value, NodeType.SOURCE_REVISION.value, NodeType.CONTENT_CHUNK.value,
+        ):
+            raise GraphWriteError("source-chain record has an invalid value type")
+
+    revisions_by_source: dict[str, list[SourceRevision]] = {}
+    for revision in revisions.values():
+        source = sources.get(revision.source_id)
+        if source is None:
+            raise GraphWriteError("source revision references a missing local Source")
+        if revision.owner_id != source.owner_id:
+            raise GraphWriteError("source revision owner does not match its Source")
+        if sha256(revision.content.encode("utf-8")).hexdigest() != revision.content_hash:
+            raise GraphWriteError("source revision content hash does not match its content")
+        revisions_by_source.setdefault(source.id, []).append(revision)
+
+    expected_edges: list[tuple[str, str, str]] = []
+    expected_chunk_by_id: dict[str, ContentChunk] = {}
+    for source in sorted(sources.values(), key=lambda value: value.id):
+        history = sorted(revisions_by_source.get(source.id, ()), key=lambda value: value.revision)
+        if history:
+            try:
+                current = validate_source_revision_history(source, history)
+            except DomainValidationError as error:
+                raise GraphWriteError("source revision history or current pointer is inconsistent") from error
+            expected_edges.extend(
+                (source.id, "HAS_SOURCE_REVISION", revision.id) for revision in history
+            )
+            expected_edges.append((source.id, "CURRENT_SOURCE_REVISION", current.id))
+        elif source.current_revision_id is not None:
+            raise GraphWriteError("Source has a current revision pointer without local history")
+
+        for revision in history:
+            try:
+                expected_chunks = build_content_chunks(revision)
+            except DomainValidationError as error:
+                raise GraphWriteError("source revision cannot produce valid deterministic chunks") from error
+            for chunk in expected_chunks:
+                expected_chunk_by_id[chunk.id] = chunk
+                expected_edges.append((revision.id, "HAS_CHUNK", chunk.id))
+
+    if set(chunks) != set(expected_chunk_by_id):
+        raise GraphWriteError("source revision ContentChunks are missing or unexpected")
+    for chunk_id, expected in expected_chunk_by_id.items():
+        actual = chunks[chunk_id]
+        if (
+            actual.owner_id != expected.owner_id
+            or actual.source_revision_id != expected.source_revision_id
+            or actual.ordinal != expected.ordinal
+            or actual.char_start != expected.char_start
+            or actual.char_end != expected.char_end
+            or actual.text != expected.text
+            or actual.text_hash != expected.text_hash
+        ):
+            raise GraphWriteError("ContentChunk ordinal, range, text, or hash conflicts with its revision")
+
+    expected_set = set(expected_edges)
+    edge_counts: dict[tuple[str, str, str], int] = {}
+    lineage_types = {"HAS_SOURCE_REVISION", "CURRENT_SOURCE_REVISION", "HAS_CHUNK"}
+    for edge in structural_edges:
+        if not isinstance(edge, tuple) or len(edge) != 3:
+            raise GraphWriteError("structural edge is malformed")
+        if any(not isinstance(part, str) or not part for part in edge):
+            raise GraphWriteError("structural edge endpoint or type is malformed")
+        if edge[1] not in lineage_types:
+            continue
+        if edge not in expected_set:
+            raise GraphWriteError("source-chain structural edge has a contradictory endpoint or direction")
+        edge_counts[edge] = edge_counts.get(edge, 0) + 1
+        if edge_counts[edge] > 1:
+            raise GraphWriteError("source-chain structural edge is duplicated")
+    missing = tuple(edge for edge in expected_edges if edge not in edge_counts)
+    return len(sources), len(revisions), len(chunks), missing
 
 
 def capture_idea_payload_fingerprint(
@@ -488,6 +594,46 @@ class InMemoryGraphWriteService:
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt
+
+    def preview_source_chain_repair(self) -> SourceChainRepairPlan:
+        """Preflight every local Source chain and report missing v2 edges."""
+
+        with self._lock:
+            sources, revisions, chunks, missing = _source_chain_repair_plan(
+                self.owner_id, self._nodes, self._structural_edges,
+            )
+            return SourceChainRepairPlan(self.owner_id, sources, revisions, chunks, missing)
+
+    def apply_source_chain_repair(self, *, actor: str = "local-owner") -> SourceChainRepairPlan:
+        """Add only validated missing source-chain edges, with one audit event."""
+
+        actor = _required_text(actor, "actor")
+        with self._lock:
+            source_count, revision_count, chunk_count, missing = _source_chain_repair_plan(
+                self.owner_id, self._nodes, self._structural_edges,
+            )
+            if not missing:
+                return SourceChainRepairPlan(self.owner_id, source_count, revision_count, chunk_count, ())
+
+            fingerprint = payload_fingerprint("repair_source_chain_edges", self.owner_id, missing)
+            audit_key = f"source-chain-repair:{fingerprint[:32]}"
+            prior_edges = list(self._structural_edges)
+            prior_audit = len(self._audit)
+            try:
+                self._structural_edges.extend(missing)
+                if not any(event.idempotency_key == audit_key for event in self._audit):
+                    self._append_audit(
+                        WriteReceipt("repair_source_chain_edges", self.owner_id, "source_chain", 0, audit_key),
+                        actor,
+                        fingerprint,
+                    )
+            except Exception:
+                self._structural_edges = prior_edges
+                del self._audit[prior_audit:]
+                raise
+            return SourceChainRepairPlan(
+                self.owner_id, source_count, revision_count, chunk_count, missing, missing,
+            )
 
     def record_research_run(
         self,
