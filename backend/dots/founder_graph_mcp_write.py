@@ -145,6 +145,10 @@ class McpWriteSurface:
                     "classification": text,
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "evidence_ids": ids,
+                    "egress_policy": {
+                        "type": "string",
+                        "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value],
+                    },
                     "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
@@ -408,7 +412,13 @@ class McpWriteSurface:
         )
 
     def _append_claim(self, arguments: Mapping[str, Any]) -> WriteReceipt:
-        self._reject_unknown(arguments, {"text", "claim_type", "classification", "confidence", "evidence_ids", "idempotency_key"})
+        self._reject_unknown(arguments, {"text", "claim_type", "classification", "confidence", "evidence_ids", "egress_policy", "idempotency_key"})
+        try:
+            egress_policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY))
+        except (TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "append_claim allows only local_only or shareable.") from error
+        if egress_policy not in {EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE}:
+            raise McpWriteError("invalid_input", "append_claim allows only local_only or shareable.")
         claim = Claim(
             owner_id=self.writes.owner_id,
             id=self._command_id("claim", self._idempotency(arguments)),
@@ -417,6 +427,7 @@ class McpWriteSurface:
             classification=arguments.get("classification"),
             confidence=arguments.get("confidence", 0.0),
             evidence_ids=arguments.get("evidence_ids", ()),
+            egress_policy=egress_policy,
         )
         return self.writes.put_node(claim, idempotency_key=self._idempotency(arguments), operation="append_claim")
 
