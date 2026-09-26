@@ -124,6 +124,8 @@ _FIELD_ALLOWLIST: dict[NodeType, tuple[str, ...]] = {
         "expires_at",
         "supersedes_id",
         "provenance_id",
+        "based_on_brief_id",
+        "based_on_brief_section_index",
         "egress_policy",
     ),
     NodeType.CONTENT_CHUNK: (
