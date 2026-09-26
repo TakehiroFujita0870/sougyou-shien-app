@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from dots.founder_graph import EgressPolicy, Evidence, Idea, NodeType, RelationAssertion
-from dots.founder_graph import Claim, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
+from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
@@ -328,6 +328,44 @@ def test_higher_scoring_legacy_path_replaces_formal_path_provenance() -> None:
     result = McpReadSurface(reads).call("search", {"query": "Foundry graph"}, owner_id="owner-1")
     claim_result = next(item for item in result["results"] if item["id"] == claim.id)
     assert claim_result["relation_path"] == list(hit.path) and "semantic_relation_path" not in claim_result
+
+
+def test_higher_scoring_formal_path_replaces_all_winning_path_metadata() -> None:
+    driver, reads = _gateway()
+    source_low = PersonAsset(owner_id="owner-1", id="person-a", name="Foundry", egress_policy=EgressPolicy.SHAREABLE)
+    source_high = PersonAsset(owner_id="owner-1", id="person-z", name="Foundry graph", egress_policy=EgressPolicy.SHAREABLE)
+    asset = Asset(owner_id="owner-1", id="asset-1", name="Target", egress_policy=EgressPolicy.SHAREABLE)
+    evidence_low = Evidence(owner_id="owner-1", id="evidence-low", material_id="material-low", source_revision_id="revision-low", egress_policy=EgressPolicy.SHAREABLE)
+    evidence_high = Evidence(owner_id="owner-1", id="evidence-high", material_id="material-high", source_revision_id="revision-high", egress_policy=EgressPolicy.SHAREABLE)
+    nodes = (source_low, source_high, asset, evidence_low, evidence_high)
+    endpoint_rows = {node.id: _persisted_row(node, search_text=getattr(node, "name", "")) for node in nodes}
+    assertions = tuple(
+        RelationAssertion(
+            owner_id="owner-1", id=f"assertion-{suffix}", source_id=source.id, target_id=asset.id,
+            source_kind=NodeType.PERSON, target_kind=NodeType.ASSET,
+            predicate=RelationType.HAS_CAPABILITY, assertion_family_id=f"family-{suffix}",
+            status="inferred", confidence=0.8, evidence_ids=(evidence.id,),
+            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc), egress_policy=EgressPolicy.SHAREABLE,
+        )
+        for suffix, source, evidence in (("low", source_low, evidence_low), ("high", source_high, evidence_high))
+    )
+    formal_rows = [
+        _formal_edge_row(assertion, relation, endpoint_rows[target_id])
+        for assertion in assertions
+        for _source_id, relation, target_id in relation_assertion_structural_edges(assertion)
+    ]
+    driver.session_value.search_rows = [
+        {**endpoint_rows[source_low.id], "search_text": "foundry"},
+        {**endpoint_rows[source_high.id], "search_text": "foundry graph"},
+    ]
+    driver.session_value.fetch_rows = list(endpoint_rows.values())
+    driver.session_value.formal_rows = formal_rows
+
+    hit = next(item for item in reads.search("foundry graph", owner_id="owner-1").hits if item.node.id == asset.id)
+
+    assert hit.path == (source_high.id, RelationType.HAS_CAPABILITY.value, asset.id)
+    assert [step.relation_assertion_id for step in hit.relation_path] == ["assertion-high"]
+    assert hit.evidence_ids == (evidence_high.id,)
 
 
 def test_search_paginates_with_stable_cursor() -> None:

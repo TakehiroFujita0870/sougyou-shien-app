@@ -589,11 +589,18 @@ class Neo4jGraphReadService:
                     candidate_path = current_path + (step.predicate, neighbor_id) if current_path else (current_id, step.predicate, neighbor_id)
                     if candidate_score <= scores.get(neighbor_id, -1.0):
                         continue
+                    prior_steps = relation_paths.get(current_id, ())
+                    formal_candidate = not current_path or len(prior_steps) == (len(current_path) - 1) // 2
+                    candidate_relation_path = (*prior_steps, step) if formal_candidate else ()
+                    candidate_evidence = (
+                        tuple(dict.fromkeys(evidence_id for item in candidate_relation_path for evidence_id in item.evidence_ids))
+                        if formal_candidate
+                        else tuple(dict.fromkeys((*evidence_by_node.get(current_id, ()), *step.evidence_ids)))
+                    )
                     scores[neighbor_id] = candidate_score
                     paths[neighbor_id] = candidate_path
-                    prior_steps = relation_paths.get(current_id, ())
-                    relation_paths[neighbor_id] = (*prior_steps, step) if not current_path or len(prior_steps) == (len(current_path) - 1) // 2 else ()
-                    evidence_by_node[neighbor_id] = tuple(dict.fromkeys((*evidence_by_node.get(current_id, ()), *step.evidence_ids)))
+                    relation_paths[neighbor_id] = candidate_relation_path
+                    evidence_by_node[neighbor_id] = candidate_evidence
                     next_frontier.add(neighbor_id)
             relation_rows = _rows(tx.run(
                 _SEARCH_RELATIONS_QUERY, owner_id=owner_id, matched_ids=sorted(frontier),
