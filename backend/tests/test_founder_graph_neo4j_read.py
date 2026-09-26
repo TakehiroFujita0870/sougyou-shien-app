@@ -11,7 +11,7 @@ from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeT
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
-from dots.founder_graph_mcp import McpReadSurface
+from dots.founder_graph_mcp import McpReadError, McpReadSurface
 from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
 from dots.founder_graph_read import GraphReadError, GraphReadNotFoundError
 
@@ -234,6 +234,33 @@ def test_fetch_hides_foreign_and_non_current_rows() -> None:
         reads.fetch("old", owner_id="owner-1")
 
     assert reads.search("anything", owner_id="owner-2").hits == ()
+
+
+def test_neo4j_mcp_asset_search_and_fetch_use_only_safe_shareable_fields() -> None:
+    driver, reads = _gateway()
+    shareable = Asset(owner_id="owner-1", id="asset-shareable", name="Synthetic kit", kind="artifact",
+                      description="Safe synthetic summary", egress_policy=EgressPolicy.SHAREABLE)
+    local = Asset(owner_id="owner-1", id="asset-local", name="Private kit", kind="data",
+                  description="Private description", details={"private_notes": "synthetic secret"})
+    driver.session_value.search_rows = [
+        _persisted_row(shareable, search_text="Synthetic kit Safe synthetic summary"),
+        _persisted_row(local, search_text="Private kit Private description"),
+    ]
+    driver.session_value.fetch_rows = [_persisted_row(shareable), _persisted_row(local)]
+    surface = McpReadSurface(reads)
+
+    search = surface.call("search", {"query": "synthetic"}, owner_id="owner-1")
+    assert [item["id"] for item in search["results"]] == [shareable.id]
+    assert set(search["results"][0]["fields"]) == {"name", "kind", "description", "status"}
+    assert search["results"][0]["fields"]["description"] == "Safe synthetic summary"
+    fetched = surface.call("fetch", {"id": shareable.id}, owner_id="owner-1")
+    assert fetched["id"] == shareable.id
+    assert set(fetched["fields"]) == {"name", "kind", "description", "status"}
+    assert fetched["fields"]["description"] == "Safe synthetic summary"
+    with pytest.raises(McpReadError):
+        surface.call("fetch", {"id": local.id}, owner_id="owner-1")
+    assert "synthetic secret" not in json.dumps(search, ensure_ascii=False)
+    assert "synthetic secret" not in json.dumps(fetched, ensure_ascii=False)
 
 
 def test_mcp_fetch_returns_validated_formal_relation_projection():

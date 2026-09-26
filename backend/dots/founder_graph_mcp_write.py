@@ -9,6 +9,8 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from .founder_graph import (
+    Asset,
+    AssetKind,
     Claim,
     Decision,
     DomainValidationError,
@@ -59,6 +61,7 @@ class McpWriteSurface:
         "capture_source",
         "capture_person",
         "capture_organization",
+        "capture_asset",
         "append_claim",
         "capture_evidence",
         "link_entities",
@@ -72,6 +75,7 @@ class McpWriteSurface:
         "capture_source": False,
         "capture_person": False,
         "capture_organization": False,
+        "capture_asset": False,
         "append_claim": False,
         "capture_evidence": False,
         "link_entities": False,
@@ -137,6 +141,19 @@ class McpWriteSurface:
                         "enum": [policy.value for policy in EgressPolicy],
                     },
                     "idempotency_key": {"type": "string", "minLength": 1},
+                },
+                "additionalProperties": False,
+            },
+            "capture_asset": {
+                "type": "object",
+                "description": "資産の名称・種別・短い概要だけを保存します。本文、連絡先、個人メモ、出典本文、場所情報、来歴は受け付けません。",
+                "required": ["name", "kind", "idempotency_key"],
+                "properties": {
+                    "name": {**text, "minLength": 1, "maxLength": 500},
+                    "kind": {"type": "string", "enum": [kind.value for kind in AssetKind]},
+                    "summary": {**text, "maxLength": 4000},
+                    "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
+                    "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
             },
@@ -277,6 +294,8 @@ class McpWriteSurface:
                     if name == "capture_person"
                     else "Capture an organization node without creating relationships."
                     if name == "capture_organization"
+                    else "資産の安全なメタデータのみを保存します。関係や添付本文は作成しません。"
+                    if name == "capture_asset"
                     else "保存済みの記録同士を、根拠付きの未確定な関係として結びます。Ideaを含む場合は、調査済みBriefの章とEvidenceが必要です。"
                     if name == "link_entities"
                     else f"Purpose-limited Founder Graph write command: {name}. Provide the fields in the input schema and reuse idempotency_key on retries."
@@ -437,6 +456,32 @@ class McpWriteSurface:
             idempotency_key=idempotency_key,
             operation="capture_organization",
         )
+
+    def _capture_asset(self, arguments: Mapping[str, Any]) -> WriteReceipt:
+        self._reject_unknown(arguments, {"name", "kind", "summary", "egress_policy", "idempotency_key"})
+        idempotency_key = self._idempotency(arguments)
+        try:
+            policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY))
+            kind = AssetKind(arguments.get("kind"))
+        except (TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "kind must be supported and egress_policy must be local_only or shareable.") from error
+        if policy not in {EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE}:
+            raise McpWriteError("invalid_input", "capture_asset allows only local_only or shareable.")
+        summary = arguments.get("summary", "")
+        if not isinstance(summary, str) or len(summary) > 4000:
+            raise McpWriteError("invalid_input", "summary must be a string of at most 4000 characters")
+        asset_id = self._command_id("asset", idempotency_key)
+        asset = Asset(
+            owner_id=self.writes.owner_id,
+            id=asset_id,
+            name=self._text(arguments.get("name"), "name", max_length=500),
+            kind=kind,
+            description=summary.strip(),
+            details={},
+            egress_policy=policy,
+            provenance=Provenance(actor="local-owner", operation="capture_asset", target_id=asset_id, idempotency_key=idempotency_key),
+        )
+        return self.writes.put_node(asset, idempotency_key=idempotency_key, operation="capture_asset")
 
     def _append_claim(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {"text", "claim_type", "classification", "confidence", "evidence_ids", "egress_policy", "idempotency_key"})

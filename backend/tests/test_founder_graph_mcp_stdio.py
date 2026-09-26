@@ -25,7 +25,7 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
     assert ping["result"] == {}
     tools = listed["result"]["tools"]
     assert {tool["name"] for tool in tools} == {
-        "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
+        "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
         "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
@@ -56,6 +56,17 @@ def test_tools_call_delegates_read_and_idempotent_write() -> None:
     assert json.loads(write["result"]["content"][0]["text"])["target_type"] == "idea"
     assert json.loads(replay["result"]["content"][0]["text"])["replayed"] is True
     assert search["result"]["structuredContent"]["results"] == []
+
+
+def test_capture_asset_is_discoverable_and_callable_over_stdio() -> None:
+    server = create_stdio_server("owner-asset")
+    tool = next(item for item in server.handle(request("tools/list", 90, {}))["result"]["tools"] if item["name"] == "capture_asset")
+    assert tool["inputSchema"]["required"] == ["name", "kind", "idempotency_key"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+    captured = server.handle(request("tools/call", 91, {"name": "capture_asset", "arguments": {
+        "name": "Synthetic asset", "kind": "artifact", "summary": "Short metadata", "idempotency_key": "asset-stdio",
+    }}))
+    assert captured["result"]["structuredContent"]["target_type"] == "asset"
 
 
 def test_stdio_source_grounded_evidence_returns_common_receipt_only() -> None:
