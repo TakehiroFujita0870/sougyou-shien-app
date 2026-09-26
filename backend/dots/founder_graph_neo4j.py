@@ -169,6 +169,11 @@ def _node_properties(node: Any) -> dict[str, Any]:
         supersedes_id = getattr(node, "supersedes_id", None)
         if supersedes_id is not None:
             properties["supersedes_id"] = str(supersedes_id)
+    elif node_type is NodeType.EVIDENCE:
+        for reference in ("claim_id", "source_revision_id", "content_chunk_id"):
+            value = getattr(node, reference, None)
+            if value is not None:
+                properties[reference] = str(value)
     elif node_type is NodeType.RELATION_ASSERTION:
         properties["assertion_family_id"] = str(node.assertion_family_id)
         if node.supersedes_id is not None:
@@ -2314,6 +2319,36 @@ class Neo4jGraphGateway:
                 raise GraphWriteError("relation assertion Evidence has an invalid type")
             if _record_value(evidence, "status") != Status.ACTIVE.value:
                 raise GraphWriteError("relation assertion Evidence must be active")
+            lineage = _single(tx.run(
+                "MATCH (e:Evidence {id: $evidence_id, owner_id: $owner_id}) "
+                "OPTIONAL MATCH (e)-[ef:EVIDENCE_FROM]->(evidence_target) "
+                "OPTIONAL MATCH (ch:ContentChunk) WHERE ch.id = e.content_chunk_id "
+                "OPTIONAL MATCH (e)-[expected_ef:EVIDENCE_FROM]->(expected_ch:ContentChunk "
+                "{owner_id: $owner_id}) WHERE expected_ch.id = e.content_chunk_id "
+                "OPTIONAL MATCH (chunk_origin)-[hc:HAS_CHUNK]->(ch) "
+                "OPTIONAL MATCH (r:SourceRevision {owner_id: $owner_id}) WHERE r.id = e.source_revision_id "
+                "OPTIONAL MATCH (r)-[expected_hc:HAS_CHUNK]->(ch) "
+                "RETURN e.content_chunk_id AS content_chunk_id, e.source_revision_id AS source_revision_id, "
+                "ch.id AS chunk_id, ch.node_type AS chunk_type, ch.status AS chunk_status, "
+                "r.id AS revision_id, r.node_type AS revision_type, r.status AS revision_status, "
+                "count(DISTINCT ef) AS evidence_edge_count, count(DISTINCT expected_ef) AS expected_evidence_edge_count, "
+                "count(DISTINCT hc) AS chunk_edge_count, count(DISTINCT expected_hc) AS expected_chunk_edge_count",
+                evidence_id=evidence_id, owner_id=self.owner_id,
+            ))
+            if (
+                lineage is None
+                or _record_value(lineage, "content_chunk_id") != _record_value(lineage, "chunk_id")
+                or _record_value(lineage, "source_revision_id") != _record_value(lineage, "revision_id")
+                or _record_value(lineage, "chunk_type") != NodeType.CONTENT_CHUNK.value
+                or _record_value(lineage, "revision_type") != NodeType.SOURCE_REVISION.value
+                or _record_value(lineage, "chunk_status") != Status.ACTIVE.value
+                or _record_value(lineage, "revision_status") != Status.ACTIVE.value
+                or _record_value(lineage, "evidence_edge_count") != 1
+                or _record_value(lineage, "expected_evidence_edge_count") != 1
+                or _record_value(lineage, "chunk_edge_count") != 1
+                or _record_value(lineage, "expected_chunk_edge_count") != 1
+            ):
+                raise GraphWriteError("relation assertion Evidence source-grounded lineage is invalid")
             if assertion.egress_policy is EgressPolicy.SHAREABLE and _record_value(
                 evidence, "egress_policy"
             ) != EgressPolicy.SHAREABLE.value:

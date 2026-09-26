@@ -964,6 +964,28 @@ class InMemoryGraphWriteService:
                     raise GraphWriteError("relation assertion Evidence must belong to the local owner")
                 if evidence.status is not Status.ACTIVE:
                     raise GraphWriteError("relation assertion Evidence must be active")
+                if evidence.content_chunk_id is None or evidence.source_revision_id is None:
+                    raise GraphWriteError("relation assertion Evidence must be source-grounded")
+                chunk = self._nodes.get(evidence.content_chunk_id)
+                revision = self._nodes.get(evidence.source_revision_id)
+                if (
+                    not isinstance(chunk, ContentChunk)
+                    or not isinstance(revision, SourceRevision)
+                    or chunk.owner_id != self.owner_id
+                    or revision.owner_id != self.owner_id
+                    or chunk.status is not Status.ACTIVE
+                    or revision.status is not Status.ACTIVE
+                    or chunk.source_revision_id != revision.id
+                    or tuple(
+                        edge for edge in self._structural_edges
+                        if edge[0] == evidence.id and edge[1] == EvidenceEdgeType.EVIDENCE_FROM.value
+                    ) != ((evidence.id, EvidenceEdgeType.EVIDENCE_FROM.value, chunk.id),)
+                    or tuple(
+                        edge for edge in self._structural_edges
+                        if edge[1] == "HAS_CHUNK" and edge[2] == chunk.id
+                    ) != ((revision.id, "HAS_CHUNK", chunk.id),)
+                ):
+                    raise GraphWriteError("relation assertion Evidence source-grounded lineage is invalid")
                 if assertion.egress_policy is EgressPolicy.SHAREABLE and evidence.egress_policy is not EgressPolicy.SHAREABLE:
                     raise GraphWriteError("shareable relation assertion requires shareable Evidence")
 

@@ -9,8 +9,8 @@ from dots.founder_graph import (
     Claim,
     DomainValidationError,
     EgressPolicy,
-    Evidence,
     Idea,
+    MaterialKind,
     NodeType,
     Provenance,
     RelationAssertion,
@@ -20,7 +20,9 @@ from dots.founder_graph import (
     RelationshipStatus,
     ResearchCampaign,
     ResearchRun,
+    Source,
     Status,
+    SourceRevision,
     relation_assertion_structural_edges,
 )
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
@@ -39,14 +41,22 @@ def _setup():
                 egress_policy=EgressPolicy.SHAREABLE)
     claim = Claim(
         id="claim-relation", owner_id=writes.owner_id, text="Synthetic claim", confidence=0.8,
-        evidence_ids=("evidence-relation",), egress_policy=EgressPolicy.SHAREABLE,
+        egress_policy=EgressPolicy.SHAREABLE,
     )
-    evidence = Evidence(
-        id="evidence-relation", owner_id=writes.owner_id, material_id="material-relation",
-        claim_id=claim.id, egress_policy=EgressPolicy.SHAREABLE,
-    )
-    for node in (idea, claim, evidence):
+    for node in (idea, claim):
         writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    source = Source(owner_id=writes.owner_id, id="source-relation", title="Synthetic source",
+                    kind=MaterialKind.WEB, locator="https://example.test/source",
+                    current_revision_id="source-revision-relation", revision=1)
+    source_revision = SourceRevision(owner_id=writes.owner_id, id=source.current_revision_id,
+                                     source_id=source.id, content="Synthetic source text",
+                                     locator=source.locator, egress_policy=EgressPolicy.LOCAL_ONLY)
+    source_receipt = writes.capture_source(source, source_revision, idempotency_key="source-relation-seed")
+    evidence_receipt = writes.capture_evidence(
+        claim.id, source_receipt.content_chunk_ids[0], egress_policy=EgressPolicy.SHAREABLE,
+        idempotency_key="evidence-relation-seed",
+    )
+    evidence = writes.get_node(evidence_receipt.target_id)
 
     created = now - timedelta(minutes=10)
     campaign = ResearchCampaign(
@@ -141,6 +151,61 @@ def test_save_assertion_checks_researched_brief_and_replays_without_repair():
     assert (assertion.id, RelationAssertionEdgeType.ASSERTS_TO.value, assertion.target_id) not in writes.structural_edges()
     assert writes.get_latest_idea_brief(idea.id) is brief
     assert writes.get_node(evidence.id) is evidence
+
+
+def test_relation_assertion_requires_source_grounded_evidence_and_structural_lineage():
+    writes, _, _, evidence, _, assertion = _setup()
+    legacy = replace(evidence, material_id="legacy-material", source_revision_id=None, content_chunk_id=None,
+                     char_start=None, char_end=None, locator=None, content_hash=None)
+    writes._nodes[evidence.id] = legacy
+    with pytest.raises(GraphWriteError, match="source-grounded"):
+        writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="legacy-evidence")
+    writes._nodes[evidence.id] = evidence
+    evidence_edge = (evidence.id, "EVIDENCE_FROM", evidence.content_chunk_id)
+    writes._structural_edges.remove(evidence_edge)
+    with pytest.raises(GraphWriteError, match="source-grounded"):
+        writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="missing-evidence-edge")
+    writes._structural_edges.append(evidence_edge)
+    chunk_edge = (evidence.source_revision_id, "HAS_CHUNK", evidence.content_chunk_id)
+    writes._structural_edges.remove(chunk_edge)
+    with pytest.raises(GraphWriteError, match="source-grounded"):
+        writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="missing-chunk-edge")
+    writes._structural_edges.append(chunk_edge)
+    result = writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="grounded-evidence")
+    assert result.target_id == assertion.id
+
+
+@pytest.mark.parametrize("extra_edge", [
+    "evidence_to_wrong_label", "evidence_to_foreign_owner",
+    "wrong_label_into_chunk", "foreign_owner_into_chunk",
+])
+def test_relation_assertion_rejects_extra_malformed_evidence_edges(extra_edge: str):
+    writes, _, _, evidence, _, assertion = _setup()
+    chunk = writes.get_node(evidence.content_chunk_id)
+    if extra_edge == "evidence_to_wrong_label":
+        target = Claim(owner_id=writes.owner_id, id="extra-claim-target", text="Synthetic")
+        writes._nodes[target.id] = target
+        edge = (evidence.id, "EVIDENCE_FROM", target.id)
+    elif extra_edge == "evidence_to_foreign_owner":
+        target = Claim(owner_id="foreign-owner", id="extra-foreign-target", text="Synthetic")
+        writes._nodes[target.id] = target
+        edge = (evidence.id, "EVIDENCE_FROM", target.id)
+    elif extra_edge == "wrong_label_into_chunk":
+        origin = Claim(owner_id=writes.owner_id, id="extra-claim-origin", text="Synthetic")
+        writes._nodes[origin.id] = origin
+        edge = (origin.id, "HAS_CHUNK", chunk.id)
+    else:
+        origin = SourceRevision(owner_id="foreign-owner", id="extra-foreign-origin",
+                                source_id="foreign-source", content="Synthetic")
+        writes._nodes[origin.id] = origin
+        edge = (origin.id, "HAS_CHUNK", chunk.id)
+    writes._structural_edges.append(edge)
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+
+    with pytest.raises(GraphWriteError, match="source-grounded"):
+        writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key=f"extra-{extra_edge}")
+
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
 
 
 def test_local_only_assertion_may_cite_local_only_endpoints_and_evidence():
