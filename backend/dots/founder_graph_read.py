@@ -11,9 +11,14 @@ from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
 from .founder_graph import (
+    ContentChunk,
+    Claim,
+    EgressPolicy,
     Evidence,
     Idea,
     NodeType,
+    Source,
+    SourceRevision,
     RelationAssertion,
     RelationAssertionEdgeType,
     Relationship,
@@ -134,6 +139,9 @@ class GraphReadPort(Protocol):
 
     def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
         """Fetch one owner-scoped node view."""
+
+    def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
+        """Fetch one current, grounded, shareable relation assertion."""
 
 
 _NON_CURRENT = frozenset({"retracted", "superseded", "expired", "cancelled", "revoked", "archived"})
@@ -339,7 +347,10 @@ class GraphReadService:
                 current_evidence = evidence_by_node.get(current_id, ())
                 for neighbor_id, step in sorted(
                     adjacency.get(current_id, ()),
-                    key=lambda item: (item[0], item[1].predicate, item[1].evidence_ids),
+                    key=lambda item: (
+                        item[0], item[1].predicate, item[1].evidence_ids,
+                        item[1].relation_assertion_id or "",
+                    ),
                 ):
                     if neighbor_id in current_path[0::2]:
                         continue
@@ -382,6 +393,22 @@ class GraphReadService:
         if node is None or not self._visible(node, owner_id):
             raise GraphReadNotFoundError("node was not found")
         return _node_view(node)
+
+    def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
+        snapshot = self._writes.read_snapshot()
+        nodes = {node.id: node for node in snapshot.nodes}
+        assertion = nodes.get(node_id)
+        if not isinstance(assertion, RelationAssertion) or assertion.owner_id != owner_id:
+            raise GraphReadNotFoundError("node was not found")
+        adjacency: dict[str, list[tuple[str, RelationPathStep]]] = {}
+        self._add_formal_assertion_edges(
+            adjacency, snapshot, nodes, owner_id, datetime.now(timezone.utc), monotonic(), 30_000,
+        )
+        for neighbors in adjacency.values():
+            for _neighbor, step in neighbors:
+                if step.relation_assertion_id == assertion.id and step.traversal_direction == "outgoing":
+                    return step
+        raise GraphReadNotFoundError("node was not found")
 
     @staticmethod
     def _visible(node: Any, owner_id: str) -> bool:
@@ -432,6 +459,8 @@ class GraphReadService:
                 continue
             if not self._assertion_current(assertion, node_by_id, owner_id, at):
                 continue
+            if assertion.egress_policy is not EgressPolicy.SHAREABLE:
+                continue
             if assertion.supersedes_id is not None and len(successor_ids.get(assertion.supersedes_id, ())) != 1:
                 continue
             try:
@@ -443,7 +472,12 @@ class GraphReadService:
                 continue
             source = node_by_id.get(assertion.source_id)
             target = node_by_id.get(assertion.target_id)
-            if not self._current_endpoint(source, owner_id, node_by_id) or not self._current_endpoint(target, owner_id, node_by_id):
+            if (
+                not self._current_endpoint(source, owner_id, node_by_id)
+                or not self._current_endpoint(target, owner_id, node_by_id)
+                or getattr(source, "egress_policy", None) is not EgressPolicy.SHAREABLE
+                or getattr(target, "egress_policy", None) is not EgressPolicy.SHAREABLE
+            ):
                 continue
             if getattr(source, "node_type", None) is not assertion.source_kind:
                 continue
@@ -455,9 +489,59 @@ class GraphReadService:
             if valid_brief_id is False:
                 continue
             valid_evidence = True
+            edge_counts: dict[tuple[str, str, str], int] = {}
+            for edge in edges:
+                edge_counts[edge] = edge_counts.get(edge, 0) + 1
             for evidence_id in assertion.evidence_ids:
                 evidence = node_by_id.get(evidence_id)
-                if not isinstance(evidence, Evidence) or evidence.owner_id != owner_id or evidence.status is not Status.ACTIVE:
+                if (
+                    not isinstance(evidence, Evidence)
+                    or evidence.owner_id != owner_id
+                    or evidence.status is not Status.ACTIVE
+                    or evidence.egress_policy is not EgressPolicy.SHAREABLE
+                    or evidence.content_chunk_id is None
+                    or evidence.source_revision_id is None
+                    or evidence.claim_id is None
+                    or evidence.material_id is not None
+                    or bool(evidence.excerpt)
+                ):
+                    valid_evidence = False
+                    break
+                claim = node_by_id.get(evidence.claim_id)
+                chunk = node_by_id.get(evidence.content_chunk_id)
+                revision = node_by_id.get(evidence.source_revision_id)
+                source_record = node_by_id.get(revision.source_id) if isinstance(revision, SourceRevision) else None
+                if (
+                    not isinstance(claim, Claim)
+                    or claim.owner_id != owner_id
+                    or claim.status is not Status.ACTIVE
+                    or not isinstance(chunk, ContentChunk)
+                    or chunk.owner_id != owner_id
+                    or chunk.status is not Status.ACTIVE
+                    or not isinstance(revision, SourceRevision)
+                    or revision.owner_id != owner_id
+                    or revision.status is not Status.ACTIVE
+                    or chunk.source_revision_id != revision.id
+                    or not isinstance(source_record, Source)
+                    or source_record.owner_id != owner_id
+                    or source_record.status is not Status.ACTIVE
+                    or source_record.current_revision_id != revision.id
+                    or evidence.locator != f"chars:{evidence.char_start}-{evidence.char_end}"
+                    or evidence.content_hash != chunk.text_hash
+                    or edge_counts.get((evidence.id, "EVIDENCE_FROM", chunk.id)) != 1
+                    or edge_counts.get((revision.id, "HAS_CHUNK", chunk.id)) != 1
+                    or edge_counts.get((source_record.id, "HAS_SOURCE_REVISION", revision.id)) != 1
+                    or edge_counts.get((source_record.id, "CURRENT_SOURCE_REVISION", revision.id)) != 1
+                    or any(
+                        edge[0] == evidence.id and edge[1] == "EVIDENCE_FROM" and edge[2] != chunk.id
+                        for edge in edges
+                    )
+                    or any(edge[1] == "HAS_CHUNK" and edge[2] == chunk.id and edge[0] != revision.id for edge in edges)
+                    or any(
+                        edge[0] == source_record.id and edge[1] == "CURRENT_SOURCE_REVISION" and edge[2] != revision.id
+                        for edge in edges
+                    )
+                ):
                     valid_evidence = False
                     break
             if not valid_evidence:

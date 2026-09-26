@@ -111,6 +111,27 @@ _SEARCH_FORMAL_ASSERTIONS_QUERY = (
     "b.search_text AS target_search_text ORDER BY assertion_id, relation, target_id"
 )
 
+_EVIDENCE_LINEAGE_QUERY = (
+    "MATCH (e:Evidence {id: $evidence_id, owner_id: $owner_id}) "
+    "OPTIONAL MATCH (e)-[ef:EVIDENCE_FROM]->(c) "
+    "OPTIONAL MATCH (r:SourceRevision)-[hc:HAS_CHUNK]->(c) "
+    "OPTIONAL MATCH (s:Source {id: r.source_id, owner_id: $owner_id}) "
+    "OPTIONAL MATCH (s)-[sh:HAS_SOURCE_REVISION]->(r) "
+    "OPTIONAL MATCH (s)-[sc:CURRENT_SOURCE_REVISION]->(r) "
+    "OPTIONAL MATCH (cl:Claim {id: e.claim_id, owner_id: $owner_id}) "
+    "RETURN e.owner_id AS evidence_owner_id, e.status AS evidence_status, "
+    "e.egress_policy AS evidence_egress_policy, e.payload_json AS evidence_payload_json, "
+    "count(DISTINCT ef) AS evidence_edge_count, count(DISTINCT hc) AS revision_edge_count, "
+    "count(DISTINCT sh) AS source_history_edge_count, count(DISTINCT sc) AS source_current_edge_count, "
+    "size([(s)-[:CURRENT_SOURCE_REVISION]->() | 1]) AS source_current_edge_total, "
+    "collect(DISTINCT {chunk_id: c.id, chunk_labels: labels(c), chunk_owner_id: c.owner_id, chunk_status: c.status, "
+    "chunk_source_revision_id: c.source_revision_id, chunk_payload_json: c.payload_json, "
+    "revision_id: r.id, revision_owner_id: r.owner_id, revision_status: r.status, "
+    "revision_payload_json: r.payload_json, source_id: s.id, source_owner_id: s.owner_id, "
+    "source_status: s.status, source_payload_json: s.payload_json}) AS lineages, cl.id AS claim_id, "
+    "cl.owner_id AS claim_owner_id, cl.status AS claim_status, cl.payload_json AS claim_payload_json"
+)
+
 _RELATIONS_QUERY = (
     "MATCH (a)-[r]->(b) "
     "WHERE a.id = $node_id AND a.owner_id = $owner_id AND b.owner_id = $owner_id "
@@ -446,7 +467,9 @@ class Neo4jGraphReadService:
                     not isinstance(view, NodeView)
                     or view.node_type != NodeType.EVIDENCE.value
                     or view.status != Status.ACTIVE.value
-                    for view in evidence_views
+                    or view.fields.get("egress_policy") != EgressPolicy.SHAREABLE.value
+                    or not self._evidence_lineage_valid(tx, evidence_id=evidence_id, owner_id=owner_id)
+                    for evidence_id, view in zip(assertion.evidence_ids, evidence_views, strict=True)
                 ):
                     continue
                 step = RelationPathStep(
@@ -468,6 +491,83 @@ class Neo4jGraphReadService:
             except (GraphReadError, GraphWriteError, DomainValidationError, TypeError, ValueError, KeyError):
                 continue
         return adjacency, views
+
+    @staticmethod
+    def _evidence_lineage_valid(tx: Any, *, evidence_id: str, owner_id: str) -> bool:
+        rows = _rows(tx.run(_EVIDENCE_LINEAGE_QUERY, evidence_id=evidence_id, owner_id=owner_id))
+        if len(rows) != 1:
+            return False
+        row = rows[0]
+        try:
+            evidence = json.loads(_row_value(row, "evidence_payload_json"))
+            lineages = _row_value(row, "lineages")
+            claim = json.loads(_row_value(row, "claim_payload_json"))
+        except (TypeError, ValueError):
+            return False
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("id") != evidence_id
+            or evidence.get("owner_id") != owner_id
+            or evidence.get("status") != Status.ACTIVE.value
+            or evidence.get("egress_policy") != EgressPolicy.SHAREABLE.value
+            or evidence.get("claim_id") is None
+            or evidence.get("content_chunk_id") is None
+            or evidence.get("source_revision_id") is None
+            or evidence.get("material_id") is not None
+            or evidence.get("excerpt") != ""
+            or _row_value(row, "evidence_owner_id") != owner_id
+            or _row_value(row, "evidence_status") != Status.ACTIVE.value
+            or _row_value(row, "evidence_egress_policy") != EgressPolicy.SHAREABLE.value
+            or _row_value(row, "evidence_edge_count") != 1
+            or _row_value(row, "revision_edge_count") != 1
+            or _row_value(row, "source_history_edge_count") != 1
+            or _row_value(row, "source_current_edge_count") != 1
+            or _row_value(row, "source_current_edge_total") != 1
+            or _row_value(row, "claim_id") != evidence.get("claim_id")
+            or _row_value(row, "claim_owner_id") != owner_id
+            or _row_value(row, "claim_status") != Status.ACTIVE.value
+            or not isinstance(lineages, list)
+            or len(lineages) != 1
+            or not isinstance(lineages[0], Mapping)
+            or not isinstance(claim, dict)
+        ):
+            return False
+        lineage = lineages[0]
+        try:
+            chunk = json.loads(lineage["chunk_payload_json"])
+            revision = json.loads(lineage["revision_payload_json"])
+            source = json.loads(lineage["source_payload_json"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        chunk_id = evidence["content_chunk_id"]
+        revision_id = evidence["source_revision_id"]
+        claim_id = evidence["claim_id"]
+        return (
+            isinstance(chunk, dict)
+            and isinstance(revision, dict)
+            and isinstance(source, dict)
+            and lineage.get("chunk_id") == chunk_id == chunk.get("id")
+            and isinstance(lineage.get("chunk_labels"), (list, tuple))
+            and "ContentChunk" in lineage.get("chunk_labels", ())
+            and lineage.get("chunk_owner_id") == owner_id == chunk.get("owner_id")
+            and lineage.get("chunk_status") == Status.ACTIVE.value == chunk.get("status")
+            and lineage.get("chunk_source_revision_id") == revision_id == chunk.get("source_revision_id")
+            and lineage.get("revision_id") == revision_id == revision.get("id")
+            and lineage.get("revision_owner_id") == owner_id == revision.get("owner_id")
+            and lineage.get("revision_status") == Status.ACTIVE.value == revision.get("status")
+            and lineage.get("source_id") == revision.get("source_id")
+            and lineage.get("source_owner_id") == owner_id
+            and lineage.get("source_status") == Status.ACTIVE.value
+            and claim.get("id") == claim_id
+            and claim.get("owner_id") == owner_id
+            and claim.get("status") == Status.ACTIVE.value
+            and evidence.get("locator") == f"chars:{evidence.get('char_start')}-{evidence.get('char_end')}"
+            and evidence.get("content_hash") == chunk.get("text_hash")
+            and source.get("id") == lineage.get("source_id")
+            and source.get("owner_id") == owner_id
+            and source.get("status") == Status.ACTIVE.value
+            and source.get("current_revision_id") == revision_id
+        )
 
     @contextmanager
     def _read_session(self):
@@ -499,6 +599,24 @@ class Neo4jGraphReadService:
         if view is None:
             raise GraphReadNotFoundError("node was not found")
         return view
+
+    def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
+        identifier = _required_node_id(node_id)
+        owner = _required_owner(owner_id)
+        if owner != self._gateway.owner_id:
+            raise GraphReadNotFoundError("node was not found")
+        started = monotonic()
+        with self._read_session() as session:
+            step = self._gateway._execute_read(
+                session,
+                lambda tx: next((step for neighbors in self._formal_adjacency(
+                    tx, owner_id=owner, at=datetime.now(timezone.utc), started=started, timeout_ms=30_000,
+                )[0].values() for _neighbor, step in neighbors
+                    if step.relation_assertion_id == identifier and step.traversal_direction == "outgoing"), None),
+            )
+        if step is None:
+            raise GraphReadNotFoundError("node was not found")
+        return step
 
     def search(
         self,
@@ -584,7 +702,10 @@ class Neo4jGraphReadService:
             next_frontier: set[str] = set()
             for current_id in sorted(frontier):
                 current_path = paths.get(current_id, ())
-                for neighbor_id, step in sorted(formal.get(current_id, ()), key=lambda item: (item[0], item[1].predicate)):
+                for neighbor_id, step in sorted(
+                    formal.get(current_id, ()),
+                    key=lambda item: (item[0], item[1].predicate, item[1].evidence_ids, item[1].relation_assertion_id or ""),
+                ):
                     self._check_timeout(started, timeout_ms)
                     if neighbor_id in current_path[0::2]:
                         continue
