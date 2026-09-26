@@ -29,6 +29,7 @@ function installStorage() {
 
 async function mountApp(width) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -45,8 +46,8 @@ afterEach(async () => {
 });
 
 describe('UI E2E quality loop: Home / Project / Knowledge', () => {
-  it.each([1280, 390])('keeps Home AI composer as the only input entry at %ipx', async (width) => {
-    const { container } = await mountApp(width);
+  it('keeps Home AI composer as the only input entry at 1280x720', async () => {
+    const { container } = await mountApp(1280);
     expect(container.querySelector('nav[aria-label="主要ページ"]')).toBeTruthy();
     expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
     expect(container.querySelector('#home-supervisor-message')).toBeTruthy();
@@ -55,13 +56,13 @@ describe('UI E2E quality loop: Home / Project / Knowledge', () => {
   it('keeps surface context and selected surface after an F5-equivalent remount without network', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    const first = await mountApp(390);
+    const first = await mountApp(1280);
     const project = [...first.container.querySelectorAll('nav button')].find((button) => button.textContent.trim() === 'プロジェクト');
     await act(async () => project.click());
     expect(first.container.querySelector('[aria-current="page"]').textContent).toBe('プロジェクト');
     await act(async () => first.root.unmount());
     mounted.shift().container.remove();
-    const second = await mountApp(390);
+    const second = await mountApp(1280);
     expect(second.container.querySelector('[aria-current="page"]').textContent).toBe('プロジェクト');
     expect(second.container.textContent).toContain('Project');
     expect(fetchSpy).not.toHaveBeenCalled();

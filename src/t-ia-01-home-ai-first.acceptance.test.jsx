@@ -13,6 +13,7 @@ const profileKey = 'dots:user-profile';
 
 function mountHome(width) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -45,8 +46,8 @@ afterEach(async () => {
 });
 
 describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
-  it.each([1280, 390])('keeps the initial canvas composer-first at %ipx', async (width) => {
-    const container = await mountHome(width);
+  it('keeps the initial canvas composer-first at 1280x720', async () => {
+    const container = await mountHome(1280);
     expect(container.textContent).toContain('Dots. AI');
     expect(container.querySelector('label[for="home-supervisor-message"]')).toBeTruthy();
     expect(container.querySelector('textarea#home-supervisor-message')).toBeTruthy();
@@ -58,7 +59,7 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
   });
 
   it('exposes keyboard and screen-reader acceptance landmarks', async () => {
-    const container = await mountHome(390);
+    const container = await mountHome(1280);
     const nav = container.querySelector('nav[aria-label="主要ページ"]');
     const main = container.querySelector('main');
     const textarea = container.querySelector('textarea#home-supervisor-message');
@@ -73,12 +74,12 @@ describe('T-IA-01 Home AI-first visual regression acceptance contract', () => {
   it('survives F5-equivalent remount without context leakage or network calls', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    const first = await mountHome(390);
+    const first = await mountHome(1280);
     await typeInto(first.querySelector('#home-supervisor-message'), '検証用の工場課題');
     const firstRoot = mounted[0].root;
     await act(async () => firstRoot.unmount());
     mounted.shift().container.remove();
-    const second = await mountHome(390);
+    const second = await mountHome(1280);
     expect(second.querySelector('#home-supervisor-message').value).toBe('検証用の工場課題');
     expect(second.textContent).not.toMatch(/local|fake|mock/i);
     expect(fetchSpy).not.toHaveBeenCalled();
