@@ -625,6 +625,8 @@ class InMemoryGraphWriteService:
             claim, chunk = self._nodes.get(claim_id), self._nodes.get(content_chunk_id)
             if not isinstance(claim, Claim) or claim.owner_id != self.owner_id or claim.status is not Status.ACTIVE:
                 raise GraphWriteNotFoundError("claim does not exist")
+            if policy is EgressPolicy.SHAREABLE and claim.egress_policy is not EgressPolicy.SHAREABLE:
+                raise GraphWriteError("shareable Evidence requires an active shareable Claim")
             if not isinstance(chunk, ContentChunk) or chunk.owner_id != self.owner_id or chunk.status is not Status.ACTIVE:
                 raise GraphWriteNotFoundError("content chunk does not exist")
             revision = self._nodes.get(chunk.source_revision_id)

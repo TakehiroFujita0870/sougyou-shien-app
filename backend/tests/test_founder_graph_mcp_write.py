@@ -30,6 +30,8 @@ from dots.founder_graph import (
     project_shareable,
 )
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from dots.founder_graph_mcp import McpReadSurface
+from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_neo4j_write import PersistedNodeReference
 from dots.founder_graph_write import InMemoryGraphWriteService, WriteReceipt
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
@@ -233,6 +235,48 @@ def test_capture_source_rejects_unsafe_or_non_http_urls(url: str) -> None:
     with pytest.raises(McpWriteError):
         surface.call("capture_source", {"url": url, "title": "Source", "summary": "Summary", "idempotency_key": "bad"}, owner_id="owner-1")
     assert writes.nodes() == ()
+
+
+def test_capture_evidence_allows_shareable_policy_only_for_shareable_claim_and_projects_no_lineage() -> None:
+    writes, surface = _surface()
+    schema = next(item["inputSchema"] for item in surface.tool_definitions() if item["name"] == "capture_evidence")
+    assert schema["properties"]["egress_policy"]["enum"] == ["local_only", "shareable"]
+    person_schema = next(item["inputSchema"] for item in surface.tool_definitions() if item["name"] == "capture_person")
+    assert person_schema["properties"]["egress_policy"]["enum"] == ["local_only"]
+    source = surface.call("capture_source", {
+        "url": "https://example.test/private", "title": "Private source",
+        "summary": "Private body phrase", "idempotency_key": "evidence-source",
+    }, owner_id="owner-1")
+    claim = surface.call("append_claim", {
+        "text": "Shareable claim", "egress_policy": "shareable", "idempotency_key": "shareable-claim",
+    }, owner_id="owner-1")
+    receipt = surface.call("capture_evidence", {
+        "claim_id": claim.target_id, "content_chunk_id": source.content_chunk_ids[0],
+        "egress_policy": "shareable", "idempotency_key": "shareable-evidence",
+    }, owner_id="owner-1")
+    evidence = writes.get_node(receipt.target_id)
+    assert evidence.egress_policy is EgressPolicy.SHAREABLE
+    projection = McpReadSurface(GraphReadService(writes)).call(
+        "fetch", {"id": receipt.target_id}, owner_id="owner-1",
+    )
+    assert projection["id"] == receipt.target_id
+    serialized = str(projection)
+    assert all(value not in serialized for value in (
+        "Private body phrase", "https://example.test/private", source.source_revision_id,
+        source.content_chunk_ids[0],
+    ))
+    assert not {"excerpt", "locator", "claim_id", "source_revision_id", "content_chunk_id"} & set(projection["fields"])
+    for private_field in ("excerpt", "locator", "source_text"):
+        with pytest.raises(McpWriteError):
+            surface.call("capture_evidence", {
+                "claim_id": claim.target_id, "content_chunk_id": source.content_chunk_ids[0],
+                "idempotency_key": f"reject-{private_field}", private_field: "private",
+            }, owner_id="owner-1")
+    with pytest.raises(McpWriteError):
+        surface.call("capture_evidence", {
+            "claim_id": claim.target_id, "content_chunk_id": source.content_chunk_ids[0],
+            "egress_policy": "unknown", "idempotency_key": "reject-policy",
+        }, owner_id="owner-1")
 
 
 def test_capture_person_and_organization_are_idempotent_and_keep_relationships_explicit() -> None:
