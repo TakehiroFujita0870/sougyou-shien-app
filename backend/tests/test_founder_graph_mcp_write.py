@@ -487,6 +487,52 @@ def test_link_entities_retries_same_formal_assertion_without_duplicate_edges() -
     assert writes.structural_edges().count((assertion.id, RelationAssertionEdgeType.ASSERTS_TO.value, second.id)) == 1
 
 
+@pytest.mark.parametrize("private_component", ["evidence", "endpoint"])
+def test_link_entities_rejects_shareable_assertion_with_local_only_component_without_writes(
+    private_component: str,
+) -> None:
+    writes, surface = _surface()
+    first = PersonAsset(
+        owner_id="owner-1", id=f"private-check-first-{private_component}", name="First",
+        egress_policy=EgressPolicy.LOCAL_ONLY if private_component == "endpoint" else EgressPolicy.SHAREABLE,
+    )
+    second = PersonAsset(
+        owner_id="owner-1", id=f"private-check-second-{private_component}", name="Second",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    claim = Claim(
+        owner_id="owner-1", id=f"private-check-claim-{private_component}", text="Synthetic", confidence=0.8,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    evidence = Evidence(
+        owner_id="owner-1", id=f"private-check-evidence-{private_component}", material_id="private-check-material",
+        claim_id=claim.id,
+        egress_policy=EgressPolicy.LOCAL_ONLY if private_component == "evidence" else EgressPolicy.SHAREABLE,
+    )
+    for node in (first, second, claim, evidence):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before_nodes = writes.nodes()
+    before_edges = writes.structural_edges()
+    before_audit = writes.audit_events()
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", {
+            "source_id": first.id,
+            "target_id": second.id,
+            "relation": RelationType.INTRODUCED_BY.value,
+            "status": RelationshipStatus.INFERRED.value,
+            "confidence": 0.7,
+            "expires_at": "2099-01-01T00:00:00Z",
+            "evidence_ids": [evidence.id],
+            "egress_policy": EgressPolicy.SHAREABLE.value,
+            "idempotency_key": f"shareable-private-component-{private_component}",
+        }, owner_id="owner-1")
+
+    assert writes.nodes() == before_nodes
+    assert writes.structural_edges() == before_edges
+    assert writes.audit_events() == before_audit
+
+
 @pytest.mark.parametrize("status", ["confirmed", "rejected", "superseded", "expired"])
 def test_link_entities_rejects_non_model_generated_status_without_writes(status: str) -> None:
     writes, surface = _surface()
