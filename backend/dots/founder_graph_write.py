@@ -26,7 +26,9 @@ from .founder_graph import (
     NodeType,
     PersonAsset,
     RelationAssertion,
+    RelationAssertionEdgeType,
     RelationType,
+    RelationshipStatus,
     ReportVersion,
     Relationship,
     ResearchCampaign,
@@ -40,6 +42,7 @@ from .founder_graph import (
     validate_report_references,
     validate_run_campaign_reference,
     validate_source_revision_history,
+    relation_assertion_structural_edges,
 )
 from .idea_brief import IdeaBriefVersion
 
@@ -272,6 +275,7 @@ class InMemoryGraphWriteService:
         "capture_organization",
         "append_claim",
         "link_entities",
+        "save_relation_assertion",
         "save_research_report",
         "record_decision",
         "record_correction",
@@ -305,6 +309,8 @@ class InMemoryGraphWriteService:
         node_owner = _required_text(getattr(node, "owner_id", None), "node.owner_id")
         if node_owner != self.owner_id:
             raise GraphWriteError("node owner does not match the local owner")
+        if isinstance(node, RelationAssertion):
+            raise GraphWriteError("RelationAssertion must be saved with save_relation_assertion")
         fingerprint = payload_fingerprint(operation, node, expected_revision, self.owner_id)
         with self._lock:
             replay = self._replay_or_raise(idempotency_key, fingerprint)
@@ -644,6 +650,208 @@ class InMemoryGraphWriteService:
             lineage = self._idea_brief_ids_by_root.get(_required_text(idea_lineage_root_id, "idea_lineage_root_id"), ())
             return None if not lineage else self._idea_briefs[lineage[-1]]
 
+    def save_relation_assertion(
+        self,
+        assertion: RelationAssertion,
+        *,
+        expected_family_revision: int | None,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Atomically save a formal assertion and its canonical structural refs.
+
+        This memory-only method is intentionally absent from GraphWritePort
+        until a persistent adapter can implement the same transaction contract.
+        """
+        operation = self._validate_command("save_relation_assertion", actor, idempotency_key)
+        if not isinstance(assertion, RelationAssertion):
+            raise GraphWriteError("save_relation_assertion requires a RelationAssertion")
+        if assertion.owner_id != self.owner_id:
+            raise GraphWriteError("relation assertion owner does not match the local owner")
+        if assertion.status is RelationshipStatus.SUPERSEDED:
+            raise GraphWriteError("a new relation assertion cannot start in superseded status")
+        if expected_family_revision is not None and (
+            type(expected_family_revision) is not int or expected_family_revision < 1
+        ):
+            raise RevisionConflictError("expected family revision must be a positive integer or None")
+        intent = tuple(
+            (field.name, getattr(assertion, field.name))
+            for field in fields(assertion)
+            if field.name != "valid_from"
+        )
+        fingerprint = payload_fingerprint(operation, intent, expected_family_revision, self.owner_id)
+
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            if assertion.id in self._nodes or assertion.id in self._idea_briefs:
+                raise NodeAlreadyExistsError("relation assertion id is already registered")
+
+            endpoints = (assertion.source_id, assertion.target_id)
+            resolved: dict[str, Any] = {}
+            for node_id, declared_kind in (
+                (assertion.source_id, assertion.source_kind),
+                (assertion.target_id, assertion.target_kind),
+            ):
+                node = self._nodes.get(node_id)
+                if node is None:
+                    raise GraphWriteNotFoundError("relation assertion endpoint does not exist")
+                if _node_type(node) is not declared_kind:
+                    raise GraphWriteError("relation assertion endpoint type does not match its declaration")
+                if getattr(node, "owner_id", None) != self.owner_id:
+                    raise GraphWriteError("relation assertion endpoints must belong to the local owner")
+                status = getattr(node, "status", None)
+                if status in {
+                    Status.ARCHIVED, Status.SUPERSEDED, Status.RETRACTED,
+                    Status.EXPIRED, Status.CANCELLED, Status.REVOKED, Status.FAILED,
+                }:
+                    raise GraphWriteError("relation assertion endpoint is not current and active")
+                if any(
+                    getattr(candidate, "owner_id", None) == self.owner_id
+                    and getattr(candidate, "supersedes_id", None) == node_id
+                    for candidate in self._nodes.values()
+                ):
+                    raise GraphWriteError("relation assertion endpoint has a superseding revision")
+                resolved[node_id] = node
+            for node_id in endpoints:
+                node = resolved[node_id]
+                if isinstance(node, Idea) and self._current_idea_revision_locked(node) is not node:
+                    raise GraphWriteError("relation assertion must reference the current Idea revision")
+
+            if not assertion.evidence_ids:
+                raise GraphWriteError("formal relation assertion requires Evidence")
+            for evidence_id in assertion.evidence_ids:
+                evidence = self._nodes.get(evidence_id)
+                if not isinstance(evidence, Evidence):
+                    raise GraphWriteNotFoundError("relation assertion Evidence does not exist")
+                if evidence.owner_id != self.owner_id:
+                    raise GraphWriteError("relation assertion Evidence must belong to the local owner")
+                if evidence.status is not Status.ACTIVE:
+                    raise GraphWriteError("relation assertion Evidence must be active")
+
+            idea_nodes = tuple(node for node in resolved.values() if isinstance(node, Idea))
+            if idea_nodes:
+                based_on_idea = (
+                    resolved[assertion.source_id]
+                    if isinstance(resolved[assertion.source_id], Idea)
+                    else resolved[assertion.target_id]
+                )
+                root_idea_id = self._idea_root_id_locked(based_on_idea)
+                lineage = self._idea_brief_ids_by_root.get(root_idea_id, ())
+                latest_brief = self._idea_briefs[lineage[-1]] if lineage else None
+                if (
+                    assertion.based_on_brief_id is None
+                    or latest_brief is None
+                    or assertion.based_on_brief_id != latest_brief.id
+                    or latest_brief.based_on_idea_id != based_on_idea.id
+                    or not latest_brief.research_run_ids
+                ):
+                    raise GraphWriteError("Idea relation requires the exact latest researched Brief")
+                section = latest_brief.sections[assertion.based_on_brief_section_index]
+                if not set(assertion.evidence_ids).issubset(section.evidence_ids):
+                    raise GraphWriteError("relation Evidence must be cited by the selected Brief section")
+                self._validate_brief_research_locked(latest_brief, based_on_idea)
+            elif assertion.based_on_brief_id is not None:
+                raise GraphWriteError("non-Idea relation cannot claim an Idea Brief reference")
+
+            predecessor = None
+            family_members = tuple(
+                node for node in self._nodes.values()
+                if isinstance(node, RelationAssertion)
+                and node.owner_id == self.owner_id
+                and node.assertion_family_id == assertion.assertion_family_id
+            )
+            family_revisions = tuple(sorted(node.revision for node in family_members))
+            if family_revisions and family_revisions != tuple(range(1, family_revisions[-1] + 1)):
+                raise GraphWriteError("relation assertion family history is ambiguous")
+            actual_family_revision = family_revisions[-1] if family_revisions else None
+            if expected_family_revision != actual_family_revision:
+                raise RevisionConflictError("expected relation assertion family revision is stale")
+
+            if assertion.supersedes_id is None:
+                if family_members or assertion.revision != 1:
+                    raise RevisionConflictError("new relation family must start at revision one")
+            else:
+                prior = self._nodes.get(assertion.supersedes_id)
+                if not isinstance(prior, RelationAssertion) or prior.owner_id != self.owner_id:
+                    raise GraphWriteNotFoundError("relation assertion predecessor is not owner-scoped")
+                predecessor = prior
+                successors = tuple(
+                    node for node in self._nodes.values()
+                    if isinstance(node, RelationAssertion)
+                    and node.owner_id == self.owner_id
+                    and node.supersedes_id == prior.id
+                )
+                if successors:
+                    raise GraphWriteError("relation assertion predecessor already has a successor")
+                if prior.assertion_family_id == assertion.assertion_family_id:
+                    if prior.revision != actual_family_revision or assertion.revision != prior.revision + 1:
+                        raise RevisionConflictError("same-family correction must extend the exact latest revision")
+                    if (prior.source_id, prior.predicate, prior.target_id) != (
+                        assertion.source_id, assertion.predicate, assertion.target_id
+                    ):
+                        raise GraphWriteError("same-family correction cannot change endpoints or predicate")
+                elif family_members or assertion.revision != 1:
+                    raise RevisionConflictError("changed relation family must start at revision one")
+                elif (prior.source_id, prior.predicate, prior.target_id) == (
+                    assertion.source_id, assertion.predicate, assertion.target_id
+                ):
+                    raise GraphWriteError("unchanged relation must remain in its existing family")
+
+            try:
+                structural_edges = relation_assertion_structural_edges(assertion)
+            except DomainValidationError as error:
+                raise GraphWriteError(str(error)) from error
+            receipt = WriteReceipt(
+                operation, assertion.id, NodeType.RELATION_ASSERTION.value, assertion.revision, idempotency_key,
+            )
+            audit_length = len(self._audit)
+            edge_length = len(self._structural_edges)
+            prior_history = list(self._node_history[predecessor.id]) if predecessor is not None else None
+            if predecessor is not None and (not prior_history or prior_history[-1] != predecessor):
+                raise GraphWriteError("relation assertion predecessor history is inconsistent")
+            try:
+                if predecessor is not None and predecessor.status is not RelationshipStatus.REJECTED:
+                    self._nodes[predecessor.id] = replace(predecessor, status=RelationshipStatus.SUPERSEDED)
+                    self._node_history[predecessor.id].append(self._nodes[predecessor.id])
+                self._nodes[assertion.id] = assertion
+                self._node_history[assertion.id] = [assertion]
+                self._structural_edges.extend(structural_edges)
+                self._append_audit(receipt, actor, fingerprint)
+                self._idempotency[idempotency_key] = (fingerprint, receipt)
+            except Exception:
+                self._nodes.pop(assertion.id, None)
+                self._node_history.pop(assertion.id, None)
+                if predecessor is not None and prior_history is not None:
+                    self._nodes[predecessor.id] = prior_history[-1]
+                    self._node_history[predecessor.id] = prior_history
+                del self._structural_edges[edge_length:]
+                del self._audit[audit_length:]
+                self._idempotency.pop(idempotency_key, None)
+                raise
+            return receipt
+
+    def _idea_root_id_locked(self, idea: Idea) -> str:
+        current = idea
+        seen = {current.id}
+        while current.supersedes_id is not None:
+            parent = self._nodes.get(current.supersedes_id)
+            if (
+                not isinstance(parent, Idea)
+                or parent.owner_id != self.owner_id
+                or parent.id in seen
+                or current.revision != parent.revision + 1
+            ):
+                raise GraphWriteError("Idea lineage is not authoritative")
+            seen.add(parent.id)
+            current = parent
+        return current.id
+
+    def _current_idea_revision_locked(self, idea: Idea) -> Idea:
+        root_id = self._idea_root_id_locked(idea)
+        return self._resolve_current_idea_locked(root_id)
+
     def _resolve_current_idea_locked(self, lineage_root_id: str) -> Idea:
         root = self._nodes.get(_required_text(lineage_root_id, "idea_lineage_root_id"))
         if not isinstance(root, Idea) or root.owner_id != self.owner_id or root.supersedes_id is not None:
@@ -745,6 +953,12 @@ class InMemoryGraphWriteService:
             raise GraphWriteError("relationship must be a Relationship")
         if relationship.owner_id != self.owner_id:
             raise GraphWriteError("relationship owner does not match the local owner")
+        if (
+            relationship.relation is RelationType.SUPERSEDES
+            and relationship.source_kind is NodeType.RELATION_ASSERTION
+            and relationship.target_kind is NodeType.RELATION_ASSERTION
+        ):
+            raise GraphWriteError("RelationAssertion supersession must use save_relation_assertion")
         if expected_revision not in (None, 0):
             raise RevisionConflictError("relationships do not have mutable revisions")
         fingerprint = payload_fingerprint(operation, relationship, expected_revision, self.owner_id)
@@ -759,6 +973,12 @@ class InMemoryGraphWriteService:
                 raise GraphWriteNotFoundError("relationship endpoints must already exist")
             source_type = _node_type(source)
             target_type = _node_type(target)
+            if (
+                relationship.relation is RelationType.SUPERSEDES
+                and isinstance(source, RelationAssertion)
+                and isinstance(target, RelationAssertion)
+            ):
+                raise GraphWriteError("RelationAssertion supersession must use save_relation_assertion")
             if (source_type, target_type) not in _ALLOWED_RELATION_ENDPOINTS[relationship.relation]:
                 raise GraphWriteError("relationship endpoint types are not allowlisted")
             if getattr(source, "owner_id", None) != self.owner_id or getattr(target, "owner_id", None) != self.owner_id:

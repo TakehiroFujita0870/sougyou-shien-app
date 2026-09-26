@@ -349,6 +349,15 @@ class RelationType(StrEnum):
     BASED_ON = "BASED_ON"
 
 
+class RelationAssertionEdgeType(StrEnum):
+    """Persistence-only structural edges owned by RelationAssertion writes."""
+
+    ASSERTS_FROM = "ASSERTS_FROM"
+    ASSERTS_TO = "ASSERTS_TO"
+    EVIDENCED_BY = "EVIDENCED_BY"
+    SUPERSEDES = "SUPERSEDES"
+
+
 RelationshipType = RelationType
 
 
@@ -2262,6 +2271,32 @@ class RelationAssertion:
 
     def egress_projection(self, **kwargs: Any) -> dict[str, object]:
         return project_shareable(self, **kwargs)
+
+
+def relation_assertion_structural_edges(
+    assertion: RelationAssertion,
+) -> tuple[tuple[str, str, str], ...]:
+    """Return canonical structural refs for a validated assertion value.
+
+    Callers must resolve and validate all referenced records before storing
+    these triples. This helper fixes labels and direction; it is not proof
+    that any endpoint or Evidence exists.
+    """
+    if not isinstance(assertion, RelationAssertion):
+        raise DomainValidationError("structural edges require a RelationAssertion")
+    if len(assertion.evidence_ids) != len(set(assertion.evidence_ids)):
+        raise DomainValidationError("relation assertion Evidence IDs must be unique")
+    edges = [
+        (assertion.id, RelationAssertionEdgeType.ASSERTS_FROM.value, assertion.source_id),
+        (assertion.id, RelationAssertionEdgeType.ASSERTS_TO.value, assertion.target_id),
+        *(
+            (assertion.id, RelationAssertionEdgeType.EVIDENCED_BY.value, evidence_id)
+            for evidence_id in assertion.evidence_ids
+        ),
+    ]
+    if assertion.supersedes_id is not None:
+        edges.append((assertion.id, RelationAssertionEdgeType.SUPERSEDES.value, assertion.supersedes_id))
+    return tuple(edges)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
