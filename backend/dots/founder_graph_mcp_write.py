@@ -438,18 +438,31 @@ class McpWriteSurface:
             contact=contact,
             private_notes=arguments.get("private_notes", ""),
             egress_policy=EgressPolicy.LOCAL_ONLY,
+            provenance=Provenance(
+                actor="local-owner",
+                operation="capture_person",
+                target_id=self._command_id("person", idempotency_key),
+                idempotency_key=idempotency_key,
+            ),
         )
         return self.writes.put_node(person, idempotency_key=idempotency_key, operation="capture_person")
 
     def _capture_organization(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {"name", "description", "egress_policy", "idempotency_key"})
         idempotency_key = self._idempotency(arguments)
+        organization_id = self._command_id("organization", idempotency_key)
         organization = Organization(
             owner_id=self.writes.owner_id,
-            id=self._command_id("organization", idempotency_key),
+            id=organization_id,
             name=self._text(arguments.get("name"), "name"),
             description=arguments.get("description", ""),
             egress_policy=EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY)),
+            provenance=Provenance(
+                actor="local-owner",
+                operation="capture_organization",
+                target_id=organization_id,
+                idempotency_key=idempotency_key,
+            ),
         )
         return self.writes.put_node(
             organization,
