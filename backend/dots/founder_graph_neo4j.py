@@ -21,9 +21,14 @@ from .founder_graph import (
     CampaignAuthorizationRegistry,
     ContentChunk,
     DomainValidationError,
+    EgressPolicy,
     NodeType,
+    Provenance,
     ReportVersion,
+    RelationAssertion,
+    RelationAssertionEdgeType,
     Relationship,
+    RelationshipStatus,
     RelationType,
     ResearchRun,
     Source,
@@ -33,6 +38,7 @@ from .founder_graph import (
     validate_run_campaign_reference,
     validate_source_revision_history,
     _ALLOWED_RELATION_ENDPOINTS,
+    relation_assertion_structural_edges,
 )
 from .founder_graph_write import (
     GraphWriteError,
@@ -154,6 +160,14 @@ def _node_properties(node: Any) -> dict[str, Any]:
         supersedes_id = getattr(node, "supersedes_id", None)
         if supersedes_id is not None:
             properties["supersedes_id"] = str(supersedes_id)
+    elif node_type is NodeType.CLAIM:
+        supersedes_id = getattr(node, "supersedes_id", None)
+        if supersedes_id is not None:
+            properties["supersedes_id"] = str(supersedes_id)
+    elif node_type is NodeType.RELATION_ASSERTION:
+        properties["assertion_family_id"] = str(node.assertion_family_id)
+        if node.supersedes_id is not None:
+            properties["supersedes_id"] = str(node.supersedes_id)
     return properties
 
 
@@ -854,7 +868,8 @@ class Neo4jGraphGateway:
                 lambda tx: _single(tx.run(
                     "MATCH (n {id: $node_id, owner_id: $owner_id}) "
                     "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
-                    "n.revision AS revision, n.payload_json AS payload_json LIMIT 1",
+                    "n.revision AS revision, n.status AS status, n.assertion_family_id AS assertion_family_id, "
+                    "n.supersedes_id AS supersedes_id, n.payload_json AS payload_json LIMIT 1",
                     node_id=node_id.strip(),
                     owner_id=self.owner_id,
                 )),
@@ -867,6 +882,9 @@ class Neo4jGraphGateway:
             "owner_id": _record_value(row, "owner_id"),
             "node_type": _record_value(row, "node_type"),
             "revision": _record_value(row, "revision", 0),
+            "status": _record_value(row, "status"),
+            "assertion_family_id": _record_value(row, "assertion_family_id"),
+            "supersedes_id": _record_value(row, "supersedes_id"),
             "payload_json": _record_value(row, "payload_json"),
         }
         if values["owner_id"] != self.owner_id:
@@ -1808,6 +1826,363 @@ class Neo4jGraphGateway:
         fingerprint = payload_fingerprint("link_entities", relationship, self.owner_id)
         with self._session() as session:
             return self._execute_write(session, lambda tx: self._link_tx(tx, relationship, relation_type, idempotency_key, actor, fingerprint))
+
+    def save_relation_assertion(
+        self,
+        assertion: RelationAssertion,
+        *,
+        expected_family_revision: int | None,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Atomically persist a typed assertion, structural edges, and audit."""
+        if not isinstance(assertion, RelationAssertion):
+            raise GraphWriteError("save_relation_assertion requires a RelationAssertion")
+        if assertion.owner_id != self.owner_id:
+            raise GraphWriteError("relation assertion owner does not match the local owner")
+        if assertion.status is RelationshipStatus.SUPERSEDED:
+            raise GraphWriteError("a new relation assertion cannot start in superseded status")
+        if expected_family_revision is not None and (
+            type(expected_family_revision) is not int or expected_family_revision < 1
+        ):
+            raise RevisionConflictError("expected family revision must be a positive integer or None")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        intent = tuple(
+            (field.name, getattr(assertion, field.name))
+            for field in fields(assertion)
+            if field.name != "valid_from"
+        )
+        fingerprint = payload_fingerprint(
+            "save_relation_assertion", intent, expected_family_revision, self.owner_id,
+        )
+        try:
+            with self._session() as session:
+                return self._execute_write(session, lambda tx: self._save_relation_assertion_tx(
+                    tx, assertion, expected_family_revision, idempotency_key, actor, fingerprint,
+                ))
+        except Neo4jUnavailableError as failure:
+            return self._recover_relation_assertion_receipt(
+                assertion, idempotency_key, fingerprint, failure,
+            )
+
+    def _relation_assertion_audit_tx(self, tx: Any, key: str) -> Any | None:
+        return _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
+            "RETURN a.operation AS operation, a.payload_fingerprint AS payload_fingerprint, "
+            "a.target_id AS target_id, a.target_type AS target_type, a.revision AS revision",
+            owner_id=self.owner_id, idempotency_key=key,
+        ))
+
+    def _relation_assertion_receipt(self, record: Any | None, assertion: RelationAssertion,
+                                    key: str, fingerprint: str) -> WriteReceipt | None:
+        if record is None:
+            return None
+        if (
+            _record_value(record, "operation") != "save_relation_assertion"
+            or _record_value(record, "payload_fingerprint") != fingerprint
+            or _record_value(record, "target_id") != assertion.id
+            or _record_value(record, "target_type") != NodeType.RELATION_ASSERTION.value
+        ):
+            raise IdempotencyConflictError("idempotency key was reused with a different payload")
+        revision = _record_value(record, "revision")
+        if type(revision) is not int:
+            raise GraphWriteError("persisted relation assertion receipt is invalid")
+        if revision != assertion.revision:
+            raise IdempotencyConflictError("idempotency key was reused with a different payload")
+        return WriteReceipt(
+            "save_relation_assertion", assertion.id, NodeType.RELATION_ASSERTION.value,
+            revision, key, replayed=True,
+        )
+
+    def _recover_relation_assertion_receipt(
+        self, assertion: RelationAssertion, key: str, fingerprint: str, failure: Neo4jUnavailableError,
+    ) -> WriteReceipt:
+        try:
+            with self._session() as session:
+                record = self._execute_read(session, lambda tx: self._relation_assertion_audit_tx(tx, key))
+        except Exception:
+            raise failure from None
+        receipt = self._relation_assertion_receipt(record, assertion, key, fingerprint)
+        if receipt is None:
+            raise failure from None
+        return receipt
+
+    def _relation_assertion_record_tx(self, tx: Any, assertion_id: str) -> Any | None:
+        return _single(tx.run(
+            "MATCH (n:RelationAssertion {id: $id, owner_id: $owner_id}) "
+            "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+            "n.revision AS revision, n.status AS status, n.assertion_family_id AS assertion_family_id, "
+            "n.supersedes_id AS supersedes_id, n.payload_json AS payload_json",
+            id=assertion_id, owner_id=self.owner_id,
+        ))
+
+    def _decode_relation_assertion_record(self, record: Any) -> RelationAssertion:
+        if record is None or _record_value(record, "owner_id") != self.owner_id or _record_value(
+            record, "node_type"
+        ) != NodeType.RELATION_ASSERTION.value:
+            raise GraphWriteNotFoundError("relation assertion predecessor is not owner-scoped")
+        raw = _record_value(record, "payload_json")
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            raise GraphWriteError("persisted relation assertion is invalid") from None
+        expected_fields = {item.name for item in fields(RelationAssertion)}
+        if not isinstance(payload, dict) or set(payload) != expected_fields:
+            raise GraphWriteError("persisted relation assertion is invalid")
+        if payload.get("id") != _record_value(record, "id") or payload.get("owner_id") != self.owner_id:
+            raise GraphWriteError("persisted relation assertion is invalid")
+        revision = _record_value(record, "revision")
+        if type(revision) is not int or payload.get("revision") != revision:
+            raise GraphWriteError("persisted relation assertion is invalid")
+        if _record_value(record, "assertion_family_id") != payload.get("assertion_family_id"):
+            raise GraphWriteError("persisted relation assertion is invalid")
+        if _record_value(record, "supersedes_id") != payload.get("supersedes_id"):
+            raise GraphWriteError("persisted relation assertion is invalid")
+        if _record_value(record, "status") != payload.get("status"):
+            raise GraphWriteError("persisted relation assertion is invalid")
+        try:
+            for name in ("valid_from", "expires_at"):
+                value = payload.get(name)
+                if isinstance(value, str):
+                    payload[name] = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                elif value is not None and not isinstance(value, datetime):
+                    raise ValueError
+            provenance = payload.get("provenance")
+            if not isinstance(provenance, dict) or set(provenance) != {item.name for item in fields(Provenance)}:
+                raise ValueError
+            occurred_at = provenance.get("occurred_at")
+            if isinstance(occurred_at, str):
+                provenance["occurred_at"] = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+            payload["provenance"] = Provenance(**provenance)
+            decoded = RelationAssertion(**payload)
+        except (TypeError, ValueError, KeyError):
+            raise GraphWriteError("persisted relation assertion is invalid") from None
+        if _json_value(decoded) != json.loads(raw):
+            raise GraphWriteError("persisted relation assertion is invalid")
+        return decoded
+
+    def _lock_assertion_families_tx(self, tx: Any, family_ids: set[str]) -> None:
+        for family_id in sorted(family_ids):
+            row = _single(tx.run(
+                "MERGE (l:FounderGraphAssertionFamilyLock {owner_id: $owner_id, family_key: $family_key}) "
+                "SET l._dots_relation_write_lock = $lock_token REMOVE l._dots_relation_write_lock "
+                "RETURN l.family_key AS family_key",
+                owner_id=self.owner_id, family_key=family_id, lock_token=uuid4().hex,
+            ))
+            if row is None:
+                raise GraphWriteError("relation assertion family could not be locked")
+
+    def _save_relation_assertion_tx(
+        self, tx: Any, assertion: RelationAssertion, expected_family_revision: int | None,
+        key: str, actor: str, fingerprint: str,
+    ) -> WriteReceipt:
+        replay = self._relation_assertion_receipt(self._relation_assertion_audit_tx(tx, key), assertion, key, fingerprint)
+        if replay is not None:
+            return replay
+
+        endpoint_ids = (assertion.source_id, assertion.target_id)
+        endpoint_rows: dict[str, Any] = {}
+        for endpoint_id in dict.fromkeys(endpoint_ids):
+            rows = _rows(tx.run(
+                "MATCH (n {id: $id}) RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+                "n.status AS status, n.egress_policy AS egress_policy, n.payload_json AS payload_json, n.revision AS revision",
+                id=endpoint_id,
+            ))
+            if not rows:
+                raise GraphWriteNotFoundError("relation assertion endpoint does not exist")
+            if len(rows) != 1:
+                raise GraphWriteError("relation assertion endpoint identity is ambiguous")
+            endpoint_rows[endpoint_id] = rows[0]
+
+        declared = {assertion.source_id: assertion.source_kind, assertion.target_id: assertion.target_kind}
+        idea_roots = set()
+        for endpoint_id, row in endpoint_rows.items():
+            if _record_value(row, "owner_id") != self.owner_id:
+                raise GraphWriteError("relation assertion endpoints must belong to the local owner")
+            if _record_value(row, "node_type") != declared[endpoint_id].value:
+                raise GraphWriteError("relation assertion endpoint type does not match its declaration")
+            if declared[endpoint_id] is NodeType.IDEA:
+                idea_roots.add(self._idea_root_for_tx(tx, endpoint_id))
+        for root_id in sorted(idea_roots):
+            self._lock_idea_tx(tx, root_id)
+        for idea_id in sorted(endpoint_id for endpoint_id, kind in declared.items() if kind is NodeType.IDEA):
+            self._lock_idea_tx(tx, idea_id)
+
+        prior_hint = None
+        if assertion.supersedes_id is not None:
+            prior_hint = self._relation_assertion_record_tx(tx, assertion.supersedes_id)
+            prior_decoded_hint = self._decode_relation_assertion_record(prior_hint)
+            family_ids = {assertion.assertion_family_id, prior_decoded_hint.assertion_family_id}
+        else:
+            prior_decoded_hint = None
+            family_ids = {assertion.assertion_family_id}
+        self._lock_assertion_families_tx(tx, family_ids)
+        replay = self._relation_assertion_receipt(self._relation_assertion_audit_tx(tx, key), assertion, key, fingerprint)
+        if replay is not None:
+            return replay
+
+        collision = _single(tx.run(
+            "MATCH (n {id: $id}) RETURN n.owner_id AS owner_id, n.node_type AS node_type",
+            id=assertion.id,
+        ))
+        if collision is not None:
+            raise NodeAlreadyExistsError("relation assertion id is already registered")
+
+        resolved_ideas = []
+        for endpoint_id, row in endpoint_rows.items():
+            try:
+                kind = NodeType(_record_value(row, "node_type"))
+            except (TypeError, ValueError):
+                raise GraphWriteError("relation assertion endpoint type is invalid") from None
+            status_text = _record_value(row, "status")
+            inactive = {
+                Status.ARCHIVED.value, Status.SUPERSEDED.value, Status.RETRACTED.value,
+                Status.EXPIRED.value, Status.CANCELLED.value, Status.REVOKED.value, Status.FAILED.value,
+            }
+            if status_text in inactive:
+                raise GraphWriteError("relation assertion endpoint is not current and active")
+            if assertion.egress_policy is EgressPolicy.SHAREABLE and _record_value(
+                row, "egress_policy"
+            ) != EgressPolicy.SHAREABLE.value:
+                raise GraphWriteError("shareable relation assertion requires shareable endpoints")
+            if kind is NodeType.IDEA:
+                root_id = next(root for root in idea_roots if endpoint_id == root or self._idea_root_for_tx(tx, endpoint_id) == root)
+                chain = self._idea_chain_tx(tx, root_id)
+                endpoint = next((idea for idea in chain if idea.id == endpoint_id), None)
+                if endpoint is None or chain[-1].id != endpoint_id:
+                    raise GraphWriteError("relation assertion must reference the current Idea revision")
+                resolved_ideas.append(endpoint)
+            else:
+                successors = _rows(tx.run(
+                    "MATCH (n {owner_id: $owner_id, supersedes_id: $node_id}) RETURN n.id AS id",
+                    owner_id=self.owner_id, node_id=endpoint_id,
+                ))
+                if successors:
+                    raise GraphWriteError("relation assertion endpoint has a superseding revision")
+
+        if not assertion.evidence_ids:
+            raise GraphWriteError("formal relation assertion requires Evidence")
+        for evidence_id in assertion.evidence_ids:
+            evidence = _single(tx.run(
+                "MATCH (e:Evidence {id: $id}) RETURN e.owner_id AS owner_id, e.node_type AS node_type, "
+                "e.status AS status, e.egress_policy AS egress_policy",
+                id=evidence_id,
+            ))
+            if evidence is None or _record_value(evidence, "owner_id") != self.owner_id:
+                raise GraphWriteNotFoundError("relation assertion Evidence does not exist")
+            if _record_value(evidence, "node_type") != NodeType.EVIDENCE.value:
+                raise GraphWriteError("relation assertion Evidence has an invalid type")
+            if _record_value(evidence, "status") != Status.ACTIVE.value:
+                raise GraphWriteError("relation assertion Evidence must be active")
+            if assertion.egress_policy is EgressPolicy.SHAREABLE and _record_value(
+                evidence, "egress_policy"
+            ) != EgressPolicy.SHAREABLE.value:
+                raise GraphWriteError("shareable relation assertion requires shareable Evidence")
+
+        primary_idea = next((idea for idea in resolved_ideas if idea.id == assertion.source_id), None)
+        if primary_idea is None and resolved_ideas:
+            primary_idea = next(idea for idea in resolved_ideas if idea.id == assertion.target_id)
+        if primary_idea is not None:
+            if assertion.based_on_brief_id is None:
+                raise GraphWriteError("Idea relation requires the exact latest researched Brief")
+            self._validate_latest_researched_brief_tx(
+                tx, primary_idea_id=primary_idea.id, owner_id=self.owner_id,
+                brief_id=assertion.based_on_brief_id,
+                section_index=assertion.based_on_brief_section_index,
+                evidence_ids=assertion.evidence_ids,
+                locked_ideas=tuple(resolved_ideas),
+            )
+        elif assertion.based_on_brief_id is not None:
+            raise GraphWriteError("non-Idea relation cannot claim an Idea Brief reference")
+
+        family_rows = _rows(tx.run(
+            "MATCH (n:RelationAssertion {owner_id: $owner_id, assertion_family_id: $family_key}) "
+            "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, n.revision AS revision, "
+            "n.status AS status, n.assertion_family_id AS assertion_family_id, n.supersedes_id AS supersedes_id, "
+            "n.payload_json AS payload_json ORDER BY n.revision ASC",
+            owner_id=self.owner_id, family_key=assertion.assertion_family_id,
+        ))
+        family = tuple(self._decode_relation_assertion_record(row) for row in family_rows)
+        revisions = tuple(item.revision for item in family)
+        if revisions and revisions != tuple(range(1, revisions[-1] + 1)):
+            raise GraphWriteError("relation assertion family history is ambiguous")
+        actual_revision = revisions[-1] if revisions else None
+        if expected_family_revision != actual_revision:
+            raise RevisionConflictError("expected relation assertion family revision is stale")
+
+        predecessor = None
+        if assertion.supersedes_id is None:
+            if family or assertion.revision != 1:
+                raise RevisionConflictError("new relation family must start at revision one")
+        else:
+            predecessor = self._decode_relation_assertion_record(
+                self._relation_assertion_record_tx(tx, assertion.supersedes_id)
+            )
+            if prior_decoded_hint is None or predecessor.assertion_family_id != prior_decoded_hint.assertion_family_id:
+                raise RevisionConflictError("relation assertion predecessor changed during write")
+            successors = _rows(tx.run(
+                "MATCH (n:RelationAssertion {owner_id: $owner_id, supersedes_id: $predecessor_id}) RETURN n.id AS id",
+                owner_id=self.owner_id, predecessor_id=predecessor.id,
+            ))
+            if successors:
+                raise GraphWriteError("relation assertion predecessor already has a successor")
+            if predecessor.assertion_family_id == assertion.assertion_family_id:
+                if predecessor.revision != actual_revision or assertion.revision != predecessor.revision + 1:
+                    raise RevisionConflictError("same-family correction must extend the exact latest revision")
+                if (predecessor.source_id, predecessor.predicate, predecessor.target_id) != (
+                    assertion.source_id, assertion.predicate, assertion.target_id
+                ):
+                    raise GraphWriteError("same-family correction cannot change endpoints or predicate")
+            elif family or assertion.revision != 1:
+                raise RevisionConflictError("changed relation family must start at revision one")
+            elif (predecessor.source_id, predecessor.predicate, predecessor.target_id) == (
+                assertion.source_id, assertion.predicate, assertion.target_id
+            ):
+                raise GraphWriteError("unchanged relation must remain in its existing family")
+
+        try:
+            structural_edges = relation_assertion_structural_edges(assertion)
+        except DomainValidationError as error:
+            raise GraphWriteError(str(error)) from error
+        tx.run("CREATE (n:RelationAssertion) SET n = $properties", properties=_node_properties(assertion))
+        for source_id, edge_type, target_id in structural_edges:
+            if edge_type not in {value.value for value in RelationAssertionEdgeType}:
+                raise GraphWriteError("relation assertion structural edge is not allowlisted")
+            created = _single(tx.run(
+                f"MATCH (a:RelationAssertion {{id: $assertion_id, owner_id: $owner_id}}), "
+                "(b {id: $target_id, owner_id: $owner_id}) "
+                f"CREATE (a)-[r:{edge_type} {{owner_id: $owner_id}}]->(b) RETURN a.id AS id",
+                assertion_id=assertion.id, source_id=source_id, target_id=target_id,
+                owner_id=self.owner_id, edge_type=edge_type,
+            ))
+            if created is None:
+                raise GraphWriteNotFoundError("relation assertion structural reference does not exist")
+        if predecessor is not None and predecessor.status is not RelationshipStatus.REJECTED:
+            updated = replace(predecessor, status=RelationshipStatus.SUPERSEDED)
+            properties = _node_properties(updated)
+            tx.run(
+                "MATCH (n:RelationAssertion {id: $id, owner_id: $owner_id}) "
+                "SET n += $properties RETURN n.id AS id",
+                id=predecessor.id, owner_id=self.owner_id,
+                properties=properties,
+            )
+        receipt = WriteReceipt(
+            "save_relation_assertion", assertion.id, NodeType.RELATION_ASSERTION.value,
+            assertion.revision, key,
+        )
+        tx.run(
+            "CREATE (a:FounderGraphAudit {id: $audit_id, owner_id: $owner_id, actor: $actor, "
+            "operation: $operation, target_id: $target_id, target_type: $target_type, revision: $revision, "
+            "idempotency_key: $idempotency_key, payload_fingerprint: $payload_fingerprint})",
+            audit_id=f"audit_{sha256(f'{self.owner_id}:{key}'.encode()).hexdigest()[:32]}",
+            owner_id=self.owner_id, actor=actor, operation=receipt.operation,
+            target_id=receipt.target_id, target_type=receipt.target_type, revision=receipt.revision,
+            idempotency_key=key, payload_fingerprint=fingerprint,
+        )
+        return receipt
 
     def _link_tx(self, tx: Any, relationship: Relationship, relation_type: str, idempotency_key: str, actor: str, fingerprint: str) -> WriteReceipt:
         replay = _single(tx.run(
