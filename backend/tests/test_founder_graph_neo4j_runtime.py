@@ -197,7 +197,10 @@ def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
     response = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
 
     assert response["result"]["tools"]
-    assert len(response["result"]["tools"]) == 11
+    assert {tool["name"] for tool in response["result"]["tools"]} == {
+        "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
+        "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
+    }
     assert session.calls == []
 
 

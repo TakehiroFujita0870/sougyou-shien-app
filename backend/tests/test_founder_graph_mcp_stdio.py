@@ -24,11 +24,11 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
     assert initialized["result"]["protocolVersion"] == "2025-06-18"
     assert ping["result"] == {}
     tools = listed["result"]["tools"]
-    assert len(tools) == 11
     assert {tool["name"] for tool in tools} == {
-        "search", "fetch", "capture_idea", "capture_person", "capture_organization", "append_claim",
+        "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
+    assert len(tools) == len({tool["name"] for tool in tools})
     assert all("inputSchema" in tool and "readOnlyHint" in tool["annotations"] for tool in tools)
 
 

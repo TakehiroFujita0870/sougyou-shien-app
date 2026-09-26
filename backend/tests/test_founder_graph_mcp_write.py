@@ -103,6 +103,7 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
 
     assert [definition["name"] for definition in definitions] == [
         "capture_idea",
+        "capture_source",
         "capture_person",
         "capture_organization",
         "append_claim",
@@ -113,6 +114,32 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "confirm_person_merge",
     ]
     assert all(definition["readOnly"] is False for definition in definitions)
+
+
+def test_capture_source_saves_only_short_local_web_material_and_replays() -> None:
+    writes, surface = _surface()
+    args = {"url": "https://example.org/research", "title": "Public source",
+            "summary": "A short self-authored summary.", "idempotency_key": "source-1"}
+    first = surface.call("capture_source", args, owner_id="owner-1")
+    replay = surface.call("capture_source", args, owner_id="owner-1")
+    saved_source = writes.get_node(first.target_id)
+    saved_revision = writes.get_node(first.source_revision_id)
+    assert first.target_type == NodeType.SOURCE.value
+    assert replay.replayed is True and replay.target_id == first.target_id
+    assert saved_source.kind.value == "web" and saved_source.egress_policy is EgressPolicy.LOCAL_ONLY
+    assert saved_revision.content == args["summary"] and saved_revision.locator == args["url"]
+    assert all(writes.get_node(chunk_id).egress_policy is EgressPolicy.LOCAL_ONLY for chunk_id in first.content_chunk_ids)
+    assert not any(isinstance(node, Idea) for node in writes.nodes())
+    tool = next(item for item in surface.tool_definitions() if item["name"] == "capture_source")
+    assert set(tool["inputSchema"]["properties"]) == {"url", "title", "summary", "idempotency_key"}
+
+
+@pytest.mark.parametrize("url", ["file:///tmp/private", "https://user:password@example.org/x", "https:///missing-host"])
+def test_capture_source_rejects_unsafe_or_non_http_urls(url: str) -> None:
+    writes, surface = _surface()
+    with pytest.raises(McpWriteError):
+        surface.call("capture_source", {"url": url, "title": "Source", "summary": "Summary", "idempotency_key": "bad"}, owner_id="owner-1")
+    assert writes.nodes() == ()
 
 
 def test_capture_person_and_organization_are_idempotent_and_keep_relationships_explicit() -> None:
