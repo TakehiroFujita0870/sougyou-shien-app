@@ -80,7 +80,7 @@ class BriefTx:
         if "MATCH (i:Idea" in query and "payload_json" in query:
             rows = (node for node in self.nodes.values() if node["owner_id"] == params["owner_id"])
             if "supersedes_id: $parent_id" in query:
-                rows = (node for node in rows if json.loads(node["payload_json"])["supersedes_id"] == params["parent_id"])
+                rows = (node for node in rows if node.get("supersedes_id") == params["parent_id"])
             return Result(self._record(node) for node in rows)
         if "MATCH (n) WHERE n.id = $id" in query:
             row = self.nodes.get(params["id"]) or self.briefs.get(params["id"])
@@ -215,6 +215,34 @@ def test_store_appends_exact_successor_revision_and_reads_it_as_latest():
     assert store.get(brief.id) == brief
     assert store.get_latest(idea.id) == revised
     assert len(state.briefs) == 2 and len(state.audits) == 2
+
+
+def test_idea_scalar_successor_chain_selects_brief_leaf_and_rejects_sibling_fork():
+    idea, brief, state, store = fixtures()
+    child = idea.revise(title="synthetic corrected Idea")
+    child_properties = _node_properties(child)
+    assert child_properties["supersedes_id"] == idea.id
+    assert "supersedes_id" not in state.nodes[idea.id]
+    state.nodes[child.id] = child_properties
+
+    child_brief = IdeaBriefVersion(
+        owner_id=brief.owner_id, idea_lineage_root_id=idea.id, based_on_idea_id=child.id,
+        id="brief-current-child", created_at=brief.created_at,
+        sections=brief.sections,
+    )
+    store.save(child_brief, expected_latest_revision=None, idempotency_key="brief-child")
+    assert tuple(value.id for value in store.gateway._idea_chain_tx(state, idea.id)) == (idea.id, child.id)
+    assert store.get_latest(idea.id) == child_brief
+
+    sibling = idea.revise(title="synthetic competing Idea")
+    state.nodes[sibling.id] = _node_properties(sibling)
+    brief_count, audit_count = len(state.briefs), len(state.audits)
+    revised_brief = child_brief.revise(sections=(IdeaBriefSection(index=0, content="synthetic next"),))
+    with pytest.raises(GraphWriteError, match="multiple competing revisions"):
+        store.save(revised_brief, expected_latest_revision=1, idempotency_key="brief-after-fork")
+
+    assert len(state.briefs) == brief_count and len(state.audits) == audit_count
+    assert store.get_latest(idea.id) == child_brief
 
 
 def test_store_rejects_researched_brief_until_registered_run_and_campaign_proof_exists():

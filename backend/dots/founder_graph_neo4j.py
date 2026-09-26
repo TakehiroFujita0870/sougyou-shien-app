@@ -145,6 +145,10 @@ def _node_properties(node: Any) -> dict[str, Any]:
         current_revision_id = getattr(node, "current_revision_id", None)
         if current_revision_id is not None:
             properties["current_revision_id"] = str(current_revision_id)
+    elif node_type is NodeType.IDEA:
+        supersedes_id = getattr(node, "supersedes_id", None)
+        if supersedes_id is not None:
+            properties["supersedes_id"] = str(supersedes_id)
     elif node_type is NodeType.SOURCE_REVISION:
         properties["source_id"] = str(node.source_id)
         supersedes_id = getattr(node, "supersedes_id", None)
