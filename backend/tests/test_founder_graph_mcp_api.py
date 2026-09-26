@@ -74,7 +74,7 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     assert [item["name"] for item in tools.json()["read"]] == ["search", "fetch"]
     write_names = {item["name"] for item in tools.json()["write"]}
     assert write_names == {
-        "capture_idea", "capture_source", "capture_person", "capture_organization", "append_claim",
+        "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
         "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
@@ -92,6 +92,13 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     assert first.status_code == 200
     assert replay.status_code == 200
     assert replay.json()["replayed"] is True
+
+    asset = client.post("/v1/founder-graph/mcp/write/capture_asset", headers=headers,
+                        json={"name": "Synthetic asset", "kind": "knowledge", "summary": "A safe description", "idempotency_key": "asset-api"})
+    assert asset.status_code == 200
+    assert asset.json()["target_type"] == "asset"
+    assert client.post("/v1/founder-graph/mcp/write/capture_asset", headers=headers,
+                       json={"name": "Synthetic asset", "kind": "knowledge", "details": {"body": "x"}, "idempotency_key": "asset-api"}).status_code == 422
 
     assert client.get("/v1/founder-graph/mcp/tools", headers={"X-Local-Owner-Id": "owner-2"}).status_code == 403
 

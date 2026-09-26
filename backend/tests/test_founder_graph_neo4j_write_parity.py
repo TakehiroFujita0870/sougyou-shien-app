@@ -8,6 +8,7 @@ from hashlib import sha256
 import pytest
 
 from dots.founder_graph import (
+    Asset,
     Claim,
     EgressPolicy,
     Evidence,
@@ -366,6 +367,24 @@ def test_capture_idea_receipt_and_chunks_match_in_memory_and_neo4j_replay() -> N
         memory.capture_idea(idea, source, changed_revision, idempotency_key="capture")
     with pytest.raises(IdempotencyConflictError):
         gateway.capture_idea(idea, source, changed_revision, idempotency_key="capture")
+
+
+def test_asset_generic_put_has_memory_and_fake_neo4j_parity() -> None:
+    owner_id = "owner-asset"
+    memory = InMemoryGraphWriteService(owner_id)
+    driver = ReportReferenceDriver(owner_id)
+    gateway = Neo4jGraphGateway(driver, owner_id)
+    asset = Asset(owner_id=owner_id, id="asset-one", name="Synthetic kit", kind="artifact", description="Safe summary")
+    assert memory.put_node(asset, idempotency_key="asset-write", operation="capture_asset") == gateway.put_node(
+        asset, idempotency_key="asset-write", operation="capture_asset")
+    assert driver.session_value.nodes[asset.id]["node_type"] == "asset"
+    assert driver.session_value.nodes[asset.id]["payload_json"]
+    assert memory.put_node(asset, idempotency_key="asset-write", operation="capture_asset").replayed
+    assert gateway.put_node(asset, idempotency_key="asset-write", operation="capture_asset").replayed
+    with pytest.raises(IdempotencyConflictError):
+        memory.put_node(Asset(owner_id=owner_id, id=asset.id, name="Changed"), idempotency_key="asset-write", operation="capture_asset")
+    with pytest.raises(IdempotencyConflictError):
+        gateway.put_node(Asset(owner_id=owner_id, id=asset.id, name="Changed"), idempotency_key="asset-write", operation="capture_asset")
 
 
 def test_capture_idea_empty_content_receipt_matches_in_memory_and_neo4j() -> None:

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from dots.founder_graph import (
+    Asset,
     Claim,
     EgressPolicy,
     Evidence,
@@ -30,7 +31,7 @@ from dots.founder_graph import (
     project_shareable,
 )
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_mcp import McpReadSurface
+from dots.founder_graph_mcp import McpReadError, McpReadSurface
 from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_neo4j_write import PersistedNodeReference
 from dots.founder_graph_write import InMemoryGraphWriteService, WriteReceipt
@@ -40,6 +41,37 @@ from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 def _surface() -> tuple[InMemoryGraphWriteService, McpWriteSurface]:
     writes = InMemoryGraphWriteService("owner-1")
     return writes, McpWriteSurface(writes)
+
+
+def test_capture_asset_is_metadata_only_create_only_and_owner_scoped() -> None:
+    writes, surface = _surface()
+    arguments = {"name": "Synthetic kit", "kind": "artifact", "summary": "Safe short summary", "egress_policy": "shareable", "idempotency_key": "asset-key"}
+    first = surface.call("capture_asset", arguments, owner_id="owner-1")
+    replay = surface.call("capture_asset", arguments, owner_id="owner-1")
+
+    assert first.target_id == replay.target_id and replay.replayed
+    asset = writes.get_node(first.target_id)
+    assert isinstance(asset, Asset)
+    assert asset.details == {} and asset.description == "Safe short summary"
+    assert asset.egress_policy is EgressPolicy.SHAREABLE
+    local_receipt = surface.call("capture_asset", {"name": "Local kit", "kind": "equipment", "idempotency_key": "asset-local"}, owner_id="owner-1")
+    reader = McpReadSurface(GraphReadService(writes))
+    with pytest.raises(McpReadError):
+        reader.call("fetch", {"id": local_receipt.target_id}, owner_id="owner-1")
+    projected = reader.call("fetch", {"id": first.target_id}, owner_id="owner-1")
+    assert set(projected["fields"]) == {"name", "kind", "description", "status"}
+    assert projected["id"] == first.target_id
+    assert projected["fields"]["description"] == "Safe short summary"
+    assert "details" not in str(projected)
+    for field in ("id", "owner_id", "details", "body", "content", "source_text", "contact", "private_notes", "locator", "provenance"):
+        value = {"private": "x"} if field in {"details", "contact", "provenance"} else "private"
+        with pytest.raises(McpWriteError, match="Unknown tool arguments"):
+            surface.call("capture_asset", {"name": "Rejected", "kind": "artifact", "idempotency_key": f"reject-{field}", field: value}, owner_id="owner-1")
+    with pytest.raises(McpWriteError, match="different payload"):
+        surface.call("capture_asset", {**arguments, "name": "Changed"}, owner_id="owner-1")
+    with pytest.raises(McpWriteError, match="owner"):
+        surface.call("capture_asset", arguments, owner_id="owner-2")
+    assert len(writes.audit_events()) == 2
 
 
 def _capture_link_evidence(
@@ -200,6 +232,7 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "capture_source",
         "capture_person",
         "capture_organization",
+        "capture_asset",
         "append_claim",
         "capture_evidence",
         "link_entities",

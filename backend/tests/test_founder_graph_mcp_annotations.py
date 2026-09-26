@@ -17,6 +17,7 @@ EXPECTED_WRITE_TOOLS = {
     "capture_source",
     "capture_person",
     "capture_organization",
+    "capture_asset",
     "append_claim",
     "capture_evidence",
     "link_entities",
@@ -91,3 +92,13 @@ def test_capture_source_is_a_local_write_not_a_destructive_or_open_world_action(
     schema_description = stdio_source["inputSchema"]["description"]
     assert "ページ取得や調査の許可にはなりません" in schema_description
     assert "ページ本文は取得しません" in stdio_source["inputSchema"]["properties"]["url"]["description"]
+
+
+def test_capture_asset_schema_is_metadata_only_and_matches_between_surfaces() -> None:
+    stdio_asset = _stdio_catalog()["capture_asset"]
+    api_asset = _api_catalog()["capture_asset"]
+    assert stdio_asset["inputSchema"] == api_asset["inputSchema"]
+    assert stdio_asset["inputSchema"]["required"] == ["name", "kind", "idempotency_key"]
+    assert set(stdio_asset["inputSchema"]["properties"]) == {"name", "kind", "summary", "egress_policy", "idempotency_key"}
+    assert stdio_asset["inputSchema"]["additionalProperties"] is False
+    assert stdio_asset["annotations"] == {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}

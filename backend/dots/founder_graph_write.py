@@ -409,6 +409,7 @@ class InMemoryGraphWriteService:
         "save_idea_brief",
         "capture_person",
         "capture_organization",
+        "capture_asset",
         "append_claim",
         "link_entities",
         "save_relation_assertion",
