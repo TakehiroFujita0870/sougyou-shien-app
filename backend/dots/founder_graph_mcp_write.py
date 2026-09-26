@@ -157,15 +157,15 @@ class McpWriteSurface:
             "link_entities": {
                 "type": "object",
                 "description": "保存済みの記録同士を、根拠付きの未確定な関係として結びます。Ideaを含む場合は、調査済みBriefの章とEvidenceが必要です。",
-                "required": ["source_id", "target_id", "relation", "idempotency_key"],
+                "required": ["source_id", "target_id", "relation", "evidence_ids", "idempotency_key"],
                 "properties": {
                     "source_id": {**text, "minLength": 1},
                     "target_id": {**text, "minLength": 1},
                     "relation": {"type": "string", "enum": [relation.value for relation in RelationType]},
                     "status": {"type": "string", "enum": [RelationshipStatus.PROPOSED.value, RelationshipStatus.INFERRED.value]},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "expires_at": {"type": "string", "description": "ISO-8601 timestamp, if the relation should expire."},
-                    "evidence_ids": ids,
+                    "expires_at": {"type": "string", "description": "関係の期限を指定する場合のISO-8601日時。"},
+                    "evidence_ids": {**ids, "minItems": 1},
                     "egress_policy": {
                         "type": "string",
                         "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value],

@@ -507,6 +507,8 @@ def test_link_entities_schema_is_closed_and_requires_idea_brief_pair() -> None:
         "source_id", "target_id", "relation", "status", "confidence", "expires_at",
         "evidence_ids", "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
     }
+    assert "evidence_ids" in schema["required"]
+    assert schema["properties"]["evidence_ids"]["minItems"] == 1
     assert schema["properties"]["status"]["enum"] == ["proposed", "inferred"]
     assert definition["annotations"]["destructiveHint"] is False
 
@@ -633,6 +635,52 @@ def test_link_entities_preserves_required_network_expiry_constraint() -> None:
             "idempotency_key": "network-without-expiry",
         }, owner_id="owner-1")
 
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+@pytest.mark.parametrize("evidence_value", [None, []], ids=["omitted", "empty"])
+def test_link_entities_requires_evidence_without_mutation(evidence_value: object) -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id=f"evidence-person-1-{evidence_value}", name="First")
+    second = PersonAsset(owner_id="owner-1", id=f"evidence-person-2-{evidence_value}", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+    arguments = {
+        "source_id": first.id, "target_id": second.id,
+        "relation": RelationType.INTRODUCED_BY.value,
+        "confidence": 0.8, "expires_at": "2099-01-01T00:00:00Z",
+        "idempotency_key": f"missing-evidence-{evidence_value}",
+    }
+    if evidence_value is not None:
+        arguments["evidence_ids"] = evidence_value
+
+    with pytest.raises(McpWriteError):
+        surface.call("link_entities", arguments, owner_id="owner-1")
+
+    assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
+
+
+def test_link_entities_rejects_invalid_expiry_timestamp_without_mutation() -> None:
+    writes, surface = _surface()
+    first = PersonAsset(owner_id="owner-1", id="invalid-expiry-person-1", name="First")
+    second = PersonAsset(owner_id="owner-1", id="invalid-expiry-person-2", name="Second")
+    for node in (first, second):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    before = (writes.nodes(), writes.structural_edges(), writes.audit_events())
+
+    with pytest.raises(McpWriteError) as error:
+        surface.call("link_entities", {
+            "source_id": first.id,
+            "target_id": second.id,
+            "relation": RelationType.INTRODUCED_BY.value,
+            "confidence": 0.8,
+            "expires_at": "not-a-valid-timestamp",
+            "evidence_ids": ["synthetic-evidence"],
+            "idempotency_key": "invalid-expiry-time",
+        }, owner_id="owner-1")
+
+    assert error.value.code == "invalid_input"
     assert (writes.nodes(), writes.structural_edges(), writes.audit_events()) == before
 
 
