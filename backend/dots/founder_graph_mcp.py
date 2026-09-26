@@ -150,6 +150,7 @@ class McpReadSurface:
                 step.from_id != path_from
                 or step.to_id != path_to
                 or step.predicate != predicate
+                or not isinstance(step.traversal_direction, str)
                 or step.traversal_direction not in {"outgoing", "incoming"}
                 or not all(isinstance(value, str) and value.strip() for value in (
                     step.from_id, step.to_id, step.source_id, step.predicate, step.target_id,
@@ -157,10 +158,12 @@ class McpReadSurface:
             ):
                 return []
             if step.relation_assertion_id is None:
-                continue
+                # Do not return a misleading semantic-only fragment when a
+                # path also contains legacy Relationship edges.
+                return []
             if not isinstance(step.relation_assertion_id, str) or not step.relation_assertion_id.strip():
                 return []
-            if step.status not in {
+            if not isinstance(step.status, str) or step.status not in {
                 RelationshipStatus.PROPOSED.value,
                 RelationshipStatus.INFERRED.value,
                 RelationshipStatus.CONFIRMED.value,

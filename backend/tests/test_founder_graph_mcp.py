@@ -147,6 +147,7 @@ def test_shareable_relation_path_returns_safe_evidence_ids() -> None:
 
     assert idea_result["relation_path"] == [person.id, RelationType.CAN_CONTRIBUTE_TO.value, idea.id]
     assert idea_result["evidence_ids"] == [evidence.id]
+    assert "semantic_relation_path" not in idea_result
 
 
 def test_formal_relation_path_is_additive_and_projects_only_safe_metadata() -> None:
@@ -214,6 +215,35 @@ def test_formal_relation_path_is_additive_and_projects_only_safe_metadata() -> N
     assert "content" not in str(result)
     assert "source_text" not in str(result)
 
+    middle = NodeView(
+        "middle-idea", "idea", "owner-1", "Middle idea", "Middle idea", "active", 1,
+        {"title": "Middle idea", "egress_policy": "shareable"},
+    )
+
+    class MixedReads(Reads):
+        def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
+            return middle if node_id == middle.id else super().fetch(node_id, owner_id=owner_id)
+
+    legacy_step = RelationPathStep(
+        from_id=middle.id,
+        to_id=target.id,
+        source_id=middle.id,
+        predicate=RelationType.REUSES.value,
+        target_id=target.id,
+        traversal_direction="outgoing",
+    )
+    mixed_hit = SearchHit(
+        target,
+        0.25,
+        (source.id, RelationType.SUPPORTED_BY.value, middle.id, RelationType.REUSES.value, target.id),
+        (evidence.id,),
+        (hit.relation_path[0], legacy_step),
+    )
+    mixed_result = McpReadSurface(MixedReads())._project_hit(mixed_hit, owner_id="owner-1")
+    assert mixed_result is not None
+    assert mixed_result["relation_path"] == list(mixed_hit.path)
+    assert "semantic_relation_path" not in mixed_result
+
     local_evidence = replace(evidence, fields={"egress_policy": "local_only", "excerpt": "private excerpt"})
 
     class LocalEvidenceReads(Reads):
@@ -229,6 +259,14 @@ def test_formal_relation_path_is_additive_and_projects_only_safe_metadata() -> N
     assert malformed_projection is not None
     assert malformed_projection["relation_path"] == [source.id, RelationType.SUPPORTED_BY.value, target.id]
     assert "semantic_relation_path" not in malformed_projection
+
+    for field_name in ("traversal_direction", "status"):
+        malformed_step = replace(hit.relation_path[0], **{field_name: []})
+        malformed_hit = replace(hit, relation_path=(malformed_step,))
+        malformed_projection = surface._project_hit(malformed_hit, owner_id="owner-1")
+        assert malformed_projection is not None
+        assert malformed_projection["relation_path"] == [source.id, RelationType.SUPPORTED_BY.value, target.id]
+        assert "semantic_relation_path" not in malformed_projection
 
 
 def test_prompt_injection_text_is_returned_as_untrusted_data() -> None:
