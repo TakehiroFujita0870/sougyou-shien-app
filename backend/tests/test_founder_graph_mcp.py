@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 
 import pytest
 
 from dots.founder_graph import EgressPolicy, Evidence, Idea, PersonAsset, RelationType, Relationship, ResearchMaterial
 from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_read import GraphReadService, GraphReadTimeoutError, GraphReadUnavailableError, NodeView
+from dots.founder_graph_read import GraphReadService, GraphReadTimeoutError, GraphReadUnavailableError, NodeView, RelationPathStep, SearchHit
 from dots.founder_graph_write import InMemoryGraphWriteService
 
 
@@ -146,6 +147,126 @@ def test_shareable_relation_path_returns_safe_evidence_ids() -> None:
 
     assert idea_result["relation_path"] == [person.id, RelationType.CAN_CONTRIBUTE_TO.value, idea.id]
     assert idea_result["evidence_ids"] == [evidence.id]
+    assert "semantic_relation_path" not in idea_result
+
+
+def test_formal_relation_path_is_additive_and_projects_only_safe_metadata() -> None:
+    source = NodeView(
+        "source-idea", "idea", "owner-1", "Source idea", "Source idea", "active", 1,
+        {"title": "Source idea", "egress_policy": "shareable"},
+    )
+    target = NodeView(
+        "target-idea", "idea", "owner-1", "Target idea", "Target idea", "active", 1,
+        {"title": "Target idea", "egress_policy": "shareable"},
+    )
+    evidence = NodeView(
+        "evidence-1", "evidence", "owner-1", "Evidence", "Evidence", "active", 1,
+        {"egress_policy": "shareable", "polarity": "supports", "confidence": 0.8},
+    )
+
+    class Reads:
+        def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
+            assert owner_id == "owner-1"
+            return {source.id: source, target.id: target, evidence.id: evidence}[node_id]
+
+    surface = McpReadSurface(Reads())
+    hit = SearchHit(
+        target,
+        0.5,
+        (source.id, RelationType.SUPPORTED_BY.value, target.id),
+        (evidence.id,),
+        (RelationPathStep(
+            from_id=source.id,
+            to_id=target.id,
+            source_id=source.id,
+            predicate=RelationType.SUPPORTED_BY.value,
+            target_id=target.id,
+            traversal_direction="outgoing",
+            evidence_ids=(evidence.id,),
+            status="confirmed",
+            confidence=0.8,
+            valid_from="2026-09-20T00:00:00+00:00",
+            relation_assertion_id="assertion-1",
+            based_on_brief_id="brief-1",
+            based_on_brief_section_index=3,
+        ),),
+    )
+
+    result = surface._project_hit(hit, owner_id="owner-1")
+
+    assert result is not None
+    assert result["relation_path"] == [source.id, RelationType.SUPPORTED_BY.value, target.id]
+    assert result["semantic_relation_path"] == [{
+        "relation_assertion_id": "assertion-1",
+        "from_id": source.id,
+        "to_id": target.id,
+        "source_id": source.id,
+        "predicate": RelationType.SUPPORTED_BY.value,
+        "target_id": target.id,
+        "traversal_direction": "outgoing",
+        "status": "confirmed",
+        "confidence": 0.8,
+        "valid_from": "2026-09-20T00:00:00+00:00",
+        "expires_at": None,
+        "based_on_brief_id": "brief-1",
+        "based_on_brief_section_index": 3,
+        "evidence_ids": [evidence.id],
+    }]
+    assert "content" not in str(result)
+    assert "source_text" not in str(result)
+
+    middle = NodeView(
+        "middle-idea", "idea", "owner-1", "Middle idea", "Middle idea", "active", 1,
+        {"title": "Middle idea", "egress_policy": "shareable"},
+    )
+
+    class MixedReads(Reads):
+        def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
+            return middle if node_id == middle.id else super().fetch(node_id, owner_id=owner_id)
+
+    legacy_step = RelationPathStep(
+        from_id=middle.id,
+        to_id=target.id,
+        source_id=middle.id,
+        predicate=RelationType.REUSES.value,
+        target_id=target.id,
+        traversal_direction="outgoing",
+    )
+    mixed_hit = SearchHit(
+        target,
+        0.25,
+        (source.id, RelationType.SUPPORTED_BY.value, middle.id, RelationType.REUSES.value, target.id),
+        (evidence.id,),
+        (hit.relation_path[0], legacy_step),
+    )
+    mixed_result = McpReadSurface(MixedReads())._project_hit(mixed_hit, owner_id="owner-1")
+    assert mixed_result is not None
+    assert mixed_result["relation_path"] == list(mixed_hit.path)
+    assert "semantic_relation_path" not in mixed_result
+
+    local_evidence = replace(evidence, fields={"egress_policy": "local_only", "excerpt": "private excerpt"})
+
+    class LocalEvidenceReads(Reads):
+        def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
+            return local_evidence if node_id == evidence.id else super().fetch(node_id, owner_id=owner_id)
+
+    safe_with_local_evidence = McpReadSurface(LocalEvidenceReads())._project_hit(hit, owner_id="owner-1")
+    assert safe_with_local_evidence is not None
+    assert safe_with_local_evidence["semantic_relation_path"][0]["evidence_ids"] == []
+
+    malformed_hit = replace(hit, relation_path=(replace(hit.relation_path[0], based_on_brief_section_index=8),))
+    malformed_projection = surface._project_hit(malformed_hit, owner_id="owner-1")
+    assert malformed_projection is not None
+    assert malformed_projection["relation_path"] == [source.id, RelationType.SUPPORTED_BY.value, target.id]
+    assert "semantic_relation_path" not in malformed_projection
+
+    for field_name in ("traversal_direction", "status"):
+        malformed_step = replace(hit.relation_path[0], **{field_name: []})
+        malformed_hit = replace(hit, relation_path=(malformed_step,))
+        malformed_projection = surface._project_hit(malformed_hit, owner_id="owner-1")
+        assert malformed_projection is not None
+        assert malformed_projection["relation_path"] == [source.id, RelationType.SUPPORTED_BY.value, target.id]
+        assert "semantic_relation_path" not in malformed_projection
 
 
 def test_prompt_injection_text_is_returned_as_untrusted_data() -> None:
