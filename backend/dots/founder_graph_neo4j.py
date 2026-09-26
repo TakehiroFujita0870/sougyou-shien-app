@@ -18,14 +18,19 @@ from typing import Any, Iterator, Mapping
 from uuid import uuid4
 
 from .founder_graph import (
+    CampaignAuthorizationRegistry,
     ContentChunk,
+    DomainValidationError,
     NodeType,
     ReportVersion,
     Relationship,
     RelationType,
+    ResearchRun,
     Source,
     SourceRevision,
+    Status,
     build_content_chunks,
+    validate_run_campaign_reference,
     validate_source_revision_history,
     _ALLOWED_RELATION_ENDPOINTS,
 )
@@ -40,9 +45,12 @@ from .founder_graph_write import (
     capture_source_payload_fingerprint,
     validate_capture_source,
     payload_fingerprint,
+    research_run_payload_fingerprint,
 )
 from .founder_graph_schema import SCHEMA_VERSION, migration_queries, rollback_queries
 from .founder_graph_read import _FIELD_ALLOWLIST
+from .founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
+from .founder_graph_research_run import validate_research_run_timing
 
 
 class Neo4jGatewayError(GraphWriteError):
@@ -678,6 +686,197 @@ class Neo4jGraphGateway:
             return self._execute_write(session, lambda tx: self._capture_source_tx(
                 tx, source, source_revision, chunks, idempotency_key, actor, fingerprint
             ))
+
+    def record_research_run(
+        self,
+        run: ResearchRun,
+        *,
+        expected_campaign_revision: int,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        if not isinstance(run, ResearchRun):
+            raise GraphWriteError("record_research_run requires a ResearchRun")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        if (
+            not isinstance(expected_campaign_revision, int)
+            or isinstance(expected_campaign_revision, bool)
+            or expected_campaign_revision < 0
+        ):
+            raise RevisionConflictError("expected campaign revision must be a non-negative integer")
+        if run.owner_id != self.owner_id:
+            raise GraphWriteError("research run must belong to the local owner")
+        if type(run.authorization_revision) is not int or run.authorization_revision < 1:
+            raise GraphWriteError("research run authorization revision must be a positive integer")
+
+        fingerprint = research_run_payload_fingerprint(run, expected_campaign_revision, self.owner_id)
+        try:
+            with self._session() as session:
+                return self._execute_write(
+                    session,
+                    lambda tx: self._record_research_run_tx(
+                        tx, run, expected_campaign_revision, idempotency_key, actor, fingerprint,
+                    ),
+                )
+        except Neo4jUnavailableError as error:
+            return self._recover_research_run_receipt(run, idempotency_key, fingerprint, error)
+        except GraphWriteError:
+            raise
+        except Exception:
+            return self._recover_research_run_receipt(
+                run, idempotency_key, fingerprint, Neo4jUnavailableError("Neo4j operation failed"),
+            )
+
+    def _research_run_audit_tx(self, tx: Any, idempotency_key: str) -> Any | None:
+        return _single(tx.run(
+            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
+            "RETURN a.operation AS operation, a.payload_fingerprint AS payload_fingerprint, "
+            "a.target_id AS target_id, a.target_type AS target_type, a.revision AS revision",
+            owner_id=self.owner_id,
+            idempotency_key=idempotency_key,
+        ))
+
+    def _research_run_replay_from_record(
+        self, record: Any | None, run: ResearchRun, idempotency_key: str, fingerprint: str,
+    ) -> WriteReceipt | None:
+        if record is None:
+            return None
+        if (
+            _record_value(record, "operation") != "record_research_run"
+            or _record_value(record, "payload_fingerprint") != fingerprint
+            or _record_value(record, "target_id") != run.id
+            or _record_value(record, "target_type") != NodeType.RESEARCH_RUN.value
+        ):
+            raise IdempotencyConflictError("idempotency key was reused with a different payload")
+        revision = _record_value(record, "revision")
+        if type(revision) is not int or revision < 0:
+            raise GraphWriteError("persisted research run receipt is invalid")
+        return WriteReceipt(
+            "record_research_run", run.id, NodeType.RESEARCH_RUN.value, revision, idempotency_key, replayed=True,
+        )
+
+    def _research_run_replay_tx(
+        self, tx: Any, run: ResearchRun, idempotency_key: str, fingerprint: str,
+    ) -> WriteReceipt | None:
+        return self._research_run_replay_from_record(
+            self._research_run_audit_tx(tx, idempotency_key), run, idempotency_key, fingerprint,
+        )
+
+    def _recover_research_run_receipt(
+        self, run: ResearchRun, idempotency_key: str, fingerprint: str, failure: Neo4jUnavailableError,
+    ) -> WriteReceipt:
+        try:
+            with self._session() as session:
+                record = self._execute_read(session, lambda tx: self._research_run_audit_tx(tx, idempotency_key))
+        except Exception:
+            raise failure from None
+        replay = self._research_run_replay_from_record(record, run, idempotency_key, fingerprint)
+        if replay is None:
+            raise failure from None
+        return replay
+
+    def _record_research_run_tx(
+        self,
+        tx: Any,
+        run: ResearchRun,
+        expected_campaign_revision: int,
+        idempotency_key: str,
+        actor: str,
+        fingerprint: str,
+    ) -> WriteReceipt:
+        replay = self._research_run_replay_tx(tx, run, idempotency_key, fingerprint)
+        if replay is not None:
+            return replay
+
+        campaign_label = self.label_for(NodeType.RESEARCH_CAMPAIGN)
+        locked = self._lock_revisioned_node_tx(tx, campaign_label, run.campaign_id)
+        if locked is None:
+            raise GraphWriteNotFoundError("research campaign does not exist for the local owner")
+        replay = self._research_run_replay_tx(tx, run, idempotency_key, fingerprint)
+        if replay is not None:
+            return replay
+
+        record = _single(tx.run(
+            f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}) "
+            "RETURN c.id AS id, c.owner_id AS owner_id, c.node_type AS node_type, "
+            "c.revision AS revision, c.payload_json AS payload_json",
+            campaign_id=run.campaign_id, owner_id=self.owner_id,
+        ))
+        if record is None:
+            raise GraphWriteNotFoundError("research campaign does not exist for the local owner")
+        try:
+            campaign = decode_persisted_research_campaign(record, owner_id=self.owner_id)
+        except CampaignDecodeError:
+            raise GraphWriteError("persisted campaign authorization is invalid") from None
+        if (
+            campaign.id != run.campaign_id
+            or _record_value(locked, "id") != campaign.id
+            or _record_value(locked, "revision") != campaign.aggregate_revision
+        ):
+            raise GraphWriteError("locked research campaign state is invalid")
+        if expected_campaign_revision != campaign.aggregate_revision:
+            raise RevisionConflictError("expected campaign revision does not match current revision")
+        if run.status not in {Status.COMPLETED, Status.PARTIAL, Status.FAILED, Status.CANCELLED}:
+            raise GraphWriteError("only terminal research runs can be recorded")
+
+        now = datetime.now(timezone.utc)
+        try:
+            validate_research_run_timing(run, campaign, at=now)
+            validate_run_campaign_reference(
+                run, campaign, campaign.authorization_snapshot,
+                authorization_registry=CampaignAuthorizationRegistry.from_campaign(campaign), at=now,
+            )
+            if not campaign.can_start_run(at=now):
+                raise DomainValidationError("campaign is not authorized for another run")
+            updated_campaign = campaign.register_run(at=now)
+        except DomainValidationError:
+            raise GraphWriteError("research campaign authorization or Run timing is invalid") from None
+
+        if _single(tx.run("MATCH (n {id: $run_id}) RETURN n.id AS id", run_id=run.id)) is not None:
+            raise NodeAlreadyExistsError("research run id is already registered")
+
+        revision = campaign.aggregate_revision
+        history_id = f"history_{sha256(f'{campaign.id}:{revision}'.encode()).hexdigest()[:32]}"
+        tx.run(
+            "CREATE (h:FounderGraphHistory {id: $history_id, owner_id: $owner_id, "
+            "target_id: $target_id, revision: $revision, payload_json: $payload_json})",
+            history_id=history_id, owner_id=self.owner_id, target_id=campaign.id, revision=revision,
+            payload_json=json.dumps(
+                {"id": campaign.id, "node_type": NodeType.RESEARCH_CAMPAIGN.value, "revision": revision},
+                sort_keys=True,
+            ),
+        )
+        tx.run(
+            f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}) SET c = $properties",
+            campaign_id=campaign.id, owner_id=self.owner_id, properties=_node_properties(updated_campaign),
+        )
+        run_label = self.label_for(NodeType.RESEARCH_RUN)
+        tx.run(f"CREATE (r:{run_label}) SET r = $properties", properties=_node_properties(run))
+        linked = _single(tx.run(
+            f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}), "
+            f"(r:{run_label} {{id: $run_id, owner_id: $owner_id}}) "
+            "CREATE (c)-[:HAS_RUN]->(r) RETURN r.id AS id",
+            campaign_id=campaign.id, run_id=run.id, owner_id=self.owner_id,
+        ))
+        if linked is None:
+            raise GraphWriteNotFoundError("research campaign or Run disappeared during write")
+
+        receipt = WriteReceipt(
+            "record_research_run", run.id, NodeType.RESEARCH_RUN.value, _node_revision(run), idempotency_key,
+        )
+        audit_id = f"audit_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        tx.run(
+            "CREATE (a:FounderGraphAudit {id: $audit_id, owner_id: $owner_id, actor: $actor, "
+            "operation: $operation, target_id: $target_id, target_type: $target_type, revision: $revision, "
+            "idempotency_key: $idempotency_key, payload_fingerprint: $payload_fingerprint})",
+            audit_id=audit_id, owner_id=self.owner_id, actor=actor, operation=receipt.operation,
+            target_id=receipt.target_id, target_type=receipt.target_type, revision=receipt.revision,
+            idempotency_key=idempotency_key, payload_fingerprint=fingerprint,
+        )
+        return receipt
 
     def _capture_source_tx(self, tx: Any, source: Source, revision: SourceRevision, chunks: tuple[ContentChunk, ...],
                            idempotency_key: str, actor: str, fingerprint: str) -> WriteReceipt:

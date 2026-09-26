@@ -21,6 +21,7 @@ from .founder_graph import (
     Provenance,
     ProvenanceOrigin,
     RelationAssertion,
+    ResearchRun,
     Source,
     SourceRevision,
 )
@@ -170,6 +171,21 @@ class Neo4jGraphWriteService(GraphWritePort):
 
     def capture_source(self, source: Source, source_revision: SourceRevision, *, idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
         return self.gateway.capture_source(source, source_revision, idempotency_key=idempotency_key, actor=actor)
+
+    def record_research_run(
+        self,
+        run: ResearchRun,
+        *,
+        expected_campaign_revision: int,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self.gateway.record_research_run(
+            run,
+            expected_campaign_revision=expected_campaign_revision,
+            idempotency_key=idempotency_key,
+            actor=actor,
+        )
 
     def link_entities(self, relationship: Any, *, idempotency_key: str, expected_revision: int | None = None, actor: str = "local-owner") -> WriteReceipt:
         if expected_revision not in (None, 0):
