@@ -5,10 +5,11 @@ from dataclasses import replace
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Evidence, Idea, PersonAsset, RelationType, Relationship, ResearchMaterial
+from dots.founder_graph import Claim, EgressPolicy, Evidence, Idea, MaterialKind, PersonAsset, RelationType, Relationship, ResearchMaterial, Source, SourceRevision
 from dots.founder_graph_mcp import McpReadError, McpReadSurface
 from dots.founder_graph_read import GraphReadService, GraphReadTimeoutError, GraphReadUnavailableError, NodeView, RelationPathStep, SearchHit
 from dots.founder_graph_write import InMemoryGraphWriteService
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 def _surface() -> tuple[InMemoryGraphWriteService, McpReadSurface]:
@@ -16,15 +17,105 @@ def _surface() -> tuple[InMemoryGraphWriteService, McpReadSurface]:
     return writes, McpReadSurface(GraphReadService(writes))
 
 
-def test_read_surface_exposes_only_search_and_fetch() -> None:
+def test_read_surface_exposes_only_search_fetch_and_idea_brief_fetch() -> None:
     _writes, surface = _surface()
     definitions = surface.tool_definitions()
 
-    assert [definition["name"] for definition in definitions] == ["search", "fetch"]
+    assert [definition["name"] for definition in definitions] == ["search", "fetch", "fetch_idea_brief"]
     assert all(definition["readOnly"] is True for definition in definitions)
     assert all("additionalProperties" in definition["inputSchema"] for definition in definitions)
     with pytest.raises(McpReadError, match="read-only"):
         surface.call("delete", {}, owner_id="owner-1")
+
+
+def _brief_reader_fixture() -> tuple[InMemoryGraphWriteService, McpReadSurface, Idea, IdeaBriefVersion, Evidence, Evidence]:
+    writes, surface = _surface()
+    idea = Idea(owner_id="owner-1", id="brief-idea", title="Shareable current idea", egress_policy=EgressPolicy.SHAREABLE)
+    writes.put_node(idea, idempotency_key="brief-idea")
+
+    source = Source(
+        owner_id="owner-1", id="brief-source", title="Private source", kind=MaterialKind.WEB,
+        locator="https://private.example.test/source", current_revision_id="brief-revision", revision=1,
+    )
+    revision = SourceRevision(owner_id="owner-1", id="brief-revision", source_id=source.id, content="PRIVATE SOURCE ORIGINAL", locator=source.locator)
+    source_receipt = writes.capture_source(source, revision, idempotency_key="brief-source")
+    claim = Claim(owner_id="owner-1", id="brief-claim", text="Shareable evidence claim", confidence=0.8, egress_policy=EgressPolicy.SHAREABLE)
+    writes.put_node(claim, idempotency_key="brief-claim")
+    shared_receipt = writes.capture_evidence(
+        claim.id, source_receipt.content_chunk_ids[0], egress_policy=EgressPolicy.SHAREABLE, idempotency_key="brief-shared-evidence",
+    )
+    private_receipt = writes.capture_evidence(
+        claim.id, source_receipt.content_chunk_ids[0], egress_policy=EgressPolicy.LOCAL_ONLY, idempotency_key="brief-private-evidence",
+    )
+    shared_evidence = writes.get_node(shared_receipt.target_id)
+    private_evidence = writes.get_node(private_receipt.target_id)
+    sections = tuple(
+        IdeaBriefSection(
+            index=index,
+            content=f"Safe section {index}",
+            owner_decisions=("PRIVATE OWNER DECISION",),
+            evidence_ids=(shared_evidence.id, private_evidence.id),
+        )
+        for index in range(8)
+    )
+    brief = IdeaBriefVersion(
+        owner_id="owner-1", id="brief-latest", idea_lineage_root_id=idea.id, based_on_idea_id=idea.id,
+        sections=sections, egress_policy="shareable",
+    )
+    writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key="brief-save")
+    return writes, surface, idea, brief, shared_evidence, private_evidence
+
+
+def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() -> None:
+    writes, surface, idea, brief, shared_evidence, private_evidence = _brief_reader_fixture()
+    latest = brief.revise(
+        sections=(IdeaBriefSection(index=0, content="Latest safe section", evidence_ids=(shared_evidence.id, private_evidence.id)),),
+    )
+    writes.save_idea_brief(latest, expected_latest_revision=1, idempotency_key="brief-save-latest")
+
+    result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
+
+    assert set(result) == {"brief_id", "idea_id", "sections"}
+    assert result["brief_id"] == latest.id
+    assert result["idea_id"] == idea.id
+    assert result["sections"] == [
+        {"index": index, "title": title, "content": "Latest safe section" if index == 0 else f"Safe section {index}", "untrusted_text": "Latest safe section" if index == 0 else f"Safe section {index}", "evidence_ids": [shared_evidence.id]}
+        for index, title in enumerate((
+            "エグゼクティブサマリー", "ビジネスモデル", "顧客とマーケットサイズ", "収益モデル",
+            "競争優位性", "実現可能性", "リスク・撤退ライン", "リスクミニマムなロードマップ",
+        ))
+    ]
+    serialized = str(result)
+    for private_value in (private_evidence.id, "PRIVATE OWNER DECISION", "PRIVATE SOURCE ORIGINAL", "brief-source", "brief-revision"):
+        assert private_value not in serialized
+
+
+def test_fetch_idea_brief_hides_wrong_owner_stale_idea_and_unshareable_brief() -> None:
+    writes, surface, idea, brief, _shared, _private = _brief_reader_fixture()
+
+    with pytest.raises(McpReadError, match="not found"):
+        surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-2")
+
+    current_idea = idea.revise(title="Corrected current idea")
+    writes.put_node(current_idea, idempotency_key="brief-idea-current")
+    current_brief = brief.revise(based_on_idea_id=current_idea.id, egress_policy="local_only")
+    writes.save_idea_brief(current_brief, expected_latest_revision=1, idempotency_key="brief-current-save")
+
+    with pytest.raises(McpReadError, match="not found"):
+        surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
+    with pytest.raises(McpReadError, match="not found"):
+        surface.call("fetch_idea_brief", {"idea_id": current_idea.id}, owner_id="owner-1")
+
+
+def test_fetch_idea_brief_omits_shareable_evidence_from_a_noncurrent_source_revision() -> None:
+    writes, surface, idea, _brief, shared_evidence, _private = _brief_reader_fixture()
+    source = writes.get_node("brief-source")
+    writes._nodes[source.id] = replace(source, current_revision_id="newer-brief-revision")
+
+    result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
+
+    assert all(section["evidence_ids"] == [] for section in result["sections"])
+    assert all(shared_evidence.id not in section["evidence_ids"] for section in result["sections"])
 
 
 def test_search_and_fetch_return_shareable_projection_only() -> None:

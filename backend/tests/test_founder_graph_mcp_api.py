@@ -71,7 +71,7 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
 
     tools = client.get("/v1/founder-graph/mcp/tools", headers=headers)
     assert tools.status_code == 200
-    assert [item["name"] for item in tools.json()["read"]] == ["search", "fetch"]
+    assert [item["name"] for item in tools.json()["read"]] == ["search", "fetch", "fetch_idea_brief"]
     write_names = {item["name"] for item in tools.json()["write"]}
     assert write_names == {
         "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",

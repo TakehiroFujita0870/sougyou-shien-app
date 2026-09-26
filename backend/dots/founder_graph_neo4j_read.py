@@ -31,6 +31,7 @@ from .founder_graph import (
 from .founder_graph_neo4j import (
     Neo4jGraphGateway,
     GraphWriteError,
+    GraphWriteNotFoundError,
     Neo4jQueryContractError,
     Neo4jUnavailableError,
     _single,
@@ -48,6 +49,7 @@ from .founder_graph_read import (
     _NON_CURRENT,
     _tokens,
 )
+from .idea_brief import SECTION_TITLES
 
 
 class Neo4jReadUnavailableError(GraphReadUnavailableError):
@@ -604,6 +606,59 @@ class Neo4jGraphReadService:
         if view is None:
             raise GraphReadNotFoundError("node was not found")
         return view
+
+    def fetch_idea_brief(self, idea_id: str, *, owner_id: str) -> dict[str, Any]:
+        identifier = _required_node_id(idea_id)
+        owner = _required_owner(owner_id)
+        if owner != self._gateway.owner_id:
+            raise GraphReadNotFoundError("idea brief was not found")
+
+        def read(tx: Any) -> dict[str, Any] | None:
+            if self._gateway._idea_record_tx(tx, identifier) is None:
+                return None
+            try:
+                root_id = self._gateway._idea_root_for_tx(tx, identifier)
+                chain = self._gateway._idea_chain_tx(tx, root_id)
+            except GraphWriteNotFoundError:
+                return None
+            if not chain or chain[-1].id != identifier:
+                return None
+            idea = chain[-1]
+            if (
+                idea.status.value in _NON_CURRENT
+                or idea.egress_policy is not EgressPolicy.SHAREABLE
+            ):
+                return None
+            briefs = self._gateway._idea_briefs_for_root_tx(tx, root_id)
+            if not briefs:
+                return None
+            latest = briefs[-1]
+            if (
+                latest.owner_id != owner
+                or latest.idea_lineage_root_id != root_id
+                or latest.based_on_idea_id != idea.id
+                or latest.egress_policy != EgressPolicy.SHAREABLE.value
+            ):
+                return None
+            sections = []
+            for section in latest.sections:
+                safe_evidence_ids = [
+                    evidence_id for evidence_id in section.evidence_ids
+                    if self._evidence_lineage_valid(tx, evidence_id=evidence_id, owner_id=owner)
+                ]
+                sections.append({
+                    "index": section.index,
+                    "title": SECTION_TITLES[section.index],
+                    "content": section.content,
+                    "evidence_ids": safe_evidence_ids,
+                })
+            return {"brief_id": latest.id, "idea_id": idea.id, "sections": sections}
+
+        with self._read_session() as session:
+            projection = self._gateway._execute_read(session, read)
+        if projection is None:
+            raise GraphReadNotFoundError("idea brief was not found")
+        return projection
 
     def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
         identifier = _required_node_id(node_id)

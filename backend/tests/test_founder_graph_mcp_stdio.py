@@ -25,7 +25,7 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
     assert ping["result"] == {}
     tools = listed["result"]["tools"]
     assert {tool["name"] for tool in tools} == {
-        "search", "fetch", "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
+        "search", "fetch", "fetch_idea_brief", "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
         "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
     }
