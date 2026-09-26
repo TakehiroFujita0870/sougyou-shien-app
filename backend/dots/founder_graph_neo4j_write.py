@@ -26,6 +26,7 @@ from .founder_graph import (
     SourceRevision,
 )
 from .founder_graph_neo4j import Neo4jGraphGateway
+from .idea_brief import IdeaBriefVersion
 from .founder_graph_write import (
     GraphWriteError,
     GraphWriteNotFoundError,
@@ -231,4 +232,26 @@ class Neo4jGraphWriteService(GraphWritePort):
             revision=revision,
             fields=MappingProxyType(dict(payload)),
         )
-__all__ = ["Neo4jGraphWriteService", "PersistedNodeReference"]
+
+
+class Neo4jIdeaBriefStore:
+    """Concrete-only owner-bound persistence for immutable IdeaBrief values."""
+
+    def __init__(self, gateway: Neo4jGraphGateway) -> None:
+        if not isinstance(gateway, Neo4jGraphGateway):
+            raise GraphWriteError("a Neo4jGraphGateway is required")
+        self.gateway = gateway
+
+    def save(self, brief: IdeaBriefVersion, *, expected_latest_revision: int | None,
+             idempotency_key: str, actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.save_idea_brief(
+            brief, expected_latest_revision=expected_latest_revision,
+            idempotency_key=idempotency_key, actor=actor,
+        )
+
+    def get(self, brief_id: str) -> IdeaBriefVersion | None:
+        return self.gateway.get_idea_brief(brief_id)
+
+    def get_latest(self, idea_lineage_root_id: str) -> IdeaBriefVersion | None:
+        return self.gateway.get_latest_idea_brief(idea_lineage_root_id)
+__all__ = ["Neo4jGraphWriteService", "Neo4jIdeaBriefStore", "PersistedNodeReference"]

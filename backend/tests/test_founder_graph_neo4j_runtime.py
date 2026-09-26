@@ -43,6 +43,22 @@ class _Session:
 
     def run(self, query: str, **params):
         self.calls.append((query, params))
+        if "_dots_idea_write_lock" in query:
+            record = self.records.get(params["id"])
+            return _Result(None if record is None else {
+                name: record[name] for name in ("id", "owner_id", "node_type", "revision")
+            })
+        if "MATCH (i:Idea" in query and "supersedes_id: $parent_id" in query:
+            return _Result()
+        if "MATCH (i:Idea" in query and "payload_json" in query:
+            if "owner_id: $owner_id}" in query:
+                record = next((
+                    value for value in self.records.values()
+                    if value["owner_id"] == params["owner_id"]
+                ), None)
+                return _Result(record)
+            record = self.records.get(params["id"])
+            return _Result(record)
         if "MATCH (n {id: $node_id, owner_id: $owner_id})" in query:
             return _Result(self.records.get(params["node_id"]))
         if "FounderGraphAudit" in query and query.startswith("MATCH"):
