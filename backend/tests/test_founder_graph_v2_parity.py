@@ -151,6 +151,18 @@ def _fixture(owner_id: str = "synthetic-owner") -> tuple[object, ...]:
     )
 
 
+def _seed_legacy_relation_assertion_projection_fixture(
+    assertion: RelationAssertion,
+    memory_writes: InMemoryGraphWriteService,
+    neo4j_driver: _ParityDriver,
+) -> None:
+    """Seed a pre-M1 bare assertion only for safe read/search projection tests."""
+    assert not assertion.evidence_ids and assertion.based_on_brief_id is None
+    memory_writes._nodes[assertion.id] = assertion
+    memory_writes._node_history[assertion.id] = [assertion]
+    neo4j_driver.session_value.nodes[assertion.id] = _node_properties(assertion)
+
+
 def _view_manifest(reads, nodes: tuple[object, ...], owner_id: str) -> dict[str, object]:
     views = tuple(reads.fetch(str(node.id), owner_id=owner_id) for node in nodes)
     return {
@@ -172,7 +184,7 @@ def _view_manifest(reads, nodes: tuple[object, ...], owner_id: str) -> dict[str,
     }
 
 
-def test_schema_v2_write_and_read_match_in_memory_for_all_v2_node_types() -> None:
+def test_schema_v2_projection_read_matches_for_all_v2_node_types() -> None:
     owner_id = "synthetic-owner"
     nodes = _fixture(owner_id)
     memory_writes = InMemoryGraphWriteService(owner_id)
@@ -180,8 +192,11 @@ def test_schema_v2_write_and_read_match_in_memory_for_all_v2_node_types() -> Non
     neo4j_gateway = Neo4jGraphGateway(neo4j_driver, owner_id)
 
     for index, node in enumerate(nodes):
-        memory_writes.put_node(node, idempotency_key=f"memory-{index}")
-        neo4j_gateway.put_node(node, idempotency_key=f"neo4j-{index}")
+        if isinstance(node, RelationAssertion):
+            _seed_legacy_relation_assertion_projection_fixture(node, memory_writes, neo4j_driver)
+        else:
+            memory_writes.put_node(node, idempotency_key=f"memory-{index}")
+            neo4j_gateway.put_node(node, idempotency_key=f"neo4j-{index}")
 
     memory_reads = GraphReadService(memory_writes)
     neo4j_reads = Neo4jGraphReadService(neo4j_gateway)
@@ -203,8 +218,11 @@ def test_schema_v2_representative_search_has_the_same_safe_result_ids() -> None:
     neo4j_driver = _ParityDriver()
     neo4j_gateway = Neo4jGraphGateway(neo4j_driver, owner_id)
     for index, node in enumerate(nodes):
-        memory_writes.put_node(node, idempotency_key=f"memory-search-{index}")
-        neo4j_gateway.put_node(node, idempotency_key=f"neo4j-search-{index}")
+        if isinstance(node, RelationAssertion):
+            _seed_legacy_relation_assertion_projection_fixture(node, memory_writes, neo4j_driver)
+        else:
+            memory_writes.put_node(node, idempotency_key=f"memory-search-{index}")
+            neo4j_gateway.put_node(node, idempotency_key=f"neo4j-search-{index}")
 
     memory_hits = GraphReadService(memory_writes).search("founder", owner_id=owner_id)
     neo4j_hits = Neo4jGraphReadService(neo4j_gateway).search("founder", owner_id=owner_id)
