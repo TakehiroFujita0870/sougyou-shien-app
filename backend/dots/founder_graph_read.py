@@ -569,6 +569,7 @@ class GraphReadService:
         if type(section_index) is not int or not 0 <= section_index < len(latest.sections):
             return False, None
         section = latest.sections[section_index]
+        if not section.content.strip(): return False, None
         if not set(assertion.evidence_ids).issubset(section.evidence_ids):
             return False, None
         return latest.id, section_index

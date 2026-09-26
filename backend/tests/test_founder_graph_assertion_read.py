@@ -152,6 +152,13 @@ def test_newer_brief_hides_old_formal_path_without_erasing_history():
     assert writes.get_node(assertion.id) is assertion
 
 
+def test_empty_selected_brief_section_hides_formal_path():
+    writes, _, _, _, brief, assertion = _setup()
+    writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="formal-read")
+    writes._idea_briefs[brief.id] = replace(brief, sections=tuple(replace(s, content=" ") if s.index == assertion.based_on_brief_section_index else s for s in brief.sections))
+    assert all(step.relation_assertion_id != assertion.id for step in _assertion_hit(GraphReadService(writes), "Synthetic target").relation_path)
+
+
 def test_reader_waits_for_atomic_write_and_uses_one_lock_held_snapshot():
     writes, _, _, _, _, assertion = _setup()
     entered_audit = Event()

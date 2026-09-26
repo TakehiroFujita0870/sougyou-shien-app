@@ -18,7 +18,7 @@ Given: メモリwriterが、所有者が一致する`RelationAssertion`、正規
 
 When: `GraphReadService.search`がメモリグラフを検索する。
 
-Then: `SearchHit.relation_path`の一段がsourceとtargetを直接結び、実際のassertion ID、述語・方向、状態、確信度、有効期間、Evidence ID、該当時は主Ideaに対する正確な最新Brief IDと章番号を持つ。Assertionノードや`ASSERTS_*`/`EVIDENCED_BY`/`SUPERSEDES`の足場は、意味上の端点・述語として返らない。
+Then: `SearchHit.relation_path`の一段がsourceとtargetを直接結び、実際のassertion ID、述語・方向、状態、確信度、有効期間、Evidence ID、該当時は主Ideaに対する正確な最新Brief IDと章番号を持つ。選択Brief章の本文は空白のみでなく、Evidenceを含むこと。Assertionノードや`ASSERTS_*`/`EVIDENCED_BY`/`SUPERSEDES`の足場は、意味上の端点・述語として返らない。
 
 ### US-2 — 旧版・不正・安全でない経路を除外する
 
@@ -62,7 +62,7 @@ Then: 述語・方向・Evidenceの従来動作を保ち、`relation_assertion_i
 
 | ID | 成果物 | 完了判定 | 不確実性 |
 | --- | --- | --- | --- |
-| P4-05-MEM-READ-01 | `GraphReadSnapshot`、lock内`read_snapshot()`、`founder_graph_read.py`の正式path投影、新規focused tests | 検査: 正例Idea→Claimで実assertion/Evidence/最新Brief参照を保持。新Brief保存後は旧pathを除外し、後日の許諾期限切れは受理済みBrief pathを遡及無効にしない。両Idea端点が現行であること、主IdeaのみBriefを要求することを検査。壊れた正規参照、端点/Evidence/owner/時刻/status、同一owner後継（status不問・複数後継）、別owner後継の負例を検査。write途中のreaderが一貫snapshotを得ること、旧形式の互換とID非捏造、focused/backend全suite、diff checkを確認。TDD: 初回3 failed（formal path/snapshot未実装）、read/write focused 36 passed、main 09f4d4e7f048更新後backend 765 passed/4 skipped、diff-check clean。 | 完了 |
+| P4-05-MEM-READ-01 | `GraphReadSnapshot`、lock内`read_snapshot()`、`founder_graph_read.py`の正式path投影、新規focused tests | 検査: 正例Idea→Claimで実assertion/Evidence/最新Brief参照を保持。新Brief保存後は旧pathを除外し、後日の許諾期限切れは受理済みBrief pathを遡及無効にしない。両Idea端点が現行であること、主IdeaのみBriefを要求することを検査。壊れた正規参照、端点/Evidence/owner/時刻/status、空章、同一owner後継（status不問・複数後継）、別owner後継の負例を検査。write途中のreaderが一貫snapshotを得ること、旧形式の互換とID非捏造、focused/backend全suite、diff checkを確認。TDD: formal path/snapshot初回3 failed、空章回帰red1→green1、read/write focused 37 passed、main 09f4d4e7f048後backend 766 passed/4 skipped、diff-check clean。 | 完了 |
 
 ## 質問リスト
 
