@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-27T12:43:02Z",
-  "baseline_main": "f9e7ae275e88",
+  "updated_at": "2026-09-27T12:53:09Z",
+  "baseline_main": "8f37260b482c",
   "latest_delivery": {
     "references": [314, 315, 316, 317, 318, 319],
     "implementation": "実階層の奥行き表示、過去調査の正確な保存と表示、調査提案と自動整理の会話手順、直接一致候補の根拠付き経路保持。",
@@ -144,7 +144,10 @@
       "id": "semantic_conversation_reuse", "title": "実会話で内容を読み解いた関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "既存の調査→概要→根拠付き関係→別会話再検索に加え、現行合成記録を実ChatGPTがID指定なしで検索し、最新訂正関係と出典を取得。同じChatGPTが根拠・最新Brief章付き分類を保存し、独立HTTP読取りで現行membershipと既存関係不変を照合。別のChatGPT会話で分類階層・最新関係・出典を取得し再利用できた。外部調査や本人実データの変更なし。代表5組を追加完成条件にしない。調査提案の未達はremaining_planへ分離。",
-      "evidence": [{"recorded_at": "2026-09-26T12:06:19Z", "scope": "live-researched-idea-to-independent-chat", "result": "partial", "reference": "主会話の同時刻報告とlocal:/home/hp/projects/dots-live/docs/operations/dots-rp07-acceptance-inventory.mdの根拠付き意味関係行。"}]
+      "evidence": [
+        {"recorded_at": "2026-09-26T12:06:19Z", "scope": "live-researched-idea-to-independent-chat", "result": "partial", "reference": "主会話の同時刻報告とlocal:/home/hp/projects/dots-live/docs/operations/dots-rp07-acceptance-inventory.mdの根拠付き意味関係行。"},
+        {"recorded_at": "2026-09-27T12:53:09Z", "scope": "live-researched-idea-to-independent-chat", "result": "passed", "reference": "主会話の実ChatGPT操作と独立HTTP読取り: 合成記録の最新訂正関係と出典取得、同じモデルによるBrief章とEvidence付き分類保存、別会話での分類階層・最新関係・出典再検索を確認。本文・個人ID・会話URLは転載しない。"}
+      ]
     }
   ]
 }
