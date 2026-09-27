@@ -397,19 +397,6 @@ Then: 現行検索から旧内容が除外され、過去レポートには参�
 - 初期版でのローカルLLMと専用embedding model。
 - 法務、税務、融資、投資、特許性の保証または代理判断。
 
-## 既存成果物の再利用方針
-
-| 既存成果物 | 再利用する契約 | ピボット後の位置づけ |
-| --- | --- | --- |
-| [アイデアストックと仮説カード](../spec/idea-candidates-plan.md) | 会話保存、重複検知、訂正 | Idea revisionとcapture_ideaへ移植する |
-| [横断調査・個人ナレッジ・意思決定記憶](../spec/research-memory-plan.md) | Evidence、出典、削除伝播、過去判断 | Neo4jのClaim / Evidence / Decisionへ移植する |
-| [市場・3種競合](issue-64-market-slice.md) | 直接、間接、代替、潜在参入、本人判断 | 第2章と第4章の入力contractとして再利用する |
-| [unit economics](issue-65-unit-economics-contract.md) | Decimal、CAC、LTV、損益分岐、3シナリオ | 第3章の決定的計算moduleとして再利用する |
-| [低リスク実行契約](issue-66-low-risk-execution-contract.md) | 時間・資金上限、可逆性、撤退条件、roadmap | 第5章から第7章の共通DecisionCriterionへ移植する |
-| [フォーマル事業計画書export](issue-68-formal-business-plan-export.md) | adapter、未確定表示、privacy、attribution | 8章ReportVersionを入力とするexportへ更新する |
-
-既存moduleを再利用する場合も、PostgresのID、owner前提、5観点payloadをそのまま新しい正本にしない。Phase 0のinventoryでdomain logic、storage、UI、test fixtureを別々に分類する。
-
 ## 実装フェーズ
 
 ### Phase 0: 不確実性を潰す

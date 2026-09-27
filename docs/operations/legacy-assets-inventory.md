@@ -8,7 +8,7 @@
 
 | 資産 | 現在の参照状況 | 扱い | 確認事項 |
 | --- | --- | --- | --- |
-| 完了済み個別計画、ピボット前の`docs/spec/` | 個別計画と現況正本が混在。一部はvalidatorが参照する契約を含む | 群別に集約・削除 | 契約の参照を移してから削除。古い申し送りとスマホ専用計画は削除済み、復旧はGit履歴 |
+| 完了済みのFounder Graph個別計画 | 現況正本と混在している | 残存参照と現行契約を確認して群別に整理 | 完了履歴はGitで復旧できる。稼働手順・安全条件は現行の正本に残す |
 | 旧preview用起動手順とスクリプト | 現在は停止。別cloneの安全なUI/API確認と復旧に使う独立機能 | 維持 | 停止状態だけを未使用の根拠にしない |
 | synthetic tunnel用起動手順とスクリプト | 専用WindowsタスクはDisabled、systemdはinactiveだが登録済み。master planの隔離接続受入から参照 | 契約整理まで保留 | 合成DBの安全検査と通常liveサービスを保持し、受入・復旧参照を整理してから専用起動群を処分 |
 
@@ -32,4 +32,3 @@
 ## 関連資料
 
 - [`../plans/ci-lightening-and-legacy-disposition.md`](../plans/ci-lightening-and-legacy-disposition.md)
-- [`../spikes/founder-graph-migration-inventory.md`](../spikes/founder-graph-migration-inventory.md)
