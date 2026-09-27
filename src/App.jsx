@@ -13,12 +13,7 @@ import { useHydratedResource } from './runtime/useHydratedResource';
 import { createSidebarPortfolioRepository } from './components/sidebarPortfolioRepository';
 import { FounderGraphSurface } from './components/FounderGraphSurface';
 import { FounderGraphLiveRead } from './components/FounderGraphLiveRead';
-import { createFounderGraphReadClient } from './components/founderGraphReadClient';
-import { LocalControlDashboard } from './components/LocalControlDashboard';
-import { LocalHomeSurface } from './components/LocalHomeSurface';
-import { LocalGraphSurface } from './components/LocalGraphSurface';
-import { LocalDashboardShell } from './components/LocalDashboardShell';
-import { createLocalDashboardClient } from './runtime/localDashboardClient';
+import { LocalDashboardApp } from './components/LocalDashboardApp';
 import knowledgeDemoFixture from './fixtures/knowledge-admin-demo.json';
 
 export const WORKSPACE_NAV = [{ id: 'home', label: 'ホーム' }, { id: 'project', label: 'プロジェクト' }, { id: 'knowledge', label: 'ナレッジ' }, { id: 'graph', label: 'Graph' }];
@@ -78,9 +73,12 @@ function ProfileLoadFailure({ onRetry }) {
   );
 }
 
-export function App({ profileRepository, adoptedProjectRepository, homeConversationRepository, sidebarPortfolioRepository, founderGraphResults = [], founderGraphState = 'ready', founderGraphReports = null, founderGraphClient = null, founderGraphQuery = '' }) {
-  const localDashboardEnabled = isLocalDashboardOrigin();
-  const [activeWorkspace, setActiveWorkspace] = useState(() => localDashboardEnabled ? 'local-home' : readSelectedSurface());
+export function App(props) {
+  return isLocalDashboardOrigin() ? <LocalDashboardApp /> : <LegacyWorkspaceApp {...props} />;
+}
+
+function LegacyWorkspaceApp({ profileRepository, adoptedProjectRepository, homeConversationRepository, sidebarPortfolioRepository, founderGraphResults = [], founderGraphState = 'ready', founderGraphReports = null, founderGraphClient = null, founderGraphQuery = '' }) {
+  const [activeWorkspace, setActiveWorkspace] = useState(() => readSelectedSurface());
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDialogDismissed, setProfileDialogDismissed] = useState(false);
   const repositoryRef = useRef(null);
@@ -98,10 +96,6 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
   const [homeModelKey, setHomeModelKey] = useState(() => homeModelRepositoryRef.current.get());
   const portfolioRepositoryRef = useRef(null);
   if (!portfolioRepositoryRef.current) portfolioRepositoryRef.current = sidebarPortfolioRepository ?? createSidebarPortfolioRepository();
-  const localDashboardClientRef = useRef(null);
-  if (localDashboardEnabled && !localDashboardClientRef.current) localDashboardClientRef.current = createLocalDashboardClient();
-  const localGraphClientRef = useRef(null);
-  if (localDashboardEnabled && !localGraphClientRef.current) localGraphClientRef.current = createFounderGraphReadClient({ ownerId: 'owner-mvp' });
   const [portfolio, setPortfolio] = useState({ home: [], project: [], knowledge: [] });
   const [portfolioHydrated, setPortfolioHydrated] = useState(false);
   const [portfolioError, setPortfolioError] = useState('');
@@ -257,31 +251,18 @@ export function App({ profileRepository, adoptedProjectRepository, homeConversat
     }
     if (activeWorkspace === 'knowledge') return <KnowledgeSurface fixture={knowledgeDemoFixture} profile={profileHydration.value} ownerId="local-owner" spaceId="local-space" availableProjects={availableProjects} currentProject={adoptedProjectHydration.value} allowedEvaluationViews={projectEvaluationTabs} archiveHistory={[...portfolio.home, ...portfolio.project].filter((item) => item.archived)} onOpenProject={async (projectId, evaluationView, evidence) => { const project = availableProjects.find((item) => item.id === projectId && item.ownerId === 'local-owner' && item.spaceId === 'local-space'); const validEvidence = evidence && evidence.projectId === projectId && evidence.evaluationView === evaluationView && typeof evidence.title === 'string' && typeof evidence.content === 'string' && ['local', 'synthetic', 'unknown'].includes(evidence.sourceType) && ['high', 'medium', 'unknown'].includes(evidence.confidence) && Array.isArray(evidence.unknowns); if (!project || !projectEvaluationTabs.includes(evaluationView) || !validEvidence) return; try { const selected = await adoptedProjectRepositoryRef.current.selectCurrent?.(projectId) ?? project; const context = { projectId, ownerId: project.ownerId, spaceId: project.spaceId, title: evidence.title, content: evidence.content, evaluationView, sourceType: evidence.sourceType, confidence: evidence.confidence, unknowns: evidence.unknowns.filter((item) => typeof item === 'string').slice(0, 8) }; adoptedProjectHydration.replaceReady(selected); setProjectTargetView(evaluationView); setProjectTargetEvidence(context); persistProjectEvidenceContext(context); setPortfolioError(''); setActiveWorkspace('project'); } catch { setPortfolioError('Projectを開けませんでした。もう一度お試しください。'); } }} onAssetAdded={async (asset) => { const next = await portfolioRepositoryRef.current.ensure('knowledge', { id: asset.id, title: asset.name, unread: true, updatedAt: Date.now() }); setPortfolio(next); setPortfolioError(''); }} onSend={(value) => { void portfolioRepositoryRef.current.ensure('knowledge', { id: portfolioMessageId('knowledge:conversation', value), title: value.slice(0, 80), unread: true, updatedAt: Date.now() }).then((next) => { setPortfolio(next); setPortfolioError(''); }).catch(() => setPortfolioError('履歴を保存できませんでした。もう一度お試しください。')); }} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
     if (activeWorkspace === 'graph') {
-      if (localDashboardEnabled) return <LocalGraphSurface client={localDashboardClientRef.current} onOpenServices={() => setActiveWorkspace('local-services')} />;
-      const graphClient = founderGraphClient ?? localGraphClientRef.current;
+      const graphClient = founderGraphClient;
       if (graphClient) return <FounderGraphLiveRead client={graphClient} query={founderGraphQuery} reports={founderGraphReports} />;
       return <FounderGraphSurface results={founderGraphResults} state={founderGraphState} reports={founderGraphReports} />;
-    }
-    if (localDashboardEnabled && activeWorkspace === 'local-home') {
-      return <LocalHomeSurface client={localDashboardClientRef.current} onOpenServices={() => setActiveWorkspace('local-services')} />;
-    }
-    if (localDashboardEnabled && activeWorkspace === 'local-services') {
-      return <LocalControlDashboard client={localDashboardClientRef.current} serviceOnly />;
     }
     if (activeWorkspace === 'settings') return <div className="max-w-4xl space-y-6"><PlanSelection currentPlan={subscription.plan} onApplyPlan={updatePlan} /></div>;
     return <IdeaWorkspace key={homeConversationRevision} repository={trackedHomeConversationRepositoryRef.current} modelKey={homeModelKey} models={getHomeModels()} onModelChange={updateModel} />;
   }
 
-  if (localDashboardEnabled) {
-    return <LocalDashboardShell activePage={activeWorkspace} onSelect={setActiveWorkspace}>
-      {workspaceContent()}
-    </LocalDashboardShell>;
-  }
-
   const ShellElement = 'main';
   return (
     <ShellElement className="Dots-shell">
-      <WorkspaceShell activePage={activeWorkspace} showLocalDashboard={localDashboardEnabled} mainLandmark={localDashboardEnabled && activeWorkspace !== LOCAL_DASHBOARD_PAGE_ID} onSelect={(page) => { if (page !== 'project') setProjectTargetEvidence(null); const archivedHome = page === 'home' && portfolio.home.some((item) => item.id === activeHomeConversationId && item.archived); const archivedProject = page === 'project' && portfolio.project.some((item) => item.id === adoptedProjectHydration.value?.id && item.archived); setActiveWorkspace(archivedHome || archivedProject ? 'knowledge' : page); }} portfolio={portfolio} portfolioError={portfolioError} onOpenPortfolioItem={async (type, entry) => { if (entry.archived) return; try { if (type === 'home' && entry.snapshot) { await rawHomeConversationRepositoryRef.current.save(entry.snapshot); const next = await portfolioRepositoryRef.current.setActiveHome(entry.id); setPortfolio(next); setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } if (type === 'project' && entry.snapshot) { setProjectTargetEvidence(null); const restored = await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); adoptedProjectHydration.replaceReady(restored); } if (type === 'knowledge') { const next = await portfolioRepositoryRef.current.markRead('knowledge', entry.id); setPortfolio(next); } setPortfolioError(''); setActiveWorkspace(type); } catch { setPortfolioError('履歴を開けませんでした。項目は削除されていません。もう一度お試しください。'); throw new Error('Portfolio item open failed'); } }} onArchive={async (type, id) => { try { const next = await portfolioRepositoryRef.current.archive(type, id); setPortfolio(next); setPortfolioError(''); setActiveWorkspace('knowledge'); return true; } catch { setPortfolioError('アーカイブできませんでした。項目はそのまま残っています。もう一度お試しください。'); return false; } }} onRestore={async (type, entry) => { let previous; let staged = false; try { if (type === 'home') { previous = await rawHomeConversationRepositoryRef.current.load(); await rawHomeConversationRepositoryRef.current.save(entry.snapshot); } else { previous = adoptedProjectHydration.value; await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); } staged = true; const restoredPortfolio = await portfolioRepositoryRef.current.restore(type, entry.id); if (type === 'home') { setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } else { adoptedProjectHydration.replaceReady(entry.snapshot); } setPortfolio(restoredPortfolio); setPortfolioError(''); setActiveWorkspace(type); } catch { let compensated = !staged; try { if (staged) { if (type === 'home') await rawHomeConversationRepositoryRef.current.save(previous ?? { messages: [], proposals: [], input: '' }); else if (previous) await adoptedProjectRepositoryRef.current.saveAdopted(previous); else await adoptedProjectRepositoryRef.current.clearAdopted?.(); compensated = true; } } catch { compensated = false; } setPortfolioError(compensated ? '再開できませんでした。アーカイブは保持されています。もう一度お試しください。' : '再開できませんでした。アーカイブは保持されていますが、元の作業内容を復元できませんでした。'); } }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
+<WorkspaceShell activePage={activeWorkspace} showLocalDashboard={false} mainLandmark={false} onSelect={(page) => { if (page !== 'project') setProjectTargetEvidence(null); const archivedHome = page === 'home' && portfolio.home.some((item) => item.id === activeHomeConversationId && item.archived); const archivedProject = page === 'project' && portfolio.project.some((item) => item.id === adoptedProjectHydration.value?.id && item.archived); setActiveWorkspace(archivedHome || archivedProject ? 'knowledge' : page); }} portfolio={portfolio} portfolioError={portfolioError} onOpenPortfolioItem={async (type, entry) => { if (entry.archived) return; try { if (type === 'home' && entry.snapshot) { await rawHomeConversationRepositoryRef.current.save(entry.snapshot); const next = await portfolioRepositoryRef.current.setActiveHome(entry.id); setPortfolio(next); setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } if (type === 'project' && entry.snapshot) { setProjectTargetEvidence(null); const restored = await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); adoptedProjectHydration.replaceReady(restored); } if (type === 'knowledge') { const next = await portfolioRepositoryRef.current.markRead('knowledge', entry.id); setPortfolio(next); } setPortfolioError(''); setActiveWorkspace(type); } catch { setPortfolioError('履歴を開けませんでした。項目は削除されていません。もう一度お試しください。'); throw new Error('Portfolio item open failed'); } }} onArchive={async (type, id) => { try { const next = await portfolioRepositoryRef.current.archive(type, id); setPortfolio(next); setPortfolioError(''); setActiveWorkspace('knowledge'); return true; } catch { setPortfolioError('アーカイブできませんでした。項目はそのまま残っています。もう一度お試しください。'); return false; } }} onRestore={async (type, entry) => { let previous; let staged = false; try { if (type === 'home') { previous = await rawHomeConversationRepositoryRef.current.load(); await rawHomeConversationRepositoryRef.current.save(entry.snapshot); } else { previous = adoptedProjectHydration.value; await adoptedProjectRepositoryRef.current.saveAdopted(entry.snapshot); } staged = true; const restoredPortfolio = await portfolioRepositoryRef.current.restore(type, entry.id); if (type === 'home') { setActiveHomeConversationId(entry.id); setHomeConversationRevision((value) => value + 1); } else { adoptedProjectHydration.replaceReady(entry.snapshot); } setPortfolio(restoredPortfolio); setPortfolioError(''); setActiveWorkspace(type); } catch { let compensated = !staged; try { if (staged) { if (type === 'home') await rawHomeConversationRepositoryRef.current.save(previous ?? { messages: [], proposals: [], input: '' }); else if (previous) await adoptedProjectRepositoryRef.current.saveAdopted(previous); else await adoptedProjectRepositoryRef.current.clearAdopted?.(); compensated = true; } } catch { compensated = false; } setPortfolioError(compensated ? '再開できませんでした。アーカイブは保持されています。もう一度お試しください。' : '再開できませんでした。アーカイブは保持されていますが、元の作業内容を復元できませんでした。'); } }} currentPlan={subscription.plan} onOpenProfile={() => setProfileOpen(true)}>
         <div className="px-5 py-6 sm:py-8">{workspaceContent()}</div>
       </WorkspaceShell>
       {((profileHydration.phase === 'loading' && !profileDialogDismissed) || profileHydration.phase === 'error' || profileOpen) && <div className="Dots-dialog-backdrop fixed inset-0 z-10 grid grid-cols-[minmax(0,1fr)] place-items-end overflow-x-hidden p-3 sm:place-items-center sm:p-6" role="dialog" aria-modal="true" aria-label="あなたの情報">{profileHydration.phase === 'loading' ? <div className="Dots-dialog-panel w-full rounded-3xl p-6 shadow-xl sm:max-w-2xl">準備しています…</div> : profileHydration.phase === 'error' ? <ProfileLoadFailure onRetry={retryProfileLoad} /> : <UserProfileInterview initialProfile={profileHydration.value} repository={profileRepositoryRef.current} onClose={() => setProfileOpen(false)} onComplete={completeProfile} />}</div>}
