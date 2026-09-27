@@ -147,6 +147,207 @@ it('places asset editing in a small, keyboard-reachable icon button at the card 
   expect(editButton.getAttribute('type')).toBe('button');
 });
 
+it('requires a named confirmation before archiving and does not select a card when its trash action is used', async () => {
+  const ideas = [
+    { id: 'idea-1', title: '選択中の案', summary: '', description: '', revision: 0 },
+    { id: 'idea-2', title: '整理する案', summary: '', description: '', revision: 4 },
+  ];
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas, assets: [], profile: null })
+      .mockResolvedValueOnce({ status: 'ready', ideas: [ideas[0]], assets: [], profile: null }),
+    archiveRecord: vi.fn().mockResolvedValue({ id: 'idea-2', revision: 5, replayed: false }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  const deleteButton = container.querySelector('button[aria-label="削除: 整理する案"]');
+  expect(deleteButton.disabled).toBe(false);
+  await act(async () => deleteButton.click());
+  expect(container.querySelector('[role="alertdialog"]')?.textContent).toContain('「整理する案」を削除しますか？');
+  expect(container.querySelector('[aria-pressed="true"] strong').textContent).toBe('選択中の案');
+  expect(client.archiveRecord).not.toHaveBeenCalled();
+  await act(async () => [...container.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent === 'キャンセル').click());
+  expect(client.archiveRecord).not.toHaveBeenCalled();
+
+  await act(async () => container.querySelector('button[aria-label="削除: 整理する案"]').click());
+  await act(async () => [...container.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent === '削除する').click());
+  expect(client.archiveRecord).toHaveBeenCalledWith('idea', 'idea-2', 4, { signal: expect.any(AbortSignal) });
+  expect(client.getHome).toHaveBeenCalledTimes(2);
+  expect(container.querySelectorAll('.local-home__idea-card')).toHaveLength(1);
+  expect(container.textContent).toContain('整理する案を削除しました');
+});
+
+it('keeps confirmation available after a recoverable failure and allows the same intent to be retried', async () => {
+  const idea = { id: 'idea-1', title: '再試行する案', summary: '', description: '', revision: 2 };
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [idea], assets: [], profile: null })
+      .mockResolvedValueOnce({ status: 'empty', ideas: [], assets: [], profile: null }),
+    archiveRecord: vi.fn().mockRejectedValueOnce({ kind: 'unavailable' })
+      .mockResolvedValueOnce({ id: 'idea-1', revision: 3, replayed: true }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => container.querySelector('button[aria-label="削除: 再試行する案"]').click());
+  const confirm = () => container.querySelector('[role="alertdialog"] button:last-child');
+  await act(async () => confirm().click());
+  expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('削除できませんでした');
+
+  await act(async () => confirm().click());
+  expect(client.archiveRecord).toHaveBeenCalledTimes(2);
+  expect(client.archiveRecord.mock.calls[0].slice(0, 3)).toEqual(client.archiveRecord.mock.calls[1].slice(0, 3));
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(container.querySelectorAll('.local-home__idea-card')).toHaveLength(0);
+});
+
+it('moves focus into deletion confirmation, supports Escape, and disables all delete controls while pending', async () => {
+  let finishArchive;
+  const idea = { id: 'idea-1', title: '確認する案', summary: '', description: '', revision: 1 };
+  const asset = { id: 'asset-1', name: '確認する資料', description: '', revision: 1 };
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [idea], assets: [asset], profile: null })
+      .mockResolvedValueOnce({ status: 'ready', ideas: [], assets: [asset], profile: null }),
+    archiveRecord: vi.fn(() => new Promise((resolve) => { finishArchive = resolve; })),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  const trigger = container.querySelector('button[aria-label="削除: 確認する案"]');
+  await act(async () => trigger.click());
+  expect(document.activeElement.textContent).toBe('削除する');
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  expect(client.archiveRecord).not.toHaveBeenCalled();
+
+  await act(async () => trigger.click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(document.activeElement).toBe(container.querySelector('[role="alertdialog"]'));
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
+  expect(document.activeElement).toBe(container.querySelector('[role="alertdialog"]'));
+  expect([...container.querySelectorAll('button[aria-label^="削除:"]')].every((button) => button.disabled)).toBe(true);
+  expect([...container.querySelectorAll('[role="alertdialog"] button')].every((button) => button.disabled)).toBe(true);
+  await act(async () => finishArchive({ id: 'idea-1', revision: 2, replayed: false }));
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(container.querySelectorAll('.local-home__idea-card')).toHaveLength(0);
+});
+
+it('clears an aborted deletion confirmation and pending state when the client changes', async () => {
+  let finishArchive;
+  let archiveSignal;
+  const idea = { id: 'idea-1', title: '再読込する案', summary: '', description: '', revision: 1 };
+  const firstClient = {
+    getHome: vi.fn(async () => ({ status: 'ready', ideas: [idea], assets: [], profile: null })),
+    archiveRecord: vi.fn((kind, id, revision, { signal }) => {
+      archiveSignal = signal;
+      return new Promise((resolve) => { finishArchive = resolve; });
+    }),
+  };
+  const nextClient = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [idea], assets: [], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={firstClient} />));
+  await act(async () => container.querySelector('button[aria-label="削除: 再読込する案"]').click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(container.querySelector('[role="alertdialog"] button:last-child').textContent).toBe('削除中…');
+
+  await act(async () => root.render(<LocalHomeSurface client={nextClient} />));
+  expect(archiveSignal.aborted).toBe(true);
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="削除: 再読込する案"]').disabled).toBe(false);
+  await act(async () => finishArchive({ id: 'idea-1', revision: 2, replayed: false }));
+  expect(container.querySelectorAll('.local-home__idea-card')).toHaveLength(1);
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+});
+
+it('offers a home reload when the archive succeeds but its follow-up read fails', async () => {
+  const idea = { id: 'idea-1', title: '再読み込みが必要な案', summary: '', description: '', revision: 1 };
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [idea], assets: [], profile: null })
+      .mockRejectedValueOnce(new Error('temporary read failure'))
+      .mockResolvedValueOnce({ status: 'empty', ideas: [], assets: [], profile: null }),
+    archiveRecord: vi.fn().mockResolvedValue({ id: 'idea-1', revision: 2, replayed: false }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => container.querySelector('button[aria-label="削除: 再読み込みが必要な案"]').click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(container.textContent).toContain('再読み込みが必要な案を削除しました。一覧を更新できませんでした');
+  await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent === 'ホームを再読み込み').click());
+  expect(client.getHome).toHaveBeenCalledTimes(3);
+  expect(container.querySelectorAll('.local-home__idea-card')).toHaveLength(0);
+  expect(container.textContent).not.toContain('一覧を更新できませんでした');
+});
+
+it('refreshes a stale revision after a conflict and disables deletion when revision is unavailable', async () => {
+  const stale = { id: 'idea-1', title: '更新される案', summary: '', description: '', revision: 0 };
+  const current = { ...stale, revision: 1 };
+  const missingRevision = { id: 'idea-2', title: '版が不明な案', summary: '', description: '' };
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [stale, missingRevision], assets: [], profile: null })
+      .mockResolvedValueOnce({ status: 'ready', ideas: [current, missingRevision], assets: [], profile: null })
+      .mockResolvedValueOnce({ status: 'ready', ideas: [missingRevision], assets: [], profile: null }),
+    archiveRecord: vi.fn().mockRejectedValueOnce({ kind: 'conflict' })
+      .mockResolvedValueOnce({ id: 'idea-1', revision: 2, replayed: false }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  const unavailableDelete = container.querySelector('button[aria-label="削除: 版が不明な案"]');
+  expect(unavailableDelete.disabled).toBe(true);
+  await act(async () => container.querySelector('button[aria-label="削除: 更新される案"]').click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(client.getHome).toHaveBeenCalledTimes(2);
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(container.textContent).toContain('最新の一覧を読み込みました');
+
+  await act(async () => container.querySelector('button[aria-label="削除: 更新される案"]').click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(client.archiveRecord.mock.calls.map((call) => call.slice(0, 3))).toEqual([
+    ['idea', 'idea-1', 0],
+    ['idea', 'idea-1', 1],
+  ]);
+});
+
+it('archives an asset with its current revision and leaves items without a safe revision disabled', async () => {
+  const asset = { id: 'asset-1', name: '整理するアセット', kind: 'knowledge', description: '記録内容', revision: 3 };
+  const invalidAsset = { id: 'asset-2', name: '版が不明', kind: 'knowledge', description: '', revision: 0 };
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [], assets: [asset, invalidAsset], profile: null })
+      .mockResolvedValueOnce({ status: 'empty', ideas: [], assets: [], profile: null }),
+    archiveRecord: vi.fn().mockResolvedValue({ id: asset.id, revision: 4, replayed: false }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.includes('アセット')).click());
+
+  expect(container.querySelector('button[aria-label="削除: 版が不明"]').disabled).toBe(true);
+  await act(async () => container.querySelector('button[aria-label="削除: 整理するアセット"]').click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(client.archiveRecord).toHaveBeenCalledWith('asset', asset.id, 3, { signal: expect.any(AbortSignal) });
+  expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(0);
+});
+
 it('labels a server-validated researched idea in its card and detail', async () => {
   const client = { getHome: vi.fn(async () => ({
     status: 'ready', assets: [], profile: null,

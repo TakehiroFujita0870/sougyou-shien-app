@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './LocalHomeSurface.css';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
@@ -27,6 +27,14 @@ function EditIcon() {
   return <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4" /><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" /></svg>;
 }
 
+function TrashIcon() {
+  return <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16" /><path d="M10 11v6M14 11v6" /><path d="m6 7 1 13h10l1-13" /><path d="M9 7V4h6v3" /></svg>;
+}
+
+function canArchiveRecord(kind, revision) {
+  return Number.isSafeInteger(revision) && revision >= (kind === 'idea' ? 0 : 1);
+}
+
 export function LocalHomeSurface({ client, onOpenServices }) {
   const [tab, setTab] = useState('ideas');
   const [home, setHome] = useState({ status: 'loading', ideas: [], assets: [], profile: null });
@@ -35,15 +43,66 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const [assetDraft, setAssetDraft] = useState(null);
   const [assetSaving, setAssetSaving] = useState(false);
   const [assetNotice, setAssetNotice] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState('');
+  const [homeReloadNeeded, setHomeReloadNeeded] = useState(false);
+  const homeHeadingRef = useRef(null);
+  const deleteTriggerRef = useRef(null);
+  const deleteConfirmRef = useRef(null);
+  const deleteDialogRef = useRef(null);
+  const deleteControllerRef = useRef(null);
+  const hadDeleteDialog = useRef(false);
 
   useEffect(() => {
+    deleteControllerRef.current?.abort();
+    deleteControllerRef.current = null;
+    setDeleteConfirmation(null);
+    setDeletePending(false);
+    setDeleteNotice('');
+    setHomeReloadNeeded(false);
     const controller = new AbortController();
     setHome({ status: 'loading', ideas: [], assets: [], profile: null });
     Promise.resolve().then(() => client.getHome({ signal: controller.signal }))
       .then((result) => { if (!controller.signal.aborted) setHome(result); })
       .catch(() => { if (!controller.signal.aborted) setHome({ status: 'failed', ideas: [], assets: [], profile: null }); });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      deleteControllerRef.current?.abort();
+    };
   }, [client, attempt]);
+
+  useEffect(() => {
+    if (!deleteConfirmation) {
+      if (hadDeleteDialog.current) {
+        if (deleteTriggerRef.current?.isConnected) deleteTriggerRef.current.focus();
+        else homeHeadingRef.current?.focus();
+      }
+      hadDeleteDialog.current = false;
+      return undefined;
+    }
+    hadDeleteDialog.current = true;
+    if (deletePending) deleteDialogRef.current?.focus();
+    else deleteConfirmRef.current?.focus();
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !deletePending) setDeleteConfirmation(null);
+      if (event.key === 'Tab') {
+        const buttons = [...(deleteDialogRef.current?.querySelectorAll('button:not(:disabled)') ?? [])];
+        if (!buttons.length) {
+          event.preventDefault();
+          deleteDialogRef.current?.focus();
+        } else if (event.shiftKey && document.activeElement === buttons[0]) {
+          event.preventDefault();
+          buttons.at(-1).focus();
+        } else if (!event.shiftKey && document.activeElement === buttons.at(-1)) {
+          event.preventDefault();
+          buttons[0].focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [deleteConfirmation, deletePending]);
 
   const selectedIdea = home.ideas.find((idea) => idea.id === selectedId) ?? home.ideas[0] ?? null;
   function editAsset(asset) {
@@ -71,8 +130,66 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       setAssetSaving(false);
     }
   }
+
+  async function refreshHome(signal) {
+    const refreshed = await client.getHome({ signal });
+    if (!signal.aborted) setHome(refreshed);
+    return !signal.aborted;
+  }
+
+  async function archiveConfirmedRecord() {
+    const record = deleteConfirmation;
+    if (!record || deletePending || !canArchiveRecord(record.kind, record.revision)) return;
+    const controller = new AbortController();
+    deleteControllerRef.current = controller;
+    setDeletePending(true);
+    setDeleteNotice('');
+    setHomeReloadNeeded(false);
+    try {
+      await client.archiveRecord(record.kind, record.id, record.revision, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setHome((current) => {
+        const ideas = record.kind === 'idea' ? current.ideas.filter((idea) => idea.id !== record.id) : current.ideas;
+        const assets = record.kind === 'asset' ? current.assets.filter((asset) => asset.id !== record.id) : current.assets;
+        return { ...current, status: ideas.length + assets.length ? 'ready' : 'empty', ideas, assets };
+      });
+      setDeleteConfirmation(null);
+      try {
+        await refreshHome(controller.signal);
+        if (!controller.signal.aborted) setDeleteNotice(`${record.title}を削除しました。サービス管理の削除済み一覧から復元できます。`);
+      } catch {
+        if (!controller.signal.aborted) {
+          setHomeReloadNeeded(true);
+          setDeleteNotice(`${record.title}を削除しました。一覧を更新できませんでした。`);
+        }
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error?.kind === 'conflict') {
+        try {
+          await refreshHome(controller.signal);
+          if (!controller.signal.aborted) {
+            setDeleteConfirmation(null);
+            setDeleteNotice(`${record.title}は別の更新があったため削除できませんでした。最新の一覧を読み込みました。内容を確認してから操作してください。`);
+          }
+        } catch {
+          if (!controller.signal.aborted) {
+            setHomeReloadNeeded(true);
+            setDeleteNotice('別の更新があり削除できませんでした。最新の一覧を読み込めません。');
+          }
+        }
+      } else {
+        setDeleteNotice('削除できませんでした。状態を確認して、もう一度お試しください。');
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setDeletePending(false);
+        deleteControllerRef.current = null;
+      }
+    }
+  }
   return <main className="local-home" aria-labelledby="local-home-heading">
-    <h1 id="local-home-heading" className="sr-only">ホーム</h1>
+    <h1 ref={homeHeadingRef} id="local-home-heading" className="sr-only" tabIndex={-1}>ホーム</h1>
     <div role="tablist" aria-label="ホームの項目" className="local-home__tabs">
       {TABS.map(({ id, label, icon }) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}><HomeTabIcon name={icon} /><span>{label}</span></button>)}
     </div>
@@ -81,12 +198,21 @@ export function LocalHomeSurface({ client, onOpenServices }) {
     {home.status === 'stopped' && <div className="local-home__notice" role="status">Dots.は停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></div>}
     {['ready', 'empty'].includes(home.status) && tab === 'ideas' && <section className="local-home__idea-layout" aria-label="アイデア">
       <div className="local-home__idea-list">
-        <h2>記録したアイデア <span>{home.ideas.length}件</span></h2>
+        <h2 id="idea-list-heading" tabIndex={-1}>記録したアイデア <span>{home.ideas.length}件</span></h2>
         {home.ideas.length ? <div className="local-home__cards">{home.ideas.map((idea) => {
           const summary = idea.brief_sections?.[0]?.trim() || idea.summary;
           const isPriorResearch = idea.research_status?.startsWith('prior_research');
           const statusAnnouncement = `${researchStatusLabel(idea.research_status)}${isPriorResearch ? '（実行済み調査ではありません）' : ''}`;
-          return <button key={idea.id} type="button" className="local-home__idea-card" aria-pressed={selectedIdea?.id === idea.id} onClick={() => setSelectedId(idea.id)}><span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong><span className="local-home__status-badge" data-research-state={idea.research_status ?? 'unknown'} aria-label={statusAnnouncement}>{compactResearchStatusLabel(idea.research_status)}</span></span>{summary && <span className="local-home__idea-summary">{summary}</span>}</button>;
+          const canDelete = canArchiveRecord('idea', idea.revision);
+          return <article key={idea.id} className="local-home__idea-card" data-selected={selectedIdea?.id === idea.id ? 'true' : 'false'}>
+            <button type="button" className="local-home__idea-select" aria-pressed={selectedIdea?.id === idea.id} onClick={() => setSelectedId(idea.id)}>
+              <span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong><span className="local-home__status-badge" data-research-state={idea.research_status ?? 'unknown'} aria-label={statusAnnouncement}>{compactResearchStatusLabel(idea.research_status)}</span></span>
+              {summary && <span className="local-home__idea-summary">{summary}</span>}
+            </button>
+            <div className="local-home__card-actions">
+              <button type="button" className="local-home__icon-button" aria-label={`削除: ${idea.title}`} title={canDelete ? `「${idea.title}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canDelete || deletePending} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: idea.id, kind: 'idea', title: idea.title, revision: idea.revision }); }}><TrashIcon /></button>
+            </div>
+          </article>;
         })}</div> : <p className="local-home__notice">まだアイデアの記録はありません。ChatGPTで話したアイデアをDots.へ保存すると、ここに並びます。</p>}
       </div>
       {selectedIdea && <article className="local-home__idea-detail" aria-labelledby="selected-idea-heading">
@@ -124,12 +250,27 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           </form> : <>
             <h3>{asset.name}</h3>
             {asset.description ? <p>{asset.description}</p> : <p className="local-home__unwritten">内容はありません</p>}
-            <button type="button" className="local-home__icon-button" aria-label={`編集: ${asset.name}`} disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1} onClick={() => editAsset(asset)}><EditIcon /></button>
+            <div className="local-home__card-actions">
+              <button type="button" className="local-home__icon-button" aria-label={`編集: ${asset.name}`} disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1} onClick={() => editAsset(asset)}><EditIcon /></button>
+              <button type="button" className="local-home__icon-button" aria-label={`削除: ${asset.name}`} title={canArchiveRecord('asset', asset.revision) ? `「${asset.name}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('asset', asset.revision) || deletePending} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision }); }}><TrashIcon /></button>
+            </div>
           </>}
         </article>)}</div> : <p className="local-home__notice">記録はまだありません。</p>}
         {assetNotice && !assetDraft && <p role="status">{assetNotice}</p>}
       </section>
     </section>}
+    {deleteNotice && <p role="status" aria-live="polite" className="local-home__delete-notice">{deleteNotice}{homeReloadNeeded && <button type="button" onClick={() => { setDeleteNotice(''); setHomeReloadNeeded(false); setAttempt((value) => value + 1); }}>ホームを再読み込み</button>}</p>}
+    {deleteConfirmation && <div className="local-home__delete-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !deletePending) setDeleteConfirmation(null); }}>
+      <section ref={deleteDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="local-delete-heading" aria-describedby="local-delete-description" tabIndex={-1} className="local-home__delete-dialog">
+        <h2 id="local-delete-heading">「{deleteConfirmation.title}」を削除しますか？</h2>
+        <p id="local-delete-description">通常の一覧から非表示にします。サービス管理の削除済み一覧から復元できます。履歴と根拠は保持されます。</p>
+        {deleteNotice && <p role="alert" className="local-home__delete-error">{deleteNotice}</p>}
+        <div>
+          <button type="button" disabled={deletePending} onClick={() => { setDeleteConfirmation(null); setDeleteNotice(''); }}>キャンセル</button>
+          <button ref={deleteConfirmRef} type="button" disabled={deletePending} onClick={() => { void archiveConfirmedRecord(); }}>{deletePending ? '削除中…' : '削除する'}</button>
+        </div>
+      </section>
+    </div>}
     {tab === 'people' && <section className="local-home__notice" role="tabpanel"><h2>人的ネットワーク</h2><p>今後実装予定</p></section>}
   </main>;
 }
