@@ -13,30 +13,30 @@ from .founder_graph_read_contract import FIELD_ALLOWLIST
 from .founder_graph_write import GraphWriteError
 
 
-def _json_value(value: Any) -> Any:
+def json_value(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, datetime):
         return value.isoformat()
     if is_dataclass(value):
-        return {field.name: _json_value(getattr(value, field.name)) for field in fields(value)}
+        return {field.name: json_value(getattr(value, field.name)) for field in fields(value)}
     if isinstance(value, Mapping):
-        return {str(key): _json_value(item) for key, item in value.items()}
+        return {str(key): json_value(item) for key, item in value.items()}
     if isinstance(value, (tuple, list, set, frozenset)):
-        return [_json_value(item) for item in value]
+        return [json_value(item) for item in value]
     return value
 
 
-def _node_revision(node: Any) -> int:
+def node_revision(node: Any) -> int:
     value = getattr(node, "aggregate_revision", getattr(node, "revision", 0))
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise GraphWriteError("node revision must be a non-negative integer")
     return value
 
 
-def _node_properties(node: Any) -> dict[str, Any]:
+def node_properties(node: Any) -> dict[str, Any]:
     node_type = node.node_type if isinstance(node.node_type, NodeType) else NodeType(node.node_type)
-    payload = _json_value(node)
+    payload = json_value(node)
     payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     # Keep the persistent search projection aligned with the in-memory read
     # contract. In particular, local-only ContentChunk text may stay in the
@@ -55,7 +55,7 @@ def _node_properties(node: Any) -> dict[str, Any]:
         "node_type": node_type.value,
         "status": status.value if isinstance(status, Enum) else (str(status) if status is not None else None),
         "egress_policy": egress_policy.value if isinstance(egress_policy, Enum) else (str(egress_policy) if egress_policy is not None else None),
-        "revision": _node_revision(node),
+        "revision": node_revision(node),
         "payload_json": payload_json,
         "search_text": search_text[:16_000],
     }
@@ -96,7 +96,7 @@ def _node_properties(node: Any) -> dict[str, Any]:
     return properties
 
 
-def _single(result: Any) -> Any | None:
+def single_record(result: Any) -> Any | None:
     single = getattr(result, "single", None)
     if callable(single):
         try:
@@ -109,17 +109,17 @@ def _single(result: Any) -> Any | None:
         return None
 
 
-def _rows(result: Any) -> tuple[Any, ...]:
+def result_rows(result: Any) -> tuple[Any, ...]:
     """Return all records from a Neo4j/fake result without query coupling."""
 
     try:
         return tuple(result)
     except TypeError:
-        value = _single(result)
+        value = single_record(result)
         return () if value is None else (value,)
 
 
-def _record_value(record: Any, key: str, default: Any = None) -> Any:
+def record_value(record: Any, key: str, default: Any = None) -> Any:
     if isinstance(record, Mapping):
         return record.get(key, default)
     try:
@@ -128,7 +128,7 @@ def _record_value(record: Any, key: str, default: Any = None) -> Any:
         return default
 
 
-def _content_chunk_ids(value: Any) -> tuple[str, ...]:
+def content_chunk_ids(value: Any) -> tuple[str, ...]:
     """Decode the opaque chunk-id list persisted on a capture audit."""
 
     if value is None:

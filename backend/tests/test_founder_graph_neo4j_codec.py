@@ -31,13 +31,13 @@ from dots.founder_graph_neo4j import (
     _single as gateway_single,
 )
 from dots.founder_graph_neo4j_codec import (
-    _content_chunk_ids,
-    _json_value,
-    _node_properties,
-    _node_revision,
-    _record_value,
-    _rows,
-    _single,
+    content_chunk_ids as _content_chunk_ids,
+    json_value as _json_value,
+    node_properties as _node_properties,
+    node_revision as _node_revision,
+    record_value as _record_value,
+    result_rows as _rows,
+    single_record as _single,
 )
 from dots.founder_graph_write import GraphWriteError
 
