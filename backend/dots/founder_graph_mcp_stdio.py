@@ -18,7 +18,7 @@ from .founder_graph_mcp import McpReadError, McpReadSurface
 from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadService
 from .founder_graph_write import InMemoryGraphWriteService
-from .founder_graph_runtime import create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
+from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
 from .founder_graph_neo4j_write import Neo4jIdeaBriefStore
 
 
@@ -68,6 +68,7 @@ class FounderGraphStdioServer:
     reads: McpReadSurface
     writes: McpWriteSurface
     owner_id: str
+    _owned_driver: Any | None = None
 
     def handle(self, request: object) -> dict[str, Any] | None:
         if not isinstance(request, Mapping) or request.get("jsonrpc") != JSONRPC_VERSION or not isinstance(request.get("method"), str):
@@ -129,9 +130,18 @@ def create_stdio_server(owner_id: str | None = None) -> FounderGraphStdioServer:
     backend = resolve_graph_backend()
     if backend == "neo4j":
         driver = create_neo4j_driver_from_env()
-        database = os.environ.get("DOTS_NEO4J_DATABASE", "neo4j").strip() or "neo4j"
-        _neo4j_stdio_read_only_preflight(driver, database=database)
-        return create_neo4j_stdio_server(driver, resolved_owner, database=database)
+        try:
+            database = os.environ.get("DOTS_NEO4J_DATABASE", "neo4j").strip() or "neo4j"
+            _neo4j_stdio_read_only_preflight(driver, database=database)
+            server = create_neo4j_stdio_server(driver, resolved_owner, database=database)
+        except BaseException:
+            try:
+                close_neo4j_driver(driver)
+            except Exception:
+                pass
+            raise
+        server._owned_driver = driver
+        return server
     writes = InMemoryGraphWriteService(resolved_owner)
     reads = GraphReadService(writes)
     return FounderGraphStdioServer(McpReadSurface(reads), McpWriteSurface(writes), resolved_owner)
@@ -184,19 +194,31 @@ def run_stdio(
 
     source = input_stream or sys.stdin
     target = output_stream or sys.stdout
-    active_server = server or create_stdio_server()
-    for line in source:
-        if not line.strip():
-            continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError:
-            response = _error(None, -32700, "Parse error.")
-        else:
-            response = active_server.handle(request)
-        if response is not None:
-            target.write(json.dumps(response, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
-            target.flush()
+    created_server = server is None
+    active_server = server if server is not None else create_stdio_server()
+    try:
+        for line in source:
+            if not line.strip():
+                continue
+            try:
+                request = json.loads(line)
+            except json.JSONDecodeError:
+                response = _error(None, -32700, "Parse error.")
+            else:
+                response = active_server.handle(request)
+            if response is not None:
+                target.write(json.dumps(response, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+                target.flush()
+    except BaseException:
+        if created_server and active_server._owned_driver is not None:
+            try:
+                close_neo4j_driver(active_server._owned_driver)
+            except Exception:
+                pass
+        raise
+    else:
+        if created_server and active_server._owned_driver is not None:
+            close_neo4j_driver(active_server._owned_driver)
 
 
 def main() -> int:

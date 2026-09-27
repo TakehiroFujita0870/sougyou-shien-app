@@ -179,6 +179,14 @@ def create_neo4j_driver_from_env() -> Any:
     return GraphDatabase.driver(uri, auth=(username, password))
 
 
+def close_neo4j_driver(driver: Any) -> None:
+    """Close an owned Neo4j driver when its owner reaches shutdown."""
+
+    close = getattr(driver, "close", None)
+    if callable(close):
+        close()
+
+
 def create_neo4j_graph_composition(
     driver: Any,
     owner_id: str,

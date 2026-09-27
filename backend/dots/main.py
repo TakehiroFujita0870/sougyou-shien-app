@@ -28,7 +28,7 @@ from .runtime import RuntimeAdapter, RuntimeFault, create_runtime
 from .founder_graph_mcp import McpReadError, McpReadSurface
 from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadPort, GraphReadService
-from .founder_graph_runtime import create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
+from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
 from .founder_graph_write import GraphWritePort, InMemoryGraphWriteService
 from .founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
 
@@ -338,7 +338,17 @@ def create_configured_app() -> FastAPI:
         return create_app()
     owner_id = (os.environ.get("DOTS_LOCAL_OWNER_ID") or "local-owner").strip() or "local-owner"
     database = os.environ.get("DOTS_NEO4J_DATABASE", "neo4j").strip() or "neo4j"
-    return create_neo4j_app(create_neo4j_driver_from_env(), owner_id, database=database)
+    driver = create_neo4j_driver_from_env()
+    try:
+        app = create_neo4j_app(driver, owner_id, database=database)
+    except BaseException:
+        try:
+            close_neo4j_driver(driver)
+        except Exception:
+            pass
+        raise
+    app.router.add_event_handler("shutdown", lambda: close_neo4j_driver(driver))
+    return app
 
 
 app = create_configured_app()
