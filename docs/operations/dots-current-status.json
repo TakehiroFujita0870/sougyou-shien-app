@@ -1,28 +1,35 @@
 {
-  "updated_at": "2026-09-27T03:17:29Z",
-  "baseline_main": "12d089b672a2",
+  "updated_at": "2026-09-27T03:28:09Z",
+  "baseline_main": "c6be5719c38b",
+  "formal_integration": {
+    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/294",
+    "main_sha": "c6be5719c38b",
+    "main_verification": "backend 1144 passed / 9 skipped; desktop surface 35 passed; progress validator passed",
+    "runtime_changed": false,
+    "note": "既存成果のコードをmainへ統合。稼働サービスの配信元と保存データは変更していない。既存の実会話・起動試験の検証範囲を広げた記録ではない。"
+  },
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
-      "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "integrate",
-      "note": "終了処理を修正済み。稼働版の既存検査は1280×720でhome/servicesへ各10回、空白・例外0。後の高速遷移の約7秒読込待ちは同じ故障の再発証拠ではない。LocalGraphSurfaceと対応する回帰検査は今回の統合対象。今回ブラウザー操作の再試験は実施していない。",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "終了処理を修正済み。稼働版の既存検査は1280×720でhome/servicesへ各10回、空白・例外0。後の高速遷移の約7秒読込待ちは同じ故障の再発証拠ではない。LocalGraphSurfaceと対応する回帰検査をmainへ統合済み。今回ブラウザー操作の再試験は実施していない。",
       "evidence": [{"recorded_at": "2026-09-26T04:30:34Z", "scope": "live-graph-navigation-rp02", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md RP-02行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
     },
     {
       "id": "first_tunnel_search", "title": "接続再起動後の初回検索", "scope": "live-search-after-ready-and-control-plane-poll",
-      "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "integrate",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "health/readyとcontrol-plane poll成功後の最初の実検索が3/3成功。準備完了前の任意の呼出や未反映mainまで成功と拡張しない。速度比較は再実施しない。",
       "evidence": [{"recorded_at": "2026-09-26T06:07:09Z", "scope": "live-search-after-ready-and-control-plane-poll", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md 継続接続確認行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
     },
     {
       "id": "private_connection", "title": "非公開・本人用の接続設定", "scope": "personal-plugin-private-registration-and-loopback",
-      "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "none",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "正本APIはUSER/PRIVATE/1.0.5。Platform本人Ownerのみ・招待なし・Personalと1workspace、PC内限定の待受を確認。アカウント・鍵・PCを他人に渡さない前提。workspace ID対応の照合記録は未完だが設定不備の証拠はない。",
       "evidence": [{"recorded_at": "2026-09-27T01:07:00Z", "scope": "personal-plugin-private-registration-and-loopback", "result": "passed", "reference": "2026-09-27正本get_personal_plugin読取 USER/PRIVATE。2026-09-26のPlatform登録・招待・loopback確認はlocal:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.mdに記録。記録照合であり新しい本人認証方式の証明ではない。"}]
     },
     {
       "id": "phone_asset_write", "title": "スマホChatGPTからの資産保存", "scope": "chatgpt-mobile-asset-write-after-catalog-update",
-      "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "verify",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
       "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから自己紹介と2件のアイデアを保存した旨を報告。正本MCP search/fetchで対象2件のIdeaと関連2件のAssetを読取確認。利用者はあなたのアセット画面への表示も確認済みであり、内部の保存名から表示不足と推定した報告を撤回する。partialはスマホの独立した別会話での取得が未報告という証拠範囲だけを指す。表示故障や再登録の必要を意味しない。",
       "evidence": [
         {"recorded_at": "2026-09-27T01:21:43Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "現在の主会話での利用者報告: 指定例とは別の内容で書けたとの回答。記録タイトルと別会話の検索結果を非同期で確認依頼済み。時刻は報告の記録時刻であり試験実行時刻ではない。"},
@@ -37,7 +44,7 @@
     },
     {
       "id": "semantic_conversation_reuse", "title": "実会話で内容を読み解いた関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
-      "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "verify",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
       "note": "調査→概要→根拠付き関係→IDを渡さない別会話再検索は1組確認済み。代表5組・訂正後再利用は未確認。#290の固定保存試験や#291の期待graphを実モデルの判断成功と混同しない。",
       "evidence": [{"recorded_at": "2026-09-26T12:06:19Z", "scope": "live-researched-idea-to-independent-chat", "result": "partial", "reference": "主会話の同時刻報告とlocal:/home/hp/projects/dots-live/docs/operations/dots-rp07-acceptance-inventory.mdの根拠付き意味関係行。"}]
     }
