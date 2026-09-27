@@ -1,6 +1,6 @@
 # 旧資産の整理一覧
 
-最終更新: 2026-09-23
+最終更新: 2026-09-27
 
 この一覧は削除命令ではない。現行経路から外れていること、関連するテストと仕様の扱い、復旧可能性を確認してから一群ずつ整理する。
 
@@ -9,9 +9,9 @@
 | 資産 | 現在の参照状況 | 扱い | 確認事項 |
 | --- | --- | --- | --- |
 | `src/components/IdeaCandidateWorkspace.*` | 現行のFounder Graph画面から参照されていない。自身のテスト・Storyが中心 | 保留候補 | 関連テスト・Storyを同時に整理できるか確認 |
-| `src/components/IdeaForm.*` | 現行のFounder Graph画面から参照されていない。自身のテスト・Storyが中心 | 保留候補 | 保存経路とlocalStorage移行資料への参照がないか確認 |
-| `src/components/ResearchWorkspace.*` | 現行のFounder Graph画面から参照されていない。自身のテスト・Storyが中心 | 保留候補 | ResearchCampaign移行との関係を確認 |
-| `src/components/FileLibrary.*` | 現行のFounder Graph画面から参照されていない。自身のテスト・Storyが中心 | 保留候補 | Attachment移行との関係を確認 |
+| `src/components/IdeaForm.*` | 現行entryからの参照なしを確認 | jsx・専用test・Storyを削除 | 旧下書きを読むIdeaCandidateWorkspaceの移行処理は保持。localStorageは削除しない |
+| `src/components/ResearchWorkspace.*` | 現行entryからの参照なしを確認 | jsx・専用test・Storyを削除 | 現行ResearchCampaignの保存・許諾経路は保持 |
+| `src/components/FileLibrary.*` | 現行entryからの参照なしを確認 | jsx・専用test・Storyを削除 | 保存済み資料・Neo4j・認証情報は削除しない |
 | `src/components/LocalGoogleSignIn.*` | 現行のFounder Graph画面から参照されていない | 保留候補 | 認証境界と既存データへの影響を確認 |
 | `src/components/projectDemoFixtureAdapter.js` | 現行のFounder Graphの本番経路から参照されていない可能性がある | 保留候補 | 全参照検索と画面テストを確認 |
 
