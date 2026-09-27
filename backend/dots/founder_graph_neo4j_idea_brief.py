@@ -68,15 +68,21 @@ def _serialize_persisted_idea_brief(brief: IdeaBriefVersion) -> dict[str, Any]:
     }
 
 
-def _decode_persisted_idea_brief(record: Mapping[str, Any], *, owner_id: str) -> IdeaBriefVersion:
+def _decode_persisted_idea_brief(
+    record: Mapping[str, Any], *, owner_id: str, legacy_label_checked: bool = False,
+) -> IdeaBriefVersion:
     """Hydrate only a complete payload whose durable metadata agrees with it."""
 
     if not isinstance(record, Mapping) or set(record) != _RECORD_KEYS:
         raise IdeaBriefValidationError("persisted IdeaBrief record fields are invalid")
     if not isinstance(owner_id, str) or not owner_id.strip() or record["owner_id"] != owner_id:
         raise IdeaBriefValidationError("persisted IdeaBrief owner is invalid")
-    if record["node_type"] != _NODE_TYPE:
+    # Only queries that MATCH the concrete IdeaBriefVersion label may opt in.
+    # The old writer omitted this scalar and the later-added Run reference list.
+    if record["node_type"] != _NODE_TYPE and not (legacy_label_checked and record["node_type"] is None):
         raise IdeaBriefValidationError("persisted IdeaBrief type is invalid")
+    if legacy_label_checked and record["node_type"] is None:
+        record = {**record, "node_type": _NODE_TYPE}
     if type(record["revision"]) is not int or record["revision"] < 1:
         raise IdeaBriefValidationError("persisted IdeaBrief revision is invalid")
     raw_payload = record["payload_json"]
@@ -86,6 +92,8 @@ def _decode_persisted_idea_brief(record: Mapping[str, Any], *, owner_id: str) ->
         payload = json.loads(raw_payload)
     except (TypeError, ValueError):
         raise IdeaBriefValidationError("persisted IdeaBrief payload is invalid") from None
+    if isinstance(payload, dict) and legacy_label_checked and set(payload) == _PAYLOAD_KEYS - {"research_run_ids"}:
+        payload = {**payload, "research_run_ids": []}
     if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS:
         raise IdeaBriefValidationError("persisted IdeaBrief payload fields are invalid")
 

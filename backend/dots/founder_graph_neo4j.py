@@ -1488,7 +1488,7 @@ class Neo4jGraphGateway:
                 key: _record_value(row, key) for key in (
                     "id", "owner_id", "node_type", "revision", "idea_lineage_root_id", "supersedes_id", "payload_json",
                 )
-            }, owner_id=self.owner_id)
+            }, owner_id=self.owner_id, legacy_label_checked=True)
         except (IdeaBriefValidationError, TypeError, ValueError):
             raise GraphWriteError("persisted IdeaBrief is invalid") from None
 
