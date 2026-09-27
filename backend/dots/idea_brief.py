@@ -19,6 +19,7 @@ class IdeaBriefValidationError(ValueError):
 
 
 EgressPolicy = Literal["local_only", "shareable"]
+IdeaBriefOrigin = Literal["prior_research_import"] | None
 SECTION_TITLES: tuple[str, ...] = (
     "エグゼクティブサマリー",
     "ビジネスモデル",
@@ -73,6 +74,7 @@ class IdeaBriefVersion:
     based_on_idea_id: str
     sections: tuple[IdeaBriefSection, ...] = ()
     research_run_ids: tuple[str, ...] | list[str] = ()
+    origin: IdeaBriefOrigin | None = None
     id: str = field(default_factory=lambda: f"idea-brief_{uuid4().hex}")
     revision: int = 1
     supersedes_id: str | None = None
@@ -103,7 +105,12 @@ class IdeaBriefVersion:
         if len(by_index) != len(self.sections):
             raise IdeaBriefValidationError("section indexes must be unique")
         object.__setattr__(self, "sections", tuple(by_index.get(index, IdeaBriefSection(index=index)) for index in range(len(SECTION_TITLES))))
-        object.__setattr__(self, "research_run_ids", _strings(self.research_run_ids, "research_run_ids"))
+        run_ids = _strings(self.research_run_ids, "research_run_ids")
+        object.__setattr__(self, "research_run_ids", run_ids)
+        if self.origin not in {None, "prior_research_import"}:
+            raise IdeaBriefValidationError("origin is invalid")
+        if self.origin == "prior_research_import" and run_ids:
+            raise IdeaBriefValidationError("prior-research imports cannot claim Campaign Runs")
 
     def revise(
         self,
@@ -112,6 +119,7 @@ class IdeaBriefVersion:
         change_reason: str = "revision",
         based_on_idea_id: str | None = None,
         research_run_ids: tuple[str, ...] | list[str] | None = None,
+        origin: IdeaBriefOrigin | None = None,
         egress_policy: EgressPolicy | None = None,
     ) -> IdeaBriefVersion:
         """Create a new version; omitted sections keep their prior content."""
@@ -121,13 +129,16 @@ class IdeaBriefVersion:
             raise IdeaBriefValidationError("section indexes must be unique")
         merged = {section.index: section for section in self.sections}
         merged.update({section.index: section for section in sections})
+        run_ids = self.research_run_ids if research_run_ids is None else research_run_ids
+        next_origin = origin if origin is not None else (self.origin if not run_ids else None)
         return replace(
             self,
             id=f"idea-brief_{uuid4().hex}",
             revision=self.revision + 1,
             supersedes_id=self.id,
             based_on_idea_id=self.based_on_idea_id if based_on_idea_id is None else based_on_idea_id,
-            research_run_ids=self.research_run_ids if research_run_ids is None else research_run_ids,
+            research_run_ids=run_ids,
+            origin=next_origin,
             sections=tuple(merged.values()),
             change_reason=change_reason,
             egress_policy=self.egress_policy if egress_policy is None else egress_policy,

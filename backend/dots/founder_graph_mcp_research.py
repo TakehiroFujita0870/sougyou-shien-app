@@ -268,6 +268,7 @@ class McpResearchCampaignSurface:
                     },
                     "change_reason": {"type": "string", "maxLength": 500},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
+                    "origin": {"type": "string", "enum": ["prior_research_import"], "description": "既に実施済みの過去調査を示す場合だけ指定します。現在のCampaign/Runの許諾や実行履歴は作りません。"},
                     "idempotency_key": idempotency,
                 }, "additionalProperties": False,
             },
@@ -331,7 +332,7 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("idea brief storage is unavailable on this connection")
         if _brief_store_owner(self.brief_store) != self.writes.owner_id:
             raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
-        _reject_unknown(args, {"idea_id", "idea_lineage_root_id", "expected_revision", "sections", "change_reason", "egress_policy", "idempotency_key"})
+        _reject_unknown(args, {"idea_id", "idea_lineage_root_id", "expected_revision", "sections", "change_reason", "egress_policy", "origin", "idempotency_key"})
         key = _text(args.get("idempotency_key"), "idempotency_key")
         idea_id = _text(args.get("idea_id"), "idea_id", maximum=200)
         root_id = _text(args.get("idea_lineage_root_id", idea_id), "idea_lineage_root_id", maximum=200)
@@ -351,14 +352,19 @@ class McpResearchCampaignSurface:
         egress_policy = args.get("egress_policy", EgressPolicy.LOCAL_ONLY.value)
         if egress_policy not in {EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value}:
             raise ResearchCampaignInputError("egress_policy must be local_only or shareable")
+        requested_origin = args.get("origin")
+        if "origin" in args and requested_origin != "prior_research_import":
+            raise ResearchCampaignInputError("origin must be prior_research_import when specified")
         brief_id = _command_id("idea-brief", key)
         previous = _latest_brief(self.brief_store, root_id)
+        effective_origin = requested_origin if requested_origin is not None else (previous.origin if previous else None)
         prior_receipt = _lookup_receipt(self.writes, key, "save_idea_brief")
         existing = self.brief_store.get(brief_id)
         if prior_receipt is not None or existing is not None:
             if (prior_receipt is not None and prior_receipt.target_id != brief_id) or existing is None or existing.revision != expected + 1 or not _brief_matches(
                 existing, root_id=root_id, idea_id=idea_id, sections=sections,
                 run_ids=(), change_reason=change_reason, egress_policy=egress_policy,
+                origin=(requested_origin if requested_origin is not None else existing.origin),
             ):
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
             receipt = prior_receipt or WriteReceipt("save_idea_brief", existing.id, "idea_brief_version", existing.revision, key)
@@ -366,10 +372,12 @@ class McpResearchCampaignSurface:
         if previous is None:
             if expected != 0:
                 raise RevisionConflictError("first brief expects revision 0")
+            if effective_origin == "prior_research_import":
+                raise ResearchCampaignInputError("prior-research imports must extend an existing Brief")
             brief = IdeaBriefVersion(
                 owner_id=self.writes.owner_id, idea_lineage_root_id=root_id,
                 based_on_idea_id=idea_id, sections=sections, id=brief_id,
-                change_reason=change_reason, egress_policy=egress_policy,
+                change_reason=change_reason, egress_policy=egress_policy, origin=effective_origin,
             )
             expected_latest_revision = None
         else:
@@ -377,9 +385,21 @@ class McpResearchCampaignSurface:
                 raise RevisionConflictError("brief changed; reload its current revision")
             brief = replace(previous.revise(
                 sections=sections, based_on_idea_id=idea_id, research_run_ids=(),
-                change_reason=change_reason, egress_policy=egress_policy,
+                change_reason=change_reason, egress_policy=egress_policy, origin=effective_origin,
             ), id=brief_id)
             expected_latest_revision = expected
+        if brief.origin == "prior_research_import":
+            if brief.research_run_ids or brief.egress_policy != EgressPolicy.SHAREABLE.value:
+                raise ResearchCampaignInputError("prior-research Briefs require shareable citations and cannot claim Campaign Runs")
+            idea = self.writes.get_node(idea_id)
+            if not isinstance(idea, Idea) or idea.owner_id != self.writes.owner_id or idea.egress_policy is not EgressPolicy.SHAREABLE:
+                raise ResearchCampaignInputError("prior-research Briefs require a shareable current Idea")
+            evidence_ids = researched_evidence_ids(brief.sections)
+            if not evidence_ids or any(
+                not evidence_lineage_is_current(self.writes, evidence_id, self.writes.owner_id)
+                for evidence_id in evidence_ids
+            ):
+                raise ResearchCampaignInputError("prior-research Briefs require current, shareable Evidence citations")
         try:
             return self.brief_store.save(
                 brief, expected_latest_revision=expected_latest_revision, idempotency_key=key,
@@ -679,7 +699,7 @@ def _latest_brief(store: Any, root_id: str) -> IdeaBriefVersion | None:
 def _brief_matches(
     brief: IdeaBriefVersion, *, root_id: str, idea_id: str,
     sections: tuple[IdeaBriefSection, ...], run_ids: tuple[str, ...],
-    change_reason: str, egress_policy: str,
+    change_reason: str, egress_policy: str, origin: str | None = None,
 ) -> bool:
     return (
         brief.idea_lineage_root_id == root_id
@@ -688,6 +708,7 @@ def _brief_matches(
         and tuple(brief.research_run_ids) == run_ids
         and brief.change_reason == change_reason
         and brief.egress_policy == egress_policy
+        and brief.origin == origin
     )
 
 

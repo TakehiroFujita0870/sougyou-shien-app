@@ -94,6 +94,32 @@ def test_research_run_ids_are_empty_by_default_and_normalized_to_immutable_tuple
     assert legacy.research_run_ids == ()
     assert brief.research_run_ids == ("run-one", "run-two")
     assert isinstance(brief.research_run_ids, tuple)
+    assert legacy.origin is None
+    assert brief.origin is None
+
+
+def test_brief_origin_is_explicit_and_revisions_can_mark_prior_research_without_run_history():
+    draft = IdeaBriefVersion(
+        owner_id="owner-test", idea_lineage_root_id="idea-root", based_on_idea_id="idea-current",
+    )
+    imported = draft.revise(origin="prior_research_import", change_reason="restored citations")
+
+    assert imported.origin == "prior_research_import"
+    assert imported.research_run_ids == ()
+    assert draft.origin is None
+    assert imported.revise().origin == "prior_research_import"
+    assert imported.revise(research_run_ids=("new-run",)).origin is None
+
+    with pytest.raises(IdeaBriefValidationError):
+        IdeaBriefVersion(
+            owner_id="owner-test", idea_lineage_root_id="idea-root", based_on_idea_id="idea-current",
+            origin="prior_research_import", research_run_ids=("run-one",),
+        )
+    with pytest.raises(IdeaBriefValidationError):
+        IdeaBriefVersion(
+            owner_id="owner-test", idea_lineage_root_id="idea-root", based_on_idea_id="idea-current",
+            origin="unknown_origin",
+        )
 
 
 def test_research_run_ids_are_preserved_updated_and_cleared_by_revision():
