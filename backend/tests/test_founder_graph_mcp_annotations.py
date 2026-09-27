@@ -26,6 +26,7 @@ EXPECTED_WRITE_TOOLS = {
     "append_claim",
     "capture_evidence",
     "link_entities",
+    "retract_relation_assertion",
     "save_research_report",
     "record_decision",
     "record_correction",

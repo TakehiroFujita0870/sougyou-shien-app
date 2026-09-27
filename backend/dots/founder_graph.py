@@ -315,6 +315,7 @@ class RelationshipStatus(StrEnum):
     INFERRED = "inferred"
     CONFIRMED = "confirmed"
     REJECTED = "rejected"
+    RETRACTED = "retracted"
     EXPIRED = "expired"
     SUPERSEDED = "superseded"
 
@@ -2304,12 +2305,18 @@ class RelationAssertion:
         if status in {RelationshipStatus.INFERRED, RelationshipStatus.CONFIRMED} and not self.evidence_ids:
             raise DomainValidationError("inferred and confirmed relation assertions require evidence")
         if predicate in {RelationType.CAN_CONTRIBUTE_TO, RelationType.INTRODUCED_BY}:
-            if status not in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED}:
-                raise DomainValidationError("network relations must be proposed or inferred")
-            if self.confidence is None:
-                raise DomainValidationError("network relation assertions require confidence")
-            if self.expires_at is None:
-                raise DomainValidationError("network relation assertions require an expiration")
+            if status not in {
+                RelationshipStatus.PROPOSED,
+                RelationshipStatus.INFERRED,
+                RelationshipStatus.RETRACTED,
+                RelationshipStatus.SUPERSEDED,
+            }:
+                raise DomainValidationError("network relations must be proposed, inferred, retracted, or superseded")
+            if status in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED}:
+                if self.confidence is None:
+                    raise DomainValidationError("network relation assertions require confidence")
+                if self.expires_at is None:
+                    raise DomainValidationError("network relation assertions require an expiration")
         object.__setattr__(self, "valid_from", _required_timestamp(self.valid_from, "valid_from"))
         expires_at = _timestamp(self.expires_at, "expires_at")
         if expires_at is not None and expires_at <= self.valid_from:

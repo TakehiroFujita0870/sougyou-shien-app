@@ -76,7 +76,7 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     assert write_names == {
         "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
         "capture_evidence",
-        "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
+        "link_entities", "retract_relation_assertion", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
         "record_research_run", "save_idea_brief", "save_researched_idea_brief",
     }

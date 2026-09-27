@@ -360,8 +360,10 @@ def validate_capture_source(source: Source, revision: SourceRevision, owner_id: 
         raise GraphWriteError("capture_source requires a Source and SourceRevision")
     if source.owner_id != owner_id or revision.owner_id != owner_id:
         raise GraphWriteError("capture_source nodes must belong to the local owner")
-    if source.kind is not MaterialKind.WEB or source.egress_policy is not EgressPolicy.LOCAL_ONLY or revision.egress_policy is not EgressPolicy.LOCAL_ONLY:
-        raise GraphWriteError("captured research sources must be local-only web sources")
+    if source.kind is not MaterialKind.WEB:
+        raise GraphWriteError("captured research sources must be web sources")
+    if source.egress_policy not in {EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE} or revision.egress_policy is not source.egress_policy:
+        raise GraphWriteError("captured source and revision must use the same supported egress policy")
     if source.status.value != "active" or revision.status.value != "active":
         raise GraphWriteError("captured research source and revision must be active")
     if source.id == revision.id or source.revision != 1 or revision.revision != 1 or source.current_revision_id != revision.id or revision.source_id != source.id:
