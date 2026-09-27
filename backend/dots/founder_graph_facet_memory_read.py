@@ -8,6 +8,7 @@ from typing import Any
 
 from .founder_graph import Asset, EgressPolicy, Facet, Idea, RelationAssertion, RelationshipStatus, Status
 from .founder_graph_read import SearchHit, SearchPage, _node_view, _tokens
+from .founder_graph_lifecycle_resolver import lifecycle_reference_aliases
 from .founder_graph_facet_hierarchy import (
     FacetClassification,
     FacetNode,
@@ -54,6 +55,9 @@ def facet_region_from_snapshot(
         for node in owner_nodes
         if isinstance(node, (Idea, Asset)) and node.supersedes_id is not None
     }
+    lifecycle_aliases = lifecycle_reference_aliases(
+        node for node in owner_nodes if isinstance(node, (Idea, Asset))
+    )
     facets = tuple(
         FacetNode(owner_id, node.id, f"{node.namespace}: {node.value}")
         for node in owner_nodes
@@ -103,13 +107,13 @@ def facet_region_from_snapshot(
     classifications = tuple(
         FacetClassification(
             owner_id=owner_id,
-            entity_id=assertion.source_id,
+            entity_id=lifecycle_aliases.get(assertion.source_id, assertion.source_id),
             facet_id=assertion.target_id,
             status=assertion.status.value,
             evidence_ids=assertion.evidence_ids,
         )
         for assertion in current_tips
-        if assertion.source_id in entity_ids
+        if lifecycle_aliases.get(assertion.source_id, assertion.source_id) in entity_ids
         and assertion.target_id in facet_ids
         and assertion.source_kind.value != "facet"
         and assertion.status in _TRAVERSABLE
