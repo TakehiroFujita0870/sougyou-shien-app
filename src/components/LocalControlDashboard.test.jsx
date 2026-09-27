@@ -130,4 +130,17 @@ describe('LocalControlDashboard', () => {
     expect(view.querySelector('[aria-label="サービスごとの状態"]')?.textContent).toContain('ChatGPT接続停止中');
     expect(view.querySelector('[aria-labelledby="counts-heading"]')).toBeNull();
   });
+
+  it('shows the deleted-record restore list only in service-only mode', async () => {
+    const client = {
+      getServiceSnapshot: vi.fn(async () => ({ state: 'running', counts: { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 }, latest: [] })),
+      getDeletedRecords: vi.fn(async () => ({ status: 'ready', records: [
+        { id: 'asset-1', kind: 'asset', title: '復元できる資料', description: '概要', revision: 2 },
+      ] })),
+    };
+    const view = await renderDashboard({ client, serviceOnly: true });
+    expect(view.querySelector('[aria-labelledby="deleted-records-heading"]')).not.toBeNull();
+    expect(view.textContent).toContain('復元できる資料');
+    expect(client.getDeletedRecords).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+  });
 });

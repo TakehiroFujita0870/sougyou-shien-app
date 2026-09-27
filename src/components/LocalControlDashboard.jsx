@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LocalDeletedRecords } from './LocalDeletedRecords';
 
 const EMPTY_COUNTS = { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 };
 const COUNT_LABELS = { Idea: 'アイデアの記録', Person: '人の記録', Asset: '資産の記録', ReportVersion: '調査レポートの版' };
@@ -125,6 +126,10 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
           </div>)}
         </dl>}
       </header>
+
+      {serviceOnly && <section className="rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4" aria-label="削除済みの記録を管理">
+        <LocalDeletedRecords client={client} />
+      </section>}
 
       {(state === 'stopped' || state === 'degraded') && <p className="rounded-xl border border-dashed border-[var(--color-border-subtle)] p-4 text-sm text-[var(--color-text-muted)]">保存先と接続が稼働すると、件数と最近の記録を表示できます。</p>}
 
