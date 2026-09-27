@@ -1,0 +1,42 @@
+{
+  "updated_at": "2026-09-27T01:21:43Z",
+  "baseline_main": "56ecf2aad992",
+  "items": [
+    {
+      "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
+      "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "integrate",
+      "note": "終了処理を修正済み。1280×720でhome/servicesへ各10回、空白・例外0。後の高速遷移の約7秒読込待ちは同じ故障の再発証拠ではない。mainにはLocalGraphSurfaceがまだない。",
+      "evidence": [{"recorded_at": "2026-09-26T04:30:34Z", "scope": "live-graph-navigation-rp02", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md RP-02行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
+    },
+    {
+      "id": "first_tunnel_search", "title": "接続再起動後の初回検索", "scope": "live-search-after-ready-and-control-plane-poll",
+      "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "integrate",
+      "note": "health/readyとcontrol-plane poll成功後の最初の実検索が3/3成功。準備完了前の任意の呼出や未反映mainまで成功と拡張しない。速度比較は再実施しない。",
+      "evidence": [{"recorded_at": "2026-09-26T06:07:09Z", "scope": "live-search-after-ready-and-control-plane-poll", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md 継続接続確認行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
+    },
+    {
+      "id": "private_connection", "title": "非公開・本人用の接続設定", "scope": "personal-plugin-private-registration-and-loopback",
+      "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "none",
+      "note": "正本APIはUSER/PRIVATE/1.0.5。Platform本人Ownerのみ・招待なし・Personalと1workspace、PC内限定の待受を確認。アカウント・鍵・PCを他人に渡さない前提。workspace ID対応の照合記録は未完だが設定不備の証拠はない。",
+      "evidence": [{"recorded_at": "2026-09-27T01:07:00Z", "scope": "personal-plugin-private-registration-and-loopback", "result": "passed", "reference": "2026-09-27正本get_personal_plugin読取 USER/PRIVATE。2026-09-26のPlatform登録・招待・loopback確認はlocal:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.mdに記録。記録照合であり新しい本人認証方式の証明ではない。"}]
+    },
+    {
+      "id": "phone_asset_write", "title": "スマホChatGPTからの資産保存", "scope": "chatgpt-mobile-asset-write-after-catalog-update",
+      "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "verify",
+      "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから別内容で保存できた旨を報告。記録名・IDの照合と独立した別会話での取得はまだ未確認。故障中とは扱わない。",
+      "evidence": [{"recorded_at": "2026-09-27T01:21:43Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "現在の主会話での利用者報告: 指定例とは別の内容で書けたとの回答。記録タイトルと別会話の検索結果を非同期で確認依頼済み。時刻は報告の記録時刻であり試験実行時刻ではない。"}]
+    },
+    {
+      "id": "grounded_storage", "title": "根拠付き関係の保存と再起動後の取得", "scope": "isolated-neo4j-storage-main-288-290",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "not_applicable", "next_action": "none",
+      "note": "隔離Neo4jと決定的な架空会話の保存経路を検査。実ChatGPTモデルの意味抽出・スマホ保存の証明ではない。",
+      "evidence": [{"recorded_at": "2026-09-26T19:29:13Z", "scope": "isolated-neo4j-storage-main-288-290", "result": "passed", "reference": "GitHub PR #288/#290: https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/290 。main 38e4291の試験変更を確認。"}]
+    },
+    {
+      "id": "semantic_conversation_reuse", "title": "実会話で内容を読み解いた関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
+      "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "verify",
+      "note": "調査→概要→根拠付き関係→IDを渡さない別会話再検索は1組確認済み。代表5組・訂正後再利用は未確認。#290の固定保存試験や#291の期待graphを実モデルの判断成功と混同しない。",
+      "evidence": [{"recorded_at": "2026-09-26T12:06:19Z", "scope": "live-researched-idea-to-independent-chat", "result": "partial", "reference": "主会話の同時刻報告とlocal:/home/hp/projects/dots-live/docs/operations/dots-rp07-acceptance-inventory.mdの根拠付き意味関係行。"}]
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 
 ## 作業開始時
 
+0. [`docs/operations/progress-reporting.md`](docs/operations/progress-reporting.md)と[`docs/operations/dots-current-status.json`](docs/operations/dots-current-status.json)を先に読む。古い未完了表だけで残課題を決めない。
 1. `skills/dev/INDEX.md` を読み、現在の工程のスキルを読む。
 2. 機能追加、仕様変更、修正、技術選定では、先に planning を実施して計画文書と受け入れ条件を用意する。
 3. 実装では implementation の再帰ループに従う。テストとセルフレビューの Exit Criteria を満たすまでPRを出さない。3周しても満たせない場合は、実装を止めて planning に差し戻す。
@@ -13,6 +14,14 @@
 5. 次工程のtask、review、merge後handoffがある作業では、[handoff-closure](skills/dev/handoff-closure/SKILL.md)を使い、送達と受領確認まで同一turnで閉じる。
 6. 自律的な製品作業では、[ceo-decision-backlog](skills/dev/ceo-decision-backlog/SKILL.md)を使い、未解決の `ceo-decision` Issue件数と10件停止条件を確認する。
 7. 依頼された変更が意味単位で完了したら、利用者から停止指示がない限り、[finish-and-merge](skills/dev/finish-and-merge/SKILL.md)に従って検査、意味単位のcommit、push、PR、review、mainへのmerge、main smokeまで同一turnで閉じる。
+
+## 現況更新と単一会話の優先規約
+
+- 実装・検証・main反映・稼働反映を分ける。未統合・未確認を未修正・故障中と報告しない。
+- 残課題報告前に、同じ検査範囲の最新成功と現在の版を照合し、`python scripts/validate_progress_status.py`を実行する。現在の再現証拠がない解消済み故障を再修正へ戻さない。
+- 受入、merge、稼働変更、利用者試験の節目で、次作業・最終報告の前に現況一覧を更新する。証拠と版が不一致なら未照合とし、失敗を推測しない。
+- 通常は現在の一会話を窓口とする。別の利用者向け会話の作成、アーカイブ会話の復帰・起動は明示依頼なしに禁止する。限定的な内部サブエージェントは別会話ではない。
+- この節は旧部門間連携、assignment条件、handoff skillの別会話起動規則に優先する。利用者が部門別複数会話運用を明示再開しない限り、同一会話内の独立レビューとfinish-and-mergeで閉じ、旧CEO室・統合部への通知や受領待ちを作らない。
 
 ## 利用者への説明と承認
 
