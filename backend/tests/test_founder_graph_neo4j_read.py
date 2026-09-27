@@ -540,6 +540,82 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     assert all(secret not in str(result) for secret in ("A researched section", "must never leave the adapter"))
 
 
+def test_search_and_fetch_project_inferred_successor_with_superseded_history_ref() -> None:
+    driver, reads = _gateway()
+    idea, claim, evidence, _brief, predecessor, endpoint_rows, old_rows, brief_row = _formal_fixture()
+    predecessor = replace(predecessor, status="superseded")
+    current = RelationAssertion(
+        owner_id=predecessor.owner_id, id="assertion-current", source_id=predecessor.source_id,
+        target_id=predecessor.target_id, source_kind=predecessor.source_kind,
+        target_kind=predecessor.target_kind, predicate=predecessor.predicate,
+        assertion_family_id=predecessor.assertion_family_id, revision=2, status="inferred",
+        confidence=0.9, evidence_ids=(evidence.id,), valid_from=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        supersedes_id=predecessor.id, egress_policy=EgressPolicy.SHAREABLE,
+        provenance=predecessor.provenance.__class__(operation="link_entities", target_id="assertion-current", idempotency_key="successor-key"),
+        based_on_brief_id=predecessor.based_on_brief_id, based_on_brief_section_index=0,
+    )
+    endpoint_rows[predecessor.id] = _persisted_row(predecessor)
+    formal_rows = [
+        _formal_edge_row(current, relation, endpoint_rows[target_id])
+        for _source_id, relation, target_id in relation_assertion_structural_edges(current)
+    ]
+    evidence_row = next(row for row in old_rows if row["relation"] == "EVIDENCED_BY")
+    next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY").update({"_lineage": evidence_row["_lineage"]})
+    from dots.founder_graph_neo4j_read import _checked_historical_supersedes_ref
+    history_row = next(row for row in formal_rows if row["relation"] == RelationAssertionEdgeType.SUPERSEDES.value)
+    assert _checked_historical_supersedes_ref(history_row, owner_id="owner-1", successor=current).id == predecessor.id
+    endpoint_rows[current.id] = _persisted_row(current, search_text="")
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+    from time import monotonic
+    adjacency, _views = reads._formal_adjacency(
+        driver.session_value, owner_id="owner-1", at=datetime.now(timezone.utc), started=monotonic(), timeout_ms=30_000,
+    )
+    assert idea.id in adjacency, sorted(adjacency)
+    assert any(step.relation_assertion_id == current.id for _neighbor, step in adjacency[idea.id])
+    assert reads.fetch_relation_assertion(current.id, owner_id="owner-1").relation_assertion_id == current.id
+
+    page = reads.search("Foundry", owner_id="owner-1")
+    hit = next(item for item in page.hits if item.node.id == claim.id)
+    assert len(hit.relation_path) == 1
+    assert hit.relation_path[0].relation_assertion_id == current.id
+    fetched = reads.fetch_relation_assertion(current.id, owner_id="owner-1")
+    assert fetched.status == "inferred"
+    assert fetched.relation_assertion_id == current.id
+    mcp_fetched = McpReadSurface(reads).call("fetch", {"id": current.id}, owner_id="owner-1")
+    assert mcp_fetched["id"] == current.id and mcp_fetched["status"] == "inferred"
+    assert mcp_fetched["path"] == [idea.id, RelationType.ADDRESSES.value, claim.id]
+
+
+@pytest.mark.parametrize("mutation", ["foreign_owner", "wrong_family", "wrong_revision", "wrong_endpoint"])
+def test_historical_supersedes_ref_rejects_unrelated_or_invalid_predecessor(mutation: str) -> None:
+    _driver, _reads = _gateway()
+    idea, claim, evidence, _brief, prior, endpoint_rows, _old_rows, _brief_row = _formal_fixture()
+    prior = replace(prior, status="superseded")
+    current = RelationAssertion(
+        owner_id="owner-1", id="assertion-current", source_id=idea.id, target_id=claim.id,
+        source_kind=NodeType.IDEA, target_kind=NodeType.CLAIM, predicate=RelationType.ADDRESSES,
+        assertion_family_id=prior.assertion_family_id, revision=2, status="inferred", confidence=0.9,
+        evidence_ids=(evidence.id,), valid_from=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        supersedes_id=prior.id, egress_policy=EgressPolicy.SHAREABLE,
+        provenance=prior.provenance.__class__(operation="link_entities", target_id="assertion-current", idempotency_key="successor-key"),
+        based_on_brief_id=prior.based_on_brief_id, based_on_brief_section_index=0,
+    )
+    if mutation == "foreign_owner":
+        prior = replace(prior, owner_id="owner-2")
+    elif mutation == "wrong_family":
+        prior = replace(prior, assertion_family_id="different-family")
+    elif mutation == "wrong_revision":
+        prior = replace(prior, revision=2)
+    else:
+        prior = replace(prior, target_id="unrelated-claim")
+    endpoint_rows[prior.id] = _persisted_row(prior)
+    row = _formal_edge_row(current, RelationAssertionEdgeType.SUPERSEDES.value, endpoint_rows[prior.id])
+
+    from dots.founder_graph_neo4j_read import _checked_historical_supersedes_ref
+    with pytest.raises((GraphReadNotFoundError, ValueError)):
+        _checked_historical_supersedes_ref(row, owner_id="owner-1", successor=current)
+
+
 @pytest.mark.parametrize(("brief_ref", "evidence_refs", "field", "value", "stale_idea", "policy"), [
     ("old-brief", None, None, None, False, EgressPolicy.SHAREABLE), (None, (), None, None, False, EgressPolicy.SHAREABLE), (None, ("evidence-1", "extra"), None, None, False, EgressPolicy.SHAREABLE),
     (None, None, "target_owner_id", "owner-2", False, EgressPolicy.SHAREABLE),

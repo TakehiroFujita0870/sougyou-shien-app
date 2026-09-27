@@ -379,6 +379,28 @@ def _checked_ref_view(row: Any, *, owner_id: str) -> NodeView:
     return view
 
 
+def _checked_historical_supersedes_ref(
+    row: Any, *, owner_id: str, successor: RelationAssertion,
+) -> RelationAssertion:
+    """Validate a superseded predecessor as history, not as a public endpoint."""
+    historical_row = {
+        f"assertion_{name}": _row_value(row, f"target_{name}")
+        for name in ("id", "owner_id", "node_type", "revision", "status", "egress_policy", "payload_json")
+    }
+    predecessor = _decode_assertion(historical_row, owner_id=owner_id)
+    if (
+        successor.supersedes_id != predecessor.id
+        or predecessor.owner_id != successor.owner_id
+        or predecessor.status is not RelationshipStatus.SUPERSEDED
+        or predecessor.assertion_family_id != successor.assertion_family_id
+        or predecessor.revision != successor.revision - 1
+        or (predecessor.source_id, predecessor.target_id, predecessor.predicate)
+        != (successor.source_id, successor.target_id, successor.predicate)
+    ):
+        raise ValueError("superseded relation history does not match its successor")
+    return predecessor
+
+
 class Neo4jGraphReadService:
     """Read-only NodeView/SearchPage boundary over an injected gateway."""
 
@@ -467,6 +489,17 @@ class Neo4jGraphReadService:
                         valid = False
                         continue
                     actual_edges.append((assertion.id, relation, target_id))
+                    if relation == RelationAssertionEdgeType.SUPERSEDES.value:
+                        try:
+                            predecessor = _checked_historical_supersedes_ref(
+                                row, owner_id=owner_id, successor=assertion,
+                            )
+                        except (GraphReadError, TypeError, ValueError):
+                            valid = False
+                        else:
+                            if predecessor.id != target_id:
+                                valid = False
+                        continue
                     view = _checked_ref_view(row, owner_id=owner_id)
                     prior = ref_views.get(view.id)
                     if prior is not None and prior != view:
