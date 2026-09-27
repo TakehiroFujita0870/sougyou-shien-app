@@ -56,7 +56,7 @@ Then: The existing in-memory path remains active and no Neo4j driver or network 
 | T-N4J-02 | MCP write surface の backend-neutral typing と correction hydration | 検査: `uv run --isolated --python 3.14 --with pytest pytest -q backend/tests/test_founder_graph_mcp_write.py backend/tests/test_founder_graph_neo4j_runtime.py` が通る | 類推可能 |
 | T-N4J-03 | 明示注入用 composition helper と default path 回帰 | 検査: `uv run --isolated --python 3.14 --with pytest pytest -q backend/tests/test_founder_graph_neo4j_runtime.py backend/tests/test_founder_graph_mcp_stdio.py backend/tests/test_founder_graph_mcp_api.py` が通る | 既知 |
 | SP-N4J-04 | 実 Neo4j driver / 再起動後の read-write 一致を合成 fixture 外で確認する手順 | 検査: Neo4j起動、schema migration、write、停止、再起動、read-backを30分以内に同一ownerで記録する | 未知・先行スパイク |
-| T-N4J-04 | Neo4j live gate の未実施記録 | 検査: `rg -n "live Neo4j|未実施|T-N4J-04" docs/plans/founder-graph-neo4j-runtime-composition.md docs/HANDOFF.md` | 未知 |
+| T-N4J-04 | 当時のNeo4j live gate の未実施記録 | 現在の実施状況は[現況一覧](../operations/dots-current-status.json)の同範囲の証拠で照合する。本計画の過去の未実施記録を再試験の指示にしない | 過去の記録 |
 
 ## ADR
 
