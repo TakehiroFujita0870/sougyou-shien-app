@@ -82,6 +82,33 @@ _SEARCH_QUERY = (
     "n.search_text AS search_text"
 )
 
+_SEARCHABLE_FILTER = (
+    "WHERE node.owner_id = $owner_id AND node.node_type IN $searchable_node_types "
+    "AND NOT EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(node) } "
+    "AND NOT coalesce(node.status, '') IN $non_current "
+    "AND NOT (node:SourceRevision AND EXISTS { MATCH (s:Source {id: node.source_id, owner_id: $owner_id}) WHERE s.status = 'archived' }) "
+    "AND NOT (node:ContentChunk AND EXISTS { MATCH (r:SourceRevision {id: node.source_revision_id, owner_id: $owner_id})-[:HAS_SOURCE_REVISION]-(s:Source) WHERE s.status = 'archived' }) "
+    "AND NOT (node:Evidence AND (EXISTS { MATCH (r:SourceRevision {id: node.source_revision_id, owner_id: $owner_id})-[:HAS_SOURCE_REVISION]-(s:Source) WHERE s.status = 'archived' } "
+    "OR EXISTS { MATCH (c:ContentChunk {id: node.chunk_id, owner_id: $owner_id})<-[:HAS_CHUNK]-(r:SourceRevision)-[:HAS_SOURCE_REVISION]-(s:Source) WHERE s.status = 'archived' } "
+    "OR EXISTS { MATCH (s:Source {id: node.material_id, owner_id: $owner_id}) WHERE s.status = 'archived' })) "
+    "AND NOT (node:IdeaBriefVersion AND EXISTS { MATCH (i:Idea {id: node.based_on_idea_id, owner_id: $owner_id}) WHERE i.status = 'archived' }) "
+    "AND NOT (node:RelationAssertion AND (EXISTS { MATCH (node)-[:ASSERTS_FROM]->(i:Idea) WHERE i.owner_id = $owner_id AND i.status = 'archived' } "
+    "OR EXISTS { MATCH (node)-[:ASSERTS_TO]->(i:Idea) WHERE i.owner_id = $owner_id AND i.status = 'archived' })) "
+)
+_FULLTEXT_CANDIDATE_QUERY = (
+    "CALL db.index.fulltext.queryNodes($index_name, $fulltext_query, {limit: $candidate_limit}) YIELD node, score "
+    + _SEARCHABLE_FILTER + " RETURN node.id AS id, node.owner_id AS owner_id, node.node_type AS node_type, "
+    "node.status AS status, node.revision AS revision, node.payload_json AS payload_json, "
+    "node.search_text AS search_text, score AS raw_score ORDER BY score DESC, id LIMIT $candidate_limit"
+)
+_VECTOR_CANDIDATE_QUERY = (
+    "CALL db.index.vector.queryNodes($index_name, $candidate_limit, $embedding) YIELD node, score "
+    + _SEARCHABLE_FILTER + " RETURN node.id AS id, node.owner_id AS owner_id, node.node_type AS node_type, "
+    "node.status AS status, node.revision AS revision, node.payload_json AS payload_json, "
+    "node.search_text AS search_text, score AS raw_score ORDER BY score DESC, id LIMIT $candidate_limit"
+)
+_SEARCH_INDEX_STATUS_QUERY = "SHOW INDEXES YIELD name, state WHERE name IN $index_names RETURN name, state"
+
 _SEARCH_RELATIONS_QUERY = (
     "MATCH (a)-[r]->(b) "
     "WHERE a.owner_id = $owner_id AND b.owner_id = $owner_id "
@@ -351,10 +378,32 @@ def _checked_ref_view(row: Any, *, owner_id: str) -> NodeView:
 class Neo4jGraphReadService:
     """Read-only NodeView/SearchPage boundary over an injected gateway."""
 
-    def __init__(self, gateway: Neo4jGraphGateway) -> None:
+    def __init__(
+        self,
+        gateway: Neo4jGraphGateway,
+        *,
+        search_models: Any | None = None,
+        rerank_enabled: bool = False,
+        rerank_candidate_limit: int = 40,
+        _vector_index_name: str = "dots_founder_graph_vector_e5base",
+    ) -> None:
         if not isinstance(gateway, Neo4jGraphGateway):
             raise GraphReadError("a Neo4jGraphGateway is required")
+        if not isinstance(rerank_enabled, bool):
+            raise GraphReadError("rerank_enabled must be a boolean")
+        if (
+            not isinstance(rerank_candidate_limit, int)
+            or isinstance(rerank_candidate_limit, bool)
+            or not 1 <= rerank_candidate_limit <= 40
+        ):
+            raise GraphReadError("rerank_candidate_limit must be between 1 and 40")
+        if not isinstance(_vector_index_name, str) or not _vector_index_name.strip():
+            raise GraphReadError("vector index name must be non-empty")
         self._gateway = gateway
+        self._search_models = search_models if search_models is not None else gateway.search_models
+        self._rerank_enabled = rerank_enabled
+        self._rerank_candidate_limit = rerank_candidate_limit
+        self._vector_index_name = _vector_index_name
 
     @property
     def owner_id(self) -> str:
@@ -688,7 +737,7 @@ class Neo4jGraphReadService:
         # A restarted Neo4j instance may need to warm its page cache before
         # the first full-text scan. Keep the in-memory contract at 1 second,
         # but give the persistent local database a bounded 5-second budget.
-        timeout_ms: int = 5_000,
+        timeout_ms: int = 30_000,
     ) -> SearchPage:
         if not isinstance(query, str) or not query.strip() or len(query) > 512:
             raise GraphReadError("query must be a non-empty string of at most 512 characters")
@@ -710,6 +759,30 @@ class Neo4jGraphReadService:
             )
 
         ordered_ids = sorted(scores, key=lambda node_id: (-scores[node_id], node_id))
+        if self._rerank_enabled and self._search_models is not None and ordered_ids:
+            rerank_ids = ordered_ids[:self._rerank_candidate_limit]
+            baseline_tail = ordered_ids[self._rerank_candidate_limit:]
+            candidate_texts = [
+                self._candidate_context(node_id, views[node_id], relation_paths, evidence_by_node)
+                for node_id in rerank_ids
+            ]
+            try:
+                rerank_scores = self._search_models.rerank(query, candidate_texts)
+                if len(rerank_scores) != len(rerank_ids):
+                    raise GraphReadError("local reranker returned an invalid score count")
+                reranked_top = sorted(
+                    zip(rerank_ids, rerank_scores, strict=True),
+                    key=lambda item: (-float(item[1]), rerank_ids.index(item[0]), item[0]),
+                )
+                ordered_ids = [node_id for node_id, _score in reranked_top] + baseline_tail
+                scores = {
+                    node_id: (len(ordered_ids) - index) / len(ordered_ids)
+                    for index, node_id in enumerate(ordered_ids)
+                }
+            except Exception as error:
+                if isinstance(error, GraphReadError):
+                    raise
+                raise Neo4jReadUnavailableError("the pinned local reranker is unavailable") from error
         page_ids = ordered_ids[offset : offset + limit]
         next_cursor = str(offset + limit) if offset + limit < len(ordered_ids) else None
         return SearchPage(
@@ -734,22 +807,31 @@ class Neo4jGraphReadService:
         paths: dict[str, tuple[str, ...]] = {}
         evidence_by_node: dict[str, tuple[str, ...]] = {}
         relation_paths: dict[str, tuple[RelationPathStep, ...]] = {}
-        rows = _rows(tx.run(
-            _SEARCH_QUERY, owner_id=owner_id, tokens=list(tokens), non_current=sorted(_NON_CURRENT),
-            searchable_node_types=searchable_types,
-        ))
-        for row in rows:
-            self._check_timeout(started, timeout_ms)
-            view = _view_from_row(row, owner_id=owner_id, strict=False)
-            if view is None:
-                continue
-            views[view.id] = view
-            haystack = str(_row_value(row, "search_text", "")).casefold()
-            if not haystack:
-                haystack = json.dumps(dict(view.fields), ensure_ascii=False, sort_keys=True).casefold()
-            matched = sum(1 for token in tokens if token in haystack)
-            if matched:
-                scores[view.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack else 0.0)
+        if self._search_models is not None:
+            rows, scores = self._hybrid_candidates(
+                tx, query=query, owner_id=owner_id, started=started, timeout_ms=timeout_ms,
+            )
+            for row in rows:
+                view = _view_from_row(row, owner_id=owner_id, strict=False)
+                if view is not None:
+                    views[view.id] = view
+        else:
+            rows = _rows(tx.run(
+                _SEARCH_QUERY, owner_id=owner_id, tokens=list(tokens), non_current=sorted(_NON_CURRENT),
+                searchable_node_types=searchable_types,
+            ))
+            for row in rows:
+                self._check_timeout(started, timeout_ms)
+                view = _view_from_row(row, owner_id=owner_id, strict=False)
+                if view is None:
+                    continue
+                views[view.id] = view
+                haystack = str(_row_value(row, "search_text", "")).casefold()
+                if not haystack:
+                    haystack = json.dumps(dict(view.fields), ensure_ascii=False, sort_keys=True).casefold()
+                matched = sum(1 for token in tokens if token in haystack)
+                if matched:
+                    scores[view.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack else 0.0)
 
         formal, formal_views = self._formal_adjacency(
             tx, owner_id=owner_id, at=datetime.now(timezone.utc), started=started, timeout_ms=timeout_ms,
@@ -826,6 +908,99 @@ class Neo4jGraphReadService:
             frontier = next_frontier
         self._check_timeout(started, timeout_ms)
         return views, scores, paths, evidence_by_node, relation_paths
+
+    def _hybrid_candidates(
+        self, tx: Any, *, query: str, owner_id: str, started: float, timeout_ms: int,
+    ) -> tuple[tuple[Any, ...], dict[str, float]]:
+        """Fuse owner-filtered full-text and E5-base candidates, then rerank at most 40."""
+        index_names = ("dots_founder_graph_fulltext", self._vector_index_name)
+        status_rows = _rows(tx.run(_SEARCH_INDEX_STATUS_QUERY, index_names=list(index_names)))
+        online = {_row_value(row, "name") for row in status_rows if _row_value(row, "state") == "ONLINE"}
+        if online != set(index_names):
+            raise Neo4jReadUnavailableError("Neo4j full-text and vector search indexes are not both ONLINE")
+        candidate_limit = 50
+        searchable_types = [node_type.value for node_type in NodeType if node_type is not NodeType.RELATION_ASSERTION]
+        parameters = {
+            "owner_id": owner_id,
+            "non_current": sorted(_NON_CURRENT),
+            "candidate_limit": candidate_limit,
+            "searchable_node_types": searchable_types,
+        }
+        fulltext_rows = _rows(tx.run(
+            _FULLTEXT_CANDIDATE_QUERY,
+            **parameters,
+            index_name="dots_founder_graph_fulltext",
+            fulltext_query=self._fulltext_query(query),
+        ))
+        self._check_timeout(started, timeout_ms)
+        try:
+            embedding = self._search_models.embed_query(query)
+        except Exception as error:
+            raise Neo4jReadUnavailableError("the pinned local multilingual search model is unavailable") from error
+        vector_rows = _rows(tx.run(
+            _VECTOR_CANDIDATE_QUERY,
+            **parameters,
+            index_name=self._vector_index_name,
+            embedding=embedding,
+        ))
+        self._check_timeout(started, timeout_ms)
+        rows_by_id: dict[str, Any] = {}
+        scores: dict[str, float] = {}
+        for ranked_rows in (fulltext_rows, vector_rows):
+            seen: set[str] = set()
+            rank = 0
+            for row in ranked_rows:
+                node_id = _row_value(row, "id")
+                if not isinstance(node_id, str) or not node_id or node_id in seen:
+                    continue
+                seen.add(node_id)
+                if _row_value(row, "owner_id") != owner_id or _view_from_row(row, owner_id=owner_id, strict=False) is None:
+                    continue
+                rank += 1
+                rows_by_id[node_id] = row
+                scores[node_id] = scores.get(node_id, 0.0) + 1.0 / (60 + rank)
+        ordered = sorted(scores, key=lambda node_id: (-scores[node_id], node_id))
+        scores = {node_id: scores[node_id] for node_id in ordered}
+        return tuple(rows_by_id[node_id] for node_id in ordered), scores
+
+    @staticmethod
+    def _fulltext_query(query: str) -> str:
+        import re
+        terms = re.findall(r"[\w.-]+", query, flags=re.UNICODE)
+        escaped = [term.replace("\\", "\\\\").replace('"', '\\"') for term in terms]
+        return " OR ".join(f'"{term}"' for term in escaped) if escaped else '"__dots_no_search_terms__"'
+
+    @staticmethod
+    def _candidate_context(
+        node_id: str,
+        view: NodeView,
+        relation_paths: Mapping[str, tuple[RelationPathStep, ...]],
+        evidence_by_node: Mapping[str, tuple[str, ...]],
+    ) -> str:
+        parts = [view.title, view.snippet]
+        path = relation_paths.get(node_id, ())
+        if path:
+            parts.append("relation path: " + " ; ".join(
+                f"traversal {step.from_id} to {step.to_id}; edge {step.source_id} -[{step.predicate}]-> {step.target_id}"
+                for step in path
+            ))
+        evidence = evidence_by_node.get(node_id, ())
+        if evidence:
+            parts.append("evidence ids: " + " ".join(evidence))
+        return "\n".join(part for part in parts if part)
+
+    def facet_region(
+        self, root_facet_id: str, *, owner_id: str, max_facet_depth: int = 0
+    ):
+        """Return grounded owner-scoped Ideas and Assets in a selected Facet region."""
+        from .founder_graph_facet_neo4j_read import read_facet_region
+
+        return read_facet_region(
+            self,
+            root_facet_id,
+            owner_id=owner_id,
+            max_facet_depth=max_facet_depth,
+        )
 
     def relations(self, node_id: str, *, owner_id: str) -> tuple[GraphRelationView, ...]:
         identifier = _required_node_id(node_id)

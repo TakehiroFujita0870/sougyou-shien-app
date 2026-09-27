@@ -1034,6 +1034,41 @@ class ResearchCampaign:
             provenance=transition_provenance,
         )
 
+    def revoke(self, *, at: datetime | None = None, provenance: Provenance | None = None) -> "ResearchCampaign":
+        """Return a new unauthorized revision of this campaign.
+
+        Persistence and authorization remain at the write boundary; this pure
+        transition only changes the immutable domain value.
+        """
+        if self.status is Status.REVOKED and not self.authorized:
+            return self
+        if self.status is Status.CANCELLED:
+            raise DomainValidationError("cancelled campaign cannot be revoked")
+        transition_at = _required_timestamp(at or utc_now(), "at")
+        transition_provenance = _fresh_provenance(
+            self.provenance,
+            operation="revoke_campaign",
+            target_id=self.id,
+            occurred_at=transition_at,
+            provenance=provenance,
+        )
+        _validate_transition_time(
+            transition_at,
+            prior_approved_at=self.approved_at,
+            prior_provenance=self.provenance,
+            operation="revoke",
+        )
+        return self._transition(
+            status=Status.REVOKED,
+            authorized=False,
+            approved_at=None,
+            authorization_snapshot_id=new_id("authorization"),
+            prior_authorization_snapshot_id=self.authorization_snapshot_id,
+            authorization_revision=self.authorization_revision + 1,
+            aggregate_revision=self.aggregate_revision + 1,
+            provenance=transition_provenance,
+        )
+
     def change_scope(
         self,
         scope: Any,

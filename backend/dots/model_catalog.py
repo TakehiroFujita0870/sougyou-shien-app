@@ -23,7 +23,6 @@ LUNA_CAPABILITIES = (
     "facet_generation",
     "relation_candidate",
     "query_expansion",
-    "rerank",
 )
 
 

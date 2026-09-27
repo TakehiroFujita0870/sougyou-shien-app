@@ -19,6 +19,7 @@ from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadService
 from .founder_graph_write import InMemoryGraphWriteService
 from .founder_graph_runtime import create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
+from .founder_graph_neo4j_write import Neo4jIdeaBriefStore
 
 
 JSONRPC_VERSION = "2.0"
@@ -129,6 +130,7 @@ def create_stdio_server(owner_id: str | None = None) -> FounderGraphStdioServer:
     if backend == "neo4j":
         driver = create_neo4j_driver_from_env()
         database = os.environ.get("DOTS_NEO4J_DATABASE", "neo4j").strip() or "neo4j"
+        _neo4j_stdio_read_only_preflight(driver, database=database)
         return create_neo4j_stdio_server(driver, resolved_owner, database=database)
     writes = InMemoryGraphWriteService(resolved_owner)
     reads = GraphReadService(writes)
@@ -145,9 +147,31 @@ def create_neo4j_stdio_server(driver: Any, owner_id: str, *, database: str = "ne
     composition = create_neo4j_graph_composition(driver, owner_id, database=database)
     return FounderGraphStdioServer(
         McpReadSurface(composition.reads),
-        McpWriteSurface(composition.writes),
+        McpWriteSurface(composition.writes, brief_store=Neo4jIdeaBriefStore(composition.gateway)),
         composition.gateway.owner_id,
     )
+
+
+def _neo4j_stdio_read_only_preflight(driver: Any, *, database: str) -> None:
+    """Fail closed on an unavailable configured store without issuing writes."""
+    if not callable(getattr(driver, "session", None)):
+        return
+    session = None
+    try:
+        session = driver.session(database=database)
+        result = session.run("RETURN 1 AS dots_stdio_preflight")
+        single = getattr(result, "single", None)
+        if callable(single) and single() is None:
+            raise RuntimeError("read-only query returned no result")
+    except Exception as error:
+        raise RuntimeError("Neo4j read-only preflight failed") from error
+    finally:
+        close = getattr(session, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception as error:
+                raise RuntimeError("Neo4j read-only preflight failed") from error
 
 
 def run_stdio(

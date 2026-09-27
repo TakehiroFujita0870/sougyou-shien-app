@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from .founder_graph import NodeType, Relationship, _ALLOWED_RELATION_ENDPOINTS
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 SCHEMA_NAME = "dots-founder-graph"
 
 
@@ -110,6 +110,26 @@ _MIGRATIONS = (
             "REQUIRE (node.owner_id, node.assertion_family_id, node.revision) IS UNIQUE",
         ),
     ),
+    SchemaMigration(
+        version=6,
+        queries=(
+            "MATCH (node) WHERE node.search_text IS NOT NULL AND NOT node:FounderGraphSearchable "
+            "SET node:FounderGraphSearchable",
+            "CREATE FULLTEXT INDEX dots_founder_graph_fulltext IF NOT EXISTS "
+            "FOR (node:FounderGraphSearchable) ON EACH [node.search_text] "
+            "OPTIONS {indexConfig: {`fulltext.analyzer`: 'cjk'}}",
+        ),
+    ),
+    SchemaMigration(
+        version=7,
+        queries=(
+            "CREATE CONSTRAINT dots_ideabriefversion_owner_lineage_revision IF NOT EXISTS "
+            "FOR (node:IdeaBriefVersion) REQUIRE (node.owner_id, node.idea_lineage_root_id, node.revision) IS UNIQUE",
+            "CREATE VECTOR INDEX dots_founder_graph_vector_e5base IF NOT EXISTS "
+            "FOR (node:FounderGraphSearchable) ON (node.search_embedding_e5base) "
+            "OPTIONS {indexConfig: {`vector.dimensions`: 768, `vector.similarity_function`: 'cosine'}}",
+        ),
+    ),
 )
 
 
@@ -149,6 +169,13 @@ def rollback_queries(current_version: int = SCHEMA_VERSION, target_version: int 
         queries += ("DROP CONSTRAINT dots_assertion_family_lock_owner_key IF EXISTS",)
     if current_version >= 5 and target_version < 5:
         queries = ("DROP CONSTRAINT dots_relationassertion_owner_family_revision IF EXISTS",) + queries
+    if current_version >= 7 and target_version < 7:
+        queries = (
+            "DROP INDEX dots_founder_graph_vector_e5base IF EXISTS",
+            "DROP CONSTRAINT dots_ideabriefversion_owner_lineage_revision IF EXISTS",
+        ) + queries
+    if current_version >= 6 and target_version < 6:
+        queries = ("DROP INDEX dots_founder_graph_fulltext IF EXISTS",) + queries
     if current_version >= 3 and target_version < 3:
         queries += _drop_queries(_V3_LABELS)
     if current_version >= 2 and target_version < 2:

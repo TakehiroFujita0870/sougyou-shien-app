@@ -27,6 +27,8 @@ from .founder_graph import (
     SourceRevision,
 )
 from .founder_graph_neo4j import Neo4jGraphGateway
+from .founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
+from .founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
 from .idea_brief import IdeaBriefVersion
 from .founder_graph_write import (
     GraphWriteError,
@@ -255,6 +257,20 @@ class Neo4jGraphWriteService(GraphWritePort):
             return hydrated
         if node_type is NodeType.RELATION_ASSERTION:
             return self.gateway._decode_relation_assertion_record(record)
+        if node_type is NodeType.RESEARCH_CAMPAIGN:
+            try:
+                return decode_persisted_research_campaign(record, owner_id=self.owner_id)
+            except CampaignDecodeError:
+                raise GraphWriteError("persisted ResearchCampaign is invalid") from None
+        if node_type is NodeType.RESEARCH_RUN:
+            try:
+                return decode_persisted_research_run(
+                    {key: record.get(key) for key in ("id", "owner_id", "node_type", "revision", "payload_json")},
+                    owner_id=self.owner_id,
+                    expected_id=node_id,
+                )
+            except ResearchRunDecodeError:
+                raise GraphWriteError("persisted ResearchRun is invalid") from None
         revision = record.get("revision", 0)
         if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
             raise GraphWriteError("persisted node revision is invalid")
@@ -265,6 +281,10 @@ class Neo4jGraphWriteService(GraphWritePort):
             revision=revision,
             fields=MappingProxyType(dict(payload)),
         )
+
+    def get_write_receipt(self, idempotency_key: str, *, operation: str | None = None) -> WriteReceipt | None:
+        """Read an owner-scoped receipt from the canonical audit record."""
+        return self.gateway.fetch_write_receipt(idempotency_key, operation=operation)
 
 
 class Neo4jIdeaBriefStore:

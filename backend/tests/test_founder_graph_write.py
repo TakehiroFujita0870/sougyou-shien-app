@@ -53,6 +53,33 @@ def test_put_node_is_idempotent_and_audited() -> None:
     assert service.audit_events()[0].target_type == NodeType.IDEA.value
 
 
+def test_write_receipt_lookup_replays_existing_locked_idempotency_entry() -> None:
+    service = _service()
+    node = _idea("receipt-idea")
+    stored = service.put_node(node, idempotency_key="receipt-key", operation="capture_idea")
+
+    receipt = service.get_write_receipt("receipt-key", operation="capture_idea")
+
+    assert receipt is not None
+    assert receipt.replayed is True
+    assert receipt.target_id == stored.target_id
+    assert receipt.idempotency_key == stored.idempotency_key
+    assert service.get_write_receipt("missing-key") is None
+    with pytest.raises(IdempotencyConflictError, match="different operation"):
+        service.get_write_receipt("receipt-key", operation="save_idea_brief")
+
+
+def test_in_memory_allowlist_includes_existing_research_lifecycle_operations() -> None:
+    service = _service()
+
+    for operation in (
+        "create_research_campaign",
+        "approve_research_campaign",
+        "revoke_research_campaign",
+    ):
+        assert service._validate_command(operation, "local-owner", f"key-{operation}") == operation
+
+
 def test_idempotency_key_conflict_does_not_mutate_state() -> None:
     service = _service()
     service.put_node(_idea(), idempotency_key="idem-1")
