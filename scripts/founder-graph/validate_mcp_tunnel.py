@@ -13,7 +13,6 @@ from pathlib import Path
 
 
 RUNBOOK = Path("docs/operations/founder-graph-mcp-tunnel.md")
-PLAN = Path("docs/plans/founder-graph-mcp-tunnel.md")
 MAIN = Path("backend/dots/main.py")
 READ_MCP = Path("backend/dots/founder_graph_mcp.py")
 WRITE_MCP = Path("backend/dots/founder_graph_mcp_write.py")
@@ -39,15 +38,6 @@ REQUIRED_RUNBOOK_TOKENS = (
     "tools/call",
     "2025-06-18",
     "実機gate未実施",
-)
-REQUIRED_PLAN_TOKENS = (
-    "Given:",
-    "When:",
-    "Then:",
-    "## スコープ外",
-    "## ADR",
-    "SP-TUNNEL-01",
-    "T-STDIO-01",
 )
 SECRET_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
@@ -79,7 +69,7 @@ def scan_text(text: str, label: str) -> list[str]:
 
 def validate(root: Path) -> list[str]:
     issues: list[str] = []
-    paths = (RUNBOOK, PLAN, MAIN, READ_MCP, WRITE_MCP, STDIO_MCP)
+    paths = (RUNBOOK, MAIN, READ_MCP, WRITE_MCP, STDIO_MCP)
     for relative in paths:
         if not (root / relative).is_file():
             issues.append(f"missing required file: {relative}")
@@ -87,16 +77,13 @@ def validate(root: Path) -> list[str]:
         return issues
 
     runbook = (root / RUNBOOK).read_text(encoding="utf-8")
-    plan = (root / PLAN).read_text(encoding="utf-8")
     main = (root / MAIN).read_text(encoding="utf-8")
     read_mcp = (root / READ_MCP).read_text(encoding="utf-8")
     write_mcp = (root / WRITE_MCP).read_text(encoding="utf-8")
     stdio_mcp = (root / STDIO_MCP).read_text(encoding="utf-8")
 
     issues.extend(_missing(runbook, REQUIRED_RUNBOOK_TOKENS, "MCP tunnel runbook"))
-    issues.extend(_missing(plan, REQUIRED_PLAN_TOKENS, "MCP tunnel plan"))
     issues.extend(scan_text(runbook, "MCP tunnel runbook"))
-    issues.extend(scan_text(plan, "MCP tunnel plan"))
     if "FOUNDER_GRAPH_NEO4J_PASSWORD" in runbook:
         issues.append("MCP tunnel runbook must not document a Neo4j password variable")
     if "--mcp-server-url https://" in runbook:

@@ -1,84 +1,8 @@
 # Founder Graph データモデル正本
 
-最終更新: 2026-09-24
-状態: schema v2 domain contract、migration、fixture parityを実装済み。MCPの関係writeはv2 RelationAssertionとsource-grounded Evidenceを使用し、read/searchと通常DB migrationのgateは別途継続中
+本書は保存単位、意味関係、改訂、根拠、削除、検索投影の契約を定める。製品体験は[製品方針](founder-graph-pivot.md)、現在の実装・検証状態は[現況](../operations/dots-current-status.json)と現行コードを参照する。旧schemaへの移行経緯や完了した試験はGit・PR履歴に残し、過去の未完了欄を現在の残件とみなさない。
 
-## 要望 / ゴール / 成功指標
-
-要望は、創業に関するアイデア、保有資産、人物、組織、調査資料、判断、実験、レポートを、ChatGPTから継続利用できるグラフとして保存することである。
-
-ゴールは、ノード、関係、履歴、根拠、削除、検索投影の単位を固定し、Neo4jへ保存できたという事実だけでなく、再利用可能なFounder Graphとして意味が保たれる状態を作ることである。
-
-成功指標は、合成20会話、合成10名刺、文書5件、ResearchRun 3件を投入し、再起動後に同じID、revision、根拠、関係、検索結果を再現し、owner越境、private field外部投影、孤立根拠、循環revisionを各0件にすることである。
-
-## 現行schema v1の扱い
-
-2026-09-24の実装監査ではMCPのcapture_ideaがContentChunkを作成せず、link_entitiesがv1 Relationshipを保存し、Evidence新規作成もMCP経由ではできないことを確認した。その後の根拠付き関係保存計画に従い、現行write経路はv2 RelationAssertionとsource-grounded Evidenceを使用する。旧material_id参照は既存データの読取・変換互換に限り、新しい関係の根拠には使用しない。
-
-2026-09-24時点の実装では`Idea`と`Claim`の訂正を新しい同種ノードで表し、`Relationship`をNeo4j relationshipへ直接保存していた。これはschema v1の履歴記録であり、現行関係writeはRelationAssertionとsource-grounded Evidenceのschema v2契約を使う。
-
-2026-09-23時点で、schema v2へ移行するためのdomain contractとして`EntityRevision`、`RelationAssertion`、`ContentChunk`、`Facet`とpredicate allowlistを追加し、Neo4jへv2の制約・索引を追加するmigrationと非破壊rollbackを実装した。空のNeo4jとv1合成ノードで、移行、同じ移行の再実行、rollback後のデータ保持を実機確認済みである。さらにv2全node typeの一時保存・Neo4j保存・安全なfetch/searchのparityを合成fixtureで確認した。既存データの変換、既定保存先の切替は未完了である。
-
-次の不一致が解消するまで、`create_app()`の既定保存先をNeo4jへ切り替えない。
-
-- 安定IDとrevision IDが分離されていない。
-- Relation Assertionが独立した根拠・履歴を持てない。
-- `Capability`、Facet、ContentChunkの保存単位が固定されていない。
-- raw content、検索用text、private contactの保存境界が同じpayloadへ入り得る。
-- `FounderGraphHistory`が元payload全体ではなく最小識別情報しか保持しない経路がある。
-
-## ユーザーストーリーと受け入れ条件
-
-### US-DM-01 安定した同一物を追跡する
-
-As a 単独利用者, I want 同じアイデアや人物を訂正しても同一物として追跡したい, so that 関係が版ごとに分断されない。
-
-Given: 一つのIdea anchorにrevision 1が存在する
-
-When: titleとsummaryを訂正する
-
-Then: Idea IDは変化せず、新しいEntityRevisionが追加され、CURRENT_REVISIONが一件だけ新revisionを指す。
-
-### US-DM-02 根拠付きの関係を扱う
-
-As a 単独利用者, I want 人物とアイデアの関係に根拠と確信度を持たせたい, so that LLMの提案を事実と誤認しない。
-
-Given: Person、Idea、Evidenceが存在する
-
-When: LunaがCAN_CONTRIBUTE_TO候補を生成する
-
-Then: RelationAssertionはinferred状態、confidence、expires_at、Evidence参照、生成model snapshotを持ち、confirmed関係として検索されない。
-
-### US-DM-03 原文と抽出結果を分離する
-
-As a 単独利用者, I want 会話原文とAI抽出を区別したい, so that 誤抽出を訂正しても原文を失わない。
-
-Given: 一つのChatGPT発言をSourceとして保存している
-
-When: IdeaとClaimを抽出する
-
-Then: 原文はSourceRevisionまたはlocal content storeに一度だけ存在し、IdeaRevisionとClaimはSourceRevisionへのDERIVED_FROMを持つ。
-
-### US-DM-04 再起動後も同じ意味で検索する
-
-As a 単独利用者, I want Dotsを停止しても検索結果の意味が変わらないでほしい, so that Graphを創業判断の記憶として信頼できる。
-
-Given: 合成fixtureをschema v2へ保存してmanifestを取得している
-
-When: DotsとNeo4jを停止し、同じvolumeで再起動する
-
-Then: node、assertion、revision、current pointer、代表query hashが停止前manifestと一致する。
-
-### US-DM-05 外部送信対象を限定する
-
-As a 単独利用者, I want Graph全体をローカル検索しつつ外部へは許可fieldだけを渡したい, so that 人脈と個人情報を漏らさずにChatGPTを使える。
-
-Given: local_only、shareable、explicitのfieldを含むPersonとIdeaが存在する
-
-When: MCP searchとfetchを実行する
-
-Then: ローカル順位付けは全許可データを使い、MCP responseにはshareableまたは有効なCampaignで許可されたexplicit fieldだけが含まれる。
-
+安定した対象IDと不変の改訂を分ける。事業上の関係は根拠・状態・確信度を持つRelationAssertionを正本とし、保存や版管理の構造edgeとは区別する。MCPへ返すのは共有可能な投影だけで、ローカル原文や連絡先をそのまま返さない。
 ## モデル化の判定規則
 
 情報を新しいノードにする条件は次のいずれかである。
@@ -247,17 +171,9 @@ fieldにpolicyがない場合はlocal_onlyとして扱う。node単位policyだ�
 
 ## Graph RAG検索契約
 
-初期検索はvectorを必須にしない。
+検索は全文と多言語embeddingの候補を合わせ、現行の意味関係と根拠経路を付けて、ローカルの多言語rerankerで順位を整える。モデルと取得件数などの実行設定は現行コードを正本とし、この文書に固定値を複製しない。
 
-1. owner_id、active status、delete state、time validityで候補を絞る。
-2. IdeaRevision、AssetRevision、Personの公開表示名、Organization、Claim、ContentChunk、ReportSectionを全文検索する。
-3. 上位50件からactive RelationAssertionと構造edgeを最大2 hop展開する。
-4. Evidence、SourceRevision、Decision、Experimentを付加する。
-5. Lunaへ渡す前にlocal_only fieldを除去し、候補50件をtitle、summary、path、根拠IDへ圧縮する。
-6. Lunaで上位10件を再順位付けし、結果ごとに関連理由とpathを返す。
-7. Luna失敗時は全文scoreとhop距離の決定的順位へfallbackする。
-
-vector indexを追加する場合もcanonical contentをvectorへ置き換えない。embeddingは派生indexであり、model ID、dimension、source hashを持ち、再生成可能にする。
+owner、現行状態、削除状態、共有区分で候補と返却項目を制限する。直接一致と関係経路を失わず、改訂・監査用の構造edgeを事業上の関連性に数えない。原文や非公開連絡先は共有可能な投影へ混ぜない。embeddingは再生成できる派生索引であり、正本の内容や根拠を置き換えない。
 
 ## 削除契約
 
@@ -267,62 +183,4 @@ vector indexを追加する場合もcanonical contentをvectorへ置き換えな
 - Attachmentの物理削除は、参照countが0、backup policyを満たす、impact previewを本人が確認した場合だけ別commandで実行する。
 - 物理削除commandをMCPへ公開しない。
 
-## schema v2の検査fixture
-
-fixtureは次を固定する。
-
-- 20会話Source、Idea 8件、IdeaRevision 14件。
-- 名刺10件、Person 8人、重複候補2組、Organization 5件。
-- Asset 12件。うちcapability 5件。
-- RelationAssertion 30件。proposed、inferred、confirmed、rejected、expiredを含む。
-- 文書5件、SourceRevision 8件、ContentChunk 40件以上。
-- Claim 25件、Evidence 35件、矛盾するEvidence 3件。
-- Campaign 2件、Run 3件、ReportVersion 3件、ReportSection 24件。
-- correction、merge、soft delete、unavailable参照を各一件以上。
-
-検査は停止前manifest、停止、同一volume再起動、再取得manifest、代表10問の検索hash比較までを一つのgateにする。加えて、global ID重複、current revision複数または欠落、revision重複、owner越境assertion、根拠なしinferred / confirmed、SUPERSEDES循環、deletedでsearchableなnodeをそれぞれ0件とするCypherをmanifest生成の必須検査にする。
-
-## 質問リスト
-
-| ID | 質問 | MVP早期の扱い | 決定者 | 期限 |
-| --- | --- | --- | --- |
-| Q-DM-01 | schema v2のRelationAssertion正本化とstable anchor / immutable revision分離を採用するか | MVPの仮データ範囲で採用。実データ投入前に最終確認 | 利用者兼製品責任者 | 2026-09-23 |
-| Q-DM-02 | private archiveをアプリ層で暗号化するか | 利用者兼製品責任者 | 実データ投入前 |
-
-## スコープ外
-
-- 複数owner間の共有Graph。
-- LLMが作る任意node label、任意predicate、任意Cypher。
-- 初期版のvector必須化。
-- public MCP endpoint。
-- Graph内へのbinary保存。
-- 自動名寄せ確定と自動physical delete。
-
-## タスク
-
-| ID | 成果物 | 完了判定（検査:） | 不確実性 |
-| --- | --- | --- | --- |
-| DM-SP-01 | schema v1からv2へのfixture変換spike | 検査: 20会話と10名刺を変換し、欠落field、孤立edge、重複anchor一覧を出力する | 未知 |
-| DM-01 | NodeType、revision、RelationAssertion domain contract | 検査: `backend/tests/test_founder_graph_schema_v2.py`と既存Founder Graph unit testでstable anchor参照、immutable revision、evidence境界、predicate allowlistを確認する | 類推可能 |
-| DM-02 | Neo4j schema migration v2 | 検査: constraint、index、owner境界、rollback fixtureが実Neo4jで成功する | 類推可能 |
-| DM-03 | schema v2 write adapter | 検査: anchorとrevisionのtransaction、idempotency、revision conflict testが成功する | 類推可能 |
-| DM-04 | schema v2 read / Graph RAG adapter | 検査: 代表10問でowner越境0件、private field投影0件、根拠path欠落0件になる | 類推可能 |
-| DM-05 | 再起動永続化gate | 検査: 停止前後manifestと代表query hashが一致する | 類推可能 |
-
-## ADR
-
-| 判断 | 選択と理由 | 却下案と理由 | 結果 |
-| --- | --- | --- | --- |
-| ADR-DM-01 identity | stable anchorとimmutable revisionを分離する。関係を同一物へ保ち、履歴を上書きしないため | revisionごとにIdeaやPersonを新規作成する案は関係が分断されるため却下 | schema v2で移行 |
-| ADR-DM-02 semantic relation | RelationAssertionノードを正本にする。根拠、状態、期限、訂正を一件として扱えるため | Neo4j relationship propertyだけを正本にする案はEvidenceとの参照と履歴が弱いため却下 | schema v2で移行 |
-| ADR-DM-03 capability | CapabilityはAsset subtypeにする。創業資産として共通の検索・egress・revision契約を使えるため | 独立Labelは初期schemaの型数を増やすため却下 | `asset_kind=capability`を追加 |
-| ADR-DM-04 source content | binaryと長文原本はlocal content store、Neo4jはhash、locator、chunkを持つ | binaryをNeo4j propertyへ保存する案はbackup、検索、更新の責務を混ぜるため却下 | Attachment / ContentChunkで参照 |
-| ADR-DM-05 retrieval | graph traversal + full-text + Luna rerankで開始する | 未評価embeddingを必須にする案はモデル能力と再現性が未確認のため却下 | vectorは派生indexとして後置 |
-
-## 変更履歴
-
-| 日時 | 変更 | 理由 | 影響タスク |
-| --- | --- | --- | --- |
-| 2026-09-22 | 初版。schema v1を暫定契約とし、stable anchor、immutable revision、RelationAssertion正本、ContentChunkをschema v2に定義 | Neo4j既定化前にデータ粒度を固定するため | DM-SP-01〜DM-05 |
-| 2026-09-23 | MVPの仮データ範囲でschema v2を採用し、実装と合成永続化検査を開始 | 全体計画を止めず、実データ投入とは分離して進めるため | P1-SP-01〜P2-04 |
-| 2026-09-23 | DM-01のdomain contractを追加し、既存schema v1の保存経路は変更せずにv2値の検証を可能にした | stable anchor、immutable revision、RelationAssertion、ContentChunk、FacetをNeo4j移行前にテスト可能にするため | DM-01 |
+設計に至る経緯と完了した検査の詳細はGit・PR履歴を参照する。旧fixture件数、未実施扱いのタスク表、旧モデルを使う検索案は現行契約に含めない。

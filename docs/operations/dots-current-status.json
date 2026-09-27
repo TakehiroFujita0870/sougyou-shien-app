@@ -1,160 +1,46 @@
 {
-  "updated_at": "2026-09-27T16:42:47Z",
-  "baseline_main": "787ab15165a8",
-  "ui_refactor": {
+  "updated_at": "2026-09-27T23:50:06Z",
+  "baseline_main": "03e035d712bc",
+  "current_work": {
     "reference": "docs/plans/dots-ui-refactor-plan.md",
-    "delivery": "main",
-    "runtime": "active",
-    "runtime_sha": "9e65b57951aa",
-    "note": "US-1〜6のUI・内部整理は正式版と稼働へ反映済み。1280×720・合成記録の編集/削除/復元・復元後の根拠表示、各CI・独立レビュー・main検査成功を維持。追加US-7の文書・旧資産整理に着手。追加進捗は参照先のC0〜C3だけで管理し、既存の成功状態を未着手に戻さない。"
-  },
-  "latest_delivery": {
-    "references": [314, 315, 316, 317, 318, 319],
-    "implementation": "実階層の奥行き表示、過去調査の正確な保存と表示、調査提案と自動整理の会話手順、直接一致候補の根拠付き経路保持。",
-    "verification": "最終変更版backend1247 passed/9 skipped、UI381 passed、build・Storybook成功。各変更独立レビュー・CI・main対象検査成功。実1280×720画面で合成3分類のスクロール後に資産と実経路・根拠表示を確認。",
-    "delivery": "main",
-    "runtime": "active",
-    "runtime_note": "正式版の切替時に保存先確認が一度失敗しAPIが自動再試行で回復。API稼働後に接続を起動して正本3サービスactiveを確認。検索503の原因との同一性は未確認。",
-    "next_action": "none。会話手順の入口を修正・配信し、新しい実会話で既存未調査案の再利用、関連アセットの検討、一度の調査提案と許諾待ちを確認。外部調査は開始していない。"
-  },
-  "research_run_decoder_delivery": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/304",
-    "main_sha": "24d4ad8c5044",
-    "implementation": "実Neo4j Recordの反復が値を返すことによる正常Runの誤拒否を修正。列名・所有者・型等の厳密検査を保持。",
-    "verification": "実Recordで失敗を再現。清潔な最終commit backend1194 passed/9 skipped、CI成功、main37件成功。診断取引はrollbackし概要・受付不在を確認。",
-    "delivery": "main",
-    "runtime": "active",
-    "next_action": "none。合成概要保存・8章の出典取得・現行訂正関係のMCP取得まで成功。検索経路の確認はnormal_store_fixture_acceptanceへ分離。"
-  },
-  "asset_memory_delivery": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/303",
-    "implementation": "履歴付きAsset更新、現行版取得、旧Idea形式とPersonAsset投影の互換、厳密な履歴と型の照合。",
-    "verification": "清潔な最終commit backend1191 passed/9 skipped、CI・独立レビュー成功、main36件成功。",
-    "delivery": "main",
-    "next_action": "none。通常保存先の合成1件を実画面編集し、再読込み・現行検索・旧版保持・後継リンク・共有範囲保持を確認済み。"
-  },
-  "normal_store_fixture_acceptance": {
-    "scope": "明示的に架空と記した資料・アイデア・資産1組。外部アクセス・AI調査なし。",
-    "verification": "実APIで合成資料一組の保存・再送、8章概要保存、MCPとホームのURL/題名一致、関係訂正・再送・現行関係取得を確認。検索HTTP500はPR313、直接一致候補から関係経路が抜ける問題はPR317で修正。PR319稼働後の同じ実検索はHTTP200、現行訂正関係の経路あり・旧経路なし。途中の503は再現せず原因未特定であり、診断ログを保持する。",
-    "runtime": "passed",
-    "next_action": "none。実検索で最新関係と根拠の取得まで確認済み。変更や再発がない限り試験を繰り返さない。"
-  },
-  "source_cutover": {
-    "source": "清潔なdots-releaseをmainから作成し、依存・UIを準備。旧dots-liveは未変更。",
-    "schema": "family lockの一意制約だけ追加。重複0件。既存索引・データ・鍵を保持。",
-    "verification": "初回切替では旧概要3版のresearch_run_ids欠落でHome503を再現して復帰。PR302で修正後、清潔なmain63件・既存Homeとcanonical概要3系譜の読取り成功。再切替時点ではHome ready（11 ideas/9 assets）・API200・正本3サービスactive・control-plane poll成功。後続の合成出典の保存と読み戻しはnormal_store_fixture_acceptanceで確認済み。",
-    "runtime": "active",
-    "rollback_verification": "旧参照先へ復帰しHome ready、11 ideas/9 assetsを確認。保存データ削除なし。",
-    "next_action": "none。切替と出典・概要・関係訂正の保存確認は完了。検索の未達確認はnormal_store_fixture_acceptanceへ分離。"
-  },
-  "runtime_citation_wiring": {
-    "implementation": "OnDemandNeo4jHomeStoreへ出典取得の委譲を追加。",
-    "verification": "runtime経路の接続漏れを失敗テストで再現後、正常・例外時の接続解放を含む29件成功。独立レビュー承認。",
-    "delivery": "main",
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/301",
-    "main_sha": "e0e579a27a0a",
-    "runtime": "active"
-  },
-  "legacy_cleanup_delivery": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/300",
-    "main_sha": "7d49ebc1c98a",
-    "implementation": "現行入口から到達しない旧画面3群9ファイルを削除。旧下書きの読出し部品は保持。",
-    "verification": "UI51ファイル371件、build・Storybook・独立レビュー・CI成功。清潔な統合mainでも371件成功。",
-    "delivery": "main",
-    "runtime": "active",
-    "data_deleted": false
-  },
-  "test_connection_cleanup": {
-    "implementation": "検証用のDots（架空試験）接続のみ解除。正本Dotsの依存接続を保持。",
-    "verification": "解除APIはuninstalled、直後の読取は検証用not_installed・正本found。",
-    "runtime": "applied",
-    "local_cleanup": "架空試験専用トンネルはinactive。架空試験のlogon/logoffタスクはDisabled。正本3サービスはactiveを維持。",
-    "data_deleted": false,
-    "rollback": "必要なら検証用接続を再登録できる。保存データと鍵は削除していない。"
-  },
-  "citation_surface_delivery": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/299",
-    "main_sha": "d0a1b9e4a316",
-    "verification": "関連39UI tests・4backend tests、1280×720の架空API実ビルド画面で引用到達・例外0、独立レビュー承認、CI quality成功。清潔なmainでUI39件とbuildも成功。",
-    "delivery": "main",
-    "runtime": "active",
-    "plugin_release": "正本の非公開プラグインを1.0.8へ更新し、同じ接続・アイコン・開発者・公開範囲を維持。既存未調査案の再利用も会話手順の入口に含め、単なる一覧や検索結果の閲覧は調査提案から除外。配信内容と保持したメタデータをread-back確認。実会話の自動分類・別会話再利用はsemantic_conversation_reuseへ記録。現在のCodexツール一覧の刷新を意味しない。"
-  },
-  "citation_delivery": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/298",
-    "main_sha": "6a6428f5cd2f",
-    "implementation": "保存時の公開根拠検査とMCP・ホームの8章引用投影を実装。調査Runだけを出典保存成功と扱わない。",
-    "verification": "関連74 passed、独立レビュー承認、CI quality成功、清潔なmainで同じ74テスト成功。",
-    "delivery": "main",
-    "runtime": "active",
-    "next_action": "none。通常保存先の合成資料で出典・概要・ホーム表示を確認済み。"
-  },
-  "grounded_capture_delivery": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/297",
-    "main_sha": "320928920909",
-    "implementation": "公開出典の明示共有設定と根拠付き関係の訂正・撤回を実装。確認済み関係の自動上書きを拒否し、省略状態の再送を安定化。",
-    "verification": "関連228 passed、独立レビュー承認、CI quality成功、清潔なmainで追加8テスト成功。",
-    "delivery": "main",
-    "runtime": "active",
-    "next_action": "none。訂正・再送・現行関係取得・実検索の最新関係経路を確認済み。"
-  },
-  "remaining_plan": {
-    "reference": "docs/plans/dots-mvp-remaining-plan-20260927.md",
-    "scope": "今回の改訂残計画は確認済み。出典保存・関係訂正・引用取得・共通アセット編集・旧9ファイル整理・分類操作・実階層の奥行き投影・会話指示1.0.8はmainまたは正本プラグインと稼働版へ配送済み。検証用接続解除済み。実分類3階層・アセット画面編集・過去出典復元・最新関係の実検索、同じ実ChatGPTによる根拠付き分類保存と別会話再利用、新しい実会話での既存未調査案への一度の調査提案と許諾待ちを確認済み。任意の磨き込みを新しい完成条件にしない。",
-    "graph_update_confirmation": "出典と正式概要の保存後は同じChatGPTが追加承認なしに意味関係・分類を整理する。調査許諾と共有境界は維持。",
-    "asset_ui": "カテゴリー・分類見出し・自己紹介専用欄なしの共通カードと個別編集をPR307でmainと稼働版へ配送。1280×720の実画面を確認。通常DBの合成1件を実画面で題名・内容変更し、再読込み後の表示と実HTTP検索を確認。現行改訂2が1件、旧題名0件、共有可を保持。限定した本人所有の2IDだけのDB読取りで旧改訂1保持と後継リンクも確認。取得型をAssetに限定していた試験側の誤判定を訂正。本人の既存内容は変更していない。",
-    "priority": "出典取り込みと意味関係の訂正が1番目、検証用接続と旧未使用資産の整理が2番目。",
-    "citation_observation": "本人が外部調査を実施した既存案の欠落出典を復元済み。元回答の17件の実URL・題名・対応段落から、再調査していない未確認の主張と根拠を保存し、5章へ紐付けた第2版を作成。既存8章本文保持・過去調査印・新しいRunなしを確認。完了受付の読取り専用再実行では書込み0、全17件のURL・題名・出典ID・根拠ID・章対応を照合。実ホームで過去調査表示・17リンクと代表リンクの行き先も確認。ヘルパーが永続参照型の属性を直接読んだ確認側の誤りを修正し、追加書込みはしていない。本人の題名・ID・本文・URLはGitへ転載しない。"
-  },
-  "formal_integration": {
-    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/294",
-    "main_sha": "c6be5719c38b",
-    "main_verification": "backend 1144 passed / 9 skipped; desktop surface 35 passed; progress validator passed",
-    "runtime_changed": false,
-    "note": "既存成果のコードをmainへ統合。稼働サービスの配信元と保存データは変更していない。既存の実会話・起動試験の検証範囲を広げた記録ではない。"
+    "status": "UI変更は正式版と稼働環境へ反映済み。現行の作業は保守性向上と旧資産整理。完了した個別作業の詳細はGit・PR履歴を参照。"
   },
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
-      "note": "終了処理を修正済み。稼働版の既存検査は1280×720でhome/servicesへ各10回、空白・例外0。後の高速遷移の約7秒読込待ちは同じ故障の再発証拠ではない。LocalGraphSurfaceと対応する回帰検査をmainへ統合済み。今回ブラウザー操作の再試験は実施していない。",
-      "evidence": [{"recorded_at": "2026-09-26T04:30:34Z", "scope": "live-graph-navigation-rp02", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md RP-02行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
+      "note": "画面遷移の故障は修正済み。変更や再発なしに再試験しない。",
+      "evidence": [{"recorded_at": "2026-09-26T04:30:34Z", "scope": "live-graph-navigation-rp02", "result": "passed", "reference": "Git履歴と当時の実画面検査記録。PCのホーム・サービス管理への遷移を確認。"}]
     },
     {
       "id": "first_tunnel_search", "title": "接続再起動後の初回検索", "scope": "live-search-after-ready-and-control-plane-poll",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
-      "note": "health/readyとcontrol-plane poll成功後の最初の実検索が3/3成功。準備完了前の任意の呼出や未反映mainまで成功と拡張しない。速度比較は再実施しない。",
-      "evidence": [{"recorded_at": "2026-09-26T06:07:09Z", "scope": "live-search-after-ready-and-control-plane-poll", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md 継続接続確認行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
+      "note": "準備完了確認後の初回検索を確認済み。準備前の任意の呼出までは保証しない。",
+      "evidence": [{"recorded_at": "2026-09-26T06:07:09Z", "scope": "live-search-after-ready-and-control-plane-poll", "result": "passed", "reference": "当時の実接続で初回検索3回成功。元の記録はGit履歴。"}]
     },
     {
       "id": "private_connection", "title": "非公開・本人用の接続設定", "scope": "personal-plugin-private-registration-and-loopback",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
-      "note": "正本APIはUSER/PRIVATE/1.0.5。Platform本人Ownerのみ・招待なし・Personalと1workspace、PC内限定の待受を確認。アカウント・鍵・PCを他人に渡さない前提。workspace ID対応の照合記録は未完だが設定不備の証拠はない。",
-      "evidence": [{"recorded_at": "2026-09-27T01:07:00Z", "scope": "personal-plugin-private-registration-and-loopback", "result": "passed", "reference": "2026-09-27正本get_personal_plugin読取 USER/PRIVATE。2026-09-26のPlatform登録・招待・loopback確認はlocal:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.mdに記録。記録照合であり新しい本人認証方式の証明ではない。"}]
+      "note": "非公開登録とPC内限定待受を確認。本人アカウント・鍵・PCの利用者を信頼する境界は残る。",
+      "evidence": [{"recorded_at": "2026-09-27T01:07:00Z", "scope": "personal-plugin-private-registration-and-loopback", "result": "passed", "reference": "正本プラグインのUSER/PRIVATE設定と当時のローカル待受確認。"}]
     },
     {
       "id": "phone_asset_write", "title": "スマホChatGPTからの資産保存", "scope": "chatgpt-mobile-asset-write-after-catalog-update",
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
-      "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから自己紹介と2件のアイデアを保存した旨を報告。正本MCP search/fetchで対象2件のIdeaと関連2件のAssetを読取確認。利用者はあなたのアセット画面への表示も確認済みであり、内部の保存名から表示不足と推定した報告を撤回する。partialはスマホの独立した別会話での取得が未報告という証拠範囲だけを指す。表示故障や再登録の必要を意味しない。",
-      "evidence": [
-        {"recorded_at": "2026-09-27T01:21:43Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "現在の主会話での利用者報告: 指定例とは別の内容で書けたとの回答。記録タイトルと別会話の検索結果を非同期で確認依頼済み。時刻は報告の記録時刻であり試験実行時刻ではない。"},
-        {"recorded_at": "2026-09-27T01:26:12Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "主会話で対象情報3組の回答を受け、正本Dots search/fetchから2件のIdeaと関連2件のAssetを取得。重複登録や変更は行わず、個人情報・保存本文はGitへ転載しない。別のスマホ会話での検索結果はまだ未報告。"}
-      ]
+      "note": "本人がスマホから保存し、正本検索と画面表示を確認。スマホの別会話での再検索はこの検査範囲では未報告。表示故障を意味しない。",
+      "evidence": [{"recorded_at": "2026-09-27T01:26:12Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "本人のスマホ保存報告と正本DotsからのIdea・Asset読取確認。"}]
     },
     {
       "id": "grounded_storage", "title": "根拠付き関係の保存と再起動後の取得", "scope": "isolated-neo4j-storage-main-288-290",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "not_applicable", "next_action": "none",
-      "note": "隔離Neo4jと決定的な架空会話の保存経路を検査。実ChatGPTモデルの意味抽出・スマホ保存の証明ではない。",
-      "evidence": [{"recorded_at": "2026-09-26T19:29:13Z", "scope": "isolated-neo4j-storage-main-288-290", "result": "passed", "reference": "GitHub PR #288/#290: https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/290 。main 38e4291の試験変更を確認。"}]
+      "note": "隔離Neo4jの合成試験。実ChatGPTの意味抽出の証明とは区別する。",
+      "evidence": [{"recorded_at": "2026-09-26T19:29:13Z", "scope": "isolated-neo4j-storage-main-288-290", "result": "passed", "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/290"}]
     },
     {
-      "id": "semantic_conversation_reuse", "title": "実会話で内容を読み解いた関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
+      "id": "semantic_conversation_reuse", "title": "実会話での意味関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
-      "note": "既存の調査→概要→根拠付き関係→別会話再検索に加え、現行合成記録を実ChatGPTがID指定なしで検索し、最新訂正関係と出典を取得。同じChatGPTが根拠・最新Brief章付き分類を保存し、独立HTTP読取りで現行membershipと既存関係不変を照合。別のChatGPT会話で分類階層・最新関係・出典を取得し再利用できた。外部調査や本人実データの変更なし。代表5組を追加完成条件にしない。調査提案の未達はremaining_planへ分離。",
-      "evidence": [
-        {"recorded_at": "2026-09-26T12:06:19Z", "scope": "live-researched-idea-to-independent-chat", "result": "partial", "reference": "主会話の同時刻報告とlocal:/home/hp/projects/dots-live/docs/operations/dots-rp07-acceptance-inventory.mdの根拠付き意味関係行。"},
-        {"recorded_at": "2026-09-27T12:53:09Z", "scope": "live-researched-idea-to-independent-chat", "result": "passed", "reference": "主会話の実ChatGPT操作と独立HTTP読取り: 合成記録の最新訂正関係と出典取得、同じモデルによるBrief章とEvidence付き分類保存、別会話での分類階層・最新関係・出典再検索を確認。本文・個人ID・会話URLは転載しない。"}
-      ]
+      "note": "根拠付き分類と最新関係を保存し、別会話で出典とともに再利用済み。外部調査や本人データの変更はこの確認に含まない。",
+      "evidence": [{"recorded_at": "2026-09-27T12:53:09Z", "scope": "live-researched-idea-to-independent-chat", "result": "passed", "reference": "当時の実ChatGPT別会話と独立した通常保存先の読取確認。詳細経緯はGit・会話履歴。"}]
     }
   ]
 }

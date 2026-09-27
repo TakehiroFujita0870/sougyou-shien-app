@@ -28,7 +28,3 @@
 4. 既存localStorageやNeo4jデータを自動削除しないことを確認する。
 5. 一群だけを削除または隔離し、基本テストとビルドを実行する。
 6. 問題がなければ意味単位で記録し、次の群へ進む。
-
-## 関連資料
-
-- [`../plans/ci-lightening-and-legacy-disposition.md`](../plans/ci-lightening-and-legacy-disposition.md)
