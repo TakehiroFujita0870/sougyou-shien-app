@@ -271,6 +271,34 @@ it('clears an aborted deletion confirmation and pending state when the client ch
   expect(container.querySelector('[role="alertdialog"]')).toBeNull();
 });
 
+it('aborts a pending deletion when the home surface unmounts', async () => {
+  let archiveSignal;
+  let finishArchive;
+  const idea = { id: 'idea-1', title: '離脱する案', summary: '', description: '', revision: 1 };
+  const client = {
+    getHome: vi.fn(async () => ({ status: 'ready', ideas: [idea], assets: [], profile: null })),
+    archiveRecord: vi.fn((_kind, _id, _revision, { signal }) => {
+      archiveSignal = signal;
+      return new Promise((resolve) => { finishArchive = resolve; });
+    }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => container.querySelector('button[aria-label="削除: 離脱する案"]').click());
+  await act(async () => container.querySelector('[role="alertdialog"] button:last-child').click());
+  expect(archiveSignal.aborted).toBe(false);
+
+  await act(async () => root.unmount());
+  expect(archiveSignal.aborted).toBe(true);
+  mounted = null;
+  container.remove();
+  await act(async () => finishArchive({ id: 'archived-tip', revision: 2 }));
+  expect(client.getHome).toHaveBeenCalledTimes(1);
+});
+
 it('offers a home reload when the archive succeeds but its follow-up read fails', async () => {
   const idea = { id: 'idea-1', title: '再読み込みが必要な案', summary: '', description: '', revision: 1 };
   const client = {
