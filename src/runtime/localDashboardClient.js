@@ -1,3 +1,5 @@
+import { safePublicCitationUrl } from './publicCitationUrl.js';
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const SERVICE_NAMES = ['database', 'api', 'tunnel'];
 const COUNT_MAP = {
@@ -193,6 +195,21 @@ export function createLocalDashboardClient({
         }
         idea.brief_sections = [...item.brief_sections];
         idea.brief_revision = item.brief_revision;
+        if (item.brief_citations !== undefined) {
+          if (!Array.isArray(item.brief_citations) || item.brief_citations.length !== 8
+            || item.brief_citations.some((chapter) => !Array.isArray(chapter) || chapter.length > 100)) {
+            throw new LocalDashboardClientError('error');
+          }
+          idea.brief_citations = item.brief_citations.map((chapter) => chapter.flatMap((citation) => {
+            if (!citation || typeof citation.url !== 'string' || citation.url.length > 2048
+              || typeof citation.title !== 'string' || !citation.title.trim() || citation.title.length > 500) return [];
+            const url = safePublicCitationUrl(citation.url);
+            return url ? [{ url, title: citation.title.trim() }] : [];
+          }));
+        }
+        if (item.research_status === 'research_sources_missing' && idea.brief_sections.every((section) => section.trim())) {
+          idea.research_status = 'research_sources_missing';
+        }
         if (item.research_status === 'researched' && idea.brief_sections.every((section) => section.trim())) {
           idea.research_status = 'researched';
         }
