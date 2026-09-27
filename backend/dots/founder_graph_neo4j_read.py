@@ -69,6 +69,7 @@ class GraphRelationView:
 _FETCH_QUERY = (
     "MATCH (n) WHERE n.id = $node_id AND n.owner_id = $owner_id "
     "AND NOT coalesce(n.status, '') IN $non_current "
+    "AND NOT (n.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) }) "
     "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
     "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
     "n.search_text AS search_text LIMIT 1"
@@ -77,6 +78,7 @@ _FETCH_QUERY = (
 _SEARCH_QUERY = (
     "MATCH (n) WHERE n.owner_id = $owner_id AND n.node_type IN $searchable_node_types "
     "AND NOT coalesce(n.status, '') IN $non_current "
+    "AND NOT (n.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) }) "
     "AND any(token IN $tokens WHERE toLower(coalesce(n.search_text, '')) CONTAINS token) "
     "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
     "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
@@ -86,6 +88,7 @@ _SEARCH_QUERY = (
 _SEARCHABLE_FILTER = (
     "WHERE node.owner_id = $owner_id AND node.node_type IN $searchable_node_types "
     "AND NOT EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(node) } "
+    "AND NOT (node.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: node.id}) }) "
     "AND NOT coalesce(node.status, '') IN $non_current "
     "AND NOT (node:SourceRevision AND EXISTS { MATCH (s:Source {id: node.source_id, owner_id: $owner_id}) WHERE s.status = 'archived' }) "
     "AND NOT (node:ContentChunk AND EXISTS { MATCH (r:SourceRevision {id: node.source_revision_id, owner_id: $owner_id})-[:HAS_SOURCE_REVISION]-(s:Source) WHERE s.status = 'archived' }) "
@@ -481,6 +484,10 @@ class Neo4jGraphReadService:
                     continue
                 if source.node_type != assertion.source_kind.value or target.node_type != assertion.target_kind.value:
                     continue
+                if (self._is_revisioned_asset(source) and not self._asset_current_tx(tx, source.id)) or (
+                    self._is_revisioned_asset(target) and not self._asset_current_tx(tx, target.id)
+                ):
+                    continue
                 if any(view.status in _NON_CURRENT for view in (source, target)):
                     continue
                 idea_ends = [view for view in (source, target) if view.node_type == NodeType.IDEA.value]
@@ -655,7 +662,29 @@ class Neo4jGraphReadService:
         view = _view_from_row(rows[0], owner_id=owner)
         if view is None:
             raise GraphReadNotFoundError("node was not found")
+        if self._is_revisioned_asset(view):
+            with self._read_session() as session:
+                current = self._gateway._execute_read(
+                    session, lambda tx: self._asset_current_tx(tx, view.id),
+                )
+            if not current:
+                raise GraphReadNotFoundError("node was not found")
         return view
+
+    def _asset_current_tx(self, tx: Any, asset_id: str) -> bool:
+        try:
+            chain = self._gateway._asset_chain_tx(tx, asset_id)
+        except GraphWriteError:
+            return False
+        return bool(chain) and chain[-1].id == asset_id
+
+    @staticmethod
+    def _is_revisioned_asset(view: NodeView) -> bool:
+        # PersonAsset is an Asset subtype; ordinary Person nodes are not
+        # part of the asset revision family and must remain readable as-is.
+        return view.node_type == NodeType.ASSET.value or (
+            view.node_type == NodeType.PERSON.value and view.fields.get("kind") == "person"
+        )
 
     def fetch_idea_brief(self, idea_id: str, *, owner_id: str) -> dict[str, Any]:
         identifier = _required_node_id(idea_id)
@@ -873,7 +902,9 @@ class Neo4jGraphReadService:
             )
             for row in rows:
                 view = _view_from_row(row, owner_id=owner_id, strict=False)
-                if view is not None:
+                if view is not None and (
+                    not self._is_revisioned_asset(view) or self._asset_current_tx(tx, view.id)
+                ):
                     views[view.id] = view
         else:
             rows = _rows(tx.run(
@@ -884,6 +915,8 @@ class Neo4jGraphReadService:
                 self._check_timeout(started, timeout_ms)
                 view = _view_from_row(row, owner_id=owner_id, strict=False)
                 if view is None:
+                    continue
+                if self._is_revisioned_asset(view) and not self._asset_current_tx(tx, view.id):
                     continue
                 views[view.id] = view
                 haystack = str(_row_value(row, "search_text", "")).casefold()
