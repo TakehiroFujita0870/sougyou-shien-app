@@ -121,6 +121,16 @@ def test_foreign_owner_missing_or_noncurrent_endpoints_and_local_only_assertions
     assert result["semantic_edges"] == []
 
 
+def test_relation_to_hidden_previous_asset_revision_is_not_projected():
+    nodes = _base_nodes(_assertion())
+    nodes[1]["has_successor"] = True  # Successor may fall outside the bounded node window.
+
+    result = read_local_graph(Store(nodes), owner_id=OWNER)
+
+    assert "asset-1" not in {node["id"] for node in result["nodes"]}
+    assert result["semantic_edges"] == []
+
+
 def test_owner_local_only_assertion_remains_visible_with_only_shareable_evidence_ids():
     private_assertion = _assertion(egress_policy="local_only")
 

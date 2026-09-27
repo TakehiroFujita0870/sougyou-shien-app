@@ -127,7 +127,7 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
         lifecycle_aliases = _lifecycle_aliases(owner_id, payloads, node_kinds)
         semantic_edges = _semantic_edges(
             owner_id, payloads, node_kinds, node_statuses, globally_superseded_ids,
-            idea_aliases=lifecycle_aliases,
+            idea_aliases=lifecycle_aliases, visible_ids=included,
         )
         return {
             "status": "ready" if nodes else "empty",
@@ -161,6 +161,7 @@ def _semantic_edges(
     *,
     at: datetime | None = None,
     idea_aliases: Mapping[str, str] | None = None,
+    visible_ids: set[str],
 ) -> list[dict[str, Any]]:
     """Project current owner-local RelationAssertions without exposing payloads."""
     now = at or datetime.now(timezone.utc)
@@ -219,6 +220,8 @@ def _semantic_edges(
         if (
             source is None
             or target is None
+            or resolved_source_id not in visible_ids
+            or resolved_target_id not in visible_ids
             or resolved_source_id in superseded_asset_ids
             or resolved_target_id in superseded_asset_ids
             or node_statuses.get(resolved_source_id) in _EXCLUDED
