@@ -1,6 +1,21 @@
 {
-  "updated_at": "2026-09-27T09:37:04Z",
-  "baseline_main": "d0a1b9e4a316",
+  "updated_at": "2026-09-27T09:51:00Z",
+  "baseline_main": "7d49ebc1c98a",
+  "runtime_citation_wiring": {
+    "implementation": "OnDemandNeo4jHomeStoreへ出典取得の委譲を追加。",
+    "verification": "runtime経路の接続漏れを失敗テストで再現後、正常・例外時の接続解放を含む29件成功。独立レビュー承認。",
+    "delivery": "working_tree",
+    "runtime": "not_deployed"
+  },
+  "legacy_cleanup_delivery": {
+    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/300",
+    "main_sha": "7d49ebc1c98a",
+    "implementation": "現行入口から到達しない旧画面3群9ファイルを削除。旧下書きの読出し部品は保持。",
+    "verification": "UI51ファイル371件、build・Storybook・独立レビュー・CI成功。清潔な統合mainでも371件成功。",
+    "delivery": "main",
+    "runtime": "not_deployed",
+    "data_deleted": false
+  },
   "test_connection_cleanup": {
     "implementation": "検証用のDots（架空試験）接続のみ解除。正本Dotsの依存接続を保持。",
     "verification": "解除APIはuninstalled、直後の読取は検証用not_installed・正本found。",
@@ -12,7 +27,7 @@
   "citation_surface_delivery": {
     "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/299",
     "main_sha": "d0a1b9e4a316",
-    "verification": "関連39UI tests・4backend tests、1280×720の架空API実ビルド画面で引用到達・例外0、独立レビュー承認、CI quality成功。",
+    "verification": "関連39UI tests・4backend tests、1280×720の架空API実ビルド画面で引用到達・例外0、独立レビュー承認、CI quality成功。清潔なmainでUI39件とbuildも成功。",
     "delivery": "main",
     "runtime": "not_deployed",
     "plugin_release": "1.0.6の更新用ファイルをmainへ保存。外部リリースは未更新。"
@@ -37,7 +52,7 @@
   },
   "remaining_plan": {
     "reference": "docs/plans/dots-mvp-remaining-plan-20260927.md",
-    "scope": "公開出典保存・関係訂正と引用取得はmain配送済み。画面と会話指示は実装・レビュー完了し配送準備中。検証用接続は解除済み。旧コード整理は9ファイル削除の検査中。新機能の稼働反映と全計画の完了は未完了。",
+    "scope": "出典保存・関係訂正・引用取得・画面結線・会話指示・旧9ファイル整理はmain配送済み。検証用接続解除済み。全Asset共通編集は履歴と共有を保つ更新境界から実装中。新機能の稼働反映・分類操作・全計画の完了は未完了。",
     "graph_update_confirmation": "出典と正式概要の保存後は同じChatGPTが追加承認なしに意味関係・分類を整理する。調査許諾と共有境界は維持。",
     "asset_ui": "カテゴリー・分類見出し・自己紹介専用欄を廃止し、全Assetの共通カード一覧と題名・内容の個別編集へ統一する。既存内容と共有設定を保持。",
     "priority": "出典取り込みと意味関係の訂正が1番目、検証用接続と旧未使用資産の整理が2番目。",
