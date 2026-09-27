@@ -305,6 +305,10 @@ def read_local_facet_region(
                 "classification_evidence_ids": list(hit.classification_evidence_ids),
                 "taxonomy_status_path": list(hit.taxonomy_status_path),
                 "taxonomy_evidence_path": [list(item) for item in hit.taxonomy_evidence_path],
+                "facet_path": [
+                    {"facet_id": item.facet_id, "label": item.label, "depth": item.depth}
+                    for item in hit.facet_path
+                ],
                 "evidence_ids": list(hit.evidence_ids),
             })
         return {"status": "ready" if projected else "empty", "facet_id": facet_id, "depth": depth, "hits": projected}

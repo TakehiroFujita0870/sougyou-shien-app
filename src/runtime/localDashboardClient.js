@@ -322,7 +322,11 @@ export function createLocalDashboardClient({
     }
     const seen = new Set();
     const hits = result.hits.map((item) => {
-      if (!item || typeof item.id !== 'string' || !item.id || seen.has(item.id)
+      const facetPath = item?.facet_path;
+      const membershipKey = item && typeof item.id === 'string' && typeof item.matched_facet_id === 'string'
+        ? JSON.stringify([item.id, item.matched_facet_id])
+        : '';
+      if (!item || typeof item.id !== 'string' || !item.id || !membershipKey || seen.has(membershipKey)
         || !['idea', 'asset'].includes(item.kind) || typeof item.title !== 'string'
         || !item.title.trim() || item.root_facet_id !== facetId
         || typeof item.matched_facet_id !== 'string' || !item.matched_facet_id
@@ -334,12 +338,18 @@ export function createLocalDashboardClient({
         || item.taxonomy_status_path.some((status) => !['inferred', 'confirmed'].includes(status))
         || !Array.isArray(item.taxonomy_evidence_path) || item.taxonomy_evidence_path.length !== item.depth
         || item.taxonomy_evidence_path.some((path) => !Array.isArray(path) || !path.length || path.some((id) => typeof id !== 'string' || !id))
+        || !Array.isArray(facetPath) || facetPath.length !== item.depth + 1
+        || facetPath[0]?.facet_id !== facetId || facetPath.at(-1)?.facet_id !== item.matched_facet_id
+        || facetPath.some((entry, index) => !entry || typeof entry.facet_id !== 'string' || !entry.facet_id.trim()
+          || entry.facet_id.length > 512 || typeof entry.label !== 'string' || !entry.label.trim()
+          || entry.label.length > 512 || entry.depth !== index)
+        || new Set(facetPath.map((entry) => entry?.facet_id)).size !== facetPath.length
         || !Array.isArray(item.evidence_ids) || !item.evidence_ids.length
         || item.evidence_ids.some((id) => typeof id !== 'string' || !id)
         || [...item.classification_evidence_ids, ...item.taxonomy_evidence_path.flat()].some((id) => !item.evidence_ids.includes(id))) {
         throw new LocalDashboardClientError('error');
       }
-      seen.add(item.id);
+      seen.add(membershipKey);
       return {
         id: item.id,
         kind: item.kind,
@@ -351,6 +361,11 @@ export function createLocalDashboardClient({
         classification_evidence_ids: [...item.classification_evidence_ids],
         taxonomy_status_path: [...item.taxonomy_status_path],
         taxonomy_evidence_path: item.taxonomy_evidence_path.map((path) => [...path]),
+        facet_path: facetPath.map((entry) => ({
+          facet_id: entry.facet_id,
+          label: entry.label.trim(),
+          depth: entry.depth,
+        })),
         evidence_ids: [...new Set(item.evidence_ids)],
       };
     });

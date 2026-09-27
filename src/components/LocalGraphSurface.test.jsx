@@ -105,26 +105,38 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(mockGraphs).toHaveLength(0);
   });
 
-  it('retains the 3D canvas and displays a synthetic evidence-backed region after a Facet is selected', async () => {
+  it('keeps the 3D canvas and follows the actual parent-child-record path as wheel depth changes', async () => {
     globalThis.ResizeObserver = class { observe() {} disconnect() {} };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const hit = {
       id: 'idea-child', kind: 'idea', title: '具体の創業案', root_facet_id: 'facet-root',
-      matched_facet_id: 'facet-child', depth: 1, classification_status: 'inferred',
-      classification_evidence_ids: ['ev-class'], taxonomy_status_path: ['confirmed'],
-      taxonomy_evidence_path: [['ev-tax']], evidence_ids: ['ev-tax', 'ev-class'],
+      matched_facet_id: 'facet-child', depth: 2, classification_status: 'inferred',
+      classification_evidence_ids: ['ev-class'], taxonomy_status_path: ['confirmed', 'inferred'],
+      taxonomy_evidence_path: [['ev-tax-parent'], ['ev-tax-child']], evidence_ids: ['ev-tax-parent', 'ev-tax-child', 'ev-class'],
+      facet_path: [
+        { facet_id: 'facet-root', label: '事業領域', depth: 0 },
+        { facet_id: 'facet-middle', label: '食品関連', depth: 1 },
+        { facet_id: 'facet-child', label: '小規模な食品店', depth: 2 },
+      ],
+    };
+    const directMembership = {
+      ...hit, matched_facet_id: 'facet-root', depth: 0, classification_status: 'confirmed',
+      classification_evidence_ids: ['ev-class-direct'], taxonomy_status_path: [], taxonomy_evidence_path: [],
+      evidence_ids: ['ev-class-direct'],
+      facet_path: [{ facet_id: 'facet-root', label: '事業領域', depth: 0 }],
     };
     const client = {
       getGraph: vi.fn().mockResolvedValue({
         status: 'ready', truncated: false,
         nodes: [
           { id: 'facet-root', kind: 'facet', label: '事業領域' },
-          { id: 'facet-child', kind: 'facet', label: '創業案' },
+          { id: 'facet-middle', kind: 'facet', label: '食品関連' },
+          { id: 'facet-child', kind: 'facet', label: '小規模な食品店' },
           { id: 'idea-child', kind: 'idea', label: '具体の創業案' },
         ], edges: [],
       }),
       getFacetRegion: vi.fn(async (_facetId, depth) => ({
-        status: depth === 0 ? 'empty' : 'ready', facet_id: 'facet-root', depth, hits: depth === 0 ? [] : [hit],
+        status: depth < 2 ? 'empty' : 'ready', facet_id: 'facet-root', depth, hits: depth < 2 ? [] : [hit, directMembership],
       })),
     };
     const container = document.createElement('div');
@@ -147,13 +159,27 @@ describe('LocalGraphSurface Facet exploration', () => {
     await act(async () => container.querySelector('.local-graph__canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true })));
     await flushEffects();
     expect(client.getFacetRegion).toHaveBeenCalledWith('facet-root', 1, expect.any(Object));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 270)); });
+    await act(async () => container.querySelector('.local-graph__canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true })));
+    await flushEffects();
+    expect(client.getFacetRegion).toHaveBeenCalledWith('facet-root', 2, expect.any(Object));
     expect(container.textContent).toContain('確定');
     expect(container.textContent).toContain('推測');
-    expect(container.textContent).toContain('ev-tax');
+    expect(container.textContent).toContain('小規模な食品店');
+    expect(container.querySelectorAll('aside[aria-label="分類領域の記録と根拠"] article')).toHaveLength(2);
+    expect(container.textContent).not.toContain('Facet');
     expect(container.textContent).toContain('ev-class');
+    const graphInstance = mockGraphs.at(-1);
+    expect(graphInstance.data.nodes.map(({ id, depth }) => [id, depth])).toEqual([
+      ['facet-root', 0], ['facet-middle', 1], ['facet-child', 2], ['idea-child', 2],
+    ]);
+    expect(graphInstance.data.links.map(({ source, target }) => [source, target])).toEqual([
+      ['facet-root', 'facet-middle'], ['facet-middle', 'facet-child'], ['facet-child', 'idea-child'],
+      ['facet-root', 'idea-child'],
+    ]);
+    expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique key/i);
     const canvas = container.querySelector('.local-graph__canvas');
     const removeListener = vi.spyOn(canvas, 'removeEventListener');
-    const graphInstance = mockGraphs.at(-1);
     act(() => root.unmount());
     expect(graphInstance._destructor).toHaveBeenCalledOnce();
     expect(graphInstance.pauseAnimation).toHaveBeenCalledOnce();

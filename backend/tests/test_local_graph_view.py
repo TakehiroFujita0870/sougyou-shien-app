@@ -1,6 +1,6 @@
 import json
 
-from dots.founder_graph_facet_hierarchy import FacetRegionHit, RegionEntity
+from dots.founder_graph_facet_hierarchy import FacetPathNode, FacetRegionHit, RegionEntity
 from dots.local_graph_view import read_local_facet_region, read_local_graph
 
 
@@ -44,11 +44,16 @@ def test_facet_region_projection_exposes_status_and_opaque_evidence_only():
         root_facet_id="facet-root", matched_facet_id="facet-child", facet_depth=1,
         classification_status="inferred", classification_evidence_ids=("ev-class",),
         taxonomy_status_path=("confirmed",), taxonomy_evidence_path=(("ev-tax",),),
+        facet_path=(FacetPathNode("facet-root", "分類", 0), FacetPathNode("facet-child", "子分類", 1)),
     ),)
     result = read_local_facet_region(store, owner_id="owner-mvp", facet_id="facet-root", depth=1)
     assert result["status"] == "ready"
     assert store.facet_calls == ("owner-mvp", "facet-root", 1)
     assert result["hits"][0]["classification_status"] == "inferred"
     assert result["hits"][0]["taxonomy_status_path"] == ["confirmed"]
+    assert result["hits"][0]["facet_path"] == [
+        {"facet_id": "facet-root", "label": "分類", "depth": 0},
+        {"facet_id": "facet-child", "label": "子分類", "depth": 1},
+    ]
     assert result["hits"][0]["evidence_ids"] == ["ev-tax", "ev-class"]
     assert "本文" not in str(result)
