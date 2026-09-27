@@ -247,7 +247,7 @@ def _node_view(node: Any) -> NodeView:
         (str(values[key]) for key in ("summary", "description", "content", "excerpt", "text", "purpose") if values.get(key)),
         title,
     )
-    revision = values.get("revision", 0)
+    revision = values.get("revision", getattr(node, "revision", 0))
     if not isinstance(revision, int):
         revision = 0
     return NodeView(
@@ -758,7 +758,7 @@ class GraphReadService:
                     return False
                 seen.add(parent.id)
                 root = parent
-            if root.revision != 1:
+            if isinstance(root, Asset) and root.revision != 1:
                 return False
             seen = {root.id}
             current = root

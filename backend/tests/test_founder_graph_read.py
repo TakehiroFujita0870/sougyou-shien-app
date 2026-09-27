@@ -72,6 +72,17 @@ def test_search_returns_keyword_and_one_hop_graph_hits() -> None:
     assert incoming_step.relation_assertion_id is None
 
 
+def test_person_asset_projection_exposes_canonical_revision_metadata() -> None:
+    writes, reads = _fixture()
+    person = PersonAsset(owner_id="owner-1", id="person-revision", name="Synthetic person")
+    writes.put_node(person, idempotency_key="person-revision")
+
+    view = reads.fetch(person.id, owner_id="owner-1")
+
+    assert view.revision == person.revision == 1
+    assert "revision" not in view.fields
+
+
 def test_search_expands_to_two_hops_but_not_three() -> None:
     writes, reads = _fixture()
     nodes = tuple(
