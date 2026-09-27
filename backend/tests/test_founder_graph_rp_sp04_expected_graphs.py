@@ -51,7 +51,7 @@ def test_five_after_research_fixtures_map_to_allowed_domain_endpoints() -> None:
             assert (source, target) in _ALLOWED_RELATION_ENDPOINTS[predicate]
         assert fixture.evidence_refs
     hierarchy_endpoints = _ALLOWED_RELATION_ENDPOINTS[RelationType.CLASSIFIED_AS]
-    assert (NodeType.FACET, NodeType.FACET) not in hierarchy_endpoints
+    assert (NodeType.FACET, NodeType.FACET) in hierarchy_endpoints
     assert not hasattr(Facet, "parent_id")
 
 

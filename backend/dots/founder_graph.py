@@ -446,6 +446,7 @@ _ALLOWED_RELATION_ENDPOINTS: dict[RelationType, frozenset[tuple[NodeType, NodeTy
     RelationType.REQUIRES_CAPABILITY: frozenset({(NodeType.IDEA, NodeType.ASSET)}),
     RelationType.CLASSIFIED_AS: frozenset({
         (NodeType.IDEA, NodeType.FACET),
+        (NodeType.FACET, NodeType.FACET),
         (NodeType.ASSET, NodeType.FACET),
         (NodeType.PERSON, NodeType.FACET),
         (NodeType.ORGANIZATION, NodeType.FACET),

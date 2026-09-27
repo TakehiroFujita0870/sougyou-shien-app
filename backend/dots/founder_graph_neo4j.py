@@ -2605,10 +2605,49 @@ class Neo4jGraphGateway:
         else:
             prior_decoded_hint = None
             family_ids = {assertion.assertion_family_id}
+        facet_taxonomy_write = (
+            assertion.predicate is RelationType.CLASSIFIED_AS
+            and assertion.source_kind is NodeType.FACET
+            and assertion.target_kind is NodeType.FACET
+        )
+        if facet_taxonomy_write:
+            family_ids.add(f"facet-taxonomy:{self.owner_id}")
         self._lock_assertion_families_tx(tx, family_ids)
         replay = self._relation_assertion_receipt(self._relation_assertion_audit_tx(tx, key), assertion, key, fingerprint)
         if replay is not None:
             return replay
+
+        if facet_taxonomy_write and assertion.status is not RelationshipStatus.RETRACTED:
+            from .founder_graph_facet_hierarchy import FacetHierarchyError, FacetNode
+            from .founder_graph_facet_write_guard import validate_facet_taxonomy_write
+            facet_rows = _rows(tx.run(
+                "MATCH (f {owner_id: $owner_id, node_type: $node_type}) "
+                "RETURN f.id AS id, f.owner_id AS owner_id, f.payload_json AS payload_json",
+                owner_id=self.owner_id, node_type=NodeType.FACET.value,
+            ))
+            facets = []
+            for row in facet_rows:
+                try:
+                    payload = json.loads(_record_value(row, "payload_json"))
+                    if not isinstance(payload, Mapping) or payload.get("id") != _record_value(row, "id"):
+                        raise ValueError
+                    facets.append(FacetNode(self.owner_id, _record_value(row, "id"), payload["value"]))
+                except (TypeError, ValueError, KeyError):
+                    raise GraphWriteError("persisted Facet taxonomy is invalid") from None
+            assertion_rows = _rows(tx.run(
+                "MATCH (a:RelationAssertion {owner_id: $owner_id}) "
+                "RETURN a.id AS id, a.owner_id AS owner_id, a.node_type AS node_type, "
+                "a.revision AS revision, a.status AS status, a.assertion_family_id AS assertion_family_id, "
+                "a.supersedes_id AS supersedes_id, a.payload_json AS payload_json",
+                owner_id=self.owner_id,
+            ))
+            try:
+                taxonomy_assertions = tuple(self._decode_relation_assertion_record(row) for row in assertion_rows)
+                validate_facet_taxonomy_write(
+                    owner_id=self.owner_id, assertion=assertion, facets=facets, assertions=taxonomy_assertions,
+                )
+            except (FacetHierarchyError, ValueError):
+                raise GraphWriteError("Facet taxonomy relation is invalid") from None
 
         collision = _single(tx.run(
             "MATCH (n {id: $id}) RETURN n.owner_id AS owner_id, n.node_type AS node_type",
