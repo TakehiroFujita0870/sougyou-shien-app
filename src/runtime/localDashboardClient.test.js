@@ -8,6 +8,25 @@ function jsonResponse(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
+it('passes bounded public citations and distinguishes missing sources through the real home client', async () => {
+  const citations = Array.from({ length: 8 }, () => []);
+  citations[0] = [
+    { url: 'https://example.test/report?id=1#section', title: '公開資料', private_body: 'SECRET' },
+    { url: 'https://example.test/report?refresh_token=secret', title: 'token URL' },
+    { url: 'https://example.test/share?rlkey=secret', title: 'share key URL' },
+  ];
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+    status: 'ready', assets: [], profile: null,
+    ideas: [{ id: 'idea-cited', title: '案', summary: '', description: '',
+      research_status: 'research_sources_missing', brief_sections: Array(8).fill('概要'),
+      brief_revision: 1, brief_citations: citations }],
+  }));
+  const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+  expect(home.ideas[0].research_status).toBe('research_sources_missing');
+  expect(home.ideas[0].brief_citations[0]).toEqual([{ url: 'https://example.test/report?id=1#section', title: '公開資料' }]);
+  expect(JSON.stringify(home)).not.toContain('SECRET');
+});
+
 function statusResponse(overrides = {}) {
   return jsonResponse({ controller: 'running', csrf_token: 'csrf-from-status', services: servicesRunning, ...overrides });
 }

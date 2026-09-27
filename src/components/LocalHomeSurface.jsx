@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './LocalHomeSurface.css';
+import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
 const TABS = [
   { id: 'ideas', label: 'アイデア' },
@@ -10,7 +11,7 @@ const IDEA_SECTIONS = [
   'エグゼクティブサマリー', 'ビジネスモデル', '顧客とマーケットサイズ', '収益モデル',
   '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
 ];
-const researchStatusLabel = (status) => status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '調査状態未確認';
+const researchStatusLabel = (status) => status === 'research_sources_missing' ? '調査済み・出典を表示できません' : status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '調査状態未確認';
 
 export function LocalHomeSurface({ client, onOpenServices }) {
   const [tab, setTab] = useState('ideas');
@@ -74,7 +75,16 @@ export function LocalHomeSurface({ client, onOpenServices }) {
         <div className="local-home__section-list">{IDEA_SECTIONS.map((heading, index) => {
           const saved = selectedIdea.brief_sections?.[index]?.trim();
           const content = saved || (index === 0 ? selectedIdea.summary : '') || '未整理';
-          return <section key={heading}><h3>{index}. {heading}</h3><p className={content === '未整理' ? 'local-home__unwritten' : ''}>{content}</p></section>;
+          const citations = Array.isArray(selectedIdea.brief_citations?.[index])
+            ? selectedIdea.brief_citations[index].filter((citation) => citation && typeof citation.title === 'string' && citation.title.trim() && safePublicCitationUrl(citation.url))
+            : [];
+          return <section key={heading}>
+            <h3>{index}. {heading}</h3>
+            <p className={content === '未整理' ? 'local-home__unwritten' : ''}>{content}</p>
+            {citations.length > 0 && <p className="local-home__citation">出典: {citations.map((citation, citationIndex) => <span key={`${citation.source_id ?? citation.evidence_id ?? citation.url}-${citationIndex}`}>
+              {citationIndex > 0 ? '、' : ''}<a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()}</a>
+            </span>)}</p>}
+          </section>;
         })}</div>
       </article>}
     </section>}

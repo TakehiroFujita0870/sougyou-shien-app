@@ -100,6 +100,23 @@ it('labels a server-validated researched idea in its card and detail', async () 
   expect(container.textContent).toContain('確認した概要');
 });
 
+it('distinguishes completed research with missing current sources from drafts and cited research', async () => {
+  const client = { getHome: vi.fn(async () => ({
+    status: 'ready', assets: [], profile: null,
+    ideas: [{ id: 'missing-sources', title: '出典が未完了の案', research_status: 'research_sources_missing', brief_sections: Array(8).fill('保存された調査概要'), brief_citations: Array.from({ length: 8 }, () => []) }],
+  })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  expect(container.textContent.match(/調査済み・出典を表示できません/g)).toHaveLength(2);
+  expect(container.textContent).not.toContain('未調査');
+  expect(container.textContent).not.toContain('調査状態未確認');
+  expect(container.textContent).toContain('保存された調査概要');
+  expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
+});
+
 it('saves an explicit self-introduction edit and refreshes the Neo4j-backed view', async () => {
   let description = '元の紹介';
   const client = {
@@ -122,4 +139,52 @@ it('saves an explicit self-introduction edit and refreshes the Neo4j-backed view
   expect(client.saveSelfIntroduction).toHaveBeenCalledWith('更新した紹介', 'asset-old');
   expect(container.textContent).toContain('更新した紹介');
   expect(container.textContent).toContain('自己紹介を保存しました');
+});
+
+it('shows only valid HTTP source links beside the matching brief viewpoint', async () => {
+  const citations = Array.from({ length: 8 }, () => []);
+  citations[1] = [
+    { title: '公開統計', url: 'https://example.com/statistics?id=1#section', source_id: 'source-1', evidence_id: 'evidence-1' },
+    { title: '不正な出典', url: 'javascript:alert(1)' },
+    { title: '認証情報付きの出典', url: 'https://user:secret@example.com/private' },
+    { title: '署名付きURL', url: 'https://example.com/private?X-Amz-Signature=secret' },
+    { title: '共有鍵付きURL', url: 'https://example.com/share?rlkey=secret' },
+    { title: '', url: 'https://example.com/no-title' },
+  ];
+  const client = { getHome: vi.fn(async () => ({
+    status: 'ready', assets: [], profile: null,
+    ideas: [{ id: 'idea-1', title: '出典付きの案', brief_sections: Array(8).fill('章の概要'), brief_citations: citations }],
+  })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  const links = [...container.querySelectorAll('.local-home__citation a')];
+  expect(links).toHaveLength(1);
+  expect(links[0].textContent).toContain('公開統計');
+  expect(links[0].getAttribute('href')).toBe('https://example.com/statistics?id=1#section');
+  expect(links[0].getAttribute('target')).toBe('_blank');
+  expect(links[0].getAttribute('rel')).toContain('noopener');
+  expect(container.textContent).not.toContain('署名付きURL');
+  expect(container.textContent).not.toContain('共有鍵付きURL');
+  const sectionHeadings = [...container.querySelectorAll('.local-home__section-list h3')];
+  const citedSection = sectionHeadings.find((heading) => heading.textContent.includes('1. ビジネスモデル'));
+  expect(citedSection.parentElement.querySelector('.local-home__citation')).not.toBeNull();
+  expect(sectionHeadings.find((heading) => heading.textContent.includes('0. エグゼクティブサマリー')).parentElement.querySelector('.local-home__citation')).toBeNull();
+});
+
+it('does not invent or render citations when a chapter has none', async () => {
+  const client = { getHome: vi.fn(async () => ({
+    status: 'ready', assets: [], profile: null,
+    ideas: [{ id: 'idea-1', title: '出典なしの案', brief_sections: Array(8).fill('保存された概要'), brief_citations: Array.from({ length: 8 }, () => []) }],
+  })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
+  expect(container.querySelectorAll('.local-home__section-list a')).toHaveLength(0);
 });

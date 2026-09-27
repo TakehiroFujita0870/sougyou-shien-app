@@ -14,6 +14,7 @@ def test_citation_metadata_keeps_public_query_and_fragment_but_rejects_credentia
     assert citation_metadata({"locator": "https://user:pass@example.test/article", "title": "Title"}) is None
     assert citation_metadata({"locator": "https://example.test/article?access_token=secret", "title": "Title"}) is None
     assert citation_metadata({"locator": "https://example.test/article?refresh_token=secret", "title": "Title"}) is None
+    assert citation_metadata({"locator": "https://example.test/article?private_key=secret", "title": "Title"}) is None
     assert citation_metadata({"locator": "https://example.test/article?X-Amz-Signature=secret", "title": "Title"}) is None
     assert citation_metadata({"locator": "https://example.test/share?rlkey=secret", "title": "Title"}) is None
     assert citation_metadata({"locator": "https://example.test/article", "title": "   "}) is None

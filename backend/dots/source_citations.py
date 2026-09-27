@@ -15,7 +15,7 @@ def citation_metadata(source: Mapping[str, Any]) -> dict[str, str] | None:
     if not isinstance(locator, str) or not isinstance(title, str) or not title.strip():
         return None
     locator = locator.strip()
-    sensitive_names = {"access_token", "api_key", "apikey", "auth", "authorization", "code", "hdnea", "hdnts", "key", "jwt", "password", "rlkey", "secret", "session", "signature", "sig", "token"}
+    sensitive_names = {"access_token", "api_key", "apikey", "auth", "authorization", "code", "hdnea", "hdnts", "key", "jwt", "private_key", "password", "rlkey", "secret", "session", "signature", "sig", "token"}
 
     def sensitive_parameter(name: str) -> bool:
         normalized = re.sub(r"[^a-z0-9]", "", name.casefold())

@@ -1,11 +1,36 @@
 {
-  "updated_at": "2026-09-27T08:49:54Z",
-  "baseline_main": "76bcdcaa81ee",
+  "updated_at": "2026-09-27T09:37:04Z",
+  "baseline_main": "6a6428f5cd2f",
+  "test_connection_cleanup": {
+    "implementation": "検証用のDots（架空試験）接続のみ解除。正本Dotsの依存接続を保持。",
+    "verification": "解除APIはuninstalled、直後の読取は検証用not_installed・正本found。",
+    "runtime": "applied",
+    "data_deleted": false,
+    "rollback": "必要なら検証用接続を再登録できる。保存データと鍵は削除していない。"
+  },
+  "citation_delivery": {
+    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/298",
+    "main_sha": "6a6428f5cd2f",
+    "implementation": "保存時の公開根拠検査とMCP・ホームの8章引用投影を実装。調査Runだけを出典保存成功と扱わない。",
+    "verification": "関連74 passed、独立レビュー承認、CI quality成功、清潔なmainで同じ74テスト成功。",
+    "delivery": "main",
+    "runtime": "not_deployed",
+    "next_action": "画面と会話指示の単位を配送後に、依存する保存・取得境界をまとめて稼働反映する。"
+  },
+  "grounded_capture_delivery": {
+    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/297",
+    "main_sha": "320928920909",
+    "implementation": "公開出典の明示共有設定と根拠付き関係の訂正・撤回を実装。確認済み関係の自動上書きを拒否し、省略状態の再送を安定化。",
+    "verification": "関連228 passed、独立レビュー承認、CI quality成功、清潔なmainで追加8テスト成功。",
+    "delivery": "main",
+    "runtime": "not_deployed",
+    "next_action": "引用の取得・画面結線を別単位で配送後、依存する保存・読取り境界をまとめて稼働反映する。"
+  },
   "remaining_plan": {
     "reference": "docs/plans/dots-mvp-remaining-plan-20260927.md",
-    "scope": "計画の更新のみ。製品変更、サービス反映、接続解除、旧コード削除は未実施。",
+    "scope": "公開出典保存・関係訂正と引用取得はmain配送済み。画面と会話指示は実装・レビュー完了し配送準備中。検証用接続は解除済み。旧コード整理は9ファイル削除の検査中。新機能の稼働反映と全計画の完了は未完了。",
     "graph_update_confirmation": "出典と正式概要の保存後は同じChatGPTが追加承認なしに意味関係・分類を整理する。調査許諾と共有境界は維持。",
-    "asset_ui": "自己紹介専用欄を廃止し、全Assetの分類一覧と個別編集へ統一する計画。",
+    "asset_ui": "カテゴリー・分類見出し・自己紹介専用欄を廃止し、全Assetの共通カード一覧と題名・内容の個別編集へ統一する。既存内容と共有設定を保持。",
     "priority": "出典取り込みと意味関係の訂正が1番目、検証用接続と旧未使用資産の整理が2番目。",
     "citation_observation": "通常保存先の利用者報告1件を限定読取り。概要1版、調査Run参照0、全8章のClaim/Evidence参照0、意味関係0。本人は外部調査実施を確認。保存上の未調査は実際の未調査を意味せず、調査結果取り込み欠落として修正する。元URLと欠落操作は未特定。個人の題名・ID・本文・URLをGitへ転載しない。"
   },
