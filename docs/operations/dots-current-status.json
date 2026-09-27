@@ -1,6 +1,13 @@
 {
-  "updated_at": "2026-09-27T12:58:54Z",
+  "updated_at": "2026-09-27T16:42:47Z",
   "baseline_main": "787ab15165a8",
+  "ui_refactor": {
+    "reference": "docs/plans/dots-ui-refactor-plan.md",
+    "delivery": "main",
+    "runtime": "active",
+    "runtime_sha": "9e65b57951aa",
+    "note": "計画の全UI・内部整理をPR #345まで正式版と稼働へ反映。1280×720の横断監査・合成記録の編集/削除/復元・復元後の根拠表示を確認。最後の実HTTP404は修正され、同じ関係で200/ready、画面でも概要とEvidenceを表示。保存先・API・トンネル正常。各CI・独立レビュー・main検査成功。今回の計画に未達の必須条件なし。要件と進捗は参照先だけを正本とする。既存MVP成功を本変更の残件と混同しない。"
+  },
   "latest_delivery": {
     "references": [314, 315, 316, 317, 318, 319],
     "implementation": "実階層の奥行き表示、過去調査の正確な保存と表示、調査提案と自動整理の会話手順、直接一致候補の根拠付き経路保持。",

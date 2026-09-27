@@ -492,18 +492,21 @@ def test_lifecycle_reference_batch_fails_closed_when_owner_scan_is_capped():
     assert len(driver.calls) == 1
 
 
-def test_lifecycle_reference_batch_fails_closed_on_malformed_revision_row():
-    driver = _LifecycleRowsDriver(({
+def test_unrelated_malformed_revision_row_does_not_poison_requested_reference():
+    writes = InMemoryGraphWriteService("owner")
+    asset = Asset(owner_id="owner", id="asset-id", name="Synthetic capability")
+    writes.put_node(asset, idempotency_key="seed-asset", operation="capture_asset")
+    rows = list(_lifecycle_rows(writes))
+    rows.append({
         "id": "unrelated-idea", "node_type": "idea", "revision": 1,
         "supersedes_id": None, "status": "active", "payload_json": "{malformed",
-    },))
+    })
+    driver = _LifecycleRowsDriver(tuple(rows))
     store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
 
-    resolved = store.resolve_lifecycle_references(
-        (("idea-id", "idea"), ("asset-id", "asset")), owner_id="owner",
-    )
+    resolved = store.resolve_lifecycle_references(((asset.id, "asset"),), owner_id="owner")
 
-    assert resolved == {"idea-id": None, "asset-id": None}
+    assert resolved == {asset.id: asset.id}
     assert len(driver.calls) == 1
 
 
