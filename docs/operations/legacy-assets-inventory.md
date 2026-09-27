@@ -20,7 +20,7 @@
 | 資産 | 理由 |
 | --- | --- |
 | `docs/inherited/` | 参照用資料であり、現行仕様への推測を防ぐため変更しない |
-| `ModelSelector`、`HomeSupervisor`、`KnowledgeSurface`、`ProjectSurface`、PDF・DOCX adapter | 旧入口・Story・検査からの参照がある。現行localhost画面で使うことを意味しない。入口廃止と共通契約の移植可否を先に確認 |
+| `ModelSelector`、`HomeSupervisor`、`KnowledgeSurface`、`ProjectSurface` | 旧入口・Story・検査からの参照がある。現行localhost画面で使うことを意味しない。入口廃止と共通契約の移植可否を先に確認。旧PDF/DOCX出力は専用検査・CI・依存とともに削除済み |
 | backendのaccount、privacy、file、decision、research、market、project dossier関連 | 公開API・検査・移行/復旧との接続を調べて群別判断。個人情報保護や現行の共通処理を古い名前だけで削除しない |
 
 ## 整理手順
