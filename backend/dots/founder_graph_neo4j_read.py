@@ -771,7 +771,7 @@ class Neo4jGraphReadService:
                 })
             return {
                 "brief_id": latest.id, "idea_id": idea.id, "sections": sections,
-                "brief_citations": brief_citations,
+                "brief_citations": brief_citations, "origin": latest.origin,
             }
 
         with self._read_session() as session:

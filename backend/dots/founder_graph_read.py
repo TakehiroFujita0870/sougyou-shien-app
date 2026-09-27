@@ -510,7 +510,13 @@ class GraphReadService:
                 "evidence_ids": [item["evidence_id"] for item in citations],
                 "citations": citations,
             })
-        return {"brief_id": latest.id, "idea_id": idea.id, "sections": sections, "brief_citations": brief_citations}
+        return {
+            "brief_id": latest.id,
+            "idea_id": idea.id,
+            "sections": sections,
+            "brief_citations": brief_citations,
+            "origin": latest.origin,
+        }
 
     @staticmethod
     def _shareable_current_brief_evidence(

@@ -148,6 +148,31 @@ describe('Local dashboard client', () => {
     const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
     expect(home.ideas[0].research_status).toBe('researched');
   });
+  it('preserves an explicit prior-research origin only with validated citations', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'ready', assets: [], profile: null,
+      ideas: [{ id: 'idea-1', title: '過去調査', summary: '', description: '', research_status: 'prior_research_import', brief_origin: 'prior_research_import', brief_sections: Array(8).fill('確認済み概要'), brief_revision: 1, brief_citations: [[{ url: 'https://example.test/source', title: '公開出典' }], ...Array.from({ length: 7 }, () => [])] }],
+    }));
+    const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+    expect(home.ideas[0].research_status).toBe('prior_research_import');
+    expect(home.ideas[0].brief_origin).toBe('prior_research_import');
+    expect(home.ideas[0].brief_citations[0]).toEqual([{ url: 'https://example.test/source', title: '公開出典' }]);
+  });
+  it('does not promote malformed prior-research origin or imported missing citations', async () => {
+    for (const [idea, expectedStatus] of [
+      [{ research_status: 'prior_research_import', brief_origin: 'invented' }, 'unknown'],
+      [{ research_status: 'prior_research_import', brief_origin: 'prior_research_import', brief_citations: Array.from({ length: 8 }, () => []) }, 'prior_research_sources_missing'],
+      [{ research_status: 'prior_research_sources_missing', brief_origin: 'prior_research_import' }, 'prior_research_sources_missing'],
+    ]) {
+      const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+        status: 'ready', assets: [], profile: null,
+        ideas: [{ id: 'idea-1', title: '過去調査', summary: '', description: '', brief_sections: Array(8).fill('概要'), brief_revision: 1, ...idea }],
+      }));
+      const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+      expect(home.ideas[0].research_status).toBe(expectedStatus);
+      expect(home.ideas[0].brief_origin).toBe(idea.brief_origin === 'prior_research_import' ? 'prior_research_import' : undefined);
+    }
+  });
   it('does not display researched for an absent or partial brief', async () => {
     for (const brief of [{}, { brief_sections: ['概要', ...Array(7).fill('')], brief_revision: 1 }]) {
       const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({

@@ -209,11 +209,13 @@ class McpReadSurface:
         brief_id = projection.get("brief_id")
         resolved_idea_id = projection.get("idea_id")
         sections = projection.get("sections")
+        origin = projection.get("origin")
         if (
             not isinstance(brief_id, str) or not brief_id.strip()
             or resolved_idea_id != idea_id.strip()
             or not isinstance(sections, (tuple, list))
             or len(sections) != len(SECTION_TITLES)
+            or (origin is not None and origin != "prior_research_import")
         ):
             raise McpReadError("unavailable", "The local Founder Graph returned an invalid brief projection.")
         raw_brief_citations = projection.get("brief_citations")
@@ -269,7 +271,7 @@ class McpReadSurface:
             })
         return {
             "brief_id": brief_id, "idea_id": idea_id.strip(), "sections": safe_sections,
-            "brief_citations": brief_citations,
+            "brief_citations": brief_citations, "origin": origin,
         }
 
     def _search(self, arguments: Mapping[str, Any], *, owner_id: str) -> dict[str, Any]:

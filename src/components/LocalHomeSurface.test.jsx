@@ -128,6 +128,25 @@ it('distinguishes completed research with missing current sources from drafts an
   expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
 });
 
+it('labels imported past research distinctly and keeps imported missing citations out of the draft state', async () => {
+  const client = { getHome: vi.fn(async () => ({
+    status: 'ready', assets: [], profile: null,
+    ideas: [
+      { id: 'imported', title: '過去調査', research_status: 'prior_research_import', brief_origin: 'prior_research_import', brief_sections: Array(8).fill('過去に確認した概要'), brief_citations: [[{ url: 'https://example.test/source', title: '公開出典' }], ...Array.from({ length: 7 }, () => [])] },
+      { id: 'imported-missing', title: '出典不足の過去調査', research_status: 'prior_research_sources_missing', brief_origin: 'prior_research_import', brief_sections: Array(8).fill('過去に確認した概要'), brief_citations: Array.from({ length: 8 }, () => []) },
+    ],
+  })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  expect(container.textContent).toContain('過去調査を取り込みました');
+  expect(container.textContent).toContain('過去調査・現在の出典を表示できません');
+  expect(container.textContent).not.toContain('未調査');
+  expect([...container.querySelectorAll('.local-home__citation a')].map((link) => link.textContent)).toContain('公開出典');
+});
+
 it('edits title and content through the same form for any asset and supports cancel', async () => {
   const assets = [
     { id: 'asset-1', name: '経験', kind: 'experience', description: '内容1', revision: 1 },

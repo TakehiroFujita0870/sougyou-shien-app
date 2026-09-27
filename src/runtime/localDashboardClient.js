@@ -208,10 +208,15 @@ export function createLocalDashboardClient({
             return url ? [{ url, title: citation.title.trim() }] : [];
           }));
         }
-        if (item.research_status === 'research_sources_missing' && idea.brief_sections.every((section) => section.trim())) {
+        if (item.brief_origin === 'prior_research_import') {
+          idea.brief_origin = 'prior_research_import';
+          const hasCurrentCitations = idea.brief_citations?.some((chapter) => chapter.length > 0) ?? false;
+          idea.research_status = hasCurrentCitations ? 'prior_research_import' : 'prior_research_sources_missing';
+        }
+        if (!idea.brief_origin && item.research_status === 'research_sources_missing' && idea.brief_sections.every((section) => section.trim())) {
           idea.research_status = 'research_sources_missing';
         }
-        if (item.research_status === 'researched' && idea.brief_sections.every((section) => section.trim())) {
+        if (!idea.brief_origin && item.research_status === 'researched' && idea.brief_sections.every((section) => section.trim())) {
           idea.research_status = 'researched';
         }
       }
