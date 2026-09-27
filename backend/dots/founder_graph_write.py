@@ -51,6 +51,7 @@ from .founder_graph import (
     relation_assertion_structural_edges,
 )
 from .idea_brief import IdeaBriefVersion
+from .source_citations import evidence_lineage_is_current, researched_evidence_ids
 
 
 class GraphWriteError(DomainValidationError):
@@ -985,6 +986,7 @@ class InMemoryGraphWriteService:
                 raise NodeAlreadyExistsError("idea brief id is already registered")
 
             self._validate_brief_research_locked(brief, current_idea)
+            self._validate_prior_research_brief(brief, current_idea)
             receipt = WriteReceipt(
                 operation,
                 brief.id,
@@ -1009,6 +1011,18 @@ class InMemoryGraphWriteService:
                 self._idempotency.pop(idempotency_key, None)
                 raise
             return receipt
+
+    def _validate_prior_research_brief(self, brief: IdeaBriefVersion, idea: Idea) -> None:
+        if brief.origin != "prior_research_import":
+            return
+        evidence_ids = researched_evidence_ids(brief.sections)
+        if (
+            brief.research_run_ids or brief.egress_policy != EgressPolicy.SHAREABLE.value
+            or idea.egress_policy is not EgressPolicy.SHAREABLE or not evidence_ids
+        ):
+            raise GraphWriteError("prior-research Brief requires a shareable Idea and current Evidence citations")
+        if any(not evidence_lineage_is_current(self, evidence_id, self.owner_id) for evidence_id in evidence_ids):
+            raise GraphWriteError("prior-research Brief Evidence must be current and shareable")
 
     def get_idea_brief(self, brief_id: str) -> IdeaBriefVersion | None:
         """Return one immutable brief value from this owner-bound adapter."""

@@ -55,6 +55,18 @@ def test_idea_brief_serializer_roundtrips_all_fields_eight_sections_and_created_
     assert len(decoded.sections) == 8
     assert decoded.created_at == brief.created_at
     assert json.loads(record["payload_json"])["created_at"] == brief.created_at.isoformat()
+    assert json.loads(record["payload_json"])["origin"] is None
+
+
+def test_prior_research_origin_roundtrips_without_run_history():
+    from dataclasses import replace
+
+    brief = replace(brief_fixture(), research_run_ids=(), origin="prior_research_import")
+    decoded = _decode_persisted_idea_brief(record_for(brief), owner_id=brief.owner_id)
+
+    assert decoded == brief
+    assert decoded.origin == "prior_research_import"
+    assert decoded.research_run_ids == ()
 
 
 def test_known_legacy_brief_requires_label_checked_opt_in_and_never_invents_run_references():
@@ -70,7 +82,23 @@ def test_known_legacy_brief_requires_label_checked_opt_in_and_never_invents_run_
     decoded = _decode_persisted_idea_brief(record, owner_id=brief.owner_id, legacy_label_checked=True)
     assert decoded == brief
     assert decoded.research_run_ids == ()
+    assert decoded.origin is None
     assert "research_run_ids" not in json.loads(record["payload_json"])
+
+
+def test_legacy_payload_without_origin_gets_only_the_safe_null_default():
+    record = record_for(brief_fixture())
+    payload = json.loads(record["payload_json"])
+    del payload["origin"]
+    record["payload_json"] = json.dumps(payload)
+    record["node_type"] = None
+
+    with pytest.raises(IdeaBriefValidationError):
+        _decode_persisted_idea_brief(record, owner_id="owner-brief")
+    decoded = _decode_persisted_idea_brief(record, owner_id="owner-brief", legacy_label_checked=True)
+
+    assert decoded.origin is None
+    assert decoded.research_run_ids == ("run-one", "run-two")
 
 
 def test_legacy_mode_still_rejects_unrecognized_fields_and_explicit_wrong_type():

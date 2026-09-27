@@ -70,6 +70,7 @@ from .founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_re
 from .founder_graph_research_run import validate_research_run_timing
 from .idea_brief import IdeaBriefValidationError, IdeaBriefVersion
 from .founder_graph_historical_brief import HistoricalResearchValidationError, validate_historical_researched_brief
+from .source_citations import researched_evidence_ids
 
 
 class Neo4jGatewayError(GraphWriteError):
@@ -1651,6 +1652,21 @@ class Neo4jGraphGateway:
                 tx, primary_idea_id=idea.id, owner_id=self.owner_id, brief_id=brief.id,
                 section_index=None, evidence_ids=(), locked_ideas=(idea,), brief_override=brief,
             )
+        if brief.origin == "prior_research_import":
+            evidence_ids = researched_evidence_ids(brief.sections)
+            if (
+                brief.research_run_ids or brief.egress_policy != EgressPolicy.SHAREABLE.value
+                or idea.egress_policy is not EgressPolicy.SHAREABLE or not evidence_ids
+            ):
+                raise GraphWriteError("prior-research Brief requires a shareable Idea and current Evidence citations")
+            from .founder_graph_neo4j_read import Neo4jGraphReadService
+
+            citation_reader = Neo4jGraphReadService(self)
+            if any(
+                citation_reader._evidence_citation(tx, evidence_id=evidence_id, owner_id=self.owner_id) is None
+                for evidence_id in evidence_ids
+            ):
+                raise GraphWriteError("prior-research Brief Evidence must be current and shareable")
         collision = _single(tx.run("MATCH (n {id: $id}) RETURN n.id AS id", id=brief.id))
         if collision is not None:
             raise NodeAlreadyExistsError("idea brief id is already registered")

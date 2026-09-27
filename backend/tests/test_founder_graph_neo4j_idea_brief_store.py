@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 import json
 
 import pytest
@@ -176,6 +177,18 @@ def test_store_saves_reads_latest_and_keeps_brief_payload_out_of_node_properties
     }
     assert "synthetic 0" not in state.briefs[brief.id].get("search_text", "")
     assert len(state.audits) == 1
+
+
+def test_store_rejects_prior_import_without_shareable_current_evidence_before_writing():
+    idea, brief, state, store = fixtures()
+    shareable_idea = replace(idea, egress_policy=EgressPolicy.SHAREABLE)
+    state.nodes[idea.id] = _node_properties(shareable_idea)
+    imported = replace(brief, egress_policy=EgressPolicy.SHAREABLE, origin="prior_research_import")
+
+    with pytest.raises(GraphWriteError, match="current Evidence citations"):
+        store.save(imported, expected_latest_revision=None, idempotency_key="prior-import-empty")
+
+    assert not state.briefs and not state.audits
 
 
 def test_store_replay_is_idempotent_and_changed_intent_conflicts_without_mutation():
