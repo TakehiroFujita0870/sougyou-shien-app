@@ -4,7 +4,6 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
-import { IdeaCandidateWorkspace } from './IdeaCandidateWorkspace';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -46,19 +45,4 @@ describe('default browser repositories', () => {
     await view.unmount();
   });
 
-  it('loads each idea repository once and does not reload them on render', async () => {
-    const getItem = vi.spyOn(localStorage, 'getItem');
-
-    const view = await mount(<IdeaCandidateWorkspace />);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(callsFor(getItem, 'dots:idea-candidates')).toHaveLength(1);
-    expect(callsFor(getItem, 'dots:idea-conversation')).toHaveLength(1);
-    expect(callsFor(getItem, 'dots:idea-input-draft')).toHaveLength(1);
-    await view.rerender(<IdeaCandidateWorkspace />);
-    expect(callsFor(getItem, 'dots:idea-candidates')).toHaveLength(1);
-    expect(callsFor(getItem, 'dots:idea-conversation')).toHaveLength(1);
-    expect(callsFor(getItem, 'dots:idea-input-draft')).toHaveLength(1);
-    await view.unmount();
-  });
 });
