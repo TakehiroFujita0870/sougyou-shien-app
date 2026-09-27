@@ -939,6 +939,10 @@ class Neo4jGraphReadService:
                     not self._is_revisioned_asset(view) or self._asset_current_tx(tx, view.id)
                 ):
                     views[view.id] = view
+            # Hybrid ranks are computed before Asset lineage is checked. Keep
+            # only ranked IDs with a validated current/shareable projection so
+            # stale candidates cannot re-enter traversal or page construction.
+            scores = {node_id: score for node_id, score in scores.items() if node_id in views}
         else:
             rows = _rows(tx.run(
                 _SEARCH_QUERY, owner_id=owner_id, tokens=list(tokens), non_current=sorted(_NON_CURRENT),
@@ -1006,8 +1010,6 @@ class Neo4jGraphReadService:
                 target = _view_from_row(row, owner_id=owner_id, prefix="target_", strict=False)
                 if source is None or target is None:
                     continue
-                views[source.id] = source
-                views[target.id] = target
                 relation = _row_value(row, "relation")
                 if relation in _INTERNAL_GRAPH_EDGES:
                     continue
@@ -1016,6 +1018,13 @@ class Neo4jGraphReadService:
                     edge_evidence = _parse_evidence_ids(row)
                 except Neo4jQueryContractError as error:
                     raise GraphReadError("Neo4j relation type is not in the Founder Graph allowlist") from error
+                if any(
+                    self._is_revisioned_asset(endpoint) and not self._asset_current_tx(tx, endpoint.id)
+                    for endpoint in (source, target)
+                ):
+                    continue
+                views[source.id] = source
+                views[target.id] = target
                 for current, neighbor in ((source, target), (target, source)):
                     if current.id not in frontier:
                         continue
