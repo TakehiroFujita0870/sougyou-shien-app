@@ -30,7 +30,8 @@ description: Dotsの変更が意味単位で完了したとき、対象外の変
 9. PR作成後はPR URLを現在のCodex taskへattachする。CI、PR head SHA、base、差分を確認し、新しいpushがあれば以前のreviewを無効として再確認する。
 10. 必須CIが成功し、未解決のreview、競合、決裁境界がなければPRをmainへmergeする。意味単位のcommitを残す必要がある一連の変更ではmerge commitを使う。
 11. origin/mainをfetchし、清潔なmain checkoutまたは隔離worktreeでmain smokeを実行する。作業中の別変更があるcheckoutを強制的に切り替えない。
-12. merge後handoffがある場合は`handoff-closure`を使い、送達と受領確認まで閉じる。最後にPR番号、12文字short SHA、検査結果、残課題を利用者へ伝える。
+12. [`progress-reporting.md`](../../../docs/operations/progress-reporting.md)に従い、現況一覧のmain反映と検査結果を更新し、validatorを通す。稼働反映は実際に行った場合だけ更新する。文書だけの変更では機能の過去の成功・失敗状態を上書きしない。
+13. 利用者が部門別複数会話運用を明示した場合のhandoffだけ`handoff-closure`で閉じる。通常の一会話運用では旧管理会話を起動しない。最後にPR番号、12文字short SHA、検査結果、残課題を利用者へ伝える。
 
 ## 自動mergeを止める条件
 
@@ -48,4 +49,5 @@ description: Dotsの変更が意味単位で完了したとき、対象外の変
 - [ ] branchがoriginへpushされ、PRが現在のtaskへattachされている。
 - [ ] 必須CIとreviewが完了している。
 - [ ] PRがmainへmergeされ、main smokeが成功している。
+- [ ] 現況一覧と証拠が一致し、未統合・未確認と故障を区別している。
 - [ ] 利用者向け報告にPR、12文字short SHA、検査、残課題がある。

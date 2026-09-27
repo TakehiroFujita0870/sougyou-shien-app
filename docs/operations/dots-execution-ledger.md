@@ -1,5 +1,7 @@
 # Dots implementation execution ledger
 
+> 現在の進捗は[`dots-current-status.json`](dots-current-status.json)を入口とする。以下は時点別の履歴であり、古いOPEN・RUNNING・未完了欄だけを現在の故障として報告しない。更新と照合は[`progress-reporting.md`](progress-reporting.md)に従う。
+
 最終更新: 2026-09-27
 main SHA: `60b8731857ac`
 active goal: Founder Graph MVP
