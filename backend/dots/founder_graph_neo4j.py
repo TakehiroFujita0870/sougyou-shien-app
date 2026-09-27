@@ -338,6 +338,12 @@ class Neo4jGraphGateway:
         result = tx.run(
             f"MATCH (r:{label} {{source_id: $source_id}}) "
             "RETURN r.id AS id, r.owner_id AS owner_id, r.node_type AS node_type, "
+            "r.source_id AS source_id, r.revision AS revision, "
+            "r.supersedes_id AS supersedes_id ORDER BY r.revision ASC",
+            source_id=source_id,
+        )
+        return _rows(result)
+
     @contextmanager
     def read_session(self) -> Iterator[Any]:
         """Open the existing managed session for read adapters."""
@@ -375,12 +381,6 @@ class Neo4jGraphGateway:
         """Read the validated Asset revision chain within a caller-owned transaction."""
 
         return self._asset_chain_tx(tx, asset_id)
-
-            "r.source_id AS source_id, r.revision AS revision, "
-            "r.supersedes_id AS supersedes_id ORDER BY r.revision ASC",
-            source_id=source_id,
-        )
-        return _rows(result)
 
     def _campaign_authorization_registry_tx(self, tx: Any, campaign_id: str) -> CampaignAuthorizationRegistry:
         """Resolve a complete typed Campaign history inside the caller's transaction.
