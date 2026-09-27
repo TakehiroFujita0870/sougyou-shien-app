@@ -152,6 +152,64 @@ def test_hybrid_reranks_only_top_forty_after_graph_expansion_and_keeps_tail(monk
     assert page.hits[-1].score == pytest.approx(1 / 45)
 
 
+def test_hybrid_search_discards_stale_asset_candidates_before_ranking(monkeypatch) -> None:
+    driver, lexical_service = _gateway()
+    current = Asset(
+        owner_id="owner-1", id="asset-current", name="Current synthetic asset", kind="artifact",
+        description="Current safe summary", revision=2, supersedes_id="asset-old",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    old = Asset(
+        owner_id="owner-1", id="asset-old", name="Old synthetic asset", kind="artifact",
+        description="Old safe summary", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    models = object()
+    service = Neo4jGraphReadService(lexical_service._gateway, search_models=models, rerank_enabled=False)
+    monkeypatch.setattr(service, "_asset_current_tx", lambda _tx, asset_id: asset_id == current.id)
+    monkeypatch.setattr(
+        service,
+        "_hybrid_candidates",
+        lambda *_args, **_kwargs: (
+            (_persisted_row(old), _persisted_row(current)),
+            {old.id: 1.0, current.id: 0.5},
+        ),
+    )
+
+    page = service.search("synthetic asset", owner_id="owner-1", limit=10)
+
+    assert [hit.node.id for hit in page.hits] == [current.id]
+
+
+@pytest.mark.parametrize("stale_is_source", [False, True])
+def test_hybrid_search_does_not_reintroduce_stale_asset_through_legacy_edge(monkeypatch, stale_is_source) -> None:
+    driver, lexical_service = _gateway()
+    current = Asset(
+        owner_id="owner-1", id="asset-current", name="Current synthetic asset", kind="artifact",
+        description="Current safe summary", revision=2, supersedes_id="asset-old",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    old = Asset(
+        owner_id="owner-1", id="asset-old", name="Old synthetic asset", kind="artifact",
+        description="Old safe summary", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    models = object()
+    service = Neo4jGraphReadService(lexical_service._gateway, search_models=models, rerank_enabled=False)
+    monkeypatch.setattr(service, "_asset_current_tx", lambda _tx, asset_id: asset_id == current.id)
+    monkeypatch.setattr(
+        service,
+        "_hybrid_candidates",
+        lambda *_args, **_kwargs: ((_persisted_row(current),), {current.id: 1.0}),
+    )
+    driver.session_value.search_relation_rows = [
+        _relation_row(_persisted_row(old), _persisted_row(current), RelationType.REUSES.value)
+        if stale_is_source else _relation_row(_persisted_row(current), _persisted_row(old), RelationType.REUSES.value)
+    ]
+
+    page = service.search("synthetic asset", owner_id="owner-1", limit=10)
+
+    assert [hit.node.id for hit in page.hits] == [current.id]
+
+
 def _node_row(
     node_id: str,
     *,
@@ -500,8 +558,11 @@ def test_search_expands_two_parameterized_relation_queries_to_two_hops() -> None
         search_text="founder network",
     )
     idea = _node_row("idea-1", title="Circular materials", search_text="circular materials")
-    asset = _node_row("asset-1", node_type=NodeType.ASSET.value, title="Material expertise", search_text="material expertise")
-    driver.session_value.search_rows = [person]
+    asset = _persisted_row(
+        Asset(owner_id="owner-1", id="asset-1", name="Material expertise", kind="artifact"),
+        search_text="material expertise",
+    )
+    driver.session_value.search_rows = [person, asset]
     driver.session_value.search_relation_rows_by_call = [
         [_relation_row(person, idea, RelationType.CAN_CONTRIBUTE_TO.value)],
         [_relation_row(idea, asset, RelationType.REUSES.value)],
