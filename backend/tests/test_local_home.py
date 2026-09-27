@@ -70,7 +70,10 @@ def test_home_lists_every_current_idea_and_safe_assets_without_raw_fields():
 
     assert result["status"] == "ready"
     assert result["ideas"] == [{"id": "idea-new", "title": "New", "summary": "Summary", "description": "Detail", "research_status": "unknown"}]
-    assert result["assets"] == [{"id": "asset-1", "name": "製造業経験", "kind": "experience", "description": "現場の経験"}]
+    assert result["assets"] == [{
+        "id": "asset-1", "name": "製造業経験", "kind": "experience", "description": "現場の経験",
+        "revision": 1, "egress_policy": "local_only",
+    }]
     assert result["profile"] == {"display_name": "Takehiro"}
     serialized = json.dumps(result, ensure_ascii=False)
     assert "private" not in serialized
@@ -105,7 +108,10 @@ def test_home_displays_only_latest_self_introduction_without_losing_history():
         node("asset-new", "asset", {"name": "自己紹介", "kind": "knowledge", "description": "改訂版", "details": {"supersedes_id": "asset-old"}, "created_at": "2026-09-25T00:00:00Z"}),
     ]
     result = read_local_home(Neo4jHomeStore(Driver(rows)), owner_id="owner-a")
-    assert result["assets"] == [{"id": "asset-new", "name": "自己紹介", "kind": "knowledge", "description": "改訂版"}]
+    assert result["assets"] == [{
+        "id": "asset-new", "name": "自己紹介", "kind": "knowledge", "description": "改訂版",
+        "revision": 1, "egress_policy": "local_only",
+    }]
 
 
 def test_home_overlays_latest_brief_by_idea_lineage_without_exposing_old_version():

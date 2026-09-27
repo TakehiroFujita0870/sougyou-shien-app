@@ -8,6 +8,7 @@ from typing import Any, Mapping, Protocol, Sequence
 from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief
 from .founder_graph_neo4j import Neo4jGraphGateway
 from .founder_graph_neo4j_read import Neo4jGraphReadService
+from .founder_graph_write import GraphWritePort, WriteReceipt
 
 
 _KINDS = ("idea", "asset", "owner_profile")
@@ -53,6 +54,32 @@ class Neo4jHomeStore:
             if citation is not None:
                 result[evidence_id] = citation
         return result
+
+
+class LocalAssetWriter:
+    """Owner-scoped edit seam for the common Asset card form."""
+
+    def __init__(self, writes: GraphWritePort) -> None:
+        if not callable(getattr(writes, "revise_asset", None)):
+            raise TypeError("asset writer must support canonical revisions")
+        self._writes = writes
+
+    def save(
+        self,
+        asset_id: str,
+        *,
+        name: str,
+        description: str,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> WriteReceipt:
+        return self._writes.revise_asset(
+            asset_id=asset_id,
+            name=name,
+            description=description,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
 
 def _text(value: Any, *, required: bool = False) -> str:
@@ -130,6 +157,8 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                 continue
             if kind == "idea" and isinstance(payload.get("supersedes_id"), str):
                 superseded.add(payload["supersedes_id"])
+            if kind == "asset" and isinstance(payload.get("supersedes_id"), str):
+                superseded_assets.add(payload["supersedes_id"])
             if kind == "asset" and payload.get("name") == "自己紹介" and isinstance(payload.get("details"), dict):
                 prior = payload["details"].get("supersedes_id")
                 if isinstance(prior, str):
@@ -217,6 +246,8 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                     "name": _text(payload.get("name"), required=True),
                     "kind": _text(payload.get("kind")),
                     "description": _text(payload.get("description")),
+                    "revision": payload.get("revision", 1),
+                    "egress_policy": _text(payload.get("egress_policy")) or "local_only",
                 }))
             elif profile is None:
                 profile = {"display_name": _text(payload.get("display_name"))}

@@ -15,7 +15,7 @@ from dots.local_control_runner import SubprocessCommandRunner
 from dots.local_dashboard_app import create_local_dashboard_app
 from dots.local_graph_proxy import LocalGraphSearchProxy
 from dots.local_overview import Neo4jOverviewStore, OverviewStore, StoredOverviewNode
-from dots.local_home import Neo4jHomeStore, HomeStore
+from dots.local_home import Neo4jHomeStore, HomeStore, LocalAssetWriter
 from dots.local_graph_view import GraphViewStore, Neo4jGraphViewStore
 from dots.local_graph_provenance import Neo4jGraphProvenanceStore, read_local_graph_provenance
 from dots.local_self_intro import Neo4jSelfIntroductionWriter
@@ -94,6 +94,19 @@ class OnDemandNeo4jGraphViewStore(GraphViewStore):
             driver.close()
 
 
+class OnDemandAssetWriter:
+    def save(self, asset_id: str, *, name: str, description: str,
+             expected_revision: int, idempotency_key: str):
+        driver = create_neo4j_driver_from_env()
+        try:
+            return LocalAssetWriter(Neo4jGraphGateway(driver, LIVE_OWNER_ID)).save(
+                asset_id, name=name, description=description,
+                expected_revision=expected_revision, idempotency_key=idempotency_key,
+            )
+        finally:
+            driver.close()
+
+
 class OnDemandSelfIntroductionWriter:
     def save(self, owner_id: str, text: str, expected_id: str | None, idempotency_key: str) -> str:
         driver = create_neo4j_driver_from_env()
@@ -121,6 +134,7 @@ def create_runtime_app(*, dist_dir: Path = DEFAULT_DIST_DIR):
         home_store=OnDemandNeo4jHomeStore(),
         graph_view_store=OnDemandNeo4jGraphViewStore(),
         self_intro_writer=OnDemandSelfIntroductionWriter(),
+        asset_writer=OnDemandAssetWriter(),
         overview_owner_id=LIVE_OWNER_ID,
         dist_dir=dist_dir,
         graph_proxy=LocalGraphSearchProxy(),
