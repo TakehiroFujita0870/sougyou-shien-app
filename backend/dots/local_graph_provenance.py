@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import math
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
+from dots.founder_graph import Asset, Idea, NodeType, Status
+from dots.founder_graph_lifecycle_resolver import decode_asset_lifecycle_record, lifecycle_reference_aliases
+from dots.founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
 from dots.idea_brief import IdeaBriefVersion, SECTION_TITLES
 
 
@@ -16,6 +19,9 @@ class GraphProvenanceStore(Protocol):
     def fetch(self, node_id: str, *, owner_id: str) -> Any: ...
     def has_successor(self, assertion_id: str, *, owner_id: str) -> bool: ...
     def has_idea_successor(self, idea_id: str, *, owner_id: str) -> bool: ...
+    def resolve_lifecycle_references(
+        self, references: Sequence[tuple[str, str]], *, owner_id: str,
+    ) -> Mapping[str, str | None]: ...
     def get_brief(self, brief_id: str, *, owner_id: str) -> IdeaBriefVersion | None: ...
     def get_latest_brief(self, root_id: str, *, owner_id: str) -> IdeaBriefVersion | None: ...
 
@@ -63,17 +69,37 @@ def read_local_graph_provenance(
     raw_ids = fields.get("evidence_ids", ())
     if not isinstance(raw_ids, (tuple, list)) or any(not _string(item) for item in raw_ids):
         raise GraphProvenanceNotFound("provenance was not found")
-    for endpoint_id in (source_id, target_id):
-        endpoint = store.fetch(endpoint_id, owner_id=owner)
-        expected_kind = fields.get("source_kind") if endpoint_id == source_id else fields.get("target_kind")
+    endpoint_references = (
+        (source_id, fields.get("source_kind")),
+        (target_id, fields.get("target_kind")),
+    )
+    resolver = getattr(store, "resolve_lifecycle_references", None)
+    resolved_endpoints = resolver(endpoint_references, owner_id=owner) if callable(resolver) else {}
+    if not isinstance(resolved_endpoints, Mapping):
+        raise GraphProvenanceNotFound("provenance was not found")
+    for endpoint_id, expected_kind in endpoint_references:
+        if callable(resolver):
+            resolved_id = resolved_endpoints.get(
+                endpoint_id, endpoint_id if expected_kind not in {"idea", "asset"} else None,
+            )
+            if not _string(resolved_id):
+                raise GraphProvenanceNotFound("provenance was not found")
+        else:
+            resolved_id = endpoint_id
+            successor_check = getattr(
+                store,
+                "has_idea_successor" if expected_kind == "idea" else "has_asset_successor",
+                None,
+            )
+            if callable(successor_check) and successor_check(endpoint_id, owner_id=owner):
+                raise GraphProvenanceNotFound("provenance was not found")
+        endpoint = store.fetch(resolved_id, owner_id=owner)
         if (
-            endpoint.id != endpoint_id or endpoint.owner_id != owner
+            endpoint.id != resolved_id or endpoint.owner_id != owner
             or endpoint.node_type in {"relation_assertion", "evidence"}
             or endpoint.node_type != expected_kind
             or (endpoint.status in _NON_CURRENT if _string(endpoint.status) else False)
         ):
-            raise GraphProvenanceNotFound("provenance was not found")
-        if endpoint.node_type == "idea" and store.has_idea_successor(endpoint_id, owner_id=owner):
             raise GraphProvenanceNotFound("provenance was not found")
 
     section = None
@@ -146,6 +172,13 @@ class Neo4jGraphProvenanceStore:
         "RETURN candidate.id AS id, candidate.payload_json AS payload_json "
         "ORDER BY candidate.id LIMIT 1001"
     )
+    _LIFECYCLE_RECORDS = (
+        "MATCH (candidate) WHERE candidate.owner_id = $owner_id "
+        "AND candidate.node_type IN $node_types "
+        "RETURN candidate.id AS id, candidate.node_type AS node_type, candidate.revision AS revision, "
+        "candidate.status AS status, candidate.payload_json AS payload_json "
+        "ORDER BY candidate.id LIMIT 1001"
+    )
 
     def __init__(self, driver: Any, *, owner_id: str, database: str = "neo4j") -> None:
         self.driver, self.owner_id, self.database = driver, _identifier(owner_id, "owner_id"), database
@@ -190,6 +223,78 @@ class Neo4jGraphProvenanceStore:
         except (KeyError, TypeError, ValueError):
             return True
         return False
+
+    def resolve_lifecycle_references(
+        self, references: Sequence[tuple[str, str]], *, owner_id: str,
+    ) -> Mapping[str, str | None]:
+        """Resolve Idea/Asset lifecycle aliases in one bounded owner-scoped read."""
+        requested = {identity: kind for identity, kind in references}
+        if owner_id != self.owner_id:
+            return {identity: None for identity in requested}
+        revisioned_kinds = {kind for kind in requested.values() if kind in {"idea", "asset"}}
+        if not revisioned_kinds:
+            return {identity: identity for identity in requested}
+        import json
+        with self.driver.session(database=self.database) as session:
+            rows = tuple(session.run(
+                self._LIFECYCLE_RECORDS,
+                owner_id=owner_id,
+                node_types=sorted(revisioned_kinds),
+            ))
+        if len(rows) > 1000:
+            return {identity: None for identity in requested}
+
+        records: list[Idea | Asset] = []
+        try:
+            for row in rows:
+                identity, node_type, revision, status = (
+                    row["id"], row["node_type"], row["revision"], row["status"],
+                )
+                payload_json = row["payload_json"]
+                payload = json.loads(payload_json)
+                if not isinstance(payload, dict) or payload.get("id") != identity or payload.get("owner_id") != owner_id:
+                    return {requested_id: None for requested_id in requested}
+                if node_type == NodeType.IDEA.value:
+                    record = decode_persisted_idea(
+                        {
+                            "id": identity, "owner_id": owner_id, "node_type": node_type,
+                            "revision": revision, "payload_json": payload_json,
+                        },
+                        owner_id=owner_id, expected_id=identity,
+                    )
+                elif node_type == NodeType.ASSET.value:
+                    record = decode_asset_lifecycle_record(
+                        payload, owner_id=owner_id, expected_id=identity, expected_revision=revision,
+                    )
+                    if record.node_type.value != node_type:
+                        return {requested_id: None for requested_id in requested}
+                else:
+                    return {requested_id: None for requested_id in requested}
+                if record.revision != revision or record.status.value != status:
+                    return {requested_id: None for requested_id in requested}
+                records.append(record)
+        except (KeyError, TypeError, ValueError, IdeaDecodeError):
+            return {identity: None for identity in requested}
+
+        aliases = lifecycle_reference_aliases(records)
+        by_id = {record.id: record for record in records}
+        superseded_ids = {record.supersedes_id for record in records if record.supersedes_id is not None}
+        resolved: dict[str, str | None] = {}
+        for identity, expected_kind in requested.items():
+            if expected_kind not in {NodeType.IDEA.value, NodeType.ASSET.value}:
+                resolved[identity] = identity
+                continue
+            record = by_id.get(identity)
+            record_kind_matches = record is not None and record.node_type.value == expected_kind
+            if identity in aliases and record_kind_matches:
+                resolved[identity] = aliases[identity]
+            elif record_kind_matches and identity not in superseded_ids and record.status.value not in {
+                Status.ARCHIVED.value, Status.SUPERSEDED.value,
+            }:
+                resolved[identity] = identity
+            else:
+                resolved[identity] = None
+        return resolved
 
     def get_brief(self, brief_id: str, *, owner_id: str) -> IdeaBriefVersion | None:
         if owner_id != self.owner_id:
