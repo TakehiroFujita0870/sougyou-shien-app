@@ -13,9 +13,11 @@ from dots.local_api_adapter import FixedSystemdUserApiAdapter
 from dots.local_control_adapters import DockerNeo4jAdapter, FixedSystemdUserServiceAdapter
 from dots.local_control_runner import SubprocessCommandRunner
 from dots.local_dashboard_app import create_local_dashboard_app
+from dots.local_dashboard_driver import managed_neo4j_driver
 from dots.local_graph_proxy import LocalGraphSearchProxy
 from dots.local_overview import Neo4jOverviewStore, OverviewStore, StoredOverviewNode
 from dots.local_home import Neo4jHomeStore, HomeStore, LocalAssetWriter
+from dots.local_record_lifecycle import LocalRecordLifecycleWriter
 from dots.local_graph_view import GraphViewStore, Neo4jGraphViewStore
 from dots.local_graph_provenance import Neo4jGraphProvenanceStore, read_local_graph_provenance
 from dots.local_self_intro import Neo4jSelfIntroductionWriter
@@ -32,89 +34,70 @@ class OnDemandNeo4jOverviewStore(OverviewStore):
     """Open a read-only overview connection only when the DB is running."""
 
     def read_overview(self, owner_id: str) -> tuple[StoredOverviewNode, ...]:
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             store = Neo4jOverviewStore(driver)
             return tuple(store.read_overview(owner_id))
-        finally:
-            driver.close()
 
 
 class OnDemandNeo4jHomeStore(HomeStore):
     def read_home(self, owner_id: str):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jHomeStore(driver).read_home(owner_id)
-        finally:
-            driver.close()
 
     def read_briefs(self, owner_id: str):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jHomeStore(driver).read_briefs(owner_id)
-        finally:
-            driver.close()
 
     def read_citations(self, owner_id: str, evidence_ids):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jHomeStore(driver).read_citations(owner_id, evidence_ids)
-        finally:
-            driver.close()
 
 
 class OnDemandNeo4jGraphViewStore(GraphViewStore):
     def read_nodes(self, owner_id: str):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jGraphViewStore(driver).read_nodes(owner_id)
-        finally:
-            driver.close()
 
     def read_edges(self, owner_id: str, ids):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jGraphViewStore(driver).read_edges(owner_id, ids)
-        finally:
-            driver.close()
 
     def read_facet_region(self, owner_id: str, facet_id: str, depth: int):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jGraphViewStore(driver).read_facet_region(owner_id, facet_id, depth)
-        finally:
-            driver.close()
 
     def read_provenance(self, assertion_id: str, owner_id: str):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             store = Neo4jGraphProvenanceStore(driver, owner_id=owner_id)
             return read_local_graph_provenance(store, assertion_id=assertion_id, owner_id=owner_id)
-        finally:
-            driver.close()
 
 
 class OnDemandAssetWriter:
     def save(self, asset_id: str, *, name: str, description: str,
              expected_revision: int, idempotency_key: str):
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return LocalAssetWriter(Neo4jGraphGateway(driver, LIVE_OWNER_ID)).save(
                 asset_id, name=name, description=description,
                 expected_revision=expected_revision, idempotency_key=idempotency_key,
             )
-        finally:
-            driver.close()
+
+
+class OnDemandRecordLifecycleWriter:
+    def transition(self, kind: str, action: str, record_id: str, *,
+                   expected_revision: int, idempotency_key: str):
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
+            return LocalRecordLifecycleWriter(Neo4jGraphGateway(driver, LIVE_OWNER_ID)).transition(
+                kind, action, record_id,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
 
 
 class OnDemandSelfIntroductionWriter:
     def save(self, owner_id: str, text: str, expected_id: str | None, idempotency_key: str) -> str:
-        driver = create_neo4j_driver_from_env()
-        try:
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             writer = Neo4jSelfIntroductionWriter(Neo4jHomeStore(driver), Neo4jGraphGateway(driver, owner_id))
             return writer.save(owner_id, text, expected_id, idempotency_key)
-        finally:
-            driver.close()
 
 def create_runtime_app(*, dist_dir: Path = DEFAULT_DIST_DIR):
     """Construct the fixed production app without starting any child service."""
@@ -135,6 +118,7 @@ def create_runtime_app(*, dist_dir: Path = DEFAULT_DIST_DIR):
         graph_view_store=OnDemandNeo4jGraphViewStore(),
         self_intro_writer=OnDemandSelfIntroductionWriter(),
         asset_writer=OnDemandAssetWriter(),
+        record_lifecycle_writer=OnDemandRecordLifecycleWriter(),
         overview_owner_id=LIVE_OWNER_ID,
         dist_dir=dist_dir,
         graph_proxy=LocalGraphSearchProxy(),
