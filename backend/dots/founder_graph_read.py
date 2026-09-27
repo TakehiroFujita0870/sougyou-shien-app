@@ -746,7 +746,7 @@ class GraphReadService:
             seen = {root.id}
             while root.supersedes_id is not None:
                 parent = node_by_id.get(root.supersedes_id)
-                if not isinstance(parent, revision_type) or parent.owner_id != owner_id or parent.id in seen:
+                if type(parent) is not revision_type or parent.owner_id != owner_id or parent.id in seen:
                     return False
                 if root.revision != parent.revision + 1:
                     return False
@@ -773,7 +773,8 @@ class GraphReadService:
                     return current.id == node.id
                 child = children[0]
                 if (
-                    child.revision != current.revision + 1 or child.id in seen
+                    type(child) is not revision_type
+                    or child.revision != current.revision + 1 or child.id in seen
                     or (isinstance(child, Asset) and (
                         child.kind is not current.kind
                         or child.egress_policy is not current.egress_policy
