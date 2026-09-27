@@ -1,0 +1,19 @@
+.local-graph { color: #e9eef8; height: calc(100dvh - 55px); min-height: 470px; display: flex; flex-direction: column; }
+.local-graph__region-controls { min-height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 2px 8px; color: #bdcde4; font-size: 13px; }
+.local-graph__region-controls label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.local-graph__region-controls select { max-width: 290px; padding: 6px 28px 6px 9px; border: 1px solid #526985; border-radius: 8px; color: #edf4ff; background: #18263a; }
+.local-graph__region-status { position: absolute; z-index: 2; top: 62px; left: 16px; max-width: 52%; margin: 0; padding: 8px 11px; border: 1px solid #465b78; border-radius: 9px; color: #d6e3f7; background: #142134e8; font-size: 12px; }
+.local-graph__limit { color: #afc1da; font-size: 13px; }
+.local-graph__frame { position: relative; flex: 1; min-height: 390px; overflow: hidden; border: 1px solid #384862; border-radius: 18px; background: radial-gradient(circle at 48% 40%, #1c304b 0%, #111c2d 55%, #0b1421 100%); }
+.local-graph__canvas { width: 100%; height: 100%; cursor: grab; }
+.local-graph__canvas:active { cursor: grabbing; }
+.local-graph__selected { position: absolute; bottom: 16px; left: 16px; display: grid; gap: 4px; max-width: min(420px, 80%); padding: 12px 16px; border: 1px solid #5d7498; border-radius: 12px; background: #162239ec; }
+.local-graph__selected span { color: #acc3e4; font-size: 11px; text-transform: uppercase; }
+.local-graph__selected strong { overflow-wrap: anywhere; }
+.local-graph__depth { position: absolute; z-index: 2; top: 12px; left: 14px; margin: 0; padding: 6px 9px; border-radius: 7px; color: #c9d9f1; background: #101c2ddd; font-size: 11px; pointer-events: none; }
+.local-graph__evidence { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; gap: 6px; width: min(300px, 30%); max-height: 46%; overflow: auto; padding: 8px; border: 1px solid #435974; border-radius: 10px; background: #101c2ddd; }
+.local-graph__evidence article { display: grid; gap: 3px; padding: 5px 4px; border-bottom: 1px solid #344760; font-size: 11px; }
+.local-graph__evidence strong { overflow-wrap: anywhere; font-size: 12px; }
+.local-graph__evidence span { color: #c2d3ec; }
+.local-graph__evidence small { color: #9fb4d2; overflow-wrap: anywhere; }
+.local-graph button { color: #b8d3ff; text-decoration: underline; }

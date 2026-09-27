@@ -17,7 +17,7 @@ describe('Storybook global theme entry', () => {
     expect(styles).toContain('--color-canvas');
     expect(styles).toContain('--color-focus');
     for (const story of ['Home', 'Project', 'Knowledge', 'Account']) expect(stories).toContain(`export const ${story}`);
-    expect(stories).toContain("width: '1440px'");
-    expect(stories).toContain("height: '900px'");
+    expect(stories).toContain("width: '1280px'");
+    expect(stories).toContain("height: '720px'");
   });
 });

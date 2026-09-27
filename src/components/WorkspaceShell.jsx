@@ -22,8 +22,9 @@ function HistoryAction({ label, pending, restore = false, reveal = true, onClick
   return <button type="button" disabled={pending} aria-label={accessibleLabel} title={accessibleLabel} aria-live="polite" className={`workspace-shell__history-action${reveal ? ' workspace-shell__history-action--reveal' : ''}`} onClick={onClick}><Icon size={16} aria-hidden="true" /><span className="sr-only">{accessibleLabel}</span></button>;
 }
 
-function NavItems({ activePage, onSelect }) {
-  return SHELL_NAV.map((item) => (
+function NavItems({ activePage, onSelect, showLocalDashboard }) {
+  const items = showLocalDashboard ? [...SHELL_NAV, { id: 'local-dashboard', label: 'ローカル操作盤' }] : SHELL_NAV;
+  return items.map((item) => (
     <button key={item.id} type="button" className="workspace-shell__nav-item" aria-current={activePage === item.id ? 'page' : undefined} onClick={() => onSelect(item.id)}>
       <span aria-hidden="true" className="workspace-shell__nav-mark" />
       {item.label}
@@ -31,7 +32,7 @@ function NavItems({ activePage, onSelect }) {
   ));
 }
 
-export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolioError = '', onArchive, onRestore, onOpenPortfolioItem, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false }) {
+export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolioError = '', onArchive, onRestore, onOpenPortfolioItem, currentPlan = 'Free', accountContent = null, onOpenProfile, children, initialDrawerOpen = false, showLocalDashboard = false, mainLandmark = false }) {
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
   const [allOpen, setAllOpen] = useState(null);
   const [archivePending, setArchivePending] = useState('');
@@ -86,7 +87,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
       {drawerOpen && <button type="button" className="workspace-shell__scrim" aria-label="サイドバーを閉じる" onClick={() => setDrawerOpen(false)} />}
       <aside id="workspace-sidebar" className={`workspace-shell__sidebar${drawerOpen ? ' workspace-shell__sidebar--open' : ''}`} aria-label="ワークスペースサイドバー">
         <div className="workspace-shell__brand"><span className="workspace-shell__brand-dot" aria-hidden="true" /><span>Dots.</span></div>
-        <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} /></nav>
+        <nav className="workspace-shell__nav min-w-0" aria-label="主要ページ"><NavItems activePage={activePage} onSelect={choosePage} showLocalDashboard={showLocalDashboard} /></nav>
         {portfolioError && <p role="alert" className="mx-3 rounded-lg bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{portfolioError}</p>}
         <div className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="最近の項目">
           {SHELL_NAV.map((item) => {
@@ -128,9 +129,7 @@ export function WorkspaceShell({ activePage, onSelect, portfolio = {}, portfolio
           </div>
         </footer>
       </aside>
-      <section className="workspace-shell__main">
-        {children}
-      </section>
+      {mainLandmark ? <main className="workspace-shell__main">{children}</main> : <section className="workspace-shell__main">{children}</section>}
       <Dialog open={Boolean(allOpen)} onOpenChange={(open) => { if (!open) setAllOpen(null); }}>
         <DialogContent className="max-h-[80dvh] overflow-hidden p-0">
           <DialogTitle className="border-b border-[var(--color-border-subtle)] px-6 py-5 text-lg font-semibold">{SHELL_NAV.find((item) => item.id === allOpen)?.label}の履歴</DialogTitle>
