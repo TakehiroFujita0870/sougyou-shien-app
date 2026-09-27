@@ -8,7 +8,6 @@
 
 | 資産 | 現在の参照状況 | 扱い | 確認事項 |
 | --- | --- | --- | --- |
-| `src/components/LocalGoogleSignIn.*` | 現行のFounder Graph画面から参照されていない | 保留候補 | 認証境界と既存データへの影響を確認 |
 | `src/components/projectDemoFixtureAdapter.js` | 現行のFounder Graphの本番経路から参照されていない可能性がある | 保留候補 | 全参照検索と画面テストを確認 |
 | 完了済み個別計画、ピボット前の`docs/spec/` | 個別計画と現況正本が混在。一部はvalidatorが参照する契約を含む | 群別に集約・削除 | 契約の参照を移してから削除。古い申し送りとスマホ専用計画は削除済み、復旧はGit履歴 |
 | `src/App.jsx`の`LegacyWorkspaceApp`と旧会話/料金/帳票群 | localhost:8765以外の入口と旧検査からまだ参照。現行LocalDashboardとは別経路 | 入口確認後に群別判断 | 非表示だけで未使用と断定しない。現行契約の共通処理は保持/移植し、旧入口の利用が判明した範囲だけ判断待ち |
