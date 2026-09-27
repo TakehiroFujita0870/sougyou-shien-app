@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 
-from dots.founder_graph import EgressPolicy, Facet, Idea, NodeType, RelationAssertion, RelationType, RelationshipStatus, Status
+from dots.founder_graph import Asset, EgressPolicy, Facet, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
 from dots.founder_graph_facet_memory_read import facet_region_from_snapshot
 from dots.founder_graph_write import GraphReadSnapshot
 
@@ -120,3 +120,62 @@ def test_memory_region_fails_closed_on_tied_latest_family_revisions() -> None:
     )
 
     assert facet_region_from_snapshot(snapshot, "root", owner_id="owner-1", max_facet_depth=1) == ()
+
+
+def test_memory_region_restores_idea_and_asset_classifications_only_across_lifecycle_chain() -> None:
+    facet = Facet(owner_id="owner-1", id="facet", namespace="domain", value="Founder", egress_policy=EgressPolicy.SHAREABLE)
+    evidence = SimpleNamespace(id="ev", owner_id="owner-1", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
+    idea0 = Idea(owner_id="owner-1", id="idea-0", title="Idea", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
+    idea1 = replace(
+        idea0, id="idea-1", revision=1, supersedes_id=idea0.id, status=Status.ARCHIVED,
+        provenance=Provenance(actor="owner", operation="archive_idea", target_id="idea-1", source_id=idea0.id),
+    )
+    idea2 = replace(
+        idea1, id="idea-2", revision=2, supersedes_id=idea1.id, status=Status.ACTIVE,
+        provenance=Provenance(actor="owner", operation="restore_idea", target_id="idea-2", source_id=idea1.id),
+    )
+    asset0 = Asset(owner_id="owner-1", id="asset-0", name="Asset", egress_policy=EgressPolicy.SHAREABLE)
+    asset1 = replace(
+        asset0, id="asset-1", revision=2, supersedes_id=asset0.id, status=Status.ARCHIVED,
+        provenance=Provenance(actor="owner", operation="archive_asset", target_id="asset-1", source_id=asset0.id),
+    )
+    asset2 = replace(
+        asset1, id="asset-2", revision=3, supersedes_id=asset1.id, status=Status.ACTIVE,
+        provenance=Provenance(actor="owner", operation="restore_asset", target_id="asset-2", source_id=asset1.id),
+    )
+    idea_classification = _relation("idea-0", NodeType.IDEA, "facet", NodeType.FACET, "idea-class", "ev")
+    asset_classification = _relation("asset-0", NodeType.ASSET, "facet", NodeType.FACET, "asset-class", "ev")
+    snapshot = GraphReadSnapshot(
+        nodes=(facet, evidence, idea0, idea1, idea2, asset0, asset1, asset2, idea_classification, asset_classification),
+        relations=(), structural_edges=(), idea_briefs=(), latest_idea_briefs=(),
+    )
+
+    hits = facet_region_from_snapshot(snapshot, "facet", owner_id="owner-1")
+
+    assert [hit.entity.id for hit in hits] == ["asset-2", "idea-2"]
+    assert {hit.entity.kind for hit in hits} == {"asset", "idea"}
+
+
+def test_memory_region_does_not_restore_classification_after_normal_revision() -> None:
+    facet = Facet(owner_id="owner-1", id="facet", namespace="domain", value="Founder", egress_policy=EgressPolicy.SHAREABLE)
+    evidence = SimpleNamespace(id="ev", owner_id="owner-1", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
+    idea0 = Idea(owner_id="owner-1", id="idea-0", title="Idea", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
+    idea1 = replace(
+        idea0, id="idea-1", revision=1, supersedes_id=idea0.id, status=Status.ARCHIVED,
+        provenance=Provenance(actor="owner", operation="archive_idea", target_id="idea-1", source_id=idea0.id),
+    )
+    idea2 = replace(
+        idea1, id="idea-2", revision=2, supersedes_id=idea1.id, status=Status.ACTIVE,
+        provenance=Provenance(actor="owner", operation="restore_idea", target_id="idea-2", source_id=idea1.id),
+    )
+    edited = replace(
+        idea2, id="idea-3", revision=3, supersedes_id=idea2.id, title="Edited",
+        provenance=Provenance(actor="owner", operation="revise_idea", target_id="idea-3", source_id=idea2.id),
+    )
+    assertion = _relation("idea-0", NodeType.IDEA, "facet", NodeType.FACET, "idea-class", "ev")
+    snapshot = GraphReadSnapshot(
+        nodes=(facet, evidence, idea0, idea1, idea2, edited, assertion),
+        relations=(), structural_edges=(), idea_briefs=(), latest_idea_briefs=(),
+    )
+
+    assert facet_region_from_snapshot(snapshot, "facet", owner_id="owner-1") == ()
