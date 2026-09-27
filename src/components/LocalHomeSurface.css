@@ -1,6 +1,6 @@
 .local-home { max-width: 1180px; margin: 0 auto; color: #e9eef8; }
 .local-home__eyebrow { margin: 0 0 6px; color: #b7c8e8; font-size: 12px; font-weight: 700; letter-spacing: .16em; }
-.local-home__tabs { display: flex; gap: 18px; min-height: 38px; border-bottom: 1px solid #344158; }
+.local-home__tabs { display: flex; gap: 18px; min-height: 38px; padding: 3px 10px; border-bottom: 1px solid #344158; border-radius: 8px 8px 0 0; background: #111722; }
 .local-home__tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 37px; padding: 5px 4px 8px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #c2cee0; font-size: 14px; line-height: 1.25; cursor: pointer; }
 .local-home__tabs button svg { display: block; flex: none; }
 .local-home__tabs button:hover { color: #f1f5ff; }
@@ -12,8 +12,11 @@
 .local-home__idea-list h2 { margin: 0 0 10px; font-size: 16px; }
 .local-home__idea-list h2 span { margin-left: 7px; color: #b8c5d9; font-size: 12px; font-weight: 400; }
 .local-home__cards { display: grid; gap: 7px; }
-.local-home__idea-card { display: grid; gap: 6px; width: 100%; padding: 11px 12px; border: 1px solid #42516a; border-radius: 10px; background: #1b293bf2; color: #e9eef8; text-align: left; cursor: pointer; }
-.local-home__idea-card[aria-pressed='true'], .local-home__idea-card:hover { border-color: #9bb4dc; background: #263750; }
+.local-home__idea-card { position: relative; min-width: 0; border: 1px solid #8399b9; border-radius: 10px; background: #1b293bf2; color: #e9eef8; }
+.local-home__idea-card[data-selected='true'], .local-home__idea-card:hover { border-color: #9bb4dc; background: #263750; }
+.local-home__idea-select { display: grid; gap: 6px; width: 100%; padding: 11px 50px 11px 12px; border: 0; border-radius: inherit; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.local-home__idea-select:focus-visible { outline: 0; }
+.local-home .local-home__idea-select:focus-visible { outline: 2px solid #f0d594; outline-offset: -3px; }
 .local-home__idea-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .local-home__idea-heading strong { min-width: 0; overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .local-home__status-badge { flex: none; max-width: 48%; overflow: hidden; padding: 3px 7px; border: 1px solid #647b9c; border-radius: 999px; background: #2a3c56; color: #f0f5ff; font-size: 12px; font-weight: 600; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
@@ -37,10 +40,11 @@
 .local-home__panel li { padding: 10px 0; border-top: 1px solid #43536b; }
 .local-home__panel li p { margin: 5px 0 0; font-size: 14px; }
 .local-home__guidance { font-size: 12px; color: #a5b6ce !important; }
-.local-home__asset-card { position: relative; padding: 14px 54px 14px 14px; }
+.local-home__asset-card { position: relative; padding: 14px 82px 14px 14px; }
 .local-home__asset-card h3 { margin: 0 0 6px; font-size: 16px; }
 .local-home__asset-card p { margin: 0; }
-.local-home__icon-button { position: absolute; top: 7px; right: 7px; display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #8399b9; border-radius: 8px; background: #263850; color: #f0f5ff; cursor: pointer; }
+.local-home__card-actions { position: absolute; top: 7px; right: 7px; display: flex; gap: 4px; }
+.local-home__icon-button { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #8399b9; border-radius: 8px; background: #263850; color: #f0f5ff; cursor: pointer; }
 .local-home__icon-button svg { display: block; }
 .local-home__icon-button:disabled { opacity: .55; cursor: not-allowed; }
 .local-home__edit-form { display: grid; gap: 10px; }
@@ -50,3 +54,14 @@
 .local-home__edit-form button { border: 1px solid #8399b9; border-radius: 8px; padding: 8px 12px; background: #263850; color: #f0f5ff; cursor: pointer; }
 .local-home__edit-form button:disabled { opacity: .55; cursor: not-allowed; }
 .local-home button:focus-visible { outline: 2px solid #f0d594; outline-offset: 2px; }
+.local-home__delete-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 16px; background: #05080dcc; }
+.local-home__delete-dialog { display: grid; gap: 12px; width: min(100%, 440px); padding: 20px; border: 1px solid #657896; border-radius: 14px; background: #1b293b; box-shadow: 0 20px 60px #0009; }
+.local-home__delete-dialog h2 { margin: 0; color: #f0f4fc; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
+.local-home__delete-dialog > p { margin: 0; color: #d1dced; font-size: 14px; line-height: 1.55; }
+.local-home__delete-dialog > .local-home__delete-error { color: #ffe2d9; }
+.local-home__delete-dialog > div { display: flex; justify-content: flex-end; gap: 8px; }
+.local-home__delete-dialog button { min-height: 36px; padding: 7px 12px; border: 1px solid #8399b9; border-radius: 8px; background: #263850; color: #f0f5ff; font-size: 14px; cursor: pointer; }
+.local-home__delete-dialog button:last-child { border-color: #9bb4dc; background: #dce8fa; color: #172036; }
+.local-home__delete-dialog button:disabled { opacity: .6; cursor: not-allowed; }
+.local-home__delete-notice { display: flex; align-items: center; gap: 8px; color: #d3deef; font-size: 14px; }
+.local-home__delete-notice button { min-height: 32px; padding: 4px 9px; border: 1px solid #8399b9; border-radius: 7px; background: #263850; color: #f0f5ff; cursor: pointer; }
