@@ -18,15 +18,13 @@ from .founder_graph_read import (
     GraphReadNotFoundError,
     SearchHit,
     SearchPage,
-    _tokens,
 )
-from .founder_graph_neo4j_read import (
-    _NON_CURRENT,
-    _required_node_id,
-    _required_owner,
-    _row_value,
-    _rows,
-    _view_from_row,
+from .founder_graph_neo4j_read import node_view_from_row, required_node_id, required_owner
+from .founder_graph_read_contract import (
+    NON_CURRENT_STATUSES,
+    result_rows,
+    row_value,
+    tokens,
 )
 
 _ACTIVE_RELATION_STATUSES = frozenset({
@@ -39,9 +37,9 @@ _ACTIVE_RELATION_STATUSES = frozenset({
 def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_facet_depth: int = 0):
     """Load one owner's bounded Facet region and project grounded results."""
 
-    owner = _required_owner(owner_id)
-    root_id = _required_node_id(root_facet_id)
-    gateway = reads._gateway
+    owner = required_owner(owner_id)
+    root_id = required_node_id(root_facet_id)
+    gateway = reads.gateway
     if owner != gateway.owner_id:
         raise GraphReadNotFoundError("selected Facet was not found")
 
@@ -53,12 +51,12 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
         "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
         "n.search_text AS search_text, n.egress_policy AS egress_policy ORDER BY n.id"
     )
-    with reads._read_session() as session:
-        rows = gateway._execute_read(session, lambda tx: tuple(_rows(tx.run(
+    with reads.read_session() as session:
+        rows = gateway.execute_read(session, lambda tx: tuple(result_rows(tx.run(
             node_query,
             owner_id=owner,
             node_types=["facet", "idea", "asset", "relation_assertion"],
-            non_current=sorted(_NON_CURRENT),
+            non_current=sorted(NON_CURRENT_STATUSES),
         ))))
 
     facets: list[FacetNode] = []
@@ -70,12 +68,12 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
         # Region paths are shareable projections: excluding private intermediate
         # Facets and taxonomy assertions here prevents leaking their existence
         # through descendant membership or reported path depth.
-        if _row_value(row, "egress_policy") != "shareable":
+        if row_value(row, "egress_policy") != "shareable":
             continue
-        view = _view_from_row(row, owner_id=owner)
+        view = node_view_from_row(row, owner_id=owner)
         if view is None:
             continue
-        payload_json = _row_value(row, "payload_json")
+        payload_json = row_value(row, "payload_json")
         try:
             payload = json.loads(payload_json) if isinstance(payload_json, str) else None
         except (TypeError, ValueError) as error:
@@ -113,14 +111,14 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
         "MATCH (e:Evidence) WHERE e.owner_id = $owner_id AND e.id IN $evidence_ids "
         "AND e.egress_policy = 'shareable' AND NOT coalesce(e.status, '') IN $non_current RETURN e.id AS id"
     )
-    with reads._read_session() as session:
-        evidence_rows = gateway._execute_read(session, lambda tx: tuple(_rows(tx.run(
+    with reads.read_session() as session:
+        evidence_rows = gateway.execute_read(session, lambda tx: tuple(result_rows(tx.run(
             evidence_query,
             owner_id=owner,
             evidence_ids=sorted(evidence_ids),
-            non_current=sorted(_NON_CURRENT),
+            non_current=sorted(NON_CURRENT_STATUSES),
         ))))
-    active_evidence = {str(_row_value(row, "id")) for row in evidence_rows}
+    active_evidence = {str(row_value(row, "id")) for row in evidence_rows}
     # A relationship is traversable only when every referenced Evidence is
     # current, owner-scoped and shareable. Never downgrade to a partial proof.
     taxonomy = [
@@ -176,8 +174,8 @@ def search_facet_nodes(
 ) -> SearchPage:
     """Search only current shareable Facet nodes before applying page limits."""
 
-    owner = _required_owner(owner_id)
-    if owner != reads._gateway.owner_id:
+    owner = required_owner(owner_id)
+    if owner != reads.gateway.owner_id:
         raise GraphReadNotFoundError("Facet search was not found")
     if not isinstance(query, str) or not query.strip() or len(query) > 512:
         raise GraphReadError("query must be a non-empty string of at most 512 characters")
@@ -197,22 +195,22 @@ def search_facet_nodes(
         "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
         "n.search_text AS search_text ORDER BY n.id"
     )
-    with reads._read_session() as session:
-        rows = reads._gateway._execute_read(session, lambda tx: tuple(_rows(tx.run(query_text, owner_id=owner))))
-    tokens = _tokens(query)
+    with reads.read_session() as session:
+        rows = reads.gateway.execute_read(session, lambda tx: tuple(result_rows(tx.run(query_text, owner_id=owner))))
+    query_tokens = tokens(query)
     ranked: list[tuple[float, str, Any]] = []
     for row in rows:
-        view = _view_from_row(row, owner_id=owner)
+        view = node_view_from_row(row, owner_id=owner)
         if view is None or view.node_type != "facet" or view.fields.get("egress_policy") != "shareable":
             continue
-        stored_search_text = _row_value(row, "search_text")
+        stored_search_text = row_value(row, "search_text")
         haystack = json.dumps(dict(view.fields), ensure_ascii=False, sort_keys=True)
         if isinstance(stored_search_text, str):
             haystack += " " + stored_search_text
         haystack = haystack.casefold()
-        matched = sum(1 for token in tokens if token in haystack)
+        matched = sum(1 for token in query_tokens if token in haystack)
         if matched:
-            score = matched / len(tokens) + (0.25 if query.casefold() in haystack else 0.0)
+            score = matched / len(query_tokens) + (0.25 if query.casefold() in haystack else 0.0)
             ranked.append((score, view.id, view))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     page = ranked[offset : offset + limit]

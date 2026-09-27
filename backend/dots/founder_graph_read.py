@@ -28,6 +28,11 @@ from .founder_graph import (
     DomainValidationError,
     relation_assertion_structural_edges,
 )
+from .founder_graph_read_contract import (
+    FIELD_ALLOWLIST,
+    NON_CURRENT_STATUSES,
+    tokens,
+)
 from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
 from .idea_brief import SECTION_TITLES
 from .source_citations import citation_metadata
@@ -158,67 +163,8 @@ class GraphReadPort(Protocol):
         """Search only current, shareable Facets before applying pagination."""
 
 
-_NON_CURRENT = frozenset({"retracted", "superseded", "expired", "cancelled", "revoked", "archived"})
-_FIELD_ALLOWLIST: dict[NodeType, tuple[str, ...]] = {
-    NodeType.OWNER_PROFILE: ("display_name", "status", "egress_policy"),
-    NodeType.IDEA: ("title", "summary", "description", "source_text", "tags", "status", "egress_policy", "revision", "supersedes_id"),
-    NodeType.ASSET: ("name", "kind", "description", "status", "egress_policy"),
-    NodeType.PERSON: ("name", "description", "contact", "private_notes", "status", "egress_policy"),
-    NodeType.ORGANIZATION: ("name", "description", "status", "egress_policy"),
-    NodeType.SOURCE: ("title", "kind", "locator", "current_revision_id", "revision", "status", "egress_policy"),
-    NodeType.RESEARCH_MATERIAL: ("title", "kind", "content", "locator", "content_hash", "status", "egress_policy"),
-    NodeType.SOURCE_REVISION: ("source_id", "revision", "supersedes_id", "content", "locator", "content_hash", "retrieved_at", "egress_policy", "status"),
-    NodeType.CLAIM: ("text", "claim_type", "confidence", "evidence_ids", "status", "revision", "supersedes_id", "egress_policy"),
-    NodeType.EVIDENCE: ("material_id", "claim_id", "source_revision_id", "excerpt", "locator", "polarity", "confidence", "content_hash", "status", "egress_policy"),
-    NodeType.RESEARCH_CAMPAIGN: ("purpose", "scope", "questions", "target_idea_id", "allowed_categories", "external_sources", "trial_budget", "expires_at", "status", "authorized", "aggregate_revision", "egress_policy"),
-    NodeType.RESEARCH_RUN: ("campaign_id", "input_snapshot", "model_snapshot", "sources", "evidence_ids", "results", "failures", "status", "authorization_revision", "parent_run_id", "supersedes_id", "egress_policy"),
-    NodeType.REPORT_VERSION: ("sections", "parent_id", "supersedes_id", "change_reason", "financial_formulas", "decision_criteria", "run_ids", "evidence_ids", "status", "egress_policy"),
-    NodeType.REPORT_SECTION: ("id", "content", "facts", "ai_inferences", "unconfirmed", "owner_decisions", "claim_ids", "evidence_ids", "egress_policy"),
-    NodeType.DECISION: ("text", "claim_ids", "report_ids", "experiment_ids", "status", "egress_policy"),
-    NodeType.EXPERIMENT: ("name", "success_criteria", "stop_criteria", "status", "egress_policy"),
-    NodeType.INSTRUCTION_ARTIFACT: ("path", "scope", "content_hash", "status", "egress_policy"),
-    NodeType.ENTITY_REVISION: (
-        "entity_id",
-        "entity_type",
-        "revision",
-        "payload_schema",
-        "public_payload",
-        "content_hash",
-        "created_at",
-        "provenance_id",
-        "status",
-        "egress_policy",
-    ),
-    NodeType.RELATION_ASSERTION: (
-        "source_id",
-        "target_id",
-        "source_kind",
-        "target_kind",
-        "predicate",
-        "assertion_family_id",
-        "revision",
-        "status",
-        "confidence",
-        "evidence_ids",
-        "valid_from",
-        "expires_at",
-        "supersedes_id",
-        "provenance_id",
-        "based_on_brief_id",
-        "based_on_brief_section_index",
-        "egress_policy",
-    ),
-    NodeType.CONTENT_CHUNK: (
-        "source_revision_id",
-        "ordinal",
-        "char_start",
-        "char_end",
-        "text_hash",
-        "status",
-        "egress_policy",
-    ),
-    NodeType.FACET: ("namespace", "normalized_value", "status", "egress_policy"),
-}
+_FIELD_ALLOWLIST = FIELD_ALLOWLIST
+_NON_CURRENT = NON_CURRENT_STATUSES
 
 
 def _json_value(value: Any) -> Any:
@@ -270,8 +216,7 @@ def _node_view(node: Any) -> NodeView:
     )
 
 
-def _tokens(value: str) -> tuple[str, ...]:
-    return tuple(token for token in value.casefold().replace("\n", " ").split() if token)
+_tokens = tokens
 
 
 class GraphReadService:

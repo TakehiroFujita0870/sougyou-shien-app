@@ -62,7 +62,7 @@ from .founder_graph_write import (
     research_run_payload_fingerprint,
 )
 from .founder_graph_schema import SCHEMA_VERSION, migration_queries, rollback_queries
-from .founder_graph_read import _FIELD_ALLOWLIST
+from .founder_graph_read_contract import FIELD_ALLOWLIST
 from .founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
 from .founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
 from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief, _serialize_persisted_idea_brief
@@ -136,7 +136,7 @@ def _node_properties(node: Any) -> dict[str, Any]:
     # stored payload but must not become a searchable or browser-visible field
     # through the safe read adapter.
     fields_for_search = (
-        {field_name: payload[field_name] for field_name in _FIELD_ALLOWLIST[node_type] if field_name in payload}
+        {field_name: payload[field_name] for field_name in FIELD_ALLOWLIST[node_type] if field_name in payload}
         if isinstance(payload, Mapping)
         else {"value": payload}
     )
@@ -338,6 +338,44 @@ class Neo4jGraphGateway:
         result = tx.run(
             f"MATCH (r:{label} {{source_id: $source_id}}) "
             "RETURN r.id AS id, r.owner_id AS owner_id, r.node_type AS node_type, "
+    @contextmanager
+    def read_session(self) -> Iterator[Any]:
+        """Open the existing managed session for read adapters."""
+
+        with self._session() as session:
+            yield session
+
+    @staticmethod
+    def execute_read(session: Any, callback: Any) -> Any:
+        """Run one callback through the driver's existing read transaction."""
+
+        return Neo4jGraphGateway._execute_read(session, callback)
+
+    def read_idea_record_tx(self, tx: Any, idea_id: str) -> Any | None:
+        """Read an Idea record within a caller-owned transaction."""
+
+        return self._idea_record_tx(tx, idea_id)
+
+    def read_idea_root_for_tx(self, tx: Any, idea_id: str) -> str:
+        """Resolve an Idea lineage root within a caller-owned transaction."""
+
+        return self._idea_root_for_tx(tx, idea_id)
+
+    def read_idea_chain_tx(self, tx: Any, root_id: str) -> tuple[Any, ...]:
+        """Read the validated Idea chain within a caller-owned transaction."""
+
+        return self._idea_chain_tx(tx, root_id)
+
+    def read_idea_briefs_for_root_tx(self, tx: Any, root_id: str) -> tuple[IdeaBriefVersion, ...]:
+        """Read the validated brief history within a caller-owned transaction."""
+
+        return self._idea_briefs_for_root_tx(tx, root_id)
+
+    def read_asset_chain_tx(self, tx: Any, asset_id: str) -> tuple[Asset, ...]:
+        """Read the validated Asset revision chain within a caller-owned transaction."""
+
+        return self._asset_chain_tx(tx, asset_id)
+
             "r.source_id AS source_id, r.revision AS revision, "
             "r.supersedes_id AS supersedes_id ORDER BY r.revision ASC",
             source_id=source_id,
