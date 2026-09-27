@@ -13,6 +13,7 @@ _NON_CURRENT_IDEA_STATUSES = frozenset({
     Status.ARCHIVED, Status.SUPERSEDED, Status.RETRACTED, Status.EXPIRED,
     Status.CANCELLED, Status.REVOKED, Status.FAILED,
 })
+_UNSET = object()
 
 
 def lifecycle_reference_aliases(records: Iterable[Idea | Asset]) -> dict[str, str]:
@@ -114,11 +115,28 @@ def decode_asset_lifecycle_record(
     owner_id: str,
     expected_id: str,
     expected_revision: Any = None,
+    expected_supersedes_id: Any = _UNSET,
+    allow_legacy_initial_row: bool = False,
 ) -> Asset:
     """Hydrate an exact persisted Asset/Person payload for lifecycle checks."""
 
     if not isinstance(payload, Mapping):
         raise ValueError("persisted Asset payload is invalid")
+    normalized_legacy_row = False
+    if allow_legacy_initial_row:
+        record_type = PersonAsset if payload.get("kind") == AssetKind.PERSON.value else Asset
+        expected_fields = {field.name for field in fields(record_type)}
+        legacy_fields = expected_fields - {"revision", "supersedes_id"}
+        if set(payload) == legacy_fields:
+            # Match the established Neo4j Asset reader: old initial rows omit
+            # both lineage fields and store scalar revision 0 (or 1). They are
+            # current revision 1 only when the scalar predecessor is absent.
+            if type(expected_revision) is not int or expected_revision not in {0, 1}:
+                raise ValueError("legacy Asset revision metadata is invalid")
+            if expected_supersedes_id is not None:
+                raise ValueError("legacy Asset predecessor metadata is invalid")
+            payload = {**payload, "revision": 1, "supersedes_id": None}
+            normalized_legacy_row = True
     person_record = payload.get("kind") == AssetKind.PERSON.value
     record_type = PersonAsset if person_record else Asset
     names = {field.name for field in fields(record_type)}
@@ -128,8 +146,14 @@ def decode_asset_lifecycle_record(
         raise ValueError("persisted Asset identity is invalid")
     if type(payload.get("revision")) is not int or payload["revision"] < 1:
         raise ValueError("persisted Asset revision is invalid")
-    if expected_revision is not None and payload["revision"] != expected_revision:
+    if (
+        expected_revision is not None
+        and not (normalized_legacy_row and expected_revision in {0, 1})
+        and payload["revision"] != expected_revision
+    ):
         raise ValueError("persisted Asset revision does not match its record")
+    if expected_supersedes_id is not _UNSET and payload["supersedes_id"] != expected_supersedes_id:
+        raise ValueError("persisted Asset predecessor does not match its record")
     created_at = payload.get("created_at")
     if not isinstance(created_at, str):
         raise ValueError("persisted Asset timestamp is invalid")

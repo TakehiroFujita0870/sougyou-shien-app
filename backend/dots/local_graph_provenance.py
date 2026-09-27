@@ -176,7 +176,7 @@ class Neo4jGraphProvenanceStore:
         "MATCH (candidate) WHERE candidate.owner_id = $owner_id "
         "AND candidate.node_type IN $node_types "
         "RETURN candidate.id AS id, candidate.node_type AS node_type, candidate.revision AS revision, "
-        "candidate.status AS status, candidate.payload_json AS payload_json "
+        "candidate.supersedes_id AS supersedes_id, candidate.status AS status, candidate.payload_json AS payload_json "
         "ORDER BY candidate.id LIMIT 1001"
     )
 
@@ -244,16 +244,101 @@ class Neo4jGraphProvenanceStore:
         if len(rows) > 1000:
             return {identity: None for identity in requested}
 
-        records: list[Idea | Asset] = []
-        try:
-            for row in rows:
-                identity, node_type, revision, status = (
-                    row["id"], row["node_type"], row["revision"], row["status"],
-                )
+        # Index lineage links using both scalar and payload identities. A bad
+        # unrelated legacy row must not poison a valid reference, but a row
+        # attached through either representation remains in that reference's
+        # validation closure and fails closed if its two representations differ.
+        descriptors: list[dict[str, Any]] = []
+        rows_by_reference: dict[str, set[int]] = {}
+        duplicate_ids: set[str] = set()
+        seen_ids: set[str] = set()
+        for index, row in enumerate(rows):
+            try:
+                identity = row["id"]
+                node_type = row["node_type"]
+                revision = row["revision"]
+                scalar_parent = row["supersedes_id"]
+                status = row["status"]
                 payload_json = row["payload_json"]
-                payload = json.loads(payload_json)
-                if not isinstance(payload, dict) or payload.get("id") != identity or payload.get("owner_id") != owner_id:
-                    return {requested_id: None for requested_id in requested}
+            except (KeyError, TypeError):
+                identity = node_type = revision = scalar_parent = status = payload_json = None
+            if isinstance(identity, str):
+                if identity in seen_ids:
+                    duplicate_ids.add(identity)
+                seen_ids.add(identity)
+            try:
+                payload = json.loads(payload_json) if isinstance(payload_json, str) else None
+            except (TypeError, ValueError):
+                payload = None
+            payload_identity = payload.get("id") if isinstance(payload, dict) else None
+            payload_parent = payload.get("supersedes_id") if isinstance(payload, dict) else None
+            references_in_row = {
+                value for value in (identity, payload_identity, scalar_parent, payload_parent)
+                if isinstance(value, str) and value
+            }
+            descriptor = {
+                "identity": identity,
+                "node_type": node_type,
+                "revision": revision,
+                "scalar_parent": scalar_parent,
+                "status": status,
+                "payload_json": payload_json,
+                "payload": payload,
+                "payload_identity": payload_identity,
+                "payload_parent": payload_parent,
+                "references": references_in_row,
+            }
+            descriptors.append(descriptor)
+            for reference in references_in_row:
+                rows_by_reference.setdefault(reference, set()).add(index)
+
+        closures: dict[str, set[int]] = {}
+        for identity, kind in requested.items():
+            if kind not in {NodeType.IDEA.value, NodeType.ASSET.value}:
+                continue
+            closure: set[int] = set()
+            pending = [identity]
+            reached: set[str] = set()
+            while pending:
+                reference = pending.pop()
+                if reference in reached:
+                    continue
+                reached.add(reference)
+                for index in rows_by_reference.get(reference, ()):
+                    if index in closure:
+                        continue
+                    closure.add(index)
+                    pending.extend(descriptors[index]["references"] - reached)
+            closures[identity] = closure
+
+        related_indices = set().union(*closures.values()) if closures else set()
+        related_duplicate_ids = duplicate_ids.intersection(
+            descriptors[index]["identity"] for index in related_indices
+            if isinstance(descriptors[index]["identity"], str)
+        )
+        records: list[Idea | Asset] = []
+        invalid_references: set[str] = set()
+        for index in related_indices:
+            descriptor = descriptors[index]
+            identity = descriptor["identity"]
+            node_type = descriptor["node_type"]
+            revision = descriptor["revision"]
+            scalar_parent = descriptor["scalar_parent"]
+            status = descriptor["status"]
+            payload_json = descriptor["payload_json"]
+            payload = descriptor["payload"]
+            affected = {reference for reference, closure in closures.items() if index in closure}
+            if (
+                not isinstance(identity, str) or not isinstance(payload, dict)
+                or descriptor["payload_identity"] != identity
+                or payload.get("owner_id") != owner_id
+                or scalar_parent != descriptor["payload_parent"]
+                or (scalar_parent is not None and not isinstance(scalar_parent, str))
+                or identity in related_duplicate_ids
+            ):
+                invalid_references.update(affected)
+                continue
+            try:
                 if node_type == NodeType.IDEA.value:
                     record = decode_persisted_idea(
                         {
@@ -263,18 +348,25 @@ class Neo4jGraphProvenanceStore:
                         owner_id=owner_id, expected_id=identity,
                     )
                 elif node_type == NodeType.ASSET.value:
+                    legacy_initial_asset = (
+                        "revision" not in payload and "supersedes_id" not in payload
+                        and type(revision) is int and revision in {0, 1} and scalar_parent is None
+                    )
                     record = decode_asset_lifecycle_record(
                         payload, owner_id=owner_id, expected_id=identity, expected_revision=revision,
+                        expected_supersedes_id=scalar_parent, allow_legacy_initial_row=True,
                     )
                     if record.node_type.value != node_type:
-                        return {requested_id: None for requested_id in requested}
+                        raise ValueError("persisted Asset node type does not match its row")
                 else:
-                    return {requested_id: None for requested_id in requested}
-                if record.revision != revision or record.status.value != status:
-                    return {requested_id: None for requested_id in requested}
-                records.append(record)
-        except (KeyError, TypeError, ValueError, IdeaDecodeError):
-            return {identity: None for identity in requested}
+                    raise ValueError("persisted lifecycle row has an unsupported node type")
+                expected_record_revision = 1 if node_type == NodeType.ASSET.value and legacy_initial_asset else revision
+                if record.revision != expected_record_revision or record.status.value != status:
+                    raise ValueError("persisted lifecycle metadata does not match its row")
+            except (KeyError, TypeError, ValueError, IdeaDecodeError):
+                invalid_references.update(affected)
+                continue
+            records.append(record)
 
         aliases = lifecycle_reference_aliases(records)
         by_id = {record.id: record for record in records}
@@ -283,6 +375,9 @@ class Neo4jGraphProvenanceStore:
         for identity, expected_kind in requested.items():
             if expected_kind not in {NodeType.IDEA.value, NodeType.ASSET.value}:
                 resolved[identity] = identity
+                continue
+            if identity in invalid_references:
+                resolved[identity] = None
                 continue
             record = by_id.get(identity)
             record_kind_matches = record is not None and record.node_type.value == expected_kind
