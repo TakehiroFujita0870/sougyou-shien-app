@@ -55,6 +55,13 @@ class OnDemandNeo4jHomeStore(HomeStore):
         finally:
             driver.close()
 
+    def read_citations(self, owner_id: str, evidence_ids):
+        driver = create_neo4j_driver_from_env()
+        try:
+            return Neo4jHomeStore(driver).read_citations(owner_id, evidence_ids)
+        finally:
+            driver.close()
+
 
 class OnDemandNeo4jGraphViewStore(GraphViewStore):
     def read_nodes(self, owner_id: str):
