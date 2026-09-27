@@ -37,6 +37,9 @@ EXPECTED_WRITE_TOOLS = {
     "record_research_run",
     "save_idea_brief",
     "save_researched_idea_brief",
+    "capture_facet",
+    "classify_entity",
+    "relate_facets",
 }
 
 
