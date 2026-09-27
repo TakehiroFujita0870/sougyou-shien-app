@@ -17,8 +17,8 @@ export default defineConfig({
     browserName: 'chromium',
     ...(existsSync(systemChromium) ? { launchOptions: { executablePath: systemChromium } } : {}),
     headless: true,
-    video: { mode: 'on', size: { width: 1440, height: 900 } },
+    video: { mode: 'on', size: { width: 1280, height: 720 } },
     trace: 'retain-on-failure',
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: 1280, height: 720 },
   },
 })

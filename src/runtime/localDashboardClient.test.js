@@ -192,13 +192,34 @@ describe('Local dashboard client', () => {
         id: 'idea-1', kind: 'idea', title: '事業案', root_facet_id: 'facet/root', matched_facet_id: 'facet/child',
         depth: 1, classification_status: 'inferred', classification_evidence_ids: ['ev-class'],
         taxonomy_status_path: ['confirmed'], taxonomy_evidence_path: [['ev-tax']], evidence_ids: ['ev-tax', 'ev-class'],
+        facet_path: [
+          { facet_id: 'facet/root', label: '事業領域', depth: 0 },
+          { facet_id: 'facet/child', label: '創業案', depth: 1 },
+        ],
         private_note: 'PRIVATE',
+      }, {
+        id: 'idea-1', kind: 'idea', title: '事業案', root_facet_id: 'facet/root', matched_facet_id: 'facet/root',
+        depth: 0, classification_status: 'confirmed', classification_evidence_ids: ['ev-direct'],
+        taxonomy_status_path: [], taxonomy_evidence_path: [], evidence_ids: ['ev-direct'],
+        facet_path: [{ facet_id: 'facet/root', label: `${'n'.repeat(120)}: ${'v'.repeat(240)}`, depth: 0 }],
       }],
     };
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(payload));
     const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
     const result = await client.getFacetRegion('facet/root', 1);
-    expect(result.hits[0]).toMatchObject({ classification_status: 'inferred', evidence_ids: ['ev-tax', 'ev-class'] });
+    expect(result.hits[0]).toMatchObject({ classification_status: 'inferred', evidence_ids: ['ev-tax', 'ev-class'], facet_path: [
+      { facet_id: 'facet/root', label: '事業領域', depth: 0 },
+      { facet_id: 'facet/child', label: '創業案', depth: 1 },
+    ] });
+    expect(result.hits).toHaveLength(2);
+    expect(result.hits[1].matched_facet_id).toBe('facet/root');
+    const duplicateMembership = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({
+        ...payload, hits: [payload.hits[0], { ...payload.hits[0] }],
+      })),
+    });
+    await expect(duplicateMembership.getFacetRegion('facet/root', 1)).rejects.toBeInstanceOf(LocalDashboardClientError);
     expect(JSON.stringify(result)).not.toContain('PRIVATE');
     expect(fetchImpl.mock.calls[0][0]).toBe('/api/graph/facet-region?facet_id=facet%2Froot&depth=1');
     const malformed = createLocalDashboardClient({
@@ -206,6 +227,11 @@ describe('Local dashboard client', () => {
       fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ ...payload, hits: [{ ...payload.hits[0], evidence_ids: [] }] })),
     });
     await expect(malformed.getFacetRegion('facet/root', 1)).rejects.toBeInstanceOf(LocalDashboardClientError);
+    const brokenPath = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ ...payload, hits: [{ ...payload.hits[0], facet_path: [payload.hits[0].facet_path[1]] }] })),
+    });
+    await expect(brokenPath.getFacetRegion('facet/root', 1)).rejects.toBeInstanceOf(LocalDashboardClientError);
   });
 
   it('loads exact semantic edge provenance through the same-origin read route and allowlists safe fields', async () => {

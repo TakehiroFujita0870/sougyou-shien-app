@@ -290,11 +290,12 @@ function GraphCanvas({ client, nodes, edges, depth, onDepthChange, regionHits = 
         {labelsById.get(edge.source)} → {edge.label} → {labelsById.get(edge.target)}
       </button>)}</article>
     </aside>}
-    {regionHits.length > 0 && <aside className="local-graph__evidence" aria-label="Facet領域の記録と根拠">
-      {regionHits.map((hit) => <article key={hit.id}>
+    {regionHits.length > 0 && <aside className="local-graph__evidence" aria-label="分類領域の記録と根拠">
+      {regionHits.map((hit) => <article key={JSON.stringify([hit.id, hit.matched_facet_id])}>
         <strong>{hit.title}</strong>
-        <span>{hit.classification_status === 'confirmed' ? '確定' : '推測'} · {hit.kind === 'idea' ? 'Idea' : 'Asset'} · 深度 {hit.depth}</span>
-        {hit.taxonomy_status_path.map((status, index) => <span key={`${hit.id}-taxonomy-${index}`}>階層{index + 1}: {status === 'confirmed' ? '確定' : '推測'}</span>)}
+        <span>{hit.classification_status === 'confirmed' ? '確定' : '推測'} · {hit.kind === 'idea' ? '案' : '資産'} · 深度 {hit.depth}</span>
+        <span>{hit.facet_path.map((item) => item.label).join(' → ')}</span>
+        {hit.taxonomy_status_path.length > 0 && <span>親子関係: {hit.taxonomy_status_path.map((status) => status === 'confirmed' ? '確定' : '推測').join(' · ')}</span>}
         <small>根拠ID: {hit.evidence_ids.join('、')}</small>
       </article>)}
     </aside>}
@@ -309,18 +310,26 @@ function regionGraphData(facetId, hits, graphNodes) {
   const edges = [];
   const added = new Set([root.id]);
   for (const hit of hits) {
-    const matchedId = hit.matched_facet_id;
-    if (matchedId !== root.id && !added.has(matchedId)) {
-      const matched = byId.get(matchedId);
-      nodes.push({ id: matchedId, kind: 'facet', label: matched?.label ?? 'Facet', graphDepth: hit.depth });
-      added.add(matchedId);
-      edges.push({ source: root.id, target: matchedId, label: hit.taxonomy_status_path.map((status) => status === 'confirmed' ? '確定' : '推測').join(' → ') });
+    const path = hit.facet_path;
+    if (!Array.isArray(path) || path.length !== hit.depth + 1
+      || path[0]?.facet_id !== facetId || path.at(-1)?.facet_id !== hit.matched_facet_id) continue;
+    for (let index = 1; index < path.length; index += 1) {
+      const current = path[index];
+      const previous = path[index - 1];
+      if (!added.has(current.facet_id)) {
+        nodes.push({ id: current.facet_id, kind: 'facet', label: current.label, graphDepth: current.depth });
+        added.add(current.facet_id);
+      }
+      const edgeStatus = hit.taxonomy_status_path[index - 1];
+      if (!edges.some((edge) => edge.source === previous.facet_id && edge.target === current.facet_id)) {
+        edges.push({ source: previous.facet_id, target: current.facet_id, label: edgeStatus === 'confirmed' ? '確定' : '推測' });
+      }
     }
     if (!added.has(hit.id)) {
-      nodes.push({ id: hit.id, kind: hit.kind, label: hit.title, graphDepth: hit.depth });
+      nodes.push({ id: hit.id, kind: hit.kind, label: hit.title, graphDepth: path.at(-1).depth });
       added.add(hit.id);
     }
-    edges.push({ source: matchedId, target: hit.id, label: hit.classification_status === 'confirmed' ? '確定' : '推測' });
+    edges.push({ source: hit.matched_facet_id, target: hit.id, label: hit.classification_status === 'confirmed' ? '確定' : '推測' });
   }
   return { nodes, edges };
 }
@@ -375,16 +384,16 @@ export function LocalGraphSurface({ client, onOpenServices }) {
     {graph.status === 'empty' && <p role="status">まだ表示できる記録はありません。</p>}
     {graph.status === 'ready' && <>
       {facets.length > 0 && <div className="local-graph__region-controls">
-        <label>抽象Facet <select value={facetId} onChange={(event) => { setFacetId(event.target.value); setDepth(0); }}>
+        <label>分類から探す <select value={facetId} onChange={(event) => { setFacetId(event.target.value); setDepth(0); }}>
           <option value="">全体の意味グラフ</option>
           {facets.map((facet) => <option key={facet.id} value={facet.id}>{facet.label}</option>)}
         </select></label>
         <span>{selectedFacet ? `${selectedFacet.label}から具体記録へ` : ''}</span>
       </div>}
-      {facetId && region.status === 'loading' && <p className="local-graph__region-status" role="status">Facet領域を読み込んでいます…</p>}
+      {facetId && region.status === 'loading' && <p className="local-graph__region-status" role="status">分類内の記録を読み込んでいます…</p>}
       {facetId && region.status === 'empty' && matchingRegion && <p className="local-graph__region-status" role="status">この深度に根拠付きの記録はありません。提案は結果に含めません。</p>}
       {facetId && region.status === 'stopped' && matchingRegion && <p className="local-graph__region-status" role="status">データベースが停止しています。</p>}
-      {facetId && region.status === 'failed' && <p className="local-graph__region-status" role="alert">Facet領域を読めませんでした。従来のグラフを表示します。</p>}
+      {facetId && region.status === 'failed' && <p className="local-graph__region-status" role="alert">分類内の記録を読めませんでした。従来のグラフを表示します。</p>}
       <GraphCanvas key={facetId || 'all'} client={client} nodes={visibleNodes} edges={visibleEdges} depth={depth} onDepthChange={setDepth} anchorId={regionGraph ? facetId : ''} regionHits={facetId && region.status === 'ready' && matchingRegion ? region.hits : []} />
       {graph.truncated && <p className="local-graph__limit">表示件数の上限に達しました。全体ではなく一部を表示しています。</p>}
     </>}
