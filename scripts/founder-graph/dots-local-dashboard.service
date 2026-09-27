@@ -1,0 +1,26 @@
+# Local control remains available when the data store, API, or ChatGPT tunnel
+# is explicitly stopped. Install as a user unit only after the guarded runtime
+# and logon-coordinator checks have passed. Never bind this service publicly.
+[Unit]
+Description=Dots. local dashboard and lifecycle controller
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/dots-live
+EnvironmentFile=%h/.config/dots/live-control-plane.env
+Environment=DOTS_NEO4J_AUTH_FILE=%h/.config/dots/live-neo4j-auth.secret
+Environment=PYTHONPATH=%h/projects/dots-live/backend
+Environment=DOTS_CONNECTION_PROFILE=live
+Environment=DOTS_GRAPH_BACKEND=neo4j
+Environment=DOTS_LOCAL_OWNER_ID=owner-mvp
+Environment=DOTS_NEO4J_DATABASE=neo4j
+Environment=DOTS_NEO4J_URI=bolt://127.0.0.1:7687
+ExecStart=%h/.local/bin/uv run --project %h/projects/dots-live uvicorn --app-dir backend dots.local_dashboard_runtime:app --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+
+[Install]
+WantedBy=default.target

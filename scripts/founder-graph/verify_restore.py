@@ -1,8 +1,8 @@
 """Verify a Founder Graph restore inside an isolated, offline container.
 
 ``--validate-only`` validates the manifest without Docker. Live verification
-boots only the explicitly labeled restore volume on ``--network none`` and
-reads credentials from a read-only secret file, never from Docker argv.
+boots only the explicitly labeled restore volume on a temporary internal-only
+bridge and reads credentials from a read-only secret file, never Docker argv.
 """
 
 from __future__ import annotations
@@ -444,36 +444,50 @@ def verify_live(
     _require_restore_label(volume, manifest)
 
     container = f"founder-graph-restore-verify-{uuid.uuid4().hex[:12]}"
+    network = f"founder-graph-restore-net-{uuid.uuid4().hex[:12]}"
     mount = f"type=volume,source={volume},target=/data"
     secret_mount = f"type=bind,source={secret_path},target=/run/secrets/founder_graph_auth,readonly"
-    if "," in mount or "," in secret_mount:
-        raise ContractError("Docker --mount values must not contain commas from inputs")
-    run_result = _run(
-        [
-            "docker",
-            "run",
-            "--pull",
-            "never",
-            "--detach",
-            "--rm",
-            "--network",
-            "none",
-            "--name",
-            container,
-            "--env",
-            "NEO4J_AUTH_FILE=/run/secrets/founder_graph_auth",
-            "--mount",
-            mount,
-            "--mount",
-            secret_mount,
-            image,
-        ],
-        timeout=timeout,
-    )
-    if run_result.returncode != 0:
-        raise RuntimeError("could not boot the isolated restore container")
-
+    verification_error: Exception | None = None
+    network_created = False
     try:
+        network_result = _run(
+            ["docker", "network", "create", "--driver", "bridge", "--internal", network],
+            timeout=30,
+        )
+        if network_result.returncode != 0:
+            raise RuntimeError("could not create the isolated internal restore network")
+        network_created = True
+        run_result = _run(
+            [
+                "docker",
+                "run",
+                "--pull",
+                "never",
+                "--detach",
+                "--rm",
+                "--network",
+                network,
+                "--name",
+                container,
+                "--env",
+                "NEO4J_AUTH_FILE=/run/secrets/founder_graph_auth",
+                "--env",
+                "NEO4J_server_http_advertised__address=localhost:7474",
+                "--env",
+                "NEO4J_server_bolt_advertised__address=localhost:7687",
+                "--env",
+                "NEO4J_db_logs_query_parameter__logging__enabled=false",
+                "--mount",
+                mount,
+                "--mount",
+                secret_mount,
+                image,
+            ],
+            timeout=timeout,
+        )
+        if run_result.returncode != 0:
+            raise RuntimeError("could not boot the isolated restore container")
+
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -503,9 +517,52 @@ def verify_live(
             )
             if actual_hash != expected_hash:
                 raise RuntimeError("representative restore query hash did not match the manifest")
+    except Exception as exc:
+        verification_error = exc
+        raise
     finally:
-        # --rm removes only this short-lived container; the labeled data volume remains.
-        _run(["docker", "stop", container], timeout=30)
+        cleanup_error: Exception | None = None
+        if network_created:
+            _run(["docker", "stop", container], timeout=30)
+            containers_result = _run(
+                [
+                    "docker",
+                    "ps",
+                    "-a",
+                    "--filter",
+                    f"name=^{container}$",
+                    "--format",
+                    "{{.Names}}|{{.Status}}",
+                ],
+                timeout=30,
+            )
+            if containers_result.returncode != 0:
+                cleanup_error = RuntimeError("could not confirm isolated verifier container cleanup")
+            else:
+                still_exists = any(
+                    line.split("|", 1)[0] == container
+                    for line in containers_result.stdout.splitlines()
+                    if line.strip()
+                )
+                if still_exists:
+                    cleanup_error = RuntimeError("isolated restore verifier container remains after cleanup")
+
+        if network_created and cleanup_error is None:
+            network_result = _run(["docker", "network", "rm", network], timeout=30)
+            if network_result.returncode != 0:
+                networks_result = _run(
+                    ["docker", "network", "ls", "--filter", f"name=^{network}$", "--format", "{{.Name}}"],
+                    timeout=30,
+                )
+                if networks_result.returncode != 0:
+                    cleanup_error = RuntimeError("could not confirm isolated restore network cleanup")
+                elif network in networks_result.stdout.splitlines():
+                    cleanup_error = RuntimeError("isolated restore network remains after cleanup")
+
+        if cleanup_error is not None:
+            if verification_error is not None:
+                raise verification_error from cleanup_error
+            raise cleanup_error
 
 
 def main(argv: list[str] | None = None) -> int:

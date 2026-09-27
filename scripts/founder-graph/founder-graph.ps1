@@ -14,8 +14,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$scriptDirectory = (Resolve-Path -LiteralPath $PSScriptRoot).Path
-$repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $scriptDirectory '..\..')).Path
+$scriptDirectory = (Resolve-Path -LiteralPath $PSScriptRoot).ProviderPath
+$repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $scriptDirectory '..\..')).ProviderPath
 $composeFile = Join-Path $repositoryRoot 'compose.founder-graph.yml'
 $validator = Join-Path $scriptDirectory 'validate_local_ops.py'
 $restoreVerifier = Join-Path $scriptDirectory 'verify_restore.py'
@@ -44,6 +44,61 @@ function Require-Auth {
     }
 }
 
+function Assert-ExistingAuthFile {
+    param([string]$RequestedPath)
+
+    if ([string]::IsNullOrWhiteSpace($RequestedPath) -or -not [System.IO.Path]::IsPathRooted($RequestedPath)) {
+        throw 'FOUNDER_GRAPH_NEO4J_AUTH_FILE must name an existing absolute protected file.'
+    }
+    $item = Get-Item -Force -LiteralPath $RequestedPath -ErrorAction Stop
+    if ($item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw 'FOUNDER_GRAPH_NEO4J_AUTH_FILE must be a regular non-reparse file.'
+    }
+
+    $acl = Get-Acl -LiteralPath $item.FullName
+    $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $ownerSid = ([System.Security.Principal.NTAccount]$acl.Owner).Translate([System.Security.Principal.SecurityIdentifier]).Value
+    if ($ownerSid -ne $currentSid) { throw 'FOUNDER_GRAPH_NEO4J_AUTH_FILE must be owned by the current user.' }
+
+    $allowedSids = @($currentSid, 'S-1-5-18', 'S-1-5-32-544')
+    foreach ($rule in $acl.Access) {
+        if ($rule.AccessControlType -ne 'Allow') { continue }
+        $sid = try { $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $null }
+        if ($sid -notin $allowedSids) {
+            throw 'FOUNDER_GRAPH_NEO4J_AUTH_FILE grants access outside the current user and local administrators.'
+        }
+    }
+
+    $containerId = (& docker compose --file $composeFile ps -q neo4j | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
+        throw 'could not resolve the existing live Neo4j container before backup.'
+    }
+    $mountsJson = (& docker inspect --format '{{json .Mounts}}' $containerId | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($mountsJson)) {
+        throw 'could not resolve the existing container auth-file mount source.'
+    }
+    try { $mounts = ConvertFrom-Json -InputObject $mountsJson }
+    catch { throw 'could not parse the existing container mount metadata.' }
+    $authMounts = @($mounts | Where-Object { $_.Destination -eq '/run/secrets/founder_graph_auth' })
+    if ($authMounts.Count -ne 1) {
+        throw 'the existing container must have exactly one read-only bind for its auth file.'
+    }
+    $authMount = $authMounts[0]
+    if ($authMount.Type -ne 'bind' -or [bool]$authMount.RW) {
+        throw 'the existing container must have exactly one read-only bind for its auth file.'
+    }
+    $mountedSource = [string]$authMount.Source
+    if ([string]::IsNullOrWhiteSpace($mountedSource)) { throw 'the existing container auth-file mount source is empty.' }
+    $requestedFullPath = [System.IO.Path]::GetFullPath($item.FullName)
+    $mountedFullPath = [System.IO.Path]::GetFullPath($mountedSource)
+    if (-not $requestedFullPath.Equals($mountedFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'FOUNDER_GRAPH_NEO4J_AUTH_FILE must equal the existing container auth-file mount source.'
+    }
+
+    $script:authSecretFile = $item.FullName
+    $script:authSecretPersistent = $true
+}
+
 function Require-ProjectName {
     $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
     if ($project -notmatch '^[a-z0-9][a-z0-9_-]{0,62}$' -or $project.Contains(',')) {
@@ -52,7 +107,21 @@ function Require-ProjectName {
 }
 
 function Initialize-AuthSecret {
-    param([switch]$PersistForContainer)
+    param([switch]$PersistForContainer, [switch]$UseExistingFile)
+    if ($UseExistingFile) {
+        if (Test-Path -LiteralPath Env:FOUNDER_GRAPH_NEO4J_AUTH_FILE) {
+            $script:authFileWasSet = $true
+            $script:authFileOriginal = $env:FOUNDER_GRAPH_NEO4J_AUTH_FILE
+        }
+        else {
+            $script:authFileWasSet = $false
+        }
+        if (-not [string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_NEO4J_AUTH)) {
+            throw 'protected-file mode requires FOUNDER_GRAPH_NEO4J_AUTH to be unset.'
+        }
+        Assert-ExistingAuthFile $env:FOUNDER_GRAPH_NEO4J_AUTH_FILE
+        return
+    }
     Require-Auth
     $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
     $persistentPath = Join-Path ([System.IO.Path]::GetTempPath()) ("dots-founder-graph-auth-{0}.secret" -f $project)
@@ -242,13 +311,25 @@ function Restore-Database {
     Require-ProjectName
     $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
 
-    & docker volume inspect $restoreVolume *> $null
-    if ($LASTEXITCODE -eq 0) { throw "Refusing an existing restore volume: $restoreVolume" }
+    $existingVolumes = @(& docker volume ls --format '{{.Name}}')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not list Docker volumes before isolated restore.' }
+    if ($existingVolumes -contains $restoreVolume) { throw "Refusing an existing restore volume: $restoreVolume" }
     & docker volume create --label com.openai.founder_graph.role=restore --label com.openai.founder_graph.database=neo4j --label "com.openai.founder_graph.project=$project" --label "com.openai.founder_graph.source=$backupDirectory" $restoreVolume *> $null
     if ($LASTEXITCODE -ne 0) { throw "Could not create restore volume: $restoreVolume" }
-    $role = (& docker volume inspect --format '{{ index .Labels "com.openai.founder_graph.role" }}' $restoreVolume).Trim()
-    $database = (& docker volume inspect --format '{{ index .Labels "com.openai.founder_graph.database" }}' $restoreVolume).Trim()
-    if ($role -ne 'restore' -or $database -ne 'neo4j') { throw 'new restore volume labels must be role=restore,database=neo4j.' }
+    $labelsJson = (& docker volume inspect --format '{{json .Labels}}' $restoreVolume | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($labelsJson)) { throw 'Could not inspect new restore volume labels.' }
+    try { $labels = ConvertFrom-Json -InputObject $labelsJson }
+    catch { throw 'Could not parse new restore volume labels.' }
+    if ($labels.'com.openai.founder_graph.role' -ne 'restore' -or
+        $labels.'com.openai.founder_graph.database' -ne 'neo4j' -or
+        $labels.'com.openai.founder_graph.project' -ne $project) {
+        throw 'new restore volume labels must match role=restore,database=neo4j,project.'
+    }
+    $labelSource = [string]$labels.'com.openai.founder_graph.source'
+    if ([string]::IsNullOrWhiteSpace($labelSource) -or
+        -not [System.IO.Path]::GetFullPath($labelSource).Equals([System.IO.Path]::GetFullPath($backupDirectory), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'new restore volume source label must match the selected backup directory.'
+    }
 
     $dataMount = "type=volume,source=$restoreVolume,target=/data"
     $backupMount = "type=bind,source=$backupDirectory,target=/backups,readonly"
@@ -308,7 +389,7 @@ try {
             Invoke-Compose @('ps')
         }
         'backup' {
-            Require-Docker; Require-ProjectName; Initialize-AuthSecret
+            Require-Docker; Require-ProjectName; Initialize-AuthSecret -UseExistingFile
             Backup-Database
         }
         'restore' {
@@ -316,7 +397,7 @@ try {
             Restore-Database
         }
         'verify-restore' {
-            Require-Docker; Require-ProjectName; Initialize-AuthSecret
+            Require-Docker; Require-ProjectName; Initialize-AuthSecret -UseExistingFile
             Verify-Restore
         }
         'capture-manifest' {
