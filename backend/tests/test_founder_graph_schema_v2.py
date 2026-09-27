@@ -87,7 +87,7 @@ def test_relation_assertion_requires_evidence_for_inferred_and_confirmed() -> No
     assert inferred.node_type is NodeType.RELATION_ASSERTION
     assert inferred.predicate is RelationType.CAN_CONTRIBUTE_TO
 
-    with pytest.raises(DomainValidationError, match="network relations must be proposed or inferred"):
+    with pytest.raises(DomainValidationError, match="network relations must be proposed, inferred, retracted, or superseded"):
         RelationAssertion(
             status=RelationshipStatus.CONFIRMED,
             evidence_ids=("evidence-1",),

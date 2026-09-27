@@ -71,6 +71,7 @@ class McpWriteSurface:
         "append_claim",
         "capture_evidence",
         "link_entities",
+        "retract_relation_assertion",
         "save_research_report",
         "record_decision",
         "record_correction",
@@ -85,6 +86,7 @@ class McpWriteSurface:
         "append_claim": False,
         "capture_evidence": False,
         "link_entities": False,
+        "retract_relation_assertion": False,
         "save_research_report": False,
         "record_decision": False,
         "record_correction": True,
@@ -104,6 +106,7 @@ class McpWriteSurface:
                     "url": {"type": "string", "minLength": 1, "maxLength": 2048, "description": "HTTPまたはHTTPSの出典URL。ページ本文は取得しません。"},
                     "title": {"type": "string", "minLength": 1, "maxLength": 500, "description": "出典のタイトル。"},
                     "summary": {"type": "string", "minLength": 1, "maxLength": 4000, "description": "出典について自分で作成した1〜4000文字の要約。"},
+                    "egress_policy": {"type": "string", "enum": [policy.value for policy in EgressPolicy], "description": "shareableは公開可能なURL・タイトル・短い要約に限り、明示指定が必要です。省略時はlocal_only。"},
                     "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
@@ -210,6 +213,23 @@ class McpWriteSurface:
                         "type": "string",
                         "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value],
                     },
+                    "based_on_brief_id": {**text, "minLength": 1},
+                    "based_on_brief_section_index": {"type": "integer", "minimum": 0, "maximum": 7},
+                    "supersedes_id": {**text, "minLength": 1, "description": "訂正する直近のRelationAssertion ID。既存の関係と同じfamilyを延長します。"},
+                    "expected_family_revision": {"type": "integer", "minimum": 1, "description": "訂正対象familyの現在revision。楽観競合検出に使います。"},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "retract_relation_assertion": {
+                "type": "object",
+                "description": "保存済みの未確定な関係を根拠付きで撤回します。元記録を削除せず、同じfamilyにRETRACTED後継を追加します。",
+                "required": ["supersedes_id", "expected_family_revision", "evidence_ids", "idempotency_key"],
+                "properties": {
+                    "supersedes_id": {**text, "minLength": 1},
+                    "expected_family_revision": {"type": "integer", "minimum": 1},
+                    "evidence_ids": {**ids, "minItems": 1},
+                    "egress_policy": {"type": "string", "enum": [policy.value for policy in EgressPolicy]},
                     "based_on_brief_id": {**text, "minLength": 1},
                     "based_on_brief_section_index": {"type": "integer", "minimum": 0, "maximum": 7},
                     "idempotency_key": idempotency,
@@ -417,11 +437,15 @@ class McpWriteSurface:
         )
 
     def _capture_source(self, arguments: Mapping[str, Any]) -> WriteReceipt:
-        self._reject_unknown(arguments, {"url", "title", "summary", "idempotency_key"})
+        self._reject_unknown(arguments, {"url", "title", "summary", "egress_policy", "idempotency_key"})
         idempotency_key = self._idempotency(arguments)
         url = self._text(arguments.get("url"), "url", max_length=2048)
         title = self._text(arguments.get("title"), "title", max_length=500)
         summary = self._text(arguments.get("summary"), "summary", max_length=4000)
+        try:
+            egress_policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY.value))
+        except (TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "egress_policy must be local_only or shareable") from error
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
             raise McpWriteError("invalid_input", "url must be an absolute HTTP(S) URL without credentials")
@@ -431,11 +455,11 @@ class McpWriteSurface:
             source_id=revision_id, idempotency_key=f"{idempotency_key}:source")
         revision_provenance = replace(provenance, target_id=revision_id, idempotency_key=f"{idempotency_key}:source-revision")
         revision = SourceRevision(owner_id=self.writes.owner_id, id=revision_id, source_id=source_id,
-            content=summary, locator=url, revision=1, egress_policy=EgressPolicy.LOCAL_ONLY,
+            content=summary, locator=url, revision=1, egress_policy=egress_policy,
             provenance=revision_provenance)
         source = Source(owner_id=self.writes.owner_id, id=source_id, title=title, kind=MaterialKind.WEB,
             locator=url, current_revision_id=revision_id, revision=1,
-            egress_policy=EgressPolicy.LOCAL_ONLY, provenance=provenance)
+            egress_policy=egress_policy, provenance=provenance)
         return self.writes.capture_source(source, revision, idempotency_key=idempotency_key)
 
     def _capture_person(self, arguments: Mapping[str, Any]) -> WriteReceipt:
@@ -559,7 +583,8 @@ class McpWriteSurface:
     def _link_entities(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {
             "source_id", "target_id", "relation", "status", "confidence", "expires_at", "evidence_ids",
-            "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
+            "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "supersedes_id",
+            "expected_family_revision", "idempotency_key",
         })
         save_assertion = getattr(self.writes, "save_relation_assertion", None)
         if not callable(save_assertion):
@@ -601,6 +626,42 @@ class McpWriteSurface:
             raise McpWriteError("invalid_input", "expires_at must be an ISO-8601 timestamp string.")
         idempotency_key = self._idempotency(arguments)
         assertion_id = self._command_id("relation-assertion", idempotency_key)
+        supersedes_id = arguments.get("supersedes_id")
+        expected_family_revision = arguments.get("expected_family_revision")
+        predecessor = None
+        if supersedes_id is None:
+            if expected_family_revision is not None:
+                raise McpWriteError("invalid_input", "expected_family_revision requires supersedes_id")
+            family_id = self._command_id("relation-family", idempotency_key)
+            revision = 1
+        else:
+            supersedes_id = self._text(supersedes_id, "supersedes_id")
+            if type(expected_family_revision) is not int or expected_family_revision < 1:
+                raise McpWriteError("invalid_input", "a positive expected_family_revision is required with supersedes_id")
+            predecessor = self.writes.get_node(supersedes_id)
+            if not isinstance(predecessor, RelationAssertion) or predecessor.owner_id != self.writes.owner_id:
+                raise McpWriteError("not_found", "the relation to correct does not exist")
+            if predecessor.revision != expected_family_revision:
+                raise RevisionConflictError("expected relation family revision is stale")
+            if (predecessor.source_id, predecessor.target_id, predecessor.predicate) != (source_id, target_id, predicate):
+                raise McpWriteError("invalid_input", "a relation correction must retain its endpoints and predicate")
+            family_id = predecessor.assertion_family_id
+            revision = predecessor.revision + 1
+            if arguments.get("egress_policy") is None:
+                egress_policy = predecessor.egress_policy
+            if arguments.get("status") is None:
+                status = predecessor.status
+            if brief_id is None and has_idea_endpoint:
+                brief_id = predecessor.based_on_brief_id
+                section_index = predecessor.based_on_brief_section_index
+            if "confidence" not in arguments:
+                confidence = predecessor.confidence
+            else:
+                confidence = arguments.get("confidence")
+            if "expires_at" not in arguments:
+                expires_at = predecessor.expires_at
+        if supersedes_id is None:
+            confidence = arguments.get("confidence")
         assertion = RelationAssertion(
             owner_id=self.writes.owner_id,
             id=assertion_id,
@@ -609,10 +670,12 @@ class McpWriteSurface:
             target_id=target_id,
             target_kind=target_kind,
             predicate=predicate,
-            assertion_family_id=self._command_id("relation-family", idempotency_key),
+            assertion_family_id=family_id,
+            revision=revision,
             status=status,
-            confidence=arguments.get("confidence"),
+            confidence=confidence,
             expires_at=expires_at,
+            supersedes_id=supersedes_id,
             evidence_ids=evidence_ids,
             egress_policy=egress_policy,
             based_on_brief_id=brief_id,
@@ -635,7 +698,65 @@ class McpWriteSurface:
                 assertion = existing
         return save_assertion(
             assertion,
-            expected_family_revision=None,
+            expected_family_revision=expected_family_revision,
+            idempotency_key=idempotency_key,
+        )
+
+    def _retract_relation_assertion(self, arguments: Mapping[str, Any]) -> WriteReceipt:
+        self._reject_unknown(arguments, {
+            "supersedes_id", "expected_family_revision", "evidence_ids", "egress_policy",
+            "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
+        })
+        save_assertion = getattr(self.writes, "save_relation_assertion", None)
+        if not callable(save_assertion):
+            raise McpWriteError("unavailable", "Formal relation writes are not available on this graph adapter.")
+        predecessor_id = self._text(arguments.get("supersedes_id"), "supersedes_id")
+        predecessor = self.writes.get_node(predecessor_id)
+        if not isinstance(predecessor, RelationAssertion) or predecessor.owner_id != self.writes.owner_id:
+            raise McpWriteError("not_found", "the relation to retract does not exist")
+        expected = arguments.get("expected_family_revision")
+        if type(expected) is not int or expected < 1:
+            raise McpWriteError("invalid_input", "a positive expected_family_revision is required")
+        if predecessor.revision != expected:
+            raise RevisionConflictError("expected relation family revision is stale")
+        evidence_ids = self._ids(arguments.get("evidence_ids"), "evidence_ids")
+        if not evidence_ids:
+            raise McpWriteError("invalid_input", "retraction requires at least one evidence id")
+        try:
+            policy = EgressPolicy(arguments.get("egress_policy", predecessor.egress_policy.value))
+        except (TypeError, ValueError) as error:
+            raise McpWriteError("invalid_input", "egress_policy must be local_only or shareable") from error
+        brief_id = arguments.get("based_on_brief_id", predecessor.based_on_brief_id)
+        section_index = arguments.get("based_on_brief_section_index", predecessor.based_on_brief_section_index)
+        idempotency_key = self._idempotency(arguments)
+        assertion_id = self._command_id("relation-assertion", idempotency_key)
+        assertion = replace(
+            predecessor,
+            id=assertion_id,
+            revision=predecessor.revision + 1,
+            status=RelationshipStatus.RETRACTED,
+            evidence_ids=evidence_ids,
+            valid_from=datetime.now(predecessor.valid_from.tzinfo),
+            expires_at=None,
+            supersedes_id=predecessor.id,
+            egress_policy=policy,
+            based_on_brief_id=brief_id,
+            based_on_brief_section_index=section_index,
+            provenance=Provenance(actor="local-owner", operation="retract_relation_assertion", target_id=assertion_id, idempotency_key=idempotency_key),
+            provenance_id=None,
+        )
+        existing = self.writes.get_node(assertion_id)
+        if isinstance(existing, RelationAssertion) and existing.owner_id == self.writes.owner_id:
+            replay_candidate = replace(
+                existing,
+                valid_from=assertion.valid_from,
+                provenance=replace(existing.provenance, occurred_at=assertion.provenance.occurred_at),
+            )
+            if replay_candidate == assertion:
+                assertion = existing
+        return save_assertion(
+            assertion,
+            expected_family_revision=expected,
             idempotency_key=idempotency_key,
         )
 

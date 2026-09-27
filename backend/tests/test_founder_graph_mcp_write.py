@@ -236,6 +236,7 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "append_claim",
         "capture_evidence",
         "link_entities",
+        "retract_relation_assertion",
         "save_research_report",
         "record_decision",
         "record_correction",
@@ -265,7 +266,7 @@ def test_capture_source_saves_only_short_local_web_material_and_replays() -> Non
     assert all(writes.get_node(chunk_id).egress_policy is EgressPolicy.LOCAL_ONLY for chunk_id in first.content_chunk_ids)
     assert not any(isinstance(node, Idea) for node in writes.nodes())
     tool = next(item for item in surface.tool_definitions() if item["name"] == "capture_source")
-    assert set(tool["inputSchema"]["properties"]) == {"url", "title", "summary", "idempotency_key"}
+    assert set(tool["inputSchema"]["properties"]) == {"url", "title", "summary", "egress_policy", "idempotency_key"}
 
 
 @pytest.mark.parametrize("url", ["file:///tmp/private", "https://user:password@example.org/x", "https:///missing-host"])
@@ -674,6 +675,7 @@ def test_link_entities_schema_is_closed_and_requires_idea_brief_pair() -> None:
     assert set(schema["properties"]) == {
         "source_id", "target_id", "relation", "status", "confidence", "expires_at",
         "evidence_ids", "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
+        "supersedes_id", "expected_family_revision",
     }
     assert "evidence_ids" in schema["required"]
     assert schema["properties"]["evidence_ids"]["minItems"] == 1
