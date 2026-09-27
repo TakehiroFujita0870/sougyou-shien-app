@@ -667,6 +667,8 @@ class Asset:
     details: Mapping[str, Any] = field(default_factory=dict)
     status: Status = Status.ACTIVE
     egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
+    revision: int = 1
+    supersedes_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     provenance: Provenance = field(default_factory=Provenance)
 
@@ -681,6 +683,12 @@ class Asset:
         object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
         if self.details and self.egress_policy is not EgressPolicy.LOCAL_ONLY:
             raise DomainValidationError("asset details require local_only egress policy")
+        if not isinstance(self.revision, int) or isinstance(self.revision, bool) or self.revision < 1:
+            raise DomainValidationError("asset revision must be a positive integer")
+        if self.supersedes_id is not None:
+            object.__setattr__(self, "supersedes_id", _identifier(self.supersedes_id, "supersedes_id"))
+        if (self.revision == 1) != (self.supersedes_id is None):
+            raise DomainValidationError("asset revision and supersedes_id are inconsistent")
         object.__setattr__(self, "created_at", _required_timestamp(self.created_at, "created_at"))
         if not isinstance(self.provenance, Provenance):
             raise DomainValidationError("provenance must be a Provenance")
@@ -693,6 +701,33 @@ class Asset:
     @classmethod
     def person(cls, *, owner_id: str, name: str, **kwargs: Any) -> "PersonAsset":
         return PersonAsset(owner_id=owner_id, name=name, **kwargs)
+
+    def revise(
+        self,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        id: str | None = None,
+        revision: int | None = None,
+        provenance: Provenance | None = None,
+    ) -> "Asset":
+        """Return an immutable successor while retaining owner and sharing metadata."""
+        new_id_value = _identifier(id, "id") if id is not None else new_id("asset")
+        return replace(
+            self,
+            id=new_id_value,
+            name=self.name if name is None else name,
+            description=self.description if description is None else description,
+            revision=self.revision + 1 if revision is None else revision,
+            supersedes_id=self.id,
+            created_at=utc_now(),
+            provenance=_fresh_provenance(
+                self.provenance,
+                operation="revise_asset",
+                target_id=new_id_value,
+                provenance=provenance,
+            ),
+        )
 
     @property
     def node_type(self) -> NodeType:
