@@ -27,6 +27,87 @@ it('passes bounded public citations and distinguishes missing sources through th
   expect(JSON.stringify(home)).not.toContain('SECRET');
 });
 
+it('maps common asset revisions and sharing policy without exposing other server fields', async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+    status: 'ready', ideas: [], profile: { display_name: 'private' },
+    assets: [{ id: 'asset-1', name: '経験', kind: 'experience', description: '内容', revision: 3, egress_policy: 'shareable', details: 'PRIVATE' }],
+  }));
+  const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+  expect(home.assets).toEqual([{ id: 'asset-1', name: '経験', description: '内容', revision: 3, egress_policy: 'shareable' }]);
+  expect(JSON.stringify(home)).not.toContain('PRIVATE');
+});
+
+it('fails closed when an asset lacks a current revision or has an unknown sharing policy', async () => {
+  for (const asset of [
+    { id: 'asset-1', name: '題名', description: '内容', revision: 0, egress_policy: 'local_only' },
+    { id: 'asset-1', name: '題名', description: '内容', revision: 1, egress_policy: 'public' },
+  ]) {
+    const client = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ status: 'ready', ideas: [], assets: [asset] })),
+    });
+    await expect(client.getHome()).rejects.toBeInstanceOf(LocalDashboardClientError);
+  }
+});
+
+it('updates one asset with CSRF, expected revision and stable idempotency key, rotating on changed payload', async () => {
+  let generated = 0;
+  const fetchImpl = vi.fn()
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-2', revision: 4 }))
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-2', revision: 4, replayed: true }))
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-3', revision: 4 }));
+  const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => `asset-edit-${++generated}` });
+
+  const first = { name: '更新題名', description: '更新内容', expectedRevision: 3 };
+  await expect(client.saveAsset('asset/1', first)).resolves.toEqual({ id: 'asset-2', revision: 4 });
+  await expect(client.saveAsset('asset/1', first)).resolves.toEqual({ id: 'asset-2', revision: 4 });
+  await expect(client.saveAsset('asset/1', { ...first, name: '別の題名' })).resolves.toEqual({ id: 'asset-3', revision: 4 });
+
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+    '/api/status', '/api/assets/asset%2F1', '/api/status', '/api/assets/asset%2F1', '/api/status', '/api/assets/asset%2F1',
+  ]);
+  const requests = [fetchImpl.mock.calls[1][1], fetchImpl.mock.calls[3][1], fetchImpl.mock.calls[5][1]];
+  expect(requests.map((request) => request.method)).toEqual(['PUT', 'PUT', 'PUT']);
+  expect(requests[0].headers['X-CSRF-Token']).toBe('csrf-from-status');
+  expect(JSON.parse(requests[0].body)).toEqual({ name: '更新題名', description: '更新内容', expected_revision: 3, idempotency_key: 'asset-edit-1' });
+  expect(JSON.parse(requests[1].body).idempotency_key).toBe('asset-edit-1');
+  expect(JSON.parse(requests[2].body).idempotency_key).toBe('asset-edit-2');
+  for (const request of requests) expect(JSON.parse(request.body)).not.toHaveProperty('egress_policy');
+});
+
+it('keeps the same asset idempotency key when a save transport fails and is retried', async () => {
+  let generated = 0;
+  const fetchImpl = vi.fn()
+    .mockResolvedValueOnce(statusResponse())
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-next', revision: 2 }));
+  const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => `retry-${++generated}` });
+  const edit = { name: '題名', description: '内容', expectedRevision: 1 };
+
+  await expect(client.saveAsset('asset-1', edit)).rejects.toMatchObject({ kind: 'unavailable' });
+  await expect(client.saveAsset('asset-1', edit)).resolves.toEqual({ id: 'asset-next', revision: 2 });
+  expect(JSON.parse(fetchImpl.mock.calls[1][1].body).idempotency_key).toBe('retry-1');
+  expect(JSON.parse(fetchImpl.mock.calls[3][1].body).idempotency_key).toBe('retry-1');
+});
+
+it('rejects asset edits outside the server title, content and revision bounds before requesting', async () => {
+  const fetchImpl = vi.fn();
+  const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
+  for (const edit of [
+    { name: '', description: '', expectedRevision: 1 },
+    { name: 'x'.repeat(201), description: '', expectedRevision: 1 },
+    { name: '題名', description: 'x'.repeat(4001), expectedRevision: 1 },
+    { name: '題名', description: '', expectedRevision: 0 },
+  ]) {
+    await expect(client.saveAsset('asset-1', edit)).rejects.toBeInstanceOf(LocalDashboardClientError);
+  }
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
 function statusResponse(overrides = {}) {
   return jsonResponse({ controller: 'running', csrf_token: 'csrf-from-status', services: servicesRunning, ...overrides });
 }
@@ -89,19 +170,19 @@ describe('Local dashboard client', () => {
     expect(JSON.stringify(home)).not.toContain('SECRET');
   });
 
-  it('reads a bounded graph projection and submits an explicit self-introduction edit with CSRF', async () => {
+  it('reads a bounded graph projection and submits a common asset edit with CSRF', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ status: 'ready', nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案', private_note: 'PRIVATE' }], edges: [], truncated: false }))
       .mockResolvedValueOnce(statusResponse())
-      .mockResolvedValueOnce(jsonResponse({ id: 'asset-new' }));
+      .mockResolvedValueOnce(jsonResponse({ id: 'asset-new', revision: 2 }));
     const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => 'edit-one' });
     expect(await client.getGraph()).toEqual({ status: 'ready', nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案' }], edges: [], semantic_edges: [], truncated: false });
-    expect(await client.saveSelfIntroduction('新しい紹介', 'asset-old')).toBe('asset-new');
-    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/graph', '/api/status', '/api/self-introduction']);
+    expect(await client.saveAsset('asset-old', { name: '題名', description: '内容', expectedRevision: 1 })).toEqual({ id: 'asset-new', revision: 2 });
+    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/graph', '/api/status', '/api/assets/asset-old']);
     expect(fetchImpl.mock.calls[2][1]).toEqual(expect.objectContaining({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-from-status', 'Idempotency-Key': 'edit-one' },
-      body: JSON.stringify({ text: '新しい紹介', expected_id: 'asset-old' }),
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-from-status' },
+      body: JSON.stringify({ name: '題名', description: '内容', expected_revision: 1, idempotency_key: 'edit-one' }),
     }));
   });
   it('validates and allowlists semantic Facet region results', async () => {

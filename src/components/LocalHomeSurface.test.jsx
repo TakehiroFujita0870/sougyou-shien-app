@@ -12,12 +12,15 @@ afterEach(async () => {
   mounted = null;
 });
 
-it('shows real idea cards, eight named viewpoints, asset profile, and a people placeholder', async () => {
+it('shows ideas, eight named viewpoints, common asset cards, and a people placeholder', async () => {
   const client = { getHome: vi.fn(async () => ({
     status: 'ready',
     ideas: [{ id: 'idea-1', title: '名刺から協業', summary: '協業の候補を見つける', description: '本人のメモ' }],
-    assets: [{ id: 'asset-1', name: '製造業経験', kind: 'experience', description: '現場での経験' }],
-    profile: { displayName: 'Takehiro' },
+    assets: [
+      { id: 'asset-1', name: '自己紹介', kind: 'knowledge', description: '現場での経験', revision: 1 },
+      { id: 'asset-2', name: '製造業の経験', kind: 'experience', description: '品質管理を担当', revision: 1 },
+    ],
+    profile: { displayName: '非表示にするプロフィール' },
   })) };
   const container = document.createElement('div');
   document.body.append(container);
@@ -31,8 +34,16 @@ it('shows real idea cards, eight named viewpoints, asset profile, and a people p
   expect(container.textContent).toContain('7. リスクミニマムなロードマップ');
   expect(container.textContent).toContain('未整理');
   await act(async () => container.querySelector('[role="tab"][aria-selected="false"]').click());
-  expect(container.textContent).toContain('Takehiro');
-  expect(container.textContent).toContain('製造業経験');
+  expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(2);
+  expect(container.textContent).toContain('自己紹介');
+  expect(container.textContent).toContain('製造業の経験');
+  expect(container.textContent).toContain('品質管理を担当');
+  expect(container.textContent).not.toContain('非表示にするプロフィール');
+  expect(container.textContent).not.toContain('保有している資産');
+  expect(container.textContent).not.toContain('ABOUT YOU');
+  expect(container.textContent).not.toContain('experience');
+  expect(container.textContent).not.toContain('knowledge');
+  expect(container.querySelectorAll('.local-home__asset-card button[aria-label^="編集"]')).toHaveLength(2);
   await act(async () => [...container.querySelectorAll('[role="tab"]')].find((node) => node.textContent === '人的ネットワーク').click());
   expect(container.textContent).toContain('今後実装予定');
   expect(container.textContent).not.toContain('名刺一覧');
@@ -117,11 +128,36 @@ it('distinguishes completed research with missing current sources from drafts an
   expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
 });
 
-it('saves an explicit self-introduction edit and refreshes the Neo4j-backed view', async () => {
-  let description = '元の紹介';
+it('edits title and content through the same form for any asset and supports cancel', async () => {
+  const assets = [
+    { id: 'asset-1', name: '経験', kind: 'experience', description: '内容1', revision: 1 },
+    { id: 'asset-2', name: '資料', kind: 'document', description: '内容2', revision: 1 },
+  ];
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [], assets, profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((node) => node.textContent === 'あなたのアセット').click());
+
+  for (const asset of assets) {
+    await act(async () => [...container.querySelectorAll('.local-home__asset-card')].find((card) => card.textContent.includes(asset.name)).querySelector('button').click());
+    expect(container.querySelector('textarea[name="title"]').value).toBe(asset.name);
+    expect(container.querySelector('textarea[name="content"]').value).toBe(asset.description);
+    expect(container.textContent).not.toContain(asset.kind);
+    await act(async () => [...container.querySelectorAll('button')].find((node) => node.textContent === 'キャンセル').click());
+  }
+  expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(2);
+});
+
+it('saves a changed asset title and content then refreshes to the successor record', async () => {
+  const original = { id: 'asset-current', name: '元の題名', kind: 'document', description: '元の内容', revision: 4, egress_policy: 'local_only' };
+  const successor = { ...original, id: 'asset-successor', name: '更新した題名', description: '更新した内容', revision: 5 };
   const client = {
-    getHome: vi.fn(async () => ({ status: 'ready', ideas: [], assets: [{ id: description === '元の紹介' ? 'asset-old' : 'asset-new', name: '自己紹介', kind: 'knowledge', description }], profile: null })),
-    saveSelfIntroduction: vi.fn(async (value, id) => { expect(id).toBe('asset-old'); description = value; return 'asset-new'; }),
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [], assets: [original], profile: null })
+      .mockResolvedValueOnce({ status: 'ready', ideas: [], assets: [successor], profile: null }),
+    saveAsset: vi.fn().mockResolvedValue({ id: successor.id, revision: successor.revision }),
   };
   const container = document.createElement('div');
   document.body.append(container);
@@ -129,16 +165,54 @@ it('saves an explicit self-introduction edit and refreshes the Neo4j-backed view
   mounted = { root, container };
   await act(async () => root.render(<LocalHomeSurface client={client} />));
   await act(async () => [...container.querySelectorAll('[role="tab"]')].find((node) => node.textContent === 'あなたのアセット').click());
-  await act(async () => [...container.querySelectorAll('button')].find((node) => node.textContent === 'この画面で編集').click());
-  await act(async () => {
-    const textarea = container.querySelector('textarea');
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, '更新した紹介');
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  await act(async () => container.querySelector('button[aria-label="編集: 元の題名"]').click());
+  const setTextArea = async (name, value) => act(async () => {
+    const field = container.querySelector(`textarea[name="${name}"]`);
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, value);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  await setTextArea('title', '更新した題名');
+  await setTextArea('content', '更新した内容');
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(client.saveSelfIntroduction).toHaveBeenCalledWith('更新した紹介', 'asset-old');
-  expect(container.textContent).toContain('更新した紹介');
-  expect(container.textContent).toContain('自己紹介を保存しました');
+
+  expect(client.saveAsset).toHaveBeenCalledWith('asset-current', { name: '更新した題名', description: '更新した内容', expectedRevision: 4 });
+  expect(client.getHome).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain('更新した題名');
+  expect(container.textContent).toContain('更新した内容');
+  expect(container.textContent).toContain('変更を保存しました');
+  expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(1);
+});
+
+it('preserves asset drafts after save conflicts and generic failures', async () => {
+  const asset = { id: 'asset-1', name: '元題名', kind: 'knowledge', description: '元内容', revision: 2, egress_policy: 'shareable' };
+  for (const error of [{ kind: 'conflict' }, { kind: 'unavailable' }]) {
+    const client = {
+      getHome: vi.fn().mockResolvedValue({ status: 'ready', ideas: [], assets: [asset], profile: null }),
+      saveAsset: vi.fn().mockRejectedValue(error),
+    };
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted = { root, container };
+    await act(async () => root.render(<LocalHomeSurface client={client} />));
+    await act(async () => [...container.querySelectorAll('[role="tab"]')].find((node) => node.textContent === 'あなたのアセット').click());
+    await act(async () => container.querySelector('button[aria-label="編集: 元題名"]').click());
+    const title = container.querySelector('textarea[name="title"]');
+    const content = container.querySelector('textarea[name="content"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(title, '手元の変更');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(content, '編集した内容');
+      content.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(container.querySelector('textarea[name="title"]').value).toBe('手元の変更');
+    expect(container.querySelector('textarea[name="content"]').value).toBe('編集した内容');
+    expect(container.querySelector('[role="alert"]').textContent).toContain(error.kind === 'conflict' ? '別の更新' : '入力内容は残っています');
+    expect(client.getHome).toHaveBeenCalledTimes(1);
+    await act(async () => { root.unmount(); container.remove(); });
+    mounted = null;
+  }
 });
 
 it('shows only valid HTTP source links beside the matching brief viewpoint', async () => {
