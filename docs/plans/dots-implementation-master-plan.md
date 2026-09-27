@@ -1,5 +1,7 @@
 # Dots 実装全体計画
 
+MVP後のUI改善と結果維持の内部整理は[`UI改善・内部整理の並走計画`](dots-ui-refactor-plan.md)を実行正本とする。実装開始はそのゴール開始後。本書の過去の未完了欄を再実行しない。
+
 > 現況の入口は[`dots-current-status.json`](../operations/dots-current-status.json)。本書は要件・完成条件を保持するが、過去の診断・未完了欄の状態は最新の同範囲の証拠で照合する。[進捗報告規約](../operations/progress-reporting.md)を先に適用する。
 
 最終更新: 2026-09-27
