@@ -5,10 +5,9 @@
 ## ローカル接続先
 
 - Dots.アプリ: `http://localhost:5174/`
-- Storybook: `http://localhost:6006/`
 - ローカルAPIヘルスチェック: `http://localhost:8000/health`
 
-画面確認、スクリーンショット、引き継ぎではこのポートを共通で使う。変更比較時は、アプリとStorybookを同じ最新`main`、または同じfeature worktreeから起動する。
+画面確認、スクリーンショット、引き継ぎではこのポートを共通で使う。変更比較時は同じ最新`main`、または同じfeature worktreeからアプリを起動する。
 
 ## 役割
 
@@ -61,7 +60,6 @@ worktree側で検査、commit、branchへのpush、PR作成を行う。PR本文�
 ```powershell
 wsl.exe -d Ubuntu -u <user> -- bash -lc 'cd /home/<user>/projects/dots && npm run test'
 wsl.exe -d Ubuntu -u <user> -- bash -lc 'cd /home/<user>/projects/dots && npm run build'
-wsl.exe -d Ubuntu -u <user> -- bash -lc 'cd /home/<user>/projects/dots && npm run build-storybook'
 wsl.exe -d Ubuntu -u <user> -- bash -lc 'cd /home/<user>/projects/dots && uv run pytest && git diff --check'
 ```
 

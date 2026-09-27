@@ -20,7 +20,7 @@ mainの後続保存契約、承認・共有境界、根拠付き関係、原子�
 
 今回は隔離作業場所で通常の画面・保存処理の検査と、外部操作を置き換えた起動管理の検査を行う。実DBの変更、再起動、復元、外部調査、検索速度比較を繰り返さない。モデル本体や秘密情報はGitに含めない。
 
-通常の開発検査は `npm ci`、`npm run test`、`npm run build`、`npm run build-storybook`、`uv run pytest`、`git diff --check`。ローカル検索モデルを導入する別環境では `uv sync --extra local-rag` が必要。モデルの固定版と準備条件は実装内のカタログおよび既存の運用手順に従う。
+通常の開発検査は `npm ci`、`npm run test`、`npm run test:a11y`、`npm run build`、`uv run pytest`、`git diff --check`。ローカル検索モデルを導入する別環境では `uv sync --extra local-rag` が必要。モデルの固定版と準備条件は実装内のカタログおよび既存の運用手順に従う。
 
 起動用の定義は現在の安定した配信場所 `~/projects/dots-live` を参照する。正式版へmergeしただけでは登録・実行されない。後日の配信元変更では認証設定・依存・モデルキャッシュ・UI生成物を確認してから反映する。今回その作業は行わない。
 
