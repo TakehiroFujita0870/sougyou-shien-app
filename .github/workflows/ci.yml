@@ -18,12 +18,6 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run test
-      - name: Generate and inspect formal-plan PDF
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: mkdir -p pdf-qa-artifacts && DOTS_PDF_QA_PATH=pdf-qa-artifacts/formal-plan.pdf npm test -- --run src/components/formalPlanPdfAdapter.test.js
-      - name: Generate formal-plan DOCX
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: mkdir -p docx-qa-artifacts && DOTS_DOCX_QA_PATH=docx-qa-artifacts/formal-plan.docx npm test -- --run src/components/formalPlanDocxAdapter.test.js
       - run: npm run test:a11y
       - run: npm run build
       - name: Stop before milestone-only checks
@@ -81,9 +75,6 @@ jobs:
           name: dots-account-plan-1440-screenshot
           path: test-results/account-plan-1440x900.png
           if-no-files-found: error
-      - name: Verify Chrome PDF and DOCX downloads
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: npx playwright test tests/e2e/pdf-export.spec.js
       - name: Verify composer layout at desktop widths
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: npx playwright test tests/e2e/composer-layout.spec.js
@@ -161,32 +152,4 @@ jobs:
           if-no-files-found: error
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --all-groups
-      - name: Install LibreOffice for DOCX visual QA
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk
-      - name: Verify formal-plan DOCX Japanese text and render every page
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: uv run python scripts/verify-formal-plan-docx.py docx-qa-artifacts/formal-plan.docx docx-qa-artifacts/rendered
-      - name: Upload formal-plan DOCX visual QA
-        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: dots-formal-plan-docx-qa
-          path: |
-            docx-qa-artifacts/formal-plan.docx
-            docx-qa-artifacts/rendered/formal-plan.pdf
-            docx-qa-artifacts/rendered/*.png
-          if-no-files-found: error
-      - name: Verify formal-plan Japanese text and render every PDF page
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: uv run python scripts/verify-formal-plan-pdf.py pdf-qa-artifacts/formal-plan.pdf pdf-qa-artifacts/png
-      - name: Upload formal-plan PDF visual QA
-        if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: dots-formal-plan-pdf-qa
-          path: |
-            pdf-qa-artifacts/formal-plan.pdf
-            pdf-qa-artifacts/png/*.png
-          if-no-files-found: error
       - run: uv run pytest

@@ -9,7 +9,7 @@ describe('ProjectSurface conversation contract', () => {
     expect(html).toContain('project-composer');
     expect(html.match(/role="tab"/g)).toHaveLength(5);
     expect(html.match(/role="tabpanel"/g)).toHaveLength(1);
-    expect(html).toContain('DOCXをダウンロード');
+    expect(html).not.toContain('DOCXをダウンロード');
     expect(html).not.toContain('資料を追加');
     expect(html).toContain('AIで補完');
     expect(html).toContain('根拠');

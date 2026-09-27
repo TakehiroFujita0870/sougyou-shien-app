@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download } from "lucide-react";
 import { createProjectConversationRepository } from "./projectConversationRepository";
 import { MODEL_CATALOG } from "../models/modelCatalog";
 import { Badge } from "./ui/Badge";
@@ -26,10 +25,6 @@ const evaluationDefinitions = [
 const DEFAULT_PROJECT_MODEL_KEY =
   MODEL_CATALOG.find((model) => model.logicalKey === "gpt-5.6-terra")
     ?.logicalKey ?? MODEL_CATALOG[0]?.logicalKey;
-const downloadFormalPlanPdf = async (project) =>
-  (await import("./formalPlanPdfAdapter")).downloadFormalPlanPdf(project);
-const downloadFormalPlanDocx = async (project) =>
-  (await import("./formalPlanDocxAdapter")).downloadFormalPlanDocx(project);
 
 function createDraftProject() {
   return {
@@ -68,8 +63,6 @@ export function ProjectSurface({
   project: projectFixture,
   adoptedProject,
   conversationRepository,
-  downloadDocx = downloadFormalPlanDocx,
-  downloadPdf = downloadFormalPlanPdf,
   models = MODEL_CATALOG,
   initialModelKey = DEFAULT_PROJECT_MODEL_KEY,
   targetView,
@@ -81,7 +74,6 @@ export function ProjectSurface({
   const [composerDraft, setComposerDraft] = useState("");
   const [phase, setPhase] = useState("loading");
   const [conversationError, setConversationError] = useState("");
-  const [exportStatus, setExportStatus] = useState("idle");
   const [modelKey, setModelKey] = useState(() =>
     models.some((model) => model.logicalKey === initialModelKey)
       ? initialModelKey
@@ -213,23 +205,7 @@ export function ProjectSurface({
       });
   }
 
-  async function exportDocx() {
-    try {
-      await downloadDocx(project);
-      setExportStatus("downloaded");
-    } catch {
-      setExportStatus("error");
-    }
-  }
 
-  async function exportPdf() {
-    try {
-      await downloadPdf(project);
-      setExportStatus("pdf-downloaded");
-    } catch {
-      setExportStatus("pdf-error");
-    }
-  }
 
   if (!hasProject)
     return (
@@ -305,48 +281,7 @@ export function ProjectSurface({
             {project.overview}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="min-h-9 gap-1 px-2 text-xs text-[var(--color-text-muted)]"
-          onClick={exportDocx}
-        >
-          <Download className="size-4" />
-          DOCXをダウンロード
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="min-h-9 gap-1 px-2 text-xs text-[var(--color-text-muted)]"
-          onClick={exportPdf}
-        >
-          <Download className="size-4" />
-          PDFをダウンロード
-        </Button>
       </header>
-      {exportStatus === "downloaded" && (
-        <p
-          className="mt-3 text-sm text-[var(--color-text-muted)]"
-          role="status"
-        >
-          編集できるDOCXをダウンロードしました。
-        </p>
-      )}
-      {exportStatus === "pdf-downloaded" && (
-        <p className="mt-3 text-sm text-[var(--color-text-muted)]" role="status">
-          提出用のPDF下書きをダウンロードしました。
-        </p>
-      )}
-      {exportStatus === "error" && (
-        <p className="mt-3 text-sm text-red-700" role="alert">
-          DOCXを作成できませんでした。もう一度お試しください。
-        </p>
-      )}
-      {exportStatus === "pdf-error" && (
-        <p className="mt-3 text-sm text-red-700" role="alert">
-          PDFを作成できませんでした。もう一度お試しください。
-        </p>
-      )}
       <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(19rem,.7fr)]">
         <div className="min-w-0 space-y-7">
           <div>
