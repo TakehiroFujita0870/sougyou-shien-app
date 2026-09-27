@@ -62,7 +62,7 @@ Then: `local_only` は外部projectionに0件で、合成fixtureは `synthetic_d
 | frontend | React/Vite、Home / Project / Knowledgeの3 surface、localStorage repository群、Storybook/テスト。 | [`src/App.jsx`](../../src/App.jsx)、[`src/components`](../../src/components) |
 | 合成backend fixture | admin datasetはmessages 3、sections 5、competitors 3、knowledge assets 5、decisions 1。 | [`backend/dots/admin_demo_dataset.py`](../../backend/dots/admin_demo_dataset.py) |
 | 合成frontend fixture | asset 1、project 1、decision 1。 | [`src/fixtures/knowledge-admin-demo.json`](../../src/fixtures/knowledge-admin-demo.json) |
-| runtime data | 実DB、Supabase、localStorageの実体は未接続・未読取。実ユーザー件数は未確定。 | [`docs/HANDOFF.md`](../HANDOFF.md)、[`AGENTS.md`](../../AGENTS.md) |
+| runtime data | この移行調査時点では実DB、Supabase、localStorageは未接続・未読取。現在の稼働状態を示すものではない。 | [現況一覧](../operations/dots-current-status.json)、[`AGENTS.md`](../../AGENTS.md) |
 
 ## 1. Supabase / Postgres schema
 

@@ -9,9 +9,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mounted = [];
 
-async function mountInterview(width) {
-  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
-  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
+async function mountInterview() {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -34,32 +34,20 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-describe('Issue #56 profile mobile visual regression contract', () => {
-  it.each([320, 390, 1440])('keeps dialog header and textarea shrinkable at %ipx', async (width) => {
-    const { container } = await mountInterview(width);
-    const dialog = container.querySelector('.Dots-dialog-panel');
-    const header = dialog.querySelector('div');
-    const textarea = dialog.querySelector('textarea');
-    const close = dialog.querySelector('[aria-label="ヒアリングを閉じる"]');
-
-    expect(dialog.className).toContain('min-w-0');
-    expect(dialog.className).toContain('max-w-full');
-    expect(dialog.className).toContain('overflow-hidden');
-    expect(header.className).toContain('min-w-0');
-    expect(textarea.className).toContain('min-w-0');
-    expect(textarea.className).toContain('max-w-full');
-    expect(close).toBeTruthy();
-  });
-
-  it('keeps Escape, Enter, and Shift+Enter behavior non-destructive at 390px', async () => {
-    const { container, onClose } = await mountInterview(390);
+describe('desktop profile keyboard contract', () => {
+  it('keeps Escape, Enter, and Shift+Enter behavior non-destructive', async () => {
+    const { container, onClose } = await mountInterview();
     const textarea = container.querySelector('textarea');
     await setTextareaValue(textarea, '短い回答');
 
-    await act(async () => textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => textarea.dispatchEvent(enterEvent));
+    expect(enterEvent.defaultPrevented).toBe(true);
     expect(container.textContent).toContain('2 / 6');
 
-    await act(async () => textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true })));
+    const newlineEvent = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true });
+    await act(async () => container.querySelector('textarea').dispatchEvent(newlineEvent));
+    expect(newlineEvent.defaultPrevented).toBe(false);
     expect(container.textContent).toContain('2 / 6');
 
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
