@@ -96,8 +96,26 @@ def test_brief_instructions_are_explicitly_untrusted_data_at_mcp_boundary() -> N
     assert result["sections"][0]["content"] == result["sections"][0]["untrusted_text"] == instruction_text
     assert all(section["content"] == section["untrusted_text"] for section in result["sections"])
     assert definition["readOnly"] is True and "tool_call" not in result
-    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations"}
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin"}
+    assert result["origin"] is None
     assert result["brief_citations"] == [[] for _ in range(8)]
+
+
+def test_mcp_brief_projection_preserves_only_the_known_origin_marker():
+    class Reads:
+        def fetch_idea_brief(self, idea_id, *, owner_id):
+            return {
+                "brief_id": "brief-1", "idea_id": idea_id, "origin": "prior_research_import",
+                "sections": [
+                    {"index": index, "content": f"section {index}", "evidence_ids": [], "citations": []}
+                    for index in range(8)
+                ],
+            }
+
+    result = McpReadSurface(Reads()).call("fetch_idea_brief", {"idea_id": "idea-1"}, owner_id="owner-1")
+
+    assert result["origin"] == "prior_research_import"
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin"}
 
 
 def test_private_egress_and_relation_path_fail_closed() -> None:

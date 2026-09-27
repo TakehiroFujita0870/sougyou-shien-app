@@ -217,6 +217,8 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                 if brief is not None and brief.based_on_idea_id == identity:
                     display["brief_sections"] = [section.content for section in brief.sections]
                     display["brief_revision"] = brief.revision
+                    if brief.origin is not None:
+                        display["brief_origin"] = brief.origin
                     evidence_ids = tuple(dict.fromkeys(
                         evidence_id for section in brief.sections for evidence_id in section.evidence_ids
                     ))
@@ -237,6 +239,8 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                     # Ordinary draft edits clear them; expiry does not erase history.
                     if brief.research_run_ids and len(brief.sections) == 8 and all(section.content.strip() for section in brief.sections):
                         display["research_status"] = "researched" if has_citations else "research_sources_missing"
+                    elif brief.origin == "prior_research_import":
+                        display["research_status"] = "prior_research_import" if has_citations else "prior_research_sources_missing"
                 ideas.append((timestamp, display))
             elif kind == "asset":
                 if identity in superseded_assets:

@@ -189,3 +189,36 @@ def test_home_shows_researched_only_for_current_complete_brief_with_run_referenc
     result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")
     assert result["ideas"][0]["research_status"] == "research_sources_missing"
     assert result["ideas"][0]["brief_citations"] == [[] for _ in range(8)]
+
+
+def test_home_keeps_prior_research_origin_and_current_citations_without_campaign_run():
+    rows = [node("idea-imported", "idea", {"title": "過去調査", "status": "draft", "created_at": "2026-09-26T00:00:00Z"}, status="draft")]
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id="idea-imported", based_on_idea_id="idea-imported",
+        origin="prior_research_import", egress_policy="shareable",
+        sections=tuple(IdeaBriefSection(index=i, content=f"過去の概要{i}", evidence_ids=("evidence-public",) if i == 0 else ()) for i in range(8)),
+    )
+    store = Neo4jHomeStore(Driver(rows, (brief_row(brief),)))
+    store.read_citations = lambda _owner, ids: {"evidence-public": {"url": "https://example.test/source", "title": "公開出典"}} if ids == ("evidence-public",) else {}
+
+    result = read_local_home(store, owner_id="owner-a")
+
+    assert result["ideas"][0]["brief_origin"] == "prior_research_import"
+    assert result["ideas"][0]["research_status"] == "prior_research_import"
+    assert result["ideas"][0]["brief_citations"][0] == [{"url": "https://example.test/source", "title": "公開出典"}]
+    assert result["ideas"][0]["brief_citations"][1:] == [[] for _ in range(7)]
+
+
+def test_home_marks_imported_research_missing_current_citations_not_unresearched():
+    rows = [node("idea-imported", "idea", {"title": "過去調査", "status": "draft", "created_at": "2026-09-26T00:00:00Z"}, status="draft")]
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id="idea-imported", based_on_idea_id="idea-imported",
+        origin="prior_research_import", egress_policy="shareable",
+        sections=tuple(IdeaBriefSection(index=i, content=f"過去の概要{i}") for i in range(8)),
+    )
+
+    result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")
+
+    assert result["ideas"][0]["brief_origin"] == "prior_research_import"
+    assert result["ideas"][0]["research_status"] == "prior_research_sources_missing"
+    assert result["ideas"][0]["research_status"] != "unresearched"

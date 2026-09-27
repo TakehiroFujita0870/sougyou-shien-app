@@ -78,7 +78,8 @@ def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() ->
 
     result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
 
-    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations"}
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin"}
+    assert result["origin"] is None
     assert result["brief_citations"][0] == [{
         "url": "https://example.test/source?id=brief#overview", "title": "Synthetic public source",
         "source_id": "brief-source", "evidence_id": shared_evidence.id,

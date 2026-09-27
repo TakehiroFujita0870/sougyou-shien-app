@@ -11,7 +11,7 @@ const IDEA_SECTIONS = [
   'エグゼクティブサマリー', 'ビジネスモデル', '顧客とマーケットサイズ', '収益モデル',
   '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
 ];
-const researchStatusLabel = (status) => status === 'research_sources_missing' ? '調査済み・出典を表示できません' : status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '調査状態未確認';
+const researchStatusLabel = (status) => status === 'prior_research_sources_missing' ? '過去調査・現在の出典を表示できません' : status === 'prior_research_import' ? '過去調査を取り込みました' : status === 'research_sources_missing' ? '調査済み・出典を表示できません' : status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '調査状態未確認';
 
 export function LocalHomeSurface({ client, onOpenServices }) {
   const [tab, setTab] = useState('ideas');

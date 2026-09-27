@@ -273,7 +273,7 @@ def _formal_edge_row(assertion, relation: str, target: dict[str, object]) -> dic
             | {f"target_{key}": target[key] for key in ("id", "owner_id", "node_type", "revision", "status", "egress_policy", "payload_json", "search_text")})
 
 
-def _formal_fixture(*, assertion_brief_id: str | None = None, evidence_refs: tuple[str, ...] | None = None, assertion_policy=EgressPolicy.SHAREABLE):
+def _formal_fixture(*, assertion_brief_id: str | None = None, evidence_refs: tuple[str, ...] | None = None, assertion_policy=EgressPolicy.SHAREABLE, brief_origin=None):
     idea = Idea(owner_id="owner-1", id="idea-1", title="Foundry search seed", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
     claim = Claim(owner_id="owner-1", id="claim-1", text="A supported claim", egress_policy=EgressPolicy.SHAREABLE)
     revision = SourceRevision(owner_id="owner-1", id="revision-1", source_id="source-1", content="grounded synthetic source", egress_policy=EgressPolicy.SHAREABLE)
@@ -285,7 +285,7 @@ def _formal_fixture(*, assertion_brief_id: str | None = None, evidence_refs: tup
                         source_revision_id=revision.id, content_chunk_id=chunk.id,
                         char_start=0, char_end=len(revision.content), locator=f"chars:0-{len(revision.content)}",
                         content_hash=chunk.text_hash, status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
-    brief = IdeaBriefVersion(owner_id="owner-1", idea_lineage_root_id=idea.id, based_on_idea_id=idea.id, id="brief-1", research_run_ids=("run-1",), egress_policy="shareable", sections=(IdeaBriefSection(index=0, content="A researched section", evidence_ids=(evidence.id,)),))
+    brief = IdeaBriefVersion(owner_id="owner-1", idea_lineage_root_id=idea.id, based_on_idea_id=idea.id, id="brief-1", research_run_ids=() if brief_origin else ("run-1",), origin=brief_origin, egress_policy="shareable", sections=(IdeaBriefSection(index=0, content="A researched section", evidence_ids=(evidence.id,)),))
     assertion = RelationAssertion(owner_id="owner-1", id="assertion-1", source_id=idea.id, target_id=claim.id, source_kind=NodeType.IDEA, target_kind=NodeType.CLAIM, predicate=RelationType.ADDRESSES, assertion_family_id="family-1", status="inferred", confidence=0.8, evidence_ids=(evidence.id,), valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc), egress_policy=assertion_policy, based_on_brief_id=assertion_brief_id or brief.id, based_on_brief_section_index=0)
     endpoint_rows = {node.id: _persisted_row(node, search_text=getattr(node, "title", getattr(node, "text", ""))) for node in (idea, claim, evidence)}
     rows = [_formal_edge_row(assertion, relation, endpoint_rows[target_id])
@@ -354,6 +354,7 @@ def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evid
 
     assert result["brief_id"] == "brief-1"
     assert result["idea_id"] == idea.id
+    assert result["origin"] is None
     assert len(result["sections"]) == 8
     assert result["sections"][0] == {
         "index": 0,
@@ -367,6 +368,38 @@ def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evid
     assert result["brief_citations"][1:] == [[] for _ in range(7)]
     assert all("run-1" not in str(section) and "owner_decisions" not in section for section in result["sections"])
     assert all("IdeaBriefVersion" not in query or params["owner_id"] == "owner-1" for query, params in driver.session_value.calls)
+
+
+def test_fetch_idea_brief_preserves_prior_import_origin_and_only_current_public_citations():
+    import copy
+
+    for invalid_lineage in ("private_source", "superseded_revision", "expired_evidence"):
+        driver, reads = _gateway()
+        idea, _claim, _evidence, _brief, _assertion, _endpoints, rows, brief_row = _formal_fixture(brief_origin="prior_research_import")
+        driver.session_value.idea_rows = [_persisted_row(idea)]
+        driver.session_value.brief_rows = [brief_row]
+        driver.session_value.formal_rows = copy.deepcopy(rows)
+        lineage = next(row["_lineage"] for row in driver.session_value.formal_rows if row["relation"] == "EVIDENCED_BY")
+        if invalid_lineage == "private_source":
+            source = json.loads(lineage["lineages"][0]["source_payload_json"])
+            source["egress_policy"] = EgressPolicy.LOCAL_ONLY.value
+            lineage["lineages"][0]["source_payload_json"] = json.dumps(source)
+        elif invalid_lineage == "superseded_revision":
+            revision = json.loads(lineage["lineages"][0]["revision_payload_json"])
+            revision["status"] = Status.SUPERSEDED.value
+            lineage["lineages"][0]["revision_payload_json"] = json.dumps(revision)
+            lineage["lineages"][0]["revision_status"] = Status.SUPERSEDED.value
+        else:
+            evidence = json.loads(lineage["evidence_payload_json"])
+            evidence["status"] = Status.EXPIRED.value
+            lineage["evidence_payload_json"] = json.dumps(evidence)
+            lineage["evidence_status"] = Status.EXPIRED.value
+
+        result = reads.fetch_idea_brief(idea.id, owner_id="owner-1")
+
+        assert result["origin"] == "prior_research_import"
+        assert result["brief_citations"] == [[] for _ in range(8)]
+        assert result["sections"][0]["evidence_ids"] == []
 
 
 def test_fetch_idea_brief_rejects_a_stale_idea_revision() -> None:
