@@ -13,6 +13,7 @@ from .founder_graph_facet_hierarchy import (
     project_facet_region,
 )
 from .founder_graph import RelationshipStatus
+from .founder_graph_neo4j_idea import decode_persisted_idea
 from .founder_graph_read import (
     GraphReadError,
     GraphReadNotFoundError,
@@ -26,6 +27,7 @@ from .founder_graph_read_contract import (
     row_value,
     tokens,
 )
+from .founder_graph_lifecycle_resolver import decode_asset_lifecycle_record, lifecycle_reference_aliases
 
 _ACTIVE_RELATION_STATUSES = frozenset({
     RelationshipStatus.PROPOSED.value,
@@ -46,10 +48,11 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
     node_query = (
         "MATCH (n) WHERE n.owner_id = $owner_id AND n.node_type IN $node_types "
         "AND NOT EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(n) } "
-        "AND NOT coalesce(n.status, '') IN $non_current "
+        "AND (n.node_type IN ['idea', 'asset'] OR NOT coalesce(n.status, '') IN $non_current) "
         "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
         "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
-        "n.search_text AS search_text, n.egress_policy AS egress_policy ORDER BY n.id"
+        "n.search_text AS search_text, n.egress_policy AS egress_policy, "
+        "EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) } AS has_successor ORDER BY n.id"
     )
     with reads.read_session() as session:
         rows = gateway.execute_read(session, lambda tx: tuple(result_rows(tx.run(
@@ -63,14 +66,58 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
     entities: list[RegionEntity] = []
     taxonomy: list[FacetTaxonomyRelation] = []
     classifications: list[FacetClassification] = []
+    idea_records: dict[str, Any] = {}
+    asset_records: dict[str, Any] = {}
+    superseded_idea_ids: set[str] = set()
     evidence_ids: set[str] = set()
     for row in rows:
+        if row_value(row, "node_type") == "idea" and row_value(row, "has_successor", False) is True:
+            successor_id = row_value(row, "id")
+            if isinstance(successor_id, str) and successor_id:
+                superseded_idea_ids.add(successor_id)
         # Region paths are shareable projections: excluding private intermediate
         # Facets and taxonomy assertions here prevents leaking their existence
         # through descendant membership or reported path depth.
         if row_value(row, "egress_policy") != "shareable":
             continue
-        view = node_view_from_row(row, owner_id=owner)
+        payload_json = row_value(row, "payload_json")
+        if row_value(row, "node_type") == "idea":
+            try:
+                idea_payload = json.loads(payload_json) if isinstance(payload_json, str) else None
+                idea = decode_persisted_idea({
+                    "id": row_value(row, "id"),
+                    "owner_id": owner,
+                    "node_type": "idea",
+                    "revision": row_value(row, "revision"),
+                    "payload_json": json.dumps(idea_payload, ensure_ascii=False),
+                }, owner_id=owner, expected_id=row_value(row, "id"))
+            except (TypeError, ValueError) as error:
+                if row_value(row, "has_successor", False) is True:
+                    continue
+                fallback = node_view_from_row(row, owner_id=owner)
+                if fallback is not None:
+                    entities.append(RegionEntity(owner, fallback.id, "idea", fallback.title))
+                continue
+            idea_records[idea.id] = idea
+            continue
+        if row_value(row, "node_type") == "asset":
+            try:
+                asset_payload = json.loads(payload_json) if isinstance(payload_json, str) else None
+                asset = decode_asset_lifecycle_record(
+                    asset_payload,
+                    owner_id=owner,
+                    expected_id=row_value(row, "id"),
+                    expected_revision=row_value(row, "revision"),
+                )
+                if asset.egress_policy.value != "shareable":
+                    continue
+                asset_records[asset.id] = asset
+            except (TypeError, ValueError):
+                pass
+        view = node_view_from_row(
+            row, owner_id=owner,
+            strict=row_value(row, "node_type") != "asset",
+        )
         if view is None:
             continue
         payload_json = row_value(row, "payload_json")
@@ -83,8 +130,9 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
         if view.node_type == "facet":
             facets.append(FacetNode(owner, view.id, f"{payload.get('namespace', '')}: {payload.get('value', '')}"))
             continue
-        if view.node_type in {"idea", "asset"}:
-            entities.append(RegionEntity(owner, view.id, view.node_type, view.title))
+        if view.node_type == "asset":
+            if row_value(row, "has_successor", False) is not True:
+                entities.append(RegionEntity(owner, view.id, view.node_type, view.title))
             continue
         if view.node_type != "relation_assertion":
             continue
@@ -106,6 +154,22 @@ def read_facet_region(reads: Any, root_facet_id: str, *, owner_id: str, max_face
             taxonomy.append(FacetTaxonomyRelation(owner, source_id, target_id, status, evidence))
         elif source_kind in {"idea", "asset"} and target_kind == "facet":
             classifications.append(FacetClassification(owner, source_id, target_id, status, evidence))
+
+    lifecycle_aliases = lifecycle_reference_aliases((*idea_records.values(), *asset_records.values()))
+    superseded_idea_ids.update(
+        idea.supersedes_id for idea in idea_records.values() if idea.supersedes_id
+    )
+    entities.extend(
+        RegionEntity(owner, idea.id, "idea", idea.title)
+        for idea in idea_records.values()
+        if idea.status.value not in NON_CURRENT_STATUSES
+        and idea.id not in superseded_idea_ids
+        and idea.egress_policy.value == "shareable"
+    )
+    classifications = [
+        FacetClassification(owner, lifecycle_aliases.get(item.entity_id, item.entity_id), item.facet_id, item.status, item.evidence_ids)
+        for item in classifications
+    ]
 
     evidence_query = (
         "MATCH (e:Evidence) WHERE e.owner_id = $owner_id AND e.id IN $evidence_ids "
@@ -195,6 +259,7 @@ def search_facet_nodes(
         "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
         "n.search_text AS search_text ORDER BY n.id"
     )
+
     with reads.read_session() as session:
         rows = reads.gateway.execute_read(session, lambda tx: tuple(result_rows(tx.run(query_text, owner_id=owner))))
     query_tokens = tokens(query)

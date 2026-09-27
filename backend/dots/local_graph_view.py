@@ -6,6 +6,9 @@ import json
 import math
 from typing import Any, Mapping, Protocol, Sequence
 
+from .founder_graph_lifecycle_resolver import decode_asset_lifecycle_record, lifecycle_reference_aliases
+from .founder_graph_neo4j_idea import decode_persisted_idea
+
 
 MAX_NODES = 200
 MAX_EDGES = 400
@@ -29,7 +32,7 @@ class Neo4jGraphViewStore:
         "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
         "n.status AS status, n.payload_json AS payload_json, "
         "(EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(n) } "
-        "OR (n.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) })) "
+        "OR (n.node_type IN ['idea', 'asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) })) "
         "AS has_successor ORDER BY n.id LIMIT 201"
     )
     _EDGES = (
@@ -76,6 +79,7 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
         node_statuses: dict[str, str] = {}
         globally_superseded_ids = set()
         superseded_asset_ids = set()
+        superseded_idea_ids = set()
         for row in raw_nodes[:MAX_NODES]:
             identity, kind = row["id"], row["node_type"]
             if row["owner_id"] != owner_id or not isinstance(identity, str) or not identity or identity in seen or not isinstance(kind, str):
@@ -96,11 +100,13 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
                     raise ValueError("unexpected assertion successor status")
                 if kind == "relation_assertion" and has_successor:
                     globally_superseded_ids.add(identity)
+                if kind == "idea" and has_successor:
+                    superseded_idea_ids.add(identity)
                 if kind in {"asset", "person"} and has_successor:
                     superseded_asset_ids.add(identity)
             if str(row.get("status") or "").lower() in _EXCLUDED:
                 continue
-            if identity in superseded_asset_ids:
+            if identity in superseded_asset_ids or identity in superseded_idea_ids:
                 continue
             field = _TITLES.get(kind)
             label = payload.get(field) if field else None
@@ -118,7 +124,11 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
             if not isinstance(relation, str) or not relation:
                 raise ValueError("unexpected relation type")
             edges.append({"source": row["source"], "target": row["target"], "label": relation[:60]})
-        semantic_edges = _semantic_edges(owner_id, payloads, node_kinds, node_statuses, globally_superseded_ids)
+        lifecycle_aliases = _lifecycle_aliases(owner_id, payloads, node_kinds)
+        semantic_edges = _semantic_edges(
+            owner_id, payloads, node_kinds, node_statuses, globally_superseded_ids,
+            idea_aliases=lifecycle_aliases,
+        )
         return {
             "status": "ready" if nodes else "empty",
             "nodes": nodes,
@@ -150,9 +160,11 @@ def _semantic_edges(
     globally_superseded_ids: set[str] | frozenset[str] = frozenset(),
     *,
     at: datetime | None = None,
+    idea_aliases: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Project current owner-local RelationAssertions without exposing payloads."""
     now = at or datetime.now(timezone.utc)
+    idea_aliases = idea_aliases or {}
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
     else:
@@ -199,17 +211,20 @@ def _semantic_edges(
             or len(predicate) > 60
         ):
             continue
-        source = payloads.get(source_id)
-        target = payloads.get(target_id)
+        aliasable_kinds = {"idea", "asset", "person"}
+        resolved_source_id = idea_aliases.get(source_id, source_id) if source_kind in aliasable_kinds else source_id
+        resolved_target_id = idea_aliases.get(target_id, target_id) if target_kind in aliasable_kinds else target_id
+        source = payloads.get(resolved_source_id)
+        target = payloads.get(resolved_target_id)
         if (
             source is None
             or target is None
-            or source_id in superseded_asset_ids
-            or target_id in superseded_asset_ids
-            or node_statuses.get(source_id) in _EXCLUDED
-            or node_statuses.get(target_id) in _EXCLUDED
-            or node_kinds.get(source_id) != source_kind
-            or node_kinds.get(target_id) != target_kind
+            or resolved_source_id in superseded_asset_ids
+            or resolved_target_id in superseded_asset_ids
+            or node_statuses.get(resolved_source_id) in _EXCLUDED
+            or node_statuses.get(resolved_target_id) in _EXCLUDED
+            or node_kinds.get(resolved_source_id) != source_kind
+            or node_kinds.get(resolved_target_id) != target_kind
             or source.get("owner_id") != owner_id
             or target.get("owner_id") != owner_id
         ):
@@ -253,8 +268,8 @@ def _semantic_edges(
             continue
         projected.append({
             "id": identity,
-            "source_id": source_id,
-            "target_id": target_id,
+            "source_id": resolved_source_id,
+            "target_id": resolved_target_id,
             "predicate": predicate,
             "status": status,
             "confidence": confidence,
@@ -263,6 +278,34 @@ def _semantic_edges(
             "based_on_brief_section_index": section_index,
         })
     return sorted(projected, key=lambda edge: edge["id"])
+
+
+def _lifecycle_aliases(
+    owner_id: str,
+    payloads: Mapping[str, Mapping[str, Any]],
+    node_kinds: Mapping[str, str],
+) -> dict[str, str]:
+    records = []
+    for identity, payload in payloads.items():
+        kind = node_kinds.get(identity)
+        if kind not in {"idea", "asset", "person"}:
+            continue
+        try:
+            if kind == "idea":
+                records.append(decode_persisted_idea({
+                    "id": identity,
+                    "owner_id": owner_id,
+                    "node_type": "idea",
+                    "revision": payload.get("revision"),
+                    "payload_json": json.dumps(payload, ensure_ascii=False),
+                }, owner_id=owner_id, expected_id=identity))
+            else:
+                records.append(decode_asset_lifecycle_record(
+                    payload, owner_id=owner_id, expected_id=identity,
+                ))
+        except (TypeError, ValueError):
+            continue
+    return lifecycle_reference_aliases(records)
 
 
 def read_local_facet_region(
