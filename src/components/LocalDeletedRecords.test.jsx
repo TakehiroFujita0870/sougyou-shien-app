@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalDeletedRecords } from './LocalDeletedRecords';
+import { createLocalDashboardClient } from '../runtime/localDashboardClient.js';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let mounted;
@@ -76,6 +77,91 @@ it('disables every restore action while an operation is pending and keeps the re
   await act(async () => rejectRestore({ kind: 'conflict' }));
   expect(view.querySelectorAll('.local-deleted-records__item')).toHaveLength(1);
   expect(view.querySelector('[role="status"]')?.textContent).toContain('他の更新');
+});
+
+it('aborts a pending restore when the deleted-record list unmounts', async () => {
+  let restoreSignal;
+  const record = { id: 'asset-1', kind: 'asset', title: '離脱する資料', description: '', revision: 2 };
+  const client = {
+    getDeletedRecords: vi.fn(async () => ({ status: 'ready', records: [record] })),
+    restoreRecord: vi.fn((_kind, _id, _revision, { signal }) => {
+      restoreSignal = signal;
+      return new Promise(() => {});
+    }),
+  };
+  const view = await renderDeletedRecords(client);
+  await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === '復元').click());
+  expect(restoreSignal.aborted).toBe(false);
+
+  await act(async () => mounted.root.unmount());
+  expect(restoreSignal.aborted).toBe(true);
+  mounted.container.remove();
+  mounted = null;
+});
+
+it('retries an unavailable restore with the same intent key and recovers the list', async () => {
+  const record = { id: 'asset-1', kind: 'asset', title: '再試行する資料', description: '概要', revision: 2 };
+  const response = (body, status = 200) => ({ ok: status === 200, status, json: async () => body });
+  const restoreRequests = [];
+  const fetchImpl = vi.fn(async (path, options = {}) => {
+    if (path === '/api/deleted-records') {
+      return response(restoreRequests.length < 2
+        ? { status: 'ready', records: [record] }
+        : { status: 'empty', records: [] });
+    }
+    if (path === '/api/status') {
+      return response({ controller: 'running', csrf_token: 'synthetic-csrf', services: {} });
+    }
+    if (path === '/api/records/asset/asset-1/restore') {
+      restoreRequests.push(JSON.parse(options.body));
+      return restoreRequests.length === 1
+        ? response({}, 503)
+        : response({ id: 'asset-restored', revision: 3, replayed: true });
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const createIdempotencyKey = vi.fn(() => 'restore-intent-1');
+  const client = createLocalDashboardClient({
+    fetchImpl,
+    location: { origin: 'http://localhost:8765', hostname: 'localhost' },
+    createIdempotencyKey,
+  });
+  const view = await renderDeletedRecords(client);
+
+  const restoreButton = () => [...view.querySelectorAll('button')].find((button) => button.textContent === '復元');
+  await act(async () => restoreButton().click());
+  expect(view.querySelectorAll('.local-deleted-records__item')).toHaveLength(1);
+  expect(view.textContent).toContain('復元できませんでした');
+
+  await act(async () => restoreButton().click());
+  expect(restoreRequests).toEqual([
+    { expected_revision: 2, idempotency_key: 'restore-intent-1' },
+    { expected_revision: 2, idempotency_key: 'restore-intent-1' },
+  ]);
+  expect(createIdempotencyKey).toHaveBeenCalledOnce();
+  expect(view.querySelectorAll('.local-deleted-records__item')).toHaveLength(0);
+  expect(view.textContent).toContain('再試行する資料を復元しました');
+});
+
+it('keeps a restored record visible when the follow-up list read fails and recovers on reload', async () => {
+  const record = { id: 'idea-1', kind: 'idea', title: '更新が失敗する案', description: '', revision: 0 };
+  const client = {
+    getDeletedRecords: vi.fn().mockResolvedValueOnce({ status: 'ready', records: [record] })
+      .mockRejectedValueOnce(new Error('temporary read failure'))
+      .mockResolvedValueOnce({ status: 'empty', records: [] }),
+    restoreRecord: vi.fn().mockResolvedValue({ id: 'idea-restored', revision: 1, replayed: false }),
+  };
+  const view = await renderDeletedRecords(client);
+
+  await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === '復元').click());
+  expect(view.querySelectorAll('.local-deleted-records__item')).toHaveLength(1);
+  expect(view.textContent).toContain('削除済み一覧を更新できませんでした');
+  expect(view.querySelector('[role="alert"]')).not.toBeNull();
+
+  await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === '再読み込み').click());
+  expect(client.getDeletedRecords).toHaveBeenCalledTimes(3);
+  expect(view.querySelectorAll('.local-deleted-records__item')).toHaveLength(0);
+  expect(view.textContent).toContain('削除済みの記録はありません');
 });
 
 it('clears an aborted restore when the client changes', async () => {
