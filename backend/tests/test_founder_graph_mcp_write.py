@@ -240,6 +240,12 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "record_decision",
         "record_correction",
         "confirm_person_merge",
+        "create_research_campaign",
+        "approve_research_campaign",
+        "revoke_research_campaign",
+        "record_research_run",
+        "save_idea_brief",
+        "save_researched_idea_brief",
     ]
     assert all(definition["readOnly"] is False for definition in definitions)
 

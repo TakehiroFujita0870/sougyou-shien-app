@@ -119,6 +119,37 @@ describe('FounderGraphSurface', () => {
     expect(view.textContent).not.toContain('local-only raw content');
   });
 
+  it('shows safe RelationAssertion review metadata from structured live paths', () => {
+    const view = renderSurface({
+      results: [{
+        ...results[0],
+        relation_path: [{
+          from_id: 'person-1',
+          to_id: 'idea-1',
+          predicate: 'CAN_CONTRIBUTE_TO',
+          status: 'proposed',
+          confidence: 0.82,
+          valid_from: '2026-01-01T00:00:00Z',
+          expires_at: '2027-12-31T23:59:59Z',
+          evidence_ids: ['evidence-1'],
+          source_text: 'private relationship evidence',
+          contact: 'private@example.test',
+        }],
+      }],
+    });
+
+    act(() => view.querySelector('[data-founder-graph-card]').click());
+
+    const detail = view.querySelector('[data-founder-graph-detail]');
+    expect(detail.textContent).toContain('person-1 → CAN_CONTRIBUTE_TO → idea-1');
+    expect(detail.textContent).toContain('proposed');
+    expect(detail.textContent).toContain('0.82');
+    expect(detail.textContent).toContain('2027-12-31T23:59:59Z');
+    expect(detail.textContent).toContain('evidence-1');
+    expect(detail.textContent).not.toContain('private relationship evidence');
+    expect(detail.textContent).not.toContain('private@example.test');
+  });
+
   it.each([
     ['loading', 'Founder Graphを読み込んでいます。', 'status'],
     ['unavailable', 'Founder Graphは現在利用できません。', 'status'],

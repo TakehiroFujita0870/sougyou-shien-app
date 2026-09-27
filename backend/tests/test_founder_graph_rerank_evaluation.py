@@ -11,6 +11,11 @@ from dots.founder_graph_rerank_evaluation import (
 from dots.model_catalog import ModelCatalog, ModelCatalogEntry
 
 
+_RERANK_CATALOG = ModelCatalog((
+    ModelCatalogEntry("rerank-test", "offline", "fixture-v1", capabilities=("rerank",), is_default=True),
+))
+
+
 def _expected_first(query: str, candidate_ids: tuple[str, ...]) -> tuple[str, ...]:
     index = int(query.rsplit("topic-", 1)[1])
     expected = candidate_ids[5 + (index % 3)]
@@ -18,9 +23,11 @@ def _expected_first(query: str, candidate_ids: tuple[str, ...]) -> tuple[str, ..
 
 
 def test_fixed_fixture_records_the_p3_sp_03_target_without_a_provider_call() -> None:
-    result = evaluate_reranker(build_fixed_rerank_fixture(), _expected_first)
+    result = evaluate_reranker(
+        build_fixed_rerank_fixture(), _expected_first, catalog=_RERANK_CATALOG, logical_key="rerank-test"
+    )
 
-    assert result.model_snapshot == "luna@founder-graph-v1"
+    assert result.model_snapshot == "rerank-test@founder-graph-v1"
     assert result.case_count == 20
     assert result.top_5_hits == 20
     assert result.top_5_recall == 1.0
@@ -32,7 +39,10 @@ def test_fixed_fixture_records_the_p3_sp_03_target_without_a_provider_call() -> 
 def test_unknown_and_duplicate_model_output_are_recorded_and_fail_the_gate() -> None:
     case = RerankEvaluationCase("topic", ("idea-a", "idea-b"), "idea-a")
 
-    result = evaluate_reranker((case,), lambda _query, _candidates: ("unknown", "idea-a", "idea-a"))
+    result = evaluate_reranker(
+        (case,), lambda _query, _candidates: ("unknown", "idea-a", "idea-a"),
+        catalog=_RERANK_CATALOG, logical_key="rerank-test",
+    )
 
     assert result.top_5_hits == 1
     assert result.invalid_id_count == 1
@@ -59,7 +69,9 @@ def test_evaluation_rejects_non_sequence_model_output() -> None:
     case = RerankEvaluationCase("topic", ("idea-a",), "idea-a")
 
     with pytest.raises(RerankEvaluationError, match="sequence"):
-        evaluate_reranker((case,), lambda _query, _candidates: "idea-a")
+        evaluate_reranker(
+            (case,), lambda _query, _candidates: "idea-a", catalog=_RERANK_CATALOG, logical_key="rerank-test"
+        )
 
 
 @pytest.mark.parametrize("candidate_ids", (None, {"idea-a": "unexpected"}))
@@ -73,4 +85,6 @@ def test_evaluation_normalizes_non_sequence_model_output(returned: object) -> No
     case = RerankEvaluationCase("topic", ("idea-a",), "idea-a")
 
     with pytest.raises(RerankEvaluationError, match="reranker must return a sequence"):
-        evaluate_reranker((case,), lambda _query, _candidates: returned)  # type: ignore[return-value]
+        evaluate_reranker(
+            (case,), lambda _query, _candidates: returned, catalog=_RERANK_CATALOG, logical_key="rerank-test"
+        )  # type: ignore[return-value]

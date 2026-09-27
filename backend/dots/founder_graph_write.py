@@ -407,6 +407,9 @@ class InMemoryGraphWriteService:
         "capture_evidence",
         "record_research_run",
         "save_idea_brief",
+        "create_research_campaign",
+        "approve_research_campaign",
+        "revoke_research_campaign",
         "capture_person",
         "capture_organization",
         "capture_asset",
@@ -1398,6 +1401,20 @@ class InMemoryGraphWriteService:
     def audit_events(self) -> tuple[AuditEvent, ...]:
         with self._lock:
             return tuple(self._audit)
+
+    def get_write_receipt(self, idempotency_key: str, *, operation: str | None = None) -> WriteReceipt | None:
+        """Return an owner-local receipt for idempotent lifecycle retries."""
+        key = _required_text(idempotency_key, "idempotency_key")
+        if operation is not None:
+            operation = _required_text(operation, "operation")
+        with self._lock:
+            stored = self._idempotency.get(key)
+            if stored is None:
+                return None
+            receipt = stored[1]
+            if operation is not None and receipt.operation != operation:
+                raise IdempotencyConflictError("idempotency key was recorded for a different operation")
+            return replace(receipt, replayed=True)
 
     def _validate_command(self, operation: str, actor: str, idempotency_key: str) -> str:
         operation = _required_text(operation, "operation")

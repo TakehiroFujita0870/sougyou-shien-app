@@ -28,6 +28,8 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
         "search", "fetch", "fetch_idea_brief", "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
         "capture_evidence",
         "link_entities", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
+        "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
+        "record_research_run", "save_idea_brief", "save_researched_idea_brief",
     }
     assert len(tools) == len({tool["name"] for tool in tools})
     assert all("inputSchema" in tool and "readOnlyHint" in tool["annotations"] for tool in tools)

@@ -1,5 +1,5 @@
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Mapping
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from pydantic import BaseModel
@@ -30,6 +30,7 @@ from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadPort, GraphReadService
 from .founder_graph_runtime import create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
 from .founder_graph_write import GraphWritePort, InMemoryGraphWriteService
+from .founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
 
 
 orchestrator = ResearchOrchestrator({source: FakeSource() for source in Source})
@@ -84,7 +85,8 @@ def create_app(
     if read_owner_id != graph_writes.owner_id:
         raise ValueError("founder_graph_read_service owner must match founder_graph_owner_id")
     graph_read_mcp = McpReadSurface(graph_reads)
-    graph_write_mcp = McpWriteSurface(graph_writes)
+    brief_store = Neo4jIdeaBriefStore(graph_writes.gateway) if isinstance(graph_writes, Neo4jGraphWriteService) else None
+    graph_write_mcp = McpWriteSurface(graph_writes, brief_store=brief_store)
 
     def runtime_owner(x_local_owner_id: str | None = Header(default=None, alias="X-Local-Owner-Id")) -> str:
         try:
@@ -146,7 +148,7 @@ def create_app(
     ) -> dict[str, Any]:
         try:
             receipt = graph_write_mcp.call(tool_name, request, owner_id=owner_id)
-            return {
+            response = {
                 "operation": receipt.operation,
                 "target_id": receipt.target_id,
                 "target_type": receipt.target_type,
@@ -156,6 +158,16 @@ def create_app(
                 "source_revision_id": receipt.source_revision_id,
                 "content_chunk_ids": receipt.content_chunk_ids,
             }
+            proposal = getattr(receipt, "campaign_proposal", None)
+            if isinstance(proposal, Mapping):
+                proposal_fields = {
+                    "purpose", "target_idea_id", "scope", "questions", "allowed_categories",
+                    "external_sources", "trial_budget", "expires_at",
+                    "authorization_snapshot_id", "authorization_revision",
+                    "authorized", "status", "aggregate_revision",
+                }
+                response["campaign_proposal"] = {key: value for key, value in proposal.items() if key in proposal_fields}
+            return response
         except McpWriteError as error:
             raise mcp_error(error) from error
 

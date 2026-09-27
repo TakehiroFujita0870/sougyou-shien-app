@@ -33,6 +33,11 @@ from .founder_graph import (
     Status,
 )
 from .founder_graph_mcp_annotations import mcp_tool_annotations
+from .founder_graph_mcp_research import (
+    McpResearchCampaignSurface,
+    ResearchCampaignInputError,
+    ResearchCampaignUnavailableError,
+)
 from .founder_graph_neo4j import Neo4jUnavailableError
 from .founder_graph_write import (
     GraphWriteError,
@@ -55,6 +60,7 @@ class McpWriteError(Exception):
 @dataclass(frozen=True, slots=True)
 class McpWriteSurface:
     writes: GraphWritePort
+    brief_store: Any | None = None
 
     _TOOL_NAMES = (
         "capture_idea",
@@ -308,20 +314,32 @@ class McpWriteSurface:
                 "inputSchema": schemas.get(name, {"type": "object", "additionalProperties": False}),
             }
             for name in self._TOOL_NAMES
-        )
+        ) + McpResearchCampaignSurface(self.writes, self.brief_store).tool_definitions()
 
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> WriteReceipt:
-        if tool_name not in self._TOOL_NAMES:
+        research_tools = {
+            "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
+            "record_research_run", "save_idea_brief", "save_researched_idea_brief",
+        }
+        if tool_name not in self._TOOL_NAMES and tool_name not in research_tools:
             raise McpWriteError("unknown_tool", "Only the purpose-limited write tools are available.")
         if not isinstance(arguments, Mapping):
             raise McpWriteError("invalid_input", "Tool arguments must be an object.")
         if owner_id != self.writes.owner_id:
             raise McpWriteError("owner_mismatch", "The request owner is not the local owner.")
         try:
+            if tool_name in research_tools:
+                return McpResearchCampaignSurface(self.writes, self.brief_store).call(
+                    tool_name, arguments, owner_id=owner_id,
+                )
             handler = getattr(self, f"_{tool_name}")
             return handler(arguments)
         except McpWriteError:
             raise
+        except ResearchCampaignInputError as error:
+            raise McpWriteError("invalid_input", str(error)) from error
+        except ResearchCampaignUnavailableError as error:
+            raise McpWriteError("unavailable", str(error)) from error
         except IdempotencyConflictError as error:
             raise McpWriteError("idempotency_conflict", str(error)) from error
         except RevisionConflictError as error:

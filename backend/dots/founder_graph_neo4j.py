@@ -241,7 +241,14 @@ class Neo4jGraphGateway:
     ``execute_write`` / ``execute_read`` accepts a transaction callback.
     """
 
-    def __init__(self, driver: Any, owner_id: str, *, database: str = "neo4j") -> None:
+    def __init__(
+        self,
+        driver: Any,
+        owner_id: str,
+        *,
+        database: str = "neo4j",
+        search_models: Any | None = None,
+    ) -> None:
         if driver is None:
             raise Neo4jUnavailableError("a Neo4j driver is required")
         if not isinstance(owner_id, str) or not owner_id.strip():
@@ -251,6 +258,23 @@ class Neo4jGraphGateway:
         self.driver = driver
         self.owner_id = owner_id.strip()
         self.database = database.strip()
+        self.search_models = search_models
+
+    def _properties_for_node(self, node: Any) -> dict[str, Any]:
+        properties = _node_properties(node)
+        search_text = properties["search_text"]
+        if self.search_models is not None and search_text.strip():
+            vector = self.search_models.embed_documents([search_text])[0]
+            if len(vector) != self.search_models.embedding_dimensions:
+                raise GraphWriteError("local search embedding returned an unexpected vector size")
+            properties.update({
+                "search_embedding_e5base": vector,
+                "embedding_e5base_content_hash": sha256(search_text.encode("utf-8")).hexdigest(),
+                "embedding_e5base_model_id": self.search_models.embedding_model_id,
+                "embedding_e5base_model_revision": self.search_models.embedding_model_revision,
+                "embedding_e5base_dimensions": self.search_models.embedding_dimensions,
+            })
+        return properties
 
     @classmethod
     def label_for(cls, node_type: NodeType | str) -> str:
@@ -864,6 +888,61 @@ class Neo4jGraphGateway:
             except Exception as error:  # pragma: no cover - concrete driver failure
                 raise Neo4jUnavailableError("Neo4j health check failed") from error
 
+    def reindex_search_embeddings(self, *, batch_size: int = 64) -> int:
+        """Backfill owner-scoped search vectors using the configured local model."""
+        if self.search_models is None:
+            raise GraphWriteError("local search models are not configured")
+        if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= 256:
+            raise GraphWriteError("batch_size must be between 1 and 256")
+        total = 0
+        while True:
+            with self._session() as session:
+                rows = self._execute_read(session, lambda tx: _rows(tx.run(
+                    "MATCH (n:FounderGraphSearchable) WHERE n.owner_id = $owner_id "
+                    "AND n.search_text IS NOT NULL AND n.search_text <> '' "
+                    "AND (n.search_embedding_e5base IS NULL OR n.embedding_e5base_model_id <> $model_id "
+                    "OR n.embedding_e5base_model_revision <> $model_revision) "
+                    "RETURN n.id AS id, n.search_text AS search_text ORDER BY n.id LIMIT $batch_size",
+                    owner_id=self.owner_id,
+                    model_id=self.search_models.embedding_model_id,
+                    model_revision=self.search_models.embedding_model_revision,
+                    batch_size=batch_size,
+                )))
+            if not rows:
+                return total
+            updates = []
+            for row in rows:
+                node_id = _record_value(row, "id")
+                search_text = _record_value(row, "search_text")
+                if not isinstance(node_id, str) or not isinstance(search_text, str):
+                    raise GraphWriteError("search embedding backfill returned an invalid row")
+                vector = self.search_models.embed_documents([search_text])[0]
+                if len(vector) != self.search_models.embedding_dimensions:
+                    raise GraphWriteError("local search embedding returned an unexpected vector size")
+                updates.append({
+                    "id": node_id,
+                    "embedding": vector,
+                    "content_hash": sha256(search_text.encode("utf-8")).hexdigest(),
+                })
+            with self._session() as session:
+                def update_batch(tx: Any) -> None:
+                    result = tx.run(
+                        "UNWIND $updates AS item MATCH (n:FounderGraphSearchable {id: item.id, owner_id: $owner_id}) "
+                        "SET n.search_embedding_e5base = item.embedding, n.embedding_e5base_content_hash = item.content_hash, "
+                        "n.embedding_e5base_model_id = $model_id, n.embedding_e5base_model_revision = $model_revision, "
+                        "n.embedding_e5base_dimensions = $dimensions",
+                        updates=updates,
+                        owner_id=self.owner_id,
+                        model_id=self.search_models.embedding_model_id,
+                        model_revision=self.search_models.embedding_model_revision,
+                        dimensions=self.search_models.embedding_dimensions,
+                    )
+                    consume = getattr(result, "consume", None)
+                    if callable(consume):
+                        consume()
+                self._execute_write(session, update_batch)
+            total += len(updates)
+
     def fetch_node_record(self, node_id: str) -> Mapping[str, Any] | None:
         """Fetch the bounded persisted projection used by command adapters.
 
@@ -906,6 +985,39 @@ class Neo4jGraphGateway:
         if not isinstance(values["payload_json"], str) or not values["payload_json"].strip():
             raise GraphWriteError("Neo4j node payload is missing")
         return values
+
+    def fetch_write_receipt(self, idempotency_key: str, *, operation: str | None = None) -> WriteReceipt | None:
+        """Read a validated write receipt from this owner's immutable audit log."""
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if operation is not None and (not isinstance(operation, str) or not operation.strip()):
+            raise GraphWriteError("operation must be a non-empty string when provided")
+        with self._session() as session:
+            row = self._execute_read(session, lambda tx: _single(tx.run(
+                "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $idempotency_key}) "
+                "RETURN a.operation AS operation, a.target_id AS target_id, a.target_type AS target_type, "
+                "a.revision AS revision",
+                owner_id=self.owner_id,
+                idempotency_key=idempotency_key.strip(),
+            )))
+        if row is None:
+            return None
+        found_operation = _record_value(row, "operation")
+        target_id = _record_value(row, "target_id")
+        target_type = _record_value(row, "target_type")
+        revision = _record_value(row, "revision")
+        if (
+            not isinstance(found_operation, str) or not found_operation
+            or not isinstance(target_id, str) or not target_id
+            or not isinstance(target_type, str) or not target_type
+            or not isinstance(revision, int) or isinstance(revision, bool) or revision < 0
+        ):
+            raise GraphWriteError("persisted write receipt is invalid")
+        if operation is not None and found_operation != operation.strip():
+            raise IdempotencyConflictError("idempotency key was recorded for a different operation")
+        return WriteReceipt(
+            found_operation, target_id, target_type, revision, idempotency_key.strip(), replayed=True,
+        )
 
     def put_node(
         self,
@@ -1606,10 +1718,10 @@ class Neo4jGraphGateway:
         self._store_prior_campaign_revision_tx(tx, record)
         tx.run(
             f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}) SET c = $properties",
-            campaign_id=campaign.id, owner_id=self.owner_id, properties=_node_properties(updated_campaign),
+            campaign_id=campaign.id, owner_id=self.owner_id, properties=self._properties_for_node(updated_campaign),
         )
         run_label = self.label_for(NodeType.RESEARCH_RUN)
-        tx.run(f"CREATE (r:{run_label}) SET r = $properties", properties=_node_properties(run))
+        tx.run(f"CREATE (r:{run_label}) SET r = $properties SET r:FounderGraphSearchable", properties=self._properties_for_node(run))
         linked = _single(tx.run(
             f"MATCH (c:{campaign_label} {{id: $campaign_id, owner_id: $owner_id}}), "
             f"(r:{run_label} {{id: $run_id, owner_id: $owner_id}}) "
@@ -1655,12 +1767,12 @@ class Neo4jGraphGateway:
         if _rows(tx.run("MATCH (n) WHERE n.id IN $node_ids RETURN n.id AS id", node_ids=node_ids)):
             raise NodeAlreadyExistsError("capture_source node id is already registered")
         source_label, revision_label, chunk_label = (self.label_for(NodeType.SOURCE), self.label_for(NodeType.SOURCE_REVISION), self.label_for(NodeType.CONTENT_CHUNK))
-        tx.run(f"CREATE (n:{source_label}) SET n = $properties", properties=_node_properties(replace(source, current_revision_id=None)))
-        tx.run(f"CREATE (n:{revision_label}) SET n = $properties", properties=_node_properties(revision))
+        tx.run(f"CREATE (n:{source_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(replace(source, current_revision_id=None)))
+        tx.run(f"CREATE (n:{revision_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(revision))
         for chunk in chunks:
-            tx.run(f"CREATE (n:{chunk_label}) SET n = $properties", properties=_node_properties(chunk))
+            tx.run(f"CREATE (n:{chunk_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(chunk))
         tx.run(f"MATCH (n:{source_label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
-               id=source.id, owner_id=self.owner_id, properties=_node_properties(source))
+               id=source.id, owner_id=self.owner_id, properties=self._properties_for_node(source))
         tx.run(
             f"MATCH (s:{source_label} {{id: $source_id, owner_id: $owner_id}}), "
             f"(r:{revision_label} {{id: $revision_id, owner_id: $owner_id}}) "
@@ -1767,8 +1879,8 @@ class Neo4jGraphGateway:
         for chunk in content_chunks:
             if chunk.id not in existing_chunks:
                 tx.run(
-                    f"CREATE (n:{chunk_label}) SET n = $properties",
-                    properties=_node_properties(chunk),
+                    f"CREATE (n:{chunk_label}) SET n = $properties SET n:FounderGraphSearchable",
+                    properties=self._properties_for_node(chunk),
                 )
 
         backfill_digest = sha256(
@@ -1895,16 +2007,16 @@ class Neo4jGraphGateway:
         chunk_label = self.label_for(NodeType.CONTENT_CHUNK)
         idea_label = self.label_for(NodeType.IDEA)
         source_without_pointer = replace(source, current_revision_id=None)
-        tx.run(f"CREATE (n:{source_label}) SET n = $properties", properties=_node_properties(source_without_pointer))
-        tx.run(f"CREATE (n:{revision_label}) SET n = $properties", properties=_node_properties(source_revision))
+        tx.run(f"CREATE (n:{source_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(source_without_pointer))
+        tx.run(f"CREATE (n:{revision_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(source_revision))
         for chunk in content_chunks:
-            tx.run(f"CREATE (n:{chunk_label}) SET n = $properties", properties=_node_properties(chunk))
-        tx.run(f"CREATE (n:{idea_label}) SET n = $properties", properties=_node_properties(idea))
+            tx.run(f"CREATE (n:{chunk_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(chunk))
+        tx.run(f"CREATE (n:{idea_label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(idea))
         tx.run(
-            f"MATCH (n:{source_label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
+            f"MATCH (n:{source_label} {{id: $id, owner_id: $owner_id}}) SET n = $properties SET n:FounderGraphSearchable",
             id=str(source.id),
             owner_id=self.owner_id,
-            properties=_node_properties(source),
+            properties=self._properties_for_node(source),
         )
 
         receipt = WriteReceipt(
@@ -2024,8 +2136,8 @@ class Neo4jGraphGateway:
                     payload_json=json.dumps({"id": str(node.id), "node_type": node_type.value, "revision": current_revision}, sort_keys=True),
                 )
             tx.run(
-                f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) SET n = $properties",
-                id=str(node.id), owner_id=self.owner_id, properties=_node_properties(node),
+                f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) SET n = $properties SET n:FounderGraphSearchable",
+                id=str(node.id), owner_id=self.owner_id, properties=self._properties_for_node(node),
             )
             if node_type is NodeType.SOURCE:
                 tx.run(
@@ -2049,7 +2161,7 @@ class Neo4jGraphGateway:
         else:
             if expected_revision not in (None, 0):
                 raise RevisionConflictError("new nodes require expected_revision=0 or omitted")
-            tx.run(f"CREATE (n:{label}) SET n = $properties", properties=_node_properties(node))
+            tx.run(f"CREATE (n:{label}) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(node))
 
         revision = _node_revision(node)
         receipt = WriteReceipt(operation, str(node.id), node_type.value, revision, idempotency_key)
@@ -2428,7 +2540,7 @@ class Neo4jGraphGateway:
             structural_edges = relation_assertion_structural_edges(assertion)
         except DomainValidationError as error:
             raise GraphWriteError(str(error)) from error
-        tx.run("CREATE (n:RelationAssertion) SET n = $properties", properties=_node_properties(assertion))
+        tx.run("CREATE (n:RelationAssertion) SET n = $properties SET n:FounderGraphSearchable", properties=self._properties_for_node(assertion))
         for source_id, edge_type, target_id in structural_edges:
             if edge_type not in {value.value for value in RelationAssertionEdgeType}:
                 raise GraphWriteError("relation assertion structural edge is not allowlisted")
@@ -2443,7 +2555,7 @@ class Neo4jGraphGateway:
                 raise GraphWriteNotFoundError("relation assertion structural reference does not exist")
         if predecessor is not None and predecessor.status is not RelationshipStatus.REJECTED:
             updated = replace(predecessor, status=RelationshipStatus.SUPERSEDED)
-            properties = _node_properties(updated)
+            properties = self._properties_for_node(updated)
             tx.run(
                 "MATCH (n:RelationAssertion {id: $id, owner_id: $owner_id}) "
                 "SET n += $properties RETURN n.id AS id",

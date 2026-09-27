@@ -1,0 +1,34 @@
+.local-shell {
+  --color-canvas: #0e131d;
+  --color-surface: #172131;
+  --color-muted: #172131;
+  --color-text: #e9eef8;
+  --color-text-muted: #aab8ce;
+  --color-border-subtle: #344158;
+  --color-primary: #cbd9f3;
+  --color-focus: #d5b97f;
+  color-scheme: dark;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--color-canvas);
+  color: var(--color-text);
+}
+.local-shell__sidebar { position: sticky; top: 0; height: 100dvh; padding: 28px 16px; border-right: 1px solid #293142; background: #111722; display: flex; flex-direction: column; }
+.local-shell__brand { display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 44px; }
+.local-shell__brand-mark, .local-shell__brand-word { position: relative; display: block; flex: none; overflow: hidden; }
+.local-shell__brand-mark { width: 40px; height: 42px; }
+.local-shell__brand-word { width: 99px; height: 29px; }
+.local-shell__brand img { position: absolute; max-width: none; filter: invert(1); mix-blend-mode: screen; }
+.local-shell__brand-mark img { width: 69px; height: 69px; left: -16px; top: -7px; }
+.local-shell__brand-word img { width: 163px; height: 163px; left: -33px; top: -121px; }
+.local-shell__nav { display: grid; gap: 7px; margin-top: 42px; }
+.local-shell__nav button { display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 10px 15px; border: 0; border-radius: 11px; background: transparent; color: #bac7db; text-align: left; cursor: pointer; }
+.local-shell__nav button[aria-current='page'], .local-shell__nav button:hover { background: #232e42; color: #eef3ff; }
+.local-shell__nav button span { width: 22px; font-size: 21px; text-align: center; }
+.local-shell__workspace { min-width: 0; }
+.local-shell__content { position: relative; isolation: isolate; min-height: 100dvh; }
+.local-shell__sky { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, #0e131d33, #0e131da8), url('/assets/starfield-v1.png') center / cover; opacity: .7; pointer-events: none; }
+.local-shell__body { position: relative; padding: 20px 30px 35px; }
+.local-shell button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.local-shell .local-control-confirm-button { color: #172036; }

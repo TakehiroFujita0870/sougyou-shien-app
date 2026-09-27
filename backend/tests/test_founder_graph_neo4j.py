@@ -259,6 +259,10 @@ def test_capture_idea_writes_source_chain_in_one_transaction_and_replays() -> No
     assert sum("CREATE (n:SourceRevision)" in query for query in queries) == 1
     assert sum("CREATE (n:ContentChunk)" in query for query in queries) == 1
     assert sum("CREATE (n:Idea)" in query for query in queries) == 1
+    assert sum("SET n:FounderGraphSearchable" in query and "CREATE (n:Source)" in query for query in queries) == 1
+    assert sum("SET n:FounderGraphSearchable" in query and "CREATE (n:SourceRevision)" in query for query in queries) == 1
+    assert sum("SET n:FounderGraphSearchable" in query and "CREATE (n:ContentChunk)" in query for query in queries) == 1
+    assert sum("SET n:FounderGraphSearchable" in query and "CREATE (n:Idea)" in query for query in queries) == 1
     assert sum("CREATE (a:FounderGraphAudit" in query for query in queries) == 1
 
 
@@ -505,7 +509,7 @@ def test_migrate_executes_only_versioned_schema_queries() -> None:
     assert all(query.startswith("CREATE ") for query, _params in driver.session_value.calls)
 
 
-def test_default_migrate_targets_schema_v5_and_rollback_drops_only_schema_structure() -> None:
+def test_default_migrate_targets_schema_v7_and_rollback_drops_only_schema_structure() -> None:
     driver = FakeDriver()
     gateway = Neo4jGraphGateway(driver, "owner-1")
 
@@ -513,7 +517,7 @@ def test_default_migrate_targets_schema_v5_and_rollback_drops_only_schema_struct
     rolled_back = gateway.rollback()
 
     assert migrated > rolled_back
-    assert rolled_back == 17
+    assert rolled_back == 20
     rollback_queries = [query for query, _params in driver.session_value.calls[-rolled_back:]]
     assert all(query.startswith("DROP ") for query in rollback_queries)
     assert all("IF EXISTS" in query for query in rollback_queries)

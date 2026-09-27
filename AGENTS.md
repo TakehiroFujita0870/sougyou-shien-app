@@ -45,7 +45,7 @@
 - ChatGPTが会話、Deep Research、進捗・完了通知を担い、Dotsは保存、検索、構造化、provenanceへ集中する。Dots独自の調査schedulerと通知基盤を初期実装しない。
 - モデル、API、料金、廃止予定を変更するときは、先に [`docs/operations/model-lifecycle.md`](docs/operations/model-lifecycle.md) を読む。
 - モデルIDを画面、API、プロンプトへ分散してハードコードしない。プロバイダー別アダプターと一元的なモデルカタログを経由する。
-- Dots製品内の抽出、名寄せ、分類、facet・関係候補、再順位付けは、初期値としてLunaの論理キーを使う。これは下記のCodex部門運営モデルを変更する指示ではなく、製品runtimeの選択である。embedding capabilityは先行スパイクで検証し、未対応時に別providerを無断追加しない。
+- Dots製品内の抽出、名寄せ、分類、facet・関係候補にはLunaの論理キーを使う。検索embeddingと再順位付けは、利用者指定済みのSentence Transformers対応多言語モデル（E5-base / mMARCO）をローカル実行する。用途・固定版・準備条件は実装内のカタログと[`稼働成果の統合`](docs/operations/dots-live-integration.md)を参照し、外部APIや別モデルへ無断で切り替えない。これは下記のCodex運営モデルとは別の製品runtime設定である。
 - 既存のClaude互換、`gpt-5.6-terra`既定、モデル選択UIはピボット前の実装inventoryとして扱い、移行判断前に削除しない。
 - モデル更新は公式情報の検知、評価、PR作成までを将来自動化してよい。本番の既定モデル変更、料金境界変更、廃止モデルからの移行を無審査で自動マージしない。
 - APIキー、課金開始、実ユーザーデータを使う最初の外部AI接続は、利用者兼製品責任者の明示決裁まで行わない。egress policy設定後のshareableな通常MCP readは呼出ごとの承認を求めず、フル調査はResearchCampaignごとに目的・範囲・試行予算の許諾を得る。
@@ -100,7 +100,7 @@
 ### 役割別モデルプロファイル
 
 - CEO室は `gpt-5.6-sol / low` を使う。統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
-- 例外: [`docs/plans/dots-implementation-master-plan.md`](docs/plans/dots-implementation-master-plan.md)をobjectiveとするactive goalでは、利用者の明示指定によりcoordinator、worker、reviewerを`gpt-5.6-luna / max`に固定する。別modelへfallbackせず、Luna利用不能は`model_unavailable`として対象scopeを停止する。goal完了または停止後は前項の標準profileへ戻る。
+- 例外: Dots全体計画の内部subagent worker/reviewerは、利用者の最新指定により`gpt-6-luna / medium`を使う。root coordinatorは利用者が指定する実行環境に従う。別モデルへ無断fallbackせず、指定モデルが利用不能なら対象scopeを停止する。新しい利用者向けタスクを作る許可を意味しない。
 - 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 

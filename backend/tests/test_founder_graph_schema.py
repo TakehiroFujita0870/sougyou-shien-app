@@ -40,16 +40,16 @@ def test_schema_plan_is_idempotent_and_versioned() -> None:
     assert migration_plan(0, 1) == migration_plan(0, 1)
     assert migration_plan(1, 1) == ()
     assert migration_plan(1, 2)
-    assert all("IF NOT EXISTS" in query for query in migration_queries())
-    assert schema_manifest()["version"] == 5
-    assert schema_manifest()["rollback_query_count"] == 17
+    assert all("IF NOT EXISTS" in query or query.startswith("MATCH (node)") for query in migration_queries())
+    assert schema_manifest()["version"] == 7
+    assert schema_manifest()["rollback_query_count"] == 20
 
 
 def test_schema_v4_adds_only_internal_assertion_family_lock_uniqueness() -> None:
     v4_queries = migration_queries(3, 4)
     rollback = rollback_queries(4, 3)
 
-    assert schema_manifest()["version"] == 5
+    assert schema_manifest()["version"] == 7
     assert len(v4_queries) == 1
     assert "FounderGraphAssertionFamilyLock" in v4_queries[0]
     assert "(node.owner_id, node.family_key) IS UNIQUE" in v4_queries[0]

@@ -10,6 +10,11 @@ from dots.main import create_app
 EXPECTED_DESTRUCTIVE_HINTS = {
     "record_correction": True,
     "confirm_person_merge": True,
+    "approve_research_campaign": True,
+    "revoke_research_campaign": True,
+    "record_research_run": True,
+    "save_idea_brief": True,
+    "save_researched_idea_brief": True,
 }
 EXPECTED_READ_TOOLS = {"search", "fetch", "fetch_idea_brief"}
 EXPECTED_WRITE_TOOLS = {
@@ -25,6 +30,12 @@ EXPECTED_WRITE_TOOLS = {
     "record_decision",
     "record_correction",
     "confirm_person_merge",
+    "create_research_campaign",
+    "approve_research_campaign",
+    "revoke_research_campaign",
+    "record_research_run",
+    "save_idea_brief",
+    "save_researched_idea_brief",
 }
 
 

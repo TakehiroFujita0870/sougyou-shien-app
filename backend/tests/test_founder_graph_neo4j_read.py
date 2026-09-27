@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import datetime, timezone
+from types import MappingProxyType
 
 import pytest
 
@@ -13,7 +14,7 @@ from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
 from dots.founder_graph_mcp import McpReadError, McpReadSurface
 from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
-from dots.founder_graph_read import GraphReadError, GraphReadNotFoundError
+from dots.founder_graph_read import GraphReadError, GraphReadNotFoundError, NodeView, RelationPathStep
 
 
 class FakeResult:
@@ -88,6 +89,55 @@ def _gateway() -> tuple[FakeReadDriver, Neo4jGraphReadService]:
     driver = FakeReadDriver()
     gateway = Neo4jGraphGateway(driver, "owner-1")
     return driver, Neo4jGraphReadService(gateway)
+
+
+def test_hybrid_fulltext_query_uses_escaped_or_terms_for_cjk() -> None:
+    assert Neo4jGraphReadService._fulltext_query('創業者 graph "idea"') == '"創業者" OR "graph" OR "idea"'
+
+
+def test_hybrid_reranks_only_top_forty_after_graph_expansion_and_keeps_tail(monkeypatch) -> None:
+    driver, lexical_service = _gateway()
+
+    class SearchModels:
+        def __init__(self):
+            self.candidates = ()
+
+        def rerank(self, _query, candidates):
+            self.candidates = tuple(candidates)
+            return [float(index) for index in range(len(candidates))]
+
+    models = SearchModels()
+    service = Neo4jGraphReadService(
+        lexical_service._gateway, search_models=models, rerank_enabled=True, rerank_candidate_limit=40,
+    )
+    views = {
+        f"idea-{index:02d}": NodeView(
+            f"idea-{index:02d}", NodeType.IDEA.value, "owner-1", f"Idea {index}", "Snippet",
+            "active", 1, MappingProxyType({}),
+        )
+        for index in range(45)
+    }
+    path = RelationPathStep(
+        from_id="idea-00", to_id="idea-01", source_id="idea-00", predicate="supports",
+        target_id="idea-01", traversal_direction="outgoing", evidence_ids=("evidence-1",),
+    )
+    scores = {node_id: 1.0 / (index + 1) for index, node_id in enumerate(views)}
+    monkeypatch.setattr(
+        service,
+        "_search_tx",
+        lambda _tx, **_kwargs: (
+            views, scores, {}, {"idea-00": ("evidence-1",)}, {"idea-00": (path,)},
+        ),
+    )
+
+    page = service.search("創業 graph", owner_id="owner-1", limit=50)
+
+    assert len(models.candidates) == 40
+    assert "relation path:" in models.candidates[0]
+    assert "evidence ids: evidence-1" in models.candidates[0]
+    assert [hit.node.id for hit in page.hits[:2]] == ["idea-39", "idea-38"]
+    assert [hit.node.id for hit in page.hits[40:]] == [f"idea-{index:02d}" for index in range(40, 45)]
+    assert page.hits[-1].score == pytest.approx(1 / 45)
 
 
 def _node_row(

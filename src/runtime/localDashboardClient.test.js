@@ -1,0 +1,323 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createLocalDashboardClient, LocalDashboardClientError } from './localDashboardClient';
+
+const localLocation = { origin: 'http://localhost:4173', hostname: 'localhost' };
+const servicesRunning = { database: 'running', api: 'running', tunnel: 'running' };
+
+function jsonResponse(body, status = 200) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body };
+}
+
+function statusResponse(overrides = {}) {
+  return jsonResponse({ controller: 'running', csrf_token: 'csrf-from-status', services: servicesRunning, ...overrides });
+}
+
+function overviewResponse(overrides = {}) {
+  return jsonResponse({
+    status: 'ready',
+    count_basis: 'stored_active_records',
+    counts: { idea_records: 2, person_records: 1, asset_records: 3, report_version_records: 4 },
+    recent: [
+      { id: 'idea-1', kind: 'idea', title: '着想', updated_at: '2026-09-25T10:00:00Z' },
+      { id: 'person-1', kind: 'person', title: '山田さん', updated_at: '2026-09-25T09:00:00Z', contact: 'private@example.test' },
+      { id: 'asset-1', kind: 'asset', title: '試作資料', updated_at: '2026-09-25T08:00:00Z', details: 'private' },
+      { id: 'report-1', kind: 'report_version', title: 'PRIVATE REPORT TITLE', updated_at: '2026-09-25T07:00:00Z' },
+      { id: 'unsafe-1', kind: 'person', name: 'unsafe alternate field', private_note: 'private' },
+      { id: 'unknown-1', kind: 'decision', title: 'Unknown type' },
+    ],
+    ...overrides,
+  });
+}
+
+describe('Local dashboard client', () => {
+  it('does not promote missing or unrecognized research states from a saved brief', async () => {
+    for (const research_status of [undefined, 'complete', { status: 'completed' }]) {
+      const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+        status: 'ready', assets: [], profile: null,
+        ideas: [{ id: 'draft', title: '未確認案', summary: '', description: '', research_status, brief_sections: Array(8).fill('概要'), brief_revision: 1 }],
+      }));
+      const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+      expect(home.ideas[0].research_status).toBe('unknown');
+    }
+  });
+  it('preserves the server-validated researched state with a complete brief', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'ready', assets: [], profile: null,
+      ideas: [{ id: 'idea-1', title: '調査案', summary: '', description: '', research_status: 'researched', brief_sections: Array(8).fill('確認済み概要'), brief_revision: 1 }],
+    }));
+    const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+    expect(home.ideas[0].research_status).toBe('researched');
+  });
+  it('does not display researched for an absent or partial brief', async () => {
+    for (const brief of [{}, { brief_sections: ['概要', ...Array(7).fill('')], brief_revision: 1 }]) {
+      const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+        status: 'ready', assets: [], profile: null,
+        ideas: [{ id: 'idea-1', title: '不完全な案', summary: '', description: '', research_status: 'researched', ...brief }],
+      }));
+      const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+      expect(home.ideas[0].research_status).toBe('unknown');
+    }
+  });
+  it('preserves only the eight public idea brief sections for the home view', async () => {
+    const sections = ['要約', '', '', '', '', '実現可能性を訂正', '', ''];
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'ready',
+      ideas: [{ id: 'idea-1', title: '試験案', summary: '旧要約', description: '', research_status: 'unresearched', brief_sections: sections, brief_revision: 2, private_note: 'SECRET' }],
+      assets: [], profile: null,
+    }));
+    const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+    expect(home.ideas[0]).toEqual({ id: 'idea-1', title: '試験案', summary: '旧要約', description: '', research_status: 'unresearched', brief_sections: sections, brief_revision: 2 });
+    expect(JSON.stringify(home)).not.toContain('SECRET');
+  });
+
+  it('reads a bounded graph projection and submits an explicit self-introduction edit with CSRF', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ status: 'ready', nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案', private_note: 'PRIVATE' }], edges: [], truncated: false }))
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(jsonResponse({ id: 'asset-new' }));
+    const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => 'edit-one' });
+    expect(await client.getGraph()).toEqual({ status: 'ready', nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案' }], edges: [], semantic_edges: [], truncated: false });
+    expect(await client.saveSelfIntroduction('新しい紹介', 'asset-old')).toBe('asset-new');
+    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/graph', '/api/status', '/api/self-introduction']);
+    expect(fetchImpl.mock.calls[2][1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-from-status', 'Idempotency-Key': 'edit-one' },
+      body: JSON.stringify({ text: '新しい紹介', expected_id: 'asset-old' }),
+    }));
+  });
+  it('validates and allowlists semantic Facet region results', async () => {
+    const payload = {
+      status: 'ready', facet_id: 'facet/root', depth: 1,
+      hits: [{
+        id: 'idea-1', kind: 'idea', title: '事業案', root_facet_id: 'facet/root', matched_facet_id: 'facet/child',
+        depth: 1, classification_status: 'inferred', classification_evidence_ids: ['ev-class'],
+        taxonomy_status_path: ['confirmed'], taxonomy_evidence_path: [['ev-tax']], evidence_ids: ['ev-tax', 'ev-class'],
+        private_note: 'PRIVATE',
+      }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(payload));
+    const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
+    const result = await client.getFacetRegion('facet/root', 1);
+    expect(result.hits[0]).toMatchObject({ classification_status: 'inferred', evidence_ids: ['ev-tax', 'ev-class'] });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/graph/facet-region?facet_id=facet%2Froot&depth=1');
+    const malformed = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ ...payload, hits: [{ ...payload.hits[0], evidence_ids: [] }] })),
+    });
+    await expect(malformed.getFacetRegion('facet/root', 1)).rejects.toBeInstanceOf(LocalDashboardClientError);
+  });
+
+  it('loads exact semantic edge provenance through the same-origin read route and allowlists safe fields', async () => {
+    const payload = {
+      status: 'ready', assertion_id: 'assertion/a',
+      section: { brief_id: 'brief-1', revision: 2, idea_id: 'idea-1', section_index: 5, title: '市場はある？', content: '合成された概要の根拠章。', raw_payload: 'PRIVATE' },
+      evidence: [{ id: 'evidence-1', polarity: 'supports', confidence: 0.82, status: 'active', excerpt: 'PRIVATE', locator: 'PRIVATE' }],
+      private_note: 'PRIVATE',
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(payload));
+    const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
+    const controller = new AbortController();
+    const result = await client.getSemanticEdgeProvenance('assertion/a', { signal: controller.signal });
+    expect(fetchImpl).toHaveBeenCalledWith('/api/graph/semantic-edges/assertion%2Fa/provenance', expect.objectContaining({
+      method: 'GET', credentials: 'same-origin', mode: 'same-origin', redirect: 'error', signal: controller.signal,
+    }));
+    expect(result).toEqual({
+      status: 'ready', assertion_id: 'assertion/a',
+      section: { brief_id: 'brief-1', revision: 2, idea_id: 'idea-1', section_index: 5, title: '市場はある？', content: '合成された概要の根拠章。' },
+      evidence: [{ id: 'evidence-1', polarity: 'supports', confidence: 0.82, status: 'active' }],
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  });
+
+  it('allows evidence-only provenance for legacy assertions and preserves the stopped state', async () => {
+    const legacyClient = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ status: 'ready', assertion_id: 'legacy-1', section: null, evidence: [] })),
+    });
+    expect(await legacyClient.getSemanticEdgeProvenance('legacy-1')).toEqual({
+      status: 'ready', assertion_id: 'legacy-1', section: null, evidence: [],
+    });
+    const stoppedClient = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ status: 'stopped', assertion_id: 'legacy-1', section: null, evidence: [] })),
+    });
+    expect(await stoppedClient.getSemanticEdgeProvenance('legacy-1')).toMatchObject({ status: 'stopped' });
+  });
+
+  it('rejects malformed or cross-assertion provenance and aborts on request cancellation', async () => {
+    for (const change of [
+      { assertion_id: 'other-edge' },
+      { section: { brief_id: 'b', revision: 0, idea_id: 'i', section_index: 8, title: '', content: '' } },
+      { evidence: [{ id: 'e', polarity: 'supports', confidence: 2, status: 'active' }] },
+    ]) {
+      const invalidClient = createLocalDashboardClient({
+        location: localLocation,
+        fetchImpl: vi.fn().mockResolvedValueOnce(jsonResponse({ status: 'ready', assertion_id: 'edge-1', section: null, evidence: [], ...change })),
+      });
+      await expect(invalidClient.getSemanticEdgeProvenance('edge-1')).rejects.toBeInstanceOf(LocalDashboardClientError);
+    }
+    const fetchImpl = vi.fn((_path, { signal }) => new Promise((_, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
+    const controller = new AbortController();
+    const pending = client.getSemanticEdgeProvenance('edge-1', { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+  it('reads same-origin status and overview, mapping only safe UI fields and stored-record counts', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(overviewResponse());
+    const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
+    const controller = new AbortController();
+
+    const snapshot = await client.getSnapshot({ signal: controller.signal });
+
+    expect(snapshot).toEqual({
+      state: 'running',
+      services: servicesRunning,
+      counts: { Idea: 2, Person: 1, Asset: 3, ReportVersion: 4 },
+      latest: [
+        { id: 'idea-1', kind: 'Idea', title: '着想' },
+        { id: 'person-1', kind: 'Person', name: '山田さん' },
+        { id: 'asset-1', kind: 'Asset', name: '試作資料' },
+        { id: 'report-1', kind: 'ReportVersion', title: '調査レポート' },
+      ],
+      countBasis: 'stored_active_records',
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, '/api/status', expect.objectContaining({
+      method: 'GET', credentials: 'same-origin', mode: 'same-origin', redirect: 'error', signal: controller.signal,
+    }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, '/api/overview', expect.objectContaining({
+      method: 'GET', credentials: 'same-origin', mode: 'same-origin', redirect: 'error', signal: controller.signal,
+    }));
+    for (const [, options] of fetchImpl.mock.calls) {
+      expect(options.headers).not.toHaveProperty('Authorization');
+      expect(options).not.toHaveProperty('baseURL');
+    }
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).not.toContain('private@example.test');
+    expect(serialized).not.toContain('private_note');
+    expect(serialized).not.toContain('PRIVATE REPORT TITLE');
+    expect(serialized).not.toContain('unsafe alternate field');
+  });
+
+  it('maps empty overview to running and distinguishes stopped and degraded service states', async () => {
+    const emptyFetch = vi.fn().mockResolvedValueOnce(statusResponse()).mockResolvedValueOnce(overviewResponse({
+      status: 'empty',
+      counts: { idea_records: 0, person_records: 0, asset_records: 0, report_version_records: 0 },
+      recent: [],
+    }));
+    await expect(createLocalDashboardClient({ fetchImpl: emptyFetch, location: localLocation }).getSnapshot())
+      .resolves.toMatchObject({ state: 'running', latest: [], counts: { Idea: 0 } });
+
+    const stoppedFetch = vi.fn().mockResolvedValueOnce(statusResponse({ services: { database: 'stopped', api: 'stopped', tunnel: 'stopped' } }));
+    const stopped = await createLocalDashboardClient({ fetchImpl: stoppedFetch, location: localLocation }).getSnapshot();
+    expect(stopped.state).toBe('stopped');
+    expect(stoppedFetch).toHaveBeenCalledOnce();
+
+    const explicitStopFetch = vi.fn().mockResolvedValueOnce(statusResponse({
+      services: { database: 'stopped', api: 'unavailable', tunnel: 'stopped', intent: 'stopped' },
+    }));
+    await expect(createLocalDashboardClient({ fetchImpl: explicitStopFetch, location: localLocation }).getSnapshot())
+      .resolves.toMatchObject({ state: 'stopped', services: { api: 'unavailable' } });
+    expect(explicitStopFetch).toHaveBeenCalledOnce();
+
+    const degradedFetch = vi.fn()
+      .mockResolvedValueOnce(statusResponse({ services: { database: 'running', api: 'starting', tunnel: 'unavailable' } }))
+      .mockResolvedValueOnce(overviewResponse());
+    await expect(createLocalDashboardClient({ fetchImpl: degradedFetch, location: localLocation }).getSnapshot())
+      .resolves.toMatchObject({ state: 'degraded', services: { api: 'starting', tunnel: 'unavailable' } });
+  });
+
+  it('treats status transport errors as error and overview failures as degraded', async () => {
+    const statusFailure = createLocalDashboardClient({
+      fetchImpl: async () => { throw new Error('private transport detail'); },
+      location: localLocation,
+    });
+    await expect(statusFailure.getSnapshot()).rejects.toEqual(expect.objectContaining({
+      name: 'LocalDashboardClientError', kind: 'unavailable',
+    }));
+
+    const overviewFailure = vi.fn().mockResolvedValueOnce(statusResponse()).mockResolvedValueOnce(jsonResponse({ detail: 'private' }, 503));
+    await expect(createLocalDashboardClient({ fetchImpl: overviewFailure, location: localLocation }).getSnapshot())
+      .resolves.toMatchObject({ state: 'degraded', counts: { Idea: 0 }, latest: [] });
+
+    const malformedOverview = vi.fn().mockResolvedValueOnce(statusResponse()).mockResolvedValueOnce(overviewResponse({ count_basis: 'canonical_concepts' }));
+    await expect(createLocalDashboardClient({ fetchImpl: malformedOverview, location: localLocation }).getSnapshot())
+      .resolves.toMatchObject({ state: 'degraded' });
+  });
+
+  it('fetches fresh CSRF state and a unique idempotency key for each fixed user action', async () => {
+    let sequence = 0;
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(jsonResponse({ action: 'start', status: 'completed' }))
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(jsonResponse({ action: 'stop', status: 'completed' }));
+    const client = createLocalDashboardClient({
+      fetchImpl,
+      location: localLocation,
+      createIdempotencyKey: () => `user-action-${++sequence}`,
+    });
+    const controller = new AbortController();
+
+    await client.start({ signal: controller.signal });
+    await client.stop({ signal: controller.signal });
+
+    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+      '/api/status', '/api/control/start', '/api/status', '/api/control/stop',
+    ]);
+    expect(fetchImpl.mock.calls[1][1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      signal: controller.signal,
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': 'csrf-from-status',
+        'Idempotency-Key': 'user-action-1',
+      },
+      body: JSON.stringify({ action: 'start' }),
+    }));
+    expect(fetchImpl.mock.calls[3][1].headers['Idempotency-Key']).toBe('user-action-2');
+    expect(fetchImpl.mock.calls[3][1].body).toBe(JSON.stringify({ action: 'stop' }));
+    for (const [, options] of fetchImpl.mock.calls) expect(options.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('refuses non-local origins, redirects, failed actions, and malformed status', async () => {
+    for (const location of [
+      { origin: 'https://example.test', hostname: 'example.test' },
+      { origin: 'http://sub.localhost:4173', hostname: 'sub.localhost' },
+    ]) {
+      expect(() => createLocalDashboardClient({ location })).toThrow('exact localhost origin');
+    }
+
+    const redirected = createLocalDashboardClient({
+      location: localLocation,
+      fetchImpl: async () => ({ ...jsonResponse({}), url: 'http://attacker.test/api/status' }),
+    });
+    await expect(redirected.getSnapshot()).rejects.toBeInstanceOf(LocalDashboardClientError);
+
+    const failedActionFetch = vi.fn()
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(jsonResponse({ action: 'start', status: 'partial_failure' }));
+    await expect(createLocalDashboardClient({ fetchImpl: failedActionFetch, location: localLocation }).start())
+      .rejects.toBeInstanceOf(LocalDashboardClientError);
+
+    const malformedStatus = createLocalDashboardClient({ fetchImpl: async () => jsonResponse({ controller: 'stopped' }), location: localLocation });
+    await expect(malformedStatus.getSnapshot()).rejects.toBeInstanceOf(LocalDashboardClientError);
+  });
+
+  it('propagates AbortSignal cancellation', async () => {
+    const fetchImpl = vi.fn(async (_path, { signal }) => new Promise((_, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    const client = createLocalDashboardClient({ fetchImpl, location: localLocation });
+    const controller = new AbortController();
+    const pending = client.getSnapshot({ signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});

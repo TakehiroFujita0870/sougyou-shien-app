@@ -4,8 +4,10 @@ services:
   neo4j:
     image: neo4j:5.26-community
     pull_policy: never
+    restart: unless-stopped
     environment:
       NEO4J_AUTH_FILE: /run/secrets/founder_graph_auth
+      NEO4J_db_logs_query_parameter__logging__enabled: "false"
       NEO4J_server_http_advertised__address: "localhost:7474"
       NEO4J_server_bolt_advertised__address: "localhost:7687"
     secrets:
@@ -15,6 +17,8 @@ services:
       - "127.0.0.1:7687:7687"
     volumes:
       - founder_graph_neo4j_data:/data
+    tmpfs:
+      - /logs
     networks:
       - founder_graph_local
       - founder_graph_host

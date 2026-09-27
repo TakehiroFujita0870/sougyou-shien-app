@@ -529,7 +529,8 @@ def test_powershell_restore_source_requires_absolute_path() -> None:
 def test_restore_verifier_static_contract_has_safe_secret_argv() -> None:
     verifier = read_text(RESTORE_VERIFIER)
     assert '"--network"' in verifier
-    assert '"none"' in verifier
+    assert '"--internal"' in verifier
+    assert '"bridge"' in verifier
     assert '"--mount"' in verifier
     assert "--secret-file" in verifier
     assert "NEO4J_AUTH_FILE=/run/secrets/founder_graph_auth" in verifier

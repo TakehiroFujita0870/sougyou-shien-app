@@ -21,6 +21,7 @@ def test_default_catalog_resolves_luna_and_exposes_lifecycle_fields() -> None:
     assert model.plans == ()
     assert "entity_resolution" in model.capabilities
     assert "embedding" not in model.capabilities
+    assert "rerank" not in model.capabilities
     assert model.enabled is True
     assert model.is_default is True
     assert model.snapshot == "luna@founder-graph-v1"

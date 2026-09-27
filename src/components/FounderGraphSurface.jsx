@@ -63,8 +63,26 @@ function displayValue(value) {
 }
 
 function safeRelationPath(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim());
+  if (!Array.isArray(value)) return { labels: [], steps: [] };
+  if (value.every((item) => typeof item === 'string')) {
+    return { labels: value.filter((item) => item.trim()).map((item) => item.trim()), steps: [] };
+  }
+  const steps = value.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const textFields = ['from_id', 'to_id', 'predicate', 'status', 'valid_from', 'expires_at'];
+    const step = Object.fromEntries(textFields
+      .map((key) => [key, asText(item[key])])
+      .filter(([, text]) => text));
+    const confidence = typeof item.confidence === 'number' && Number.isFinite(item.confidence) && item.confidence >= 0 && item.confidence <= 1
+      ? item.confidence
+      : null;
+    const evidenceIds = Array.isArray(item.evidence_ids)
+      ? [...new Set(item.evidence_ids.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))]
+      : [];
+    if (!step.from_id || !step.to_id || !step.predicate) return [];
+    return [{ ...step, confidence, evidenceIds }];
+  });
+  return { labels: [], steps };
 }
 
 function safeFieldsForResult(kind, fields, result) {
@@ -97,13 +115,15 @@ export function projectFounderGraphResult(result) {
   if (egressPolicy && egressPolicy !== 'shareable') return null;
 
   const status = asText(result.status) || displayValue(fields.status);
+  const relationPath = safeRelationPath(result.relation_path);
   return {
     id,
     kind,
     title: asText(result.title) || id,
     snippet: asText(result.snippet),
     status: status || 'unknown',
-    relationPath: safeRelationPath(result.relation_path),
+    relationPath: relationPath.labels,
+    relationSteps: relationPath.steps,
     fields: safeFieldsForResult(kind, fields, result),
   };
 }
@@ -308,7 +328,27 @@ export function FounderGraphSurface({ results, fixture, state, status, initialCa
                       <div><dt className="font-semibold text-[var(--color-text-muted)]">Kind</dt><dd className="mt-1">{selectedNode.kind}</dd></div>
                       <div><dt className="font-semibold text-[var(--color-text-muted)]">Status</dt><dd className="mt-1">{selectedNode.status}</dd></div>
                       <div className="sm:col-span-2"><dt className="font-semibold text-[var(--color-text-muted)]">Snippet</dt><dd className="mt-1 leading-6">{selectedNode.snippet || 'Snippetはありません。'}</dd></div>
-                      <div className="sm:col-span-2"><dt className="font-semibold text-[var(--color-text-muted)]">Relation path</dt><dd className="mt-1 break-words leading-6">{selectedNode.relationPath.length ? selectedNode.relationPath.join(' → ') : 'なし'}</dd></div>
+                      <div className="sm:col-span-2">
+                        <dt className="font-semibold text-[var(--color-text-muted)]">Relation path</dt>
+                        {selectedNode.relationSteps.length ? (
+                          <ol className="mt-2 grid gap-3">
+                            {selectedNode.relationSteps.map((step, index) => (
+                              <li key={`${step.from_id}-${step.predicate}-${step.to_id}-${index}`} className="rounded-lg border border-[var(--color-border-subtle)] p-3">
+                                <p className="break-words leading-6">{step.from_id} → {step.predicate} → {step.to_id}</p>
+                                <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                                  {step.status && <div><dt className="font-semibold text-[var(--color-text-muted)]">Status</dt><dd>{step.status}</dd></div>}
+                                  {step.confidence !== null && <div><dt className="font-semibold text-[var(--color-text-muted)]">Confidence</dt><dd>{step.confidence}</dd></div>}
+                                  {step.valid_from && <div><dt className="font-semibold text-[var(--color-text-muted)]">Valid from</dt><dd>{step.valid_from}</dd></div>}
+                                  {step.expires_at && <div><dt className="font-semibold text-[var(--color-text-muted)]">Expires</dt><dd>{step.expires_at}</dd></div>}
+                                  {step.evidenceIds.length > 0 && <div className="sm:col-span-2"><dt className="font-semibold text-[var(--color-text-muted)]">Evidence IDs</dt><dd className="break-words">{step.evidenceIds.join(' / ')}</dd></div>}
+                                </dl>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <dd className="mt-1 break-words leading-6">{selectedNode.relationPath.length ? selectedNode.relationPath.join(' → ') : 'なし'}</dd>
+                        )}
+                      </div>
                     </dl>
                     {Object.keys(selectedNode.fields).length > 0 && (
                       <dl className="mt-5 grid gap-3 border-t border-[var(--color-border-subtle)] pt-4 text-sm sm:grid-cols-2">

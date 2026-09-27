@@ -3,8 +3,7 @@ import { expect, within } from 'storybook/test';
 const SURFACES = ['Home', 'Project', 'Knowledge'];
 
 const VIEWPORTS = {
-  desktop: { name: 'Desktop 1280px', styles: { width: '1280px', height: '800px' }, type: 'desktop' },
-  mobile390: { name: 'Mobile 390px', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+  desktop: { name: 'Dots. PC 1280 × 720 (16:9)', styles: { width: '1280px', height: '720px' }, type: 'desktop' },
 };
 
 const STATE_COPY = {
@@ -80,5 +79,4 @@ export const Empty = { args: { state: 'empty', activeSurface: 'Home' }, play: as
 export const Populated = { args: { state: 'populated', activeSurface: 'Project' }, play: assertComposer };
 export const Loading = { args: { state: 'loading', activeSurface: 'Knowledge' }, play: assertComposer };
 export const Error = { args: { state: 'error', activeSurface: 'Home' }, play: assertComposer };
-export const Mobile390 = { args: { state: 'populated', activeSurface: 'Project' }, play: assertComposer, parameters: { viewport: { defaultViewport: 'mobile390' } } };
 export const Desktop = { args: { state: 'populated', activeSurface: 'Project' }, play: assertComposer, parameters: { viewport: { defaultViewport: 'desktop' } } };

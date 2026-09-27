@@ -9,7 +9,7 @@ const adoptedProject = { id: 'story-project', title: '地域物流の共同配�
 const adoptedProjectRepository = { load: async () => adoptedProject, saveAdopted: async (value) => value };
 const homeConversationRepository = { load: async () => ({ messages: [], proposals: [], input: '' }), save: async (value) => value };
 const portfolioRepository = { load: async () => ({ home: [], project: [], knowledge: [] }), ensure: async () => ({ home: [], project: [], knowledge: [] }), upsert: async () => ({ home: [], project: [], knowledge: [] }), archive: async () => ({ home: [], project: [], knowledge: [] }) };
-const desktop = { width: '1440px', height: '900px' };
+const desktop = { width: '1280px', height: '720px' };
 
 function SurfaceStory({ surface = 'home' }) {
   window.sessionStorage.setItem('dots:selected-surface', surface);
@@ -22,15 +22,13 @@ export default {
   parameters: {
     layout: 'fullscreen',
     a11y: { test: 'error', options: { runOnly: ['wcag2a', 'wcag2aa'] } },
-    viewport: { defaultViewport: 'desktop1440', viewports: { desktop1440: { name: 'Desktop 1440 × 900', styles: desktop, type: 'desktop' } } },
+    viewport: { defaultViewport: 'dotsPc1280', viewports: { dotsPc1280: { name: 'Dots. PC 1280 × 720 (16:9)', styles: desktop, type: 'desktop' } } },
   },
 };
 
 export const Desktop = {};
-export const Mobile = { parameters: { viewport: { defaultViewport: 'mobile1' } } };
 export const HighContrast = { render: () => <div className="Dots-high-contrast"><App /></div> };
 export const Collapsed = { render: () => <WorkspaceShell initialCollapsed activePage="ideas" onSelect={() => {}}><h1>折りたたみ状態</h1></WorkspaceShell> };
-export const MobileDrawer = { parameters: { viewport: { defaultViewport: 'mobile1' } }, render: () => <WorkspaceShell initialDrawerOpen activePage="ideas" onSelect={() => {}}><h1>モバイルドロワー</h1></WorkspaceShell> };
 export const Keyboard = { render: () => <WorkspaceShell activePage="research" onSelect={() => {}}><h1>キーボード操作</h1></WorkspaceShell> };
 
 export const Home = { render: () => <SurfaceStory surface="home" /> };
