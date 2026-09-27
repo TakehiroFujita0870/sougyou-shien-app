@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-27T01:26:12Z",
-  "baseline_main": "56ecf2aad992",
+  "updated_at": "2026-09-27T03:17:29Z",
+  "baseline_main": "12d089b672a2",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
       "implementation": "implemented", "verification": "passed", "delivery": "working_tree", "runtime": "active", "next_action": "integrate",
-      "note": "終了処理を修正済み。1280×720でhome/servicesへ各10回、空白・例外0。後の高速遷移の約7秒読込待ちは同じ故障の再発証拠ではない。mainにはLocalGraphSurfaceがまだない。",
+      "note": "終了処理を修正済み。稼働版の既存検査は1280×720でhome/servicesへ各10回、空白・例外0。後の高速遷移の約7秒読込待ちは同じ故障の再発証拠ではない。LocalGraphSurfaceと対応する回帰検査は今回の統合対象。今回ブラウザー操作の再試験は実施していない。",
       "evidence": [{"recorded_at": "2026-09-26T04:30:34Z", "scope": "live-graph-navigation-rp02", "result": "passed", "reference": "local:/home/hp/projects/dots-live/docs/operations/dots-execution-ledger.md RP-02行。主会話の同時刻更新記録と2026-09-27読取監査で照合。"}]
     },
     {
@@ -23,7 +23,7 @@
     {
       "id": "phone_asset_write", "title": "スマホChatGPTからの資産保存", "scope": "chatgpt-mobile-asset-write-after-catalog-update",
       "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "verify",
-      "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから自己紹介と2件のアイデアを保存した旨を報告。正本MCP search/fetchで対象2件のIdeaと関連2件のAssetを読取確認。自己紹介全体の網羅性とスマホの独立した別会話での取得は未確認。故障中とは扱わない。",
+      "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから自己紹介と2件のアイデアを保存した旨を報告。正本MCP search/fetchで対象2件のIdeaと関連2件のAssetを読取確認。利用者はあなたのアセット画面への表示も確認済みであり、内部の保存名から表示不足と推定した報告を撤回する。partialはスマホの独立した別会話での取得が未報告という証拠範囲だけを指す。表示故障や再登録の必要を意味しない。",
       "evidence": [
         {"recorded_at": "2026-09-27T01:21:43Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "現在の主会話での利用者報告: 指定例とは別の内容で書けたとの回答。記録タイトルと別会話の検索結果を非同期で確認依頼済み。時刻は報告の記録時刻であり試験実行時刻ではない。"},
         {"recorded_at": "2026-09-27T01:26:12Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "主会話で対象情報3組の回答を受け、正本Dots search/fetchから2件のIdeaと関連2件のAssetを取得。重複登録や変更は行わず、個人情報・保存本文はGitへ転載しない。別のスマホ会話での検索結果はまだ未報告。"}

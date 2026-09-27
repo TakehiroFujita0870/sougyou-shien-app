@@ -8,7 +8,7 @@
 
 Dots.がAIプロバイダーを安全に扱い、モデルの追加・価格変更・廃止に追随できるようにする。本書はAPIキー、公式情報の確認、評価、切り戻し規律の正本である。製品runtimeとモデル用途の選択はFounder Graph計画を優先する。
 
-CodexのDots実装goalで使う`gpt-5.6-luna / max`と、Dots製品runtimeの抽出・名寄せ・分類・label候補・再順位付けで使うLuna論理キーは別の設定である。前者の例外期間と停止条件は[`dots-implementation-master-plan.md`](../plans/dots-implementation-master-plan.md)、後者のprovider、model ID、capabilityはモデルカタログで管理する。
+Codexの内部作業者に使う`gpt-6-luna / medium`と、Dots製品runtimeの抽出・名寄せ・分類・label候補で使うLuna論理キーは別の設定である。rootのモデルは利用者の指定環境に従う。検索embeddingと再順位付けは、利用者指定済みのSentence Transformers対応の固定多言語ローカルモデル（E5-base / mMARCO）を使い、Lunaによる再順位付けは行わない。モデル本体の追加・比較・変更を今回の統合で実施しない。用途、固定版、capabilityは実装内のカタログで管理する。
 
 ## ピボット前の初回リリース境界（履歴）
 
