@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -90,7 +91,7 @@ class FakeRunner:
         if args[:4] == ("systemctl", "--user", "stop", "dots-live-mcp-tunnel.service"):
             self.active = "inactive"
             return CommandResult(0, "", "")
-        if args == ("/home/hp/.local/bin/tunnel-client", "health", "--port", "8082", "--require-control-plane-poll", "--json"):
+        if args == (str(Path.home() / ".local/bin/tunnel-client"), "health", "--port", "8082", "--require-control-plane-poll", "--json"):
             return CommandResult(self.tunnel_health_returncode, json.dumps(self.tunnel_health), "")
         raise AssertionError(f"unexpected command: {args!r}")
 
@@ -222,12 +223,14 @@ def test_tunnel_start_requires_active_postcondition():
     assert ("systemctl", "--user", "start", "dots-live-mcp-tunnel.service") in runner.calls
 
 
-def test_tunnel_status_requires_health_ready_and_a_successful_control_plane_poll():
+def test_tunnel_status_requires_health_ready_and_a_successful_control_plane_poll(monkeypatch, tmp_path):
+    # Model another user's home directory without invoking a real tunnel.
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     runner = FakeRunner()
     runner.active = "active"
 
     assert FixedSystemdUserServiceAdapter(runner, health_runner=runner).status() == "running"
-    assert ("/home/hp/.local/bin/tunnel-client", "health", "--port", "8082", "--require-control-plane-poll", "--json") in runner.calls
+    assert (str(tmp_path / ".local/bin/tunnel-client"), "health", "--port", "8082", "--require-control-plane-poll", "--json") in runner.calls
 
 
 @pytest.mark.parametrize("mutation", [
