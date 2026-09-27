@@ -165,6 +165,30 @@ class Neo4jGraphWriteService(GraphWritePort):
             expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
         )
 
+    def archive_idea(self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+                     actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.archive_idea(
+            idea_id, expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
+        )
+
+    def restore_idea(self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+                     actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.restore_idea(
+            idea_id, expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
+        )
+
+    def archive_asset(self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+                      actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.archive_asset(
+            asset_id, expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
+        )
+
+    def restore_asset(self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+                      actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.restore_asset(
+            asset_id, expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
+        )
+
     def capture_idea(
         self,
         idea: Any,
