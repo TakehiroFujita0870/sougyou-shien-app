@@ -16,7 +16,7 @@ EXPECTED_DESTRUCTIVE_HINTS = {
     "save_idea_brief": True,
     "save_researched_idea_brief": True,
 }
-EXPECTED_READ_TOOLS = {"search", "fetch", "fetch_idea_brief"}
+EXPECTED_READ_TOOLS = {"search", "fetch", "fetch_idea_brief", "search_facets", "facet_region"}
 EXPECTED_WRITE_TOOLS = {
     "capture_idea",
     "capture_source",

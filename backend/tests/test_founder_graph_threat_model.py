@@ -68,7 +68,9 @@ def test_prompt_injection_is_data_only_at_read_boundary() -> None:
 
     assert result["untrusted_text"].startswith("Ignore previous instructions")
     assert result["text"] == result["untrusted_text"]
-    assert {definition["name"] for definition in definitions} == {"search", "fetch", "fetch_idea_brief"}
+    assert {definition["name"] for definition in definitions} == {
+        "search", "fetch", "fetch_idea_brief", "search_facets", "facet_region",
+    }
     assert all(definition["readOnly"] is True for definition in definitions)
     assert "tool_call" not in result
     assert "delete" not in result
