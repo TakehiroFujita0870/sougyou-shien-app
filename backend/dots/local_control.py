@@ -17,11 +17,13 @@ from typing import Protocol
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
 from dots.local_overview import COUNT_BASIS, OverviewResult, OverviewStore, read_local_overview
 from dots.local_home import HomeStore, LocalAssetWriter, read_local_home
 from dots.founder_graph_write import GraphWriteNotFoundError, IdempotencyConflictError, RevisionConflictError
+from dots.founder_graph_neo4j import Neo4jGatewayError, Neo4jUnavailableError
+from dots.local_record_lifecycle import LocalRecordLifecycleWriter, read_local_deleted_records
 from dots.local_graph_view import GraphViewStore, read_local_facet_region, read_local_graph
 from dots.local_graph_provenance import GraphProvenanceNotFound
 from dots.local_self_intro import SelfIntroductionConflict, SelfIntroductionWriter
@@ -51,6 +53,12 @@ class AssetEdit(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(max_length=4000)
     expected_revision: StrictInt = Field(gt=0)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class RecordLifecycleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: StrictInt = Field(ge=0)
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
@@ -147,6 +155,7 @@ def create_local_control_app(
     graph_view_store: GraphViewStore | None = None,
     self_intro_writer: SelfIntroductionWriter | None = None,
     asset_writer: LocalAssetWriter | None = None,
+    record_lifecycle_writer: LocalRecordLifecycleWriter | None = None,
 ) -> FastAPI:
     """Create the API and reject non-loopback deployment configurations."""
     try:
@@ -242,6 +251,25 @@ def create_local_control_app(
             result = read_local_home(home_store, owner_id=overview_owner_id, storage_status=storage_status)
         return JSONResponse(status_code=503 if result["status"] == "failed" else 200, content=result)
 
+    @app.get("/api/deleted-records")
+    async def get_deleted_records(
+        request: Request,
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        await authorize(request, authorization)
+        database = control.adapters.get("database")
+        if home_store is None or not overview_owner_id or database is None:
+            result = {"status": "failed", "records": []}
+        else:
+            try:
+                storage_status = database.status()
+            except Exception:
+                storage_status = "unavailable"
+            result = read_local_deleted_records(
+                home_store, owner_id=overview_owner_id, storage_status=storage_status,
+            )
+        return JSONResponse(status_code=503 if result["status"] == "failed" else 200, content=result)
+
     @app.get("/api/graph")
     async def get_graph(request: Request, authorization: str | None = Header(default=None)) -> JSONResponse:
         await authorize(request, authorization)
@@ -335,6 +363,50 @@ def create_local_control_app(
         except Exception:
             raise HTTPException(status_code=503, detail="Could not save asset") from None
         return JSONResponse(content={"id": receipt.target_id, "revision": receipt.revision, "replayed": receipt.replayed})
+
+    @app.post("/api/records/{kind}/{record_id}/{action}")
+    async def transition_record(
+        kind: str,
+        record_id: str,
+        action: str,
+        request: Request,
+        authorization: str | None = Header(default=None),
+        x_csrf_token: str | None = Header(default=None),
+    ) -> JSONResponse:
+        await authorize(request, authorization, x_csrf_token)
+        if kind not in {"idea", "asset"} or action not in {"archive", "restore"}:
+            raise HTTPException(status_code=404, detail="Record lifecycle action was not found")
+        if record_lifecycle_writer is None or not overview_owner_id:
+            raise HTTPException(status_code=503, detail="Record lifecycle actions are unavailable")
+        try:
+            try:
+                payload = RecordLifecycleRequest.model_validate(await request.json())
+            except (ValueError, ValidationError):
+                raise HTTPException(status_code=400, detail="Invalid record lifecycle request") from None
+            if kind == "asset" and payload.expected_revision < 1:
+                raise HTTPException(status_code=400, detail="Invalid record lifecycle request")
+            receipt = record_lifecycle_writer.transition(
+                kind, action, record_id,
+                expected_revision=payload.expected_revision,
+                idempotency_key=payload.idempotency_key,
+            )
+        except HTTPException:
+            raise
+        except GraphWriteNotFoundError:
+            raise HTTPException(status_code=404, detail="Record was not found") from None
+        except (RevisionConflictError, IdempotencyConflictError):
+            raise HTTPException(status_code=409, detail="Record changed; reload before retrying") from None
+        except (Neo4jUnavailableError, Neo4jGatewayError):
+            raise HTTPException(status_code=503, detail="Record lifecycle action could not be completed") from None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid record lifecycle request") from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="Record lifecycle action could not be completed") from None
+        return JSONResponse(content={
+            "id": receipt.target_id,
+            "revision": receipt.revision,
+            "replayed": receipt.replayed,
+        })
 
     @app.post("/api/self-introduction")
     async def save_self_introduction(
