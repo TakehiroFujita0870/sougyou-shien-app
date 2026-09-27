@@ -15,6 +15,7 @@ from .founder_graph import (
     Claim,
     EgressPolicy,
     Evidence,
+    Asset,
     Idea,
     NodeType,
     Source,
@@ -246,7 +247,7 @@ def _node_view(node: Any) -> NodeView:
         (str(values[key]) for key in ("summary", "description", "content", "excerpt", "text", "purpose") if values.get(key)),
         title,
     )
-    revision = values.get("revision", 0)
+    revision = values.get("revision", getattr(node, "revision", 0))
     if not isinstance(revision, int):
         revision = 0
     return NodeView(
@@ -300,6 +301,10 @@ class GraphReadService:
         tokens = _tokens(query)
         snapshot = self._writes.read_snapshot()
         node_by_id = {node.id: node for node in snapshot.nodes}
+        superseded_assets = {
+            node.supersedes_id for node in node_by_id.values()
+            if isinstance(node, Asset) and node.owner_id == owner and node.supersedes_id
+        }
         scores: dict[str, float] = {}
         paths: dict[str, tuple[str, ...]] = {}
         evidence_by_node: dict[str, tuple[str, ...]] = {}
@@ -308,7 +313,9 @@ class GraphReadService:
             self._check_timeout(started, timeout_ms)
             if isinstance(node, RelationAssertion):
                 continue
-            if not self._visible(node, owner):
+            if not self._visible(node, owner) or (
+                isinstance(node, Asset) and not self._current_endpoint(node, owner, node_by_id)
+            ):
                 continue
             view = _node_view(node)
             haystack = json.dumps(dict(view.fields), ensure_ascii=False, sort_keys=True)
@@ -327,6 +334,8 @@ class GraphReadService:
                 source is None or target is None
                 or isinstance(source, RelationAssertion) or isinstance(target, RelationAssertion)
                 or not self._visible(source, owner) or not self._visible(target, owner)
+                or (isinstance(source, Asset) and source.id in superseded_assets)
+                or (isinstance(target, Asset) and target.id in superseded_assets)
             ):
                 continue
             adjacency.setdefault(relation.source_id, []).append((
@@ -397,6 +406,11 @@ class GraphReadService:
         node = self._writes.get_node(node_id)
         if node is None or not self._visible(node, owner_id):
             raise GraphReadNotFoundError("node was not found")
+        if isinstance(node, Asset):
+            snapshot = self._writes.read_snapshot()
+            nodes = {candidate.id: candidate for candidate in snapshot.nodes}
+            if not self._current_endpoint(node, owner_id, nodes):
+                raise GraphReadNotFoundError("node was not found")
         return _node_view(node)
 
     def fetch_idea_brief(self, idea_id: str, *, owner_id: str) -> dict[str, Any]:
@@ -726,29 +740,47 @@ class GraphReadService:
         status_value = status.value if isinstance(status, Enum) else status
         if status_value in {"failed"}:
             return False
-        if isinstance(node, Idea):
+        if isinstance(node, (Idea, Asset)):
+            revision_type = type(node)
             root = node
             seen = {root.id}
             while root.supersedes_id is not None:
                 parent = node_by_id.get(root.supersedes_id)
-                if not isinstance(parent, Idea) or parent.owner_id != owner_id or parent.id in seen:
+                if type(parent) is not revision_type or parent.owner_id != owner_id or parent.id in seen:
                     return False
                 if root.revision != parent.revision + 1:
                     return False
+                if isinstance(root, Asset) and (
+                    root.kind is not parent.kind
+                    or root.egress_policy is not parent.egress_policy
+                    or root.details != parent.details
+                ):
+                    return False
                 seen.add(parent.id)
                 root = parent
+            if isinstance(root, Asset) and root.revision != 1:
+                return False
+            seen = {root.id}
             current = root
             while True:
                 children = [
                     candidate for candidate in node_by_id.values()
-                    if isinstance(candidate, Idea) and candidate.owner_id == owner_id and candidate.supersedes_id == current.id
+                    if isinstance(candidate, revision_type) and candidate.owner_id == owner_id and candidate.supersedes_id == current.id
                 ]
                 if len(children) > 1:
                     return False
                 if not children:
                     return current.id == node.id
                 child = children[0]
-                if child.revision != current.revision + 1 or child.id in seen:
+                if (
+                    type(child) is not revision_type
+                    or child.revision != current.revision + 1 or child.id in seen
+                    or (isinstance(child, Asset) and (
+                        child.kind is not current.kind
+                        or child.egress_policy is not current.egress_policy
+                        or child.details != current.details
+                    ))
+                ):
                     return False
                 seen.add(child.id)
                 current = child

@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from .founder_graph import (
     CampaignAuthorizationRegistry,
+    Asset,
     Claim,
     ContentChunk,
     EgressPolicy,
@@ -28,6 +29,7 @@ from .founder_graph import (
     Idea,
     NodeType,
     PersonAsset,
+    Provenance,
     RelationAssertion,
     RelationAssertionEdgeType,
     RelationType,
@@ -87,6 +89,18 @@ class GraphWritePort(Protocol):
         actor: str = "local-owner",
     ) -> "WriteReceipt":
         """Persist one owner-scoped domain node."""
+
+    def revise_asset(
+        self,
+        *,
+        asset_id: str,
+        name: str,
+        description: str,
+        expected_revision: int,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Append one immutable revision to the current Asset family tip."""
 
     def capture_idea(
         self,
@@ -415,6 +429,7 @@ class InMemoryGraphWriteService:
         "capture_person",
         "capture_organization",
         "capture_asset",
+        "revise_asset",
         "append_claim",
         "link_entities",
         "save_relation_assertion",
@@ -453,6 +468,8 @@ class InMemoryGraphWriteService:
             raise GraphWriteError("node owner does not match the local owner")
         if isinstance(node, RelationAssertion):
             raise GraphWriteError("RelationAssertion must be saved with save_relation_assertion")
+        if isinstance(node, Asset) and (node.revision != 1 or node.supersedes_id is not None):
+            raise GraphWriteError("new Assets must start at revision one without a predecessor")
         if isinstance(node, Evidence) and node.content_chunk_id is not None:
             raise GraphWriteError("source-grounded Evidence must be saved with capture_evidence")
         fingerprint = payload_fingerprint(operation, node, expected_revision, self.owner_id)
@@ -512,6 +529,119 @@ class InMemoryGraphWriteService:
                 raise
             self._idempotency[idempotency_key] = (fingerprint, receipt)
             return receipt
+
+    def revise_asset(
+        self,
+        *,
+        asset_id: str,
+        name: str,
+        description: str,
+        expected_revision: int,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        operation = self._validate_command("revise_asset", actor, idempotency_key)
+        asset_id = _required_text(asset_id, "asset_id")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 200:
+            raise GraphWriteError("asset name must contain 1 to 200 characters")
+        if not isinstance(description, str) or len(description) > 4000:
+            raise GraphWriteError("asset description must contain at most 4000 characters")
+        if type(expected_revision) is not int or expected_revision < 1:
+            raise GraphWriteError("expected asset revision must be positive")
+        name = name.strip()
+        fingerprint = payload_fingerprint(
+            operation, asset_id, name, description, expected_revision, self.owner_id,
+        )
+        successor_id = f"asset_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            previous = self._nodes.get(asset_id)
+            if not isinstance(previous, Asset) or previous.owner_id != self.owner_id:
+                raise GraphWriteNotFoundError("asset does not exist for the local owner")
+            current = self._current_asset_locked(previous)
+            if current.id != previous.id or current.revision != expected_revision:
+                raise RevisionConflictError("asset changed; reload its current revision")
+            if current.status is not Status.ACTIVE:
+                raise GraphWriteNotFoundError("asset does not exist for the local owner")
+            if successor_id in self._nodes or successor_id in self._idea_briefs:
+                raise NodeAlreadyExistsError("asset revision id is already registered")
+            successor = current.revise(
+                name=name,
+                description=description,
+                id=successor_id,
+                revision=current.revision + 1,
+                provenance=Provenance(
+                    actor=actor,
+                    operation=operation,
+                    target_id=successor_id,
+                    source_id=current.id,
+                    idempotency_key=idempotency_key,
+                ),
+            )
+            receipt = WriteReceipt(
+                operation, successor.id, NodeType.ASSET.value, successor.revision, idempotency_key,
+            )
+            self._nodes[successor.id] = successor
+            self._node_history[successor.id] = [successor]
+            audit_length = len(self._audit)
+            try:
+                self._append_audit(receipt, actor, fingerprint)
+            except Exception:
+                self._nodes.pop(successor.id, None)
+                self._node_history.pop(successor.id, None)
+                del self._audit[audit_length:]
+                raise
+            self._idempotency[idempotency_key] = (fingerprint, receipt)
+            return receipt
+
+    def _current_asset_locked(self, asset: Asset) -> Asset:
+        """Validate one complete, unbranched Asset history and return its tip."""
+        root = asset
+        seen: set[str] = set()
+        while root.supersedes_id is not None:
+            if root.id in seen or root.owner_id != self.owner_id:
+                raise GraphWriteError("asset lineage is invalid")
+            seen.add(root.id)
+            parent = self._nodes.get(root.supersedes_id)
+            if (
+                not isinstance(parent, Asset) or type(parent) is not type(root)
+                or parent.owner_id != self.owner_id
+                or root.revision != parent.revision + 1
+                or root.kind is not parent.kind
+                or root.egress_policy is not parent.egress_policy
+                or root.details != parent.details
+            ):
+                raise GraphWriteError("asset lineage revision history is invalid")
+            root = parent
+        if root.revision != 1 or root.id in seen:
+            raise GraphWriteError("asset lineage root revision is invalid")
+
+        current = root
+        seen = set()
+        while True:
+            if current.id in seen or current.owner_id != self.owner_id:
+                raise GraphWriteError("asset lineage is invalid")
+            seen.add(current.id)
+            children = [
+                node for node in self._nodes.values()
+                if isinstance(node, Asset) and node.owner_id == self.owner_id
+                and node.supersedes_id == current.id
+            ]
+            if len(children) > 1:
+                raise GraphWriteError("asset lineage has multiple competing revisions")
+            if not children:
+                return current
+            child = children[0]
+            if (
+                type(child) is not type(current) or child.revision != current.revision + 1
+                or child.id in seen or child.kind is not current.kind
+                or child.egress_policy is not current.egress_policy
+                or child.details != current.details
+            ):
+                raise GraphWriteError("asset lineage revision history is invalid")
+            current = child
 
     def capture_idea(
         self,

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 import dots.founder_graph_read as read_module
-from dots.founder_graph import EgressPolicy, Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship, Source, Status
+from dots.founder_graph import Asset, AssetKind, EgressPolicy, Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship, Source, Status
 from dots.founder_graph_read import GraphReadNotFoundError, GraphReadService, GraphReadTimeoutError
 from dots.founder_graph_write import InMemoryGraphWriteService
 
@@ -70,6 +70,31 @@ def test_search_returns_keyword_and_one_hop_graph_hits() -> None:
     assert incoming_step.target_id == idea.id
     assert incoming_step.traversal_direction == "incoming"
     assert incoming_step.relation_assertion_id is None
+
+
+def test_person_asset_projection_exposes_canonical_revision_metadata() -> None:
+    writes, reads = _fixture()
+    person = PersonAsset(owner_id="owner-1", id="person-revision", name="Synthetic person")
+    writes.put_node(person, idempotency_key="person-revision")
+
+    view = reads.fetch(person.id, owner_id="owner-1")
+
+    assert view.revision == person.revision == 1
+    assert "revision" not in view.fields
+
+
+def test_current_asset_lineage_rejects_mixed_asset_subtypes() -> None:
+    parent = Asset(
+        owner_id="owner-1", id="asset-parent", name="Parent", kind=AssetKind.PERSON,
+    )
+    child = PersonAsset(
+        owner_id="owner-1", id="person-child", name="Child", revision=2,
+        supersedes_id=parent.id,
+    )
+    node_by_id = {parent.id: parent, child.id: child}
+
+    assert not GraphReadService._current_endpoint(parent, "owner-1", node_by_id)
+    assert not GraphReadService._current_endpoint(child, "owner-1", node_by_id)
 
 
 def test_search_expands_to_two_hops_but_not_three() -> None:
