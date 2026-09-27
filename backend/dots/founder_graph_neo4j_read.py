@@ -34,7 +34,14 @@ from .founder_graph_neo4j import (
     GraphWriteNotFoundError,
     Neo4jQueryContractError,
     Neo4jUnavailableError,
-    _single,
+)
+from .founder_graph_read_contract import (
+    FIELD_ALLOWLIST,
+    NON_CURRENT_STATUSES,
+    result_rows,
+    row_value,
+    single_record,
+    tokens,
 )
 from .founder_graph_read import (
     GraphReadError,
@@ -45,12 +52,17 @@ from .founder_graph_read import (
     RelationPathStep,
     SearchHit,
     SearchPage,
-    _FIELD_ALLOWLIST,
-    _NON_CURRENT,
-    _tokens,
 )
 from .idea_brief import SECTION_TITLES
 from .source_citations import citation_metadata, parse_object
+
+
+_FIELD_ALLOWLIST = FIELD_ALLOWLIST
+_NON_CURRENT = NON_CURRENT_STATUSES
+_tokens = tokens
+_single = single_record
+_rows = result_rows
+_row_value = row_value
 
 
 class Neo4jReadUnavailableError(GraphReadUnavailableError):
@@ -181,43 +193,8 @@ _RELATIONS_QUERY = (
 )
 
 
-def _row_value(row: Any, key: str, default: Any = None) -> Any:
-    if isinstance(row, Mapping):
-        return row.get(key, default)
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        try:
-            value = getter(key)
-        except (KeyError, TypeError):
-            return default
-        return default if value is None else value
-    try:
-        return row[key]
-    except (KeyError, IndexError, TypeError):
-        return default
-
-
-def _rows(result: Any) -> tuple[Any, ...]:
-    if result is None:
-        return ()
-    try:
-        return tuple(result)
-    except TypeError:
-        row = _single(result)
-        return () if row is None else (row,)
-
-
-def _parse_payload(row: Any, *, prefix: str = "") -> dict[str, Any]:
-    raw = _row_value(row, f"{prefix}payload_json")
-    if not isinstance(raw, str) or not raw.strip():
-        raise GraphReadError("Neo4j node payload is missing")
-    try:
-        payload = json.loads(raw)
-    except (TypeError, ValueError) as error:
-        raise GraphReadError("Neo4j node payload is not valid JSON") from error
-    if not isinstance(payload, dict):
-        raise GraphReadError("Neo4j node payload must be a JSON object")
-    return payload
+_row_value = row_value
+_rows = result_rows
 
 
 def _parse_evidence_ids(row: Any) -> tuple[str, ...]:
@@ -240,8 +217,26 @@ def _parse_evidence_ids(row: Any) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: bool = True) -> NodeView | None:
-    payload = _parse_payload(row, prefix=prefix)
+def parse_node_payload(row: Any, *, prefix: str = "") -> dict[str, Any]:
+    raw = _row_value(row, f"{prefix}payload_json")
+    if not isinstance(raw, str) or not raw.strip():
+        raise GraphReadError("Neo4j node payload is missing")
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError) as error:
+        raise GraphReadError("Neo4j node payload is not valid JSON") from error
+    if not isinstance(payload, dict):
+        raise GraphReadError("Neo4j node payload must be a JSON object")
+    return payload
+
+
+_parse_payload = parse_node_payload
+
+
+def node_view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: bool = True) -> NodeView | None:
+    """Project a persisted row through the safe, owner-scoped read boundary."""
+
+    payload = parse_node_payload(row, prefix=prefix)
     node_id = _row_value(row, f"{prefix}id", payload.get("id"))
     row_owner = _row_value(row, f"{prefix}owner_id", payload.get("owner_id"))
     if not isinstance(node_id, str) or not node_id or row_owner != owner_id:
@@ -254,17 +249,13 @@ def _view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: bool = 
     except (TypeError, ValueError) as error:
         raise GraphReadError("Neo4j node type is not in the Founder Graph allowlist") from error
 
-    field_names = _FIELD_ALLOWLIST[node_type]
+    field_names = FIELD_ALLOWLIST[node_type]
     if node_type is NodeType.EVIDENCE and payload.get("content_chunk_id") is not None:
         field_names = ("polarity", "confidence", "content_hash", "status", "egress_policy")
-    values = {
-        field_name: payload[field_name]
-        for field_name in field_names
-        if field_name in payload
-    }
+    values = {field_name: payload[field_name] for field_name in field_names if field_name in payload}
     status = values.get("status", _row_value(row, f"{prefix}status"))
     status_value = status.value if hasattr(status, "value") else status
-    if status_value in _NON_CURRENT:
+    if status_value in NON_CURRENT_STATUSES:
         if strict:
             raise GraphReadNotFoundError("node was not found")
         return None
@@ -275,43 +266,37 @@ def _view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: bool = 
     if not isinstance(revision, int) or isinstance(revision, bool):
         revision = 0
     title = next(
-        (
-            str(values[key])
-            for key in ("title", "name", "display_name", "text", "purpose", "path")
-            if values.get(key)
-        ),
+        (str(values[key]) for key in ("title", "name", "display_name", "text", "purpose", "path") if values.get(key)),
         node_id,
     )
     snippet_source = next(
-        (
-            str(values[key])
-            for key in ("summary", "description", "content", "excerpt", "text", "purpose")
-            if values.get(key)
-        ),
+        (str(values[key]) for key in ("summary", "description", "content", "excerpt", "text", "purpose") if values.get(key)),
         title,
     )
     return NodeView(
-        id=node_id,
-        node_type=node_type.value,
-        owner_id=owner_id,
-        title=title,
-        snippet=snippet_source[:320],
-        status=status_value,
-        revision=revision,
+        id=node_id, node_type=node_type.value, owner_id=owner_id, title=title,
+        snippet=snippet_source[:320], status=status_value, revision=revision,
         fields=MappingProxyType(values),
     )
 
 
-def _required_owner(owner_id: str) -> str:
+_view_from_row = node_view_from_row
+
+
+def required_owner(owner_id: str) -> str:
     if not isinstance(owner_id, str) or not owner_id.strip():
         raise GraphReadError("owner_id is required")
     return owner_id.strip()
 
 
-def _required_node_id(node_id: str) -> str:
+def required_node_id(node_id: str) -> str:
     if not isinstance(node_id, str) or not node_id.strip():
         raise GraphReadError("node_id is required")
     return node_id.strip()
+
+
+_required_owner = required_owner
+_required_node_id = required_node_id
 
 
 def _aware_time(value: Any) -> datetime:
@@ -437,6 +422,12 @@ class Neo4jGraphReadService:
 
         return self._gateway.owner_id
 
+    @property
+    def gateway(self) -> Neo4jGraphGateway:
+        """Expose the typed read boundary needed by focused read adapters."""
+
+        return self._gateway
+
     def _formal_adjacency(self, tx: Any, *, owner_id: str, at: datetime, started: float, timeout_ms: int):
         grouped: dict[str, list[Any]] = {}
         rows = _rows(tx.run(_SEARCH_FORMAL_ASSERTIONS_QUERY, owner_id=owner_id))
@@ -525,16 +516,16 @@ class Neo4jGraphReadService:
                     continue
                 idea_ends = [view for view in (source, target) if view.node_type == NodeType.IDEA.value]
                 for idea in idea_ends:
-                    root_id = self._gateway._idea_root_for_tx(tx, idea.id)
-                    chain = self._gateway._idea_chain_tx(tx, root_id)
+                    root_id = self._gateway.read_idea_root_for_tx(tx, idea.id)
+                    chain = self._gateway.read_idea_chain_tx(tx, root_id)
                     if not chain or chain[-1].id != idea.id:
                         raise ValueError("Idea endpoint is not its current leaf")
                 if idea_ends:
                     if assertion.based_on_brief_id is None or assertion.based_on_brief_section_index is None:
                         continue
                     primary = source if source.node_type == NodeType.IDEA.value else target
-                    root_id = self._gateway._idea_root_for_tx(tx, primary.id)
-                    briefs = self._gateway._idea_briefs_for_root_tx(tx, root_id)
+                    root_id = self._gateway.read_idea_root_for_tx(tx, primary.id)
+                    briefs = self._gateway.read_idea_briefs_for_root_tx(tx, root_id)
                     if not briefs:
                         continue
                     latest = briefs[-1]
@@ -667,12 +658,16 @@ class Neo4jGraphReadService:
         )
 
     @contextmanager
-    def _read_session(self):
+    def read_session(self):
+        """Open a managed read session through the gateway's read contract."""
+
         try:
-            with self._gateway._session() as session:
+            with self._gateway.read_session() as session:
                 yield session
         except Neo4jUnavailableError as error:
             raise Neo4jReadUnavailableError("Neo4j read is unavailable") from error
+
+    _read_session = read_session
 
     def fetch(self, node_id: str, *, owner_id: str) -> NodeView:
         identifier = _required_node_id(node_id)
@@ -680,7 +675,7 @@ class Neo4jGraphReadService:
         if owner != self._gateway.owner_id:
             raise GraphReadNotFoundError("node was not found")
         with self._read_session() as session:
-            result = self._gateway._execute_read(
+            result = self._gateway.execute_read(
                 session,
                 lambda tx: _rows(tx.run(
                     _FETCH_QUERY,
@@ -697,7 +692,7 @@ class Neo4jGraphReadService:
             raise GraphReadNotFoundError("node was not found")
         if self._is_revisioned_asset(view):
             with self._read_session() as session:
-                current = self._gateway._execute_read(
+                current = self._gateway.execute_read(
                     session, lambda tx: self._asset_current_tx(tx, view.id),
                 )
             if not current:
@@ -706,7 +701,7 @@ class Neo4jGraphReadService:
 
     def _asset_current_tx(self, tx: Any, asset_id: str) -> bool:
         try:
-            chain = self._gateway._asset_chain_tx(tx, asset_id)
+            chain = self._gateway.read_asset_chain_tx(tx, asset_id)
         except GraphWriteError:
             return False
         return bool(chain) and chain[-1].id == asset_id
@@ -726,11 +721,11 @@ class Neo4jGraphReadService:
             raise GraphReadNotFoundError("idea brief was not found")
 
         def read(tx: Any) -> dict[str, Any] | None:
-            if self._gateway._idea_record_tx(tx, identifier) is None:
+            if self._gateway.read_idea_record_tx(tx, identifier) is None:
                 return None
             try:
-                root_id = self._gateway._idea_root_for_tx(tx, identifier)
-                chain = self._gateway._idea_chain_tx(tx, root_id)
+                root_id = self._gateway.read_idea_root_for_tx(tx, identifier)
+                chain = self._gateway.read_idea_chain_tx(tx, root_id)
             except GraphWriteNotFoundError:
                 return None
             if not chain or chain[-1].id != identifier:
@@ -741,7 +736,7 @@ class Neo4jGraphReadService:
                 or idea.egress_policy is not EgressPolicy.SHAREABLE
             ):
                 return None
-            briefs = self._gateway._idea_briefs_for_root_tx(tx, root_id)
+            briefs = self._gateway.read_idea_briefs_for_root_tx(tx, root_id)
             if not briefs:
                 return None
             latest = briefs[-1]
@@ -775,7 +770,7 @@ class Neo4jGraphReadService:
             }
 
         with self._read_session() as session:
-            projection = self._gateway._execute_read(session, read)
+            projection = self._gateway.execute_read(session, read)
         if projection is None:
             raise GraphReadNotFoundError("idea brief was not found")
         return projection
@@ -816,7 +811,7 @@ class Neo4jGraphReadService:
         if owner != self._gateway.owner_id:
             return False
         with self._read_session() as session:
-            return self._gateway._execute_read(
+            return self._gateway.execute_read(
                 session, lambda tx: self._evidence_citation(tx, evidence_id=identifier, owner_id=owner) is not None,
             )
 
@@ -827,7 +822,7 @@ class Neo4jGraphReadService:
         if owner != self._gateway.owner_id:
             return None
         with self._read_session() as session:
-            return self._gateway._execute_read(
+            return self._gateway.execute_read(
                 session, lambda tx: self._evidence_citation(tx, evidence_id=identifier, owner_id=owner),
             )
 
@@ -838,7 +833,7 @@ class Neo4jGraphReadService:
             raise GraphReadNotFoundError("node was not found")
         started = monotonic()
         with self._read_session() as session:
-            step = self._gateway._execute_read(
+            step = self._gateway.execute_read(
                 session,
                 lambda tx: next((step for neighbors in self._formal_adjacency(
                     tx, owner_id=owner, at=datetime.now(timezone.utc), started=started, timeout_ms=30_000,
@@ -874,7 +869,7 @@ class Neo4jGraphReadService:
         tokens = _tokens(query)
         started = monotonic()
         with self._read_session() as session:
-            views, scores, paths, evidence_by_node, relation_paths, direct_hit_paths = self._gateway._execute_read(
+            views, scores, paths, evidence_by_node, relation_paths, direct_hit_paths = self._gateway.execute_read(
                 session,
                 lambda tx: self._search_tx(tx, query=query, tokens=tokens, owner_id=owner,
                                            started=started, timeout_ms=timeout_ms),
@@ -1174,7 +1169,7 @@ class Neo4jGraphReadService:
             raise GraphReadNotFoundError("node was not found")
         self.fetch(identifier, owner_id=owner)
         with self._read_session() as session:
-            result = self._gateway._execute_read(
+            result = self._gateway.execute_read(
                 session,
                 lambda tx: _rows(tx.run(
                     _RELATIONS_QUERY,
