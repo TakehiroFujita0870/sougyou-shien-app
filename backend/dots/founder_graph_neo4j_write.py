@@ -157,6 +157,14 @@ class Neo4jGraphWriteService(GraphWritePort):
             actor=actor,
         )
 
+    def revise_asset(self, *, asset_id: str, name: str, description: str,
+                     expected_revision: int, idempotency_key: str,
+                     actor: str = "local-owner") -> WriteReceipt:
+        return self.gateway.revise_asset(
+            asset_id=asset_id, name=name, description=description,
+            expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
+        )
+
     def capture_idea(
         self,
         idea: Any,

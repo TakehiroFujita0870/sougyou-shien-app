@@ -28,7 +28,8 @@ class Neo4jGraphViewStore:
         "MATCH (n) WHERE n.owner_id = $owner_id AND n.node_type IS NOT NULL "
         "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
         "n.status AS status, n.payload_json AS payload_json, "
-        "EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(n) } "
+        "(EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(n) } "
+        "OR (n.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) })) "
         "AS has_successor ORDER BY n.id LIMIT 201"
     )
     _EDGES = (
@@ -74,6 +75,7 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
         node_kinds: dict[str, str] = {}
         node_statuses: dict[str, str] = {}
         globally_superseded_ids = set()
+        superseded_asset_ids = set()
         for row in raw_nodes[:MAX_NODES]:
             identity, kind = row["id"], row["node_type"]
             if row["owner_id"] != owner_id or not isinstance(identity, str) or not identity or identity in seen or not isinstance(kind, str):
@@ -94,7 +96,11 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
                     raise ValueError("unexpected assertion successor status")
                 if kind == "relation_assertion" and has_successor:
                     globally_superseded_ids.add(identity)
+                if kind in {"asset", "person"} and has_successor:
+                    superseded_asset_ids.add(identity)
             if str(row.get("status") or "").lower() in _EXCLUDED:
+                continue
+            if identity in superseded_asset_ids:
                 continue
             field = _TITLES.get(kind)
             label = payload.get(field) if field else None
@@ -158,6 +164,13 @@ def _semantic_edges(
         and payload.get("owner_id") == owner_id
         and isinstance(payload.get("supersedes_id"), str)
     }
+    superseded_asset_ids = {
+        payload.get("supersedes_id")
+        for identity, payload in payloads.items()
+        if node_kinds.get(identity) in {"asset", "person"}
+        and payload.get("owner_id") == owner_id
+        and isinstance(payload.get("supersedes_id"), str)
+    }
     projected: list[dict[str, Any]] = []
     for identity, assertion in payloads.items():
         if node_kinds.get(identity) != "relation_assertion" or assertion.get("owner_id") != owner_id:
@@ -191,6 +204,8 @@ def _semantic_edges(
         if (
             source is None
             or target is None
+            or source_id in superseded_asset_ids
+            or target_id in superseded_asset_ids
             or node_statuses.get(source_id) in _EXCLUDED
             or node_statuses.get(target_id) in _EXCLUDED
             or node_kinds.get(source_id) != source_kind

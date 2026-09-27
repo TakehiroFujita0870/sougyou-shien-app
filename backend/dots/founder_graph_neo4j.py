@@ -18,6 +18,8 @@ from typing import Any, Iterator, Mapping
 from uuid import uuid4
 
 from .founder_graph import (
+    Asset,
+    AssetKind,
     CampaignAuthorizationRegistry,
     ContentChunk,
     DomainValidationError,
@@ -25,6 +27,7 @@ from .founder_graph import (
     Evidence,
     EvidencePolarity,
     NodeType,
+    PersonAsset,
     Provenance,
     ReportVersion,
     RelationAssertion,
@@ -157,6 +160,10 @@ def _node_properties(node: Any) -> dict[str, Any]:
         if current_revision_id is not None:
             properties["current_revision_id"] = str(current_revision_id)
     elif node_type is NodeType.IDEA:
+        supersedes_id = getattr(node, "supersedes_id", None)
+        if supersedes_id is not None:
+            properties["supersedes_id"] = str(supersedes_id)
+    elif node_type in {NodeType.ASSET, NodeType.PERSON}:
         supersedes_id = getattr(node, "supersedes_id", None)
         if supersedes_id is not None:
             properties["supersedes_id"] = str(supersedes_id)
@@ -1030,6 +1037,8 @@ class Neo4jGraphGateway:
     ) -> WriteReceipt:
         if getattr(node, "owner_id", None) != self.owner_id:
             raise GraphWriteError("node owner does not match the local owner")
+        if isinstance(node, Asset) and (node.revision != 1 or node.supersedes_id is not None):
+            raise GraphWriteError("new Assets must start at revision one without a predecessor")
         if isinstance(node, Evidence) and node.content_chunk_id is not None:
             raise GraphWriteError("source-grounded Evidence must be saved with capture_evidence")
         node_type = node.node_type if isinstance(node.node_type, NodeType) else NodeType(node.node_type)
@@ -1040,6 +1049,214 @@ class Neo4jGraphGateway:
                 session,
                 lambda tx: self._put_node_tx(tx, node, node_type, label, idempotency_key, expected_revision, operation, actor, fingerprint),
             )
+
+    def revise_asset(
+        self,
+        *,
+        asset_id: str,
+        name: str,
+        description: str,
+        expected_revision: int,
+        idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Append an owner-scoped immutable Asset revision with CAS and replay."""
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise GraphWriteError("asset_id must be a non-empty string")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 200:
+            raise GraphWriteError("asset name must contain 1 to 200 characters")
+        if not isinstance(description, str) or len(description) > 4000:
+            raise GraphWriteError("asset description must contain at most 4000 characters")
+        if type(expected_revision) is not int or expected_revision < 1:
+            raise GraphWriteError("expected asset revision must be positive")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        asset_id, name, idempotency_key, actor = asset_id.strip(), name.strip(), idempotency_key.strip(), actor.strip()
+        fingerprint = payload_fingerprint(
+            "revise_asset", asset_id, name, description, expected_revision, self.owner_id,
+        )
+        successor_id = f"asset_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        with self._session() as session:
+            return self._execute_write(session, lambda tx: self._revise_asset_tx(
+                tx, asset_id, name, description, expected_revision, idempotency_key, actor,
+                fingerprint, successor_id,
+            ))
+
+    def _revise_asset_tx(
+        self, tx: Any, asset_id: str, name: str, description: str, expected_revision: int,
+        key: str, actor: str, fingerprint: str, successor_id: str,
+    ) -> WriteReceipt:
+        replay = self._put_node_replay_tx(
+            tx, operation="revise_asset", idempotency_key=key, fingerprint=fingerprint,
+        )
+        if replay is not None:
+            return replay
+
+        record = None
+        for node_type in (NodeType.ASSET, NodeType.PERSON):
+            label = self.label_for(node_type)
+            locked = self._lock_revisioned_node_tx(tx, label, asset_id)
+            if locked is not None:
+                record = _single(tx.run(
+                    f"MATCH (n:{label} {{id: $id, owner_id: $owner_id}}) "
+                    "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+                    "n.revision AS revision, n.payload_json AS payload_json",
+                    id=asset_id, owner_id=self.owner_id,
+                ))
+                break
+        if record is None:
+            raise GraphWriteNotFoundError("asset does not exist for the local owner")
+        # A concurrent request with the same key may have committed while this
+        # transaction waited for the predecessor's write lock. Recheck the
+        # canonical audit receipt before interpreting its new successor as a
+        # stale revision.
+        replay = self._put_node_replay_tx(
+            tx, operation="revise_asset", idempotency_key=key, fingerprint=fingerprint,
+        )
+        if replay is not None:
+            return replay
+        chain = self._asset_chain_tx(tx, asset_id)
+        current = chain[-1]
+        if current.id != asset_id:
+            raise RevisionConflictError("asset changed; reload its current revision")
+        if current.status is not Status.ACTIVE:
+            raise GraphWriteNotFoundError("asset does not exist for the local owner")
+        if current.revision != expected_revision:
+            raise RevisionConflictError("asset changed; reload its current revision")
+        successor = current.revise(
+            name=name, description=description, id=successor_id, revision=current.revision + 1,
+            provenance=Provenance(
+                actor=actor, operation="revise_asset", target_id=successor_id, source_id=current.id,
+                idempotency_key=key,
+            ),
+        )
+        return self._put_node_tx(
+            tx, successor, NodeType(successor.node_type), self.label_for(successor.node_type),
+            key, 0, "revise_asset", actor, fingerprint, allow_asset_revision=True,
+        )
+
+    def _asset_record_tx(self, tx: Any, asset_id: str) -> Any | None:
+        return _single(tx.run(
+            "MATCH (n {id: $id, owner_id: $owner_id}) "
+            "WHERE n.node_type IN $node_types "
+            "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+            "n.revision AS revision, n.supersedes_id AS supersedes_id, n.payload_json AS payload_json",
+            id=asset_id, owner_id=self.owner_id,
+            node_types=[NodeType.ASSET.value, NodeType.PERSON.value],
+        ))
+
+    def _decode_asset_record(self, record: Any, *, expected_id: str | None = None) -> Asset:
+        if record is None or _record_value(record, "owner_id") != self.owner_id:
+            raise GraphWriteNotFoundError("asset lineage is not owner-scoped")
+        identity = _record_value(record, "id")
+        node_type = _record_value(record, "node_type")
+        if not isinstance(identity, str) or (expected_id is not None and identity != expected_id):
+            raise GraphWriteError("persisted Asset identity is invalid")
+        if node_type not in {NodeType.ASSET.value, NodeType.PERSON.value}:
+            raise GraphWriteError("persisted Asset type is invalid")
+        raw = _record_value(record, "payload_json")
+        try:
+            payload = json.loads(raw)
+            if not isinstance(payload, Mapping) or payload.get("id") != identity or payload.get("owner_id") != self.owner_id:
+                raise ValueError
+            scalar_parent = _record_value(record, "supersedes_id")
+            payload_parent = payload.get("supersedes_id")
+            if scalar_parent != payload_parent:
+                raise ValueError
+            revision_value = payload.get("revision")
+            row_revision = _record_value(record, "revision", 0)
+            if revision_value is None:
+                revision_value = max(1, row_revision if type(row_revision) is int else 1)
+            elif type(revision_value) is not int or revision_value < 1 or row_revision != revision_value:
+                raise ValueError
+            raw_provenance = payload.get("provenance")
+            if not isinstance(raw_provenance, Mapping):
+                raise ValueError
+            occurred_at = raw_provenance["occurred_at"]
+            if isinstance(occurred_at, str):
+                occurred_at = datetime.fromisoformat(occurred_at.replace("Z", "+00:00" ))
+            provenance = Provenance(
+                actor=raw_provenance.get("actor", "system"),
+                operation=raw_provenance.get("operation", "create"),
+                origin=raw_provenance.get("origin", "manual"),
+                target_id=raw_provenance.get("target_id") or identity,
+                source_id=raw_provenance.get("source_id"),
+                model_snapshot=raw_provenance.get("model_snapshot"),
+                prompt_version=raw_provenance.get("prompt_version"),
+                rule_version=raw_provenance.get("rule_version"),
+                occurred_at=occurred_at,
+                idempotency_key=raw_provenance.get("idempotency_key"),
+            )
+            common = dict(
+                owner_id=self.owner_id, id=identity, name=payload["name"],
+                description=payload.get("description", ""), details=payload.get("details", {}),
+                status=payload.get("status", "active"), egress_policy=payload.get("egress_policy", "local_only"),
+                revision=revision_value, supersedes_id=payload_parent,
+                created_at=datetime.fromisoformat(payload["created_at"].replace("Z", "+00:00")),
+                provenance=provenance,
+            )
+            if node_type == NodeType.PERSON.value:
+                return PersonAsset(**common, contact=payload.get("contact", {}), private_notes=payload.get("private_notes", ""))
+            return Asset(**common, kind=payload.get("kind", AssetKind.KNOWLEDGE.value))
+        except (KeyError, TypeError, ValueError, AttributeError, DomainValidationError):
+            raise GraphWriteError("persisted Asset state is invalid") from None
+
+    def _asset_children_tx(self, tx: Any, parent_id: str) -> tuple[Asset, ...]:
+        rows = _rows(tx.run(
+            "MATCH (n {owner_id: $owner_id, supersedes_id: $parent_id}) "
+            "WHERE n.node_type IN $node_types "
+            "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
+            "n.revision AS revision, n.supersedes_id AS supersedes_id, n.payload_json AS payload_json",
+            owner_id=self.owner_id, parent_id=parent_id,
+            node_types=[NodeType.ASSET.value, NodeType.PERSON.value],
+        ))
+        return tuple(self._decode_asset_record(row) for row in rows)
+
+    def _asset_chain_tx(self, tx: Any, asset_id: str) -> tuple[Asset, ...]:
+        current = self._decode_asset_record(self._asset_record_tx(tx, asset_id), expected_id=asset_id)
+        backwards = [current]
+        seen = {current.id}
+        while current.supersedes_id is not None:
+            parent_id = current.supersedes_id
+            if parent_id in seen:
+                raise GraphWriteError("Asset lineage contains a cycle")
+            parent = self._decode_asset_record(self._asset_record_tx(tx, parent_id), expected_id=parent_id)
+            if (
+                type(current) is not type(parent)
+                or current.revision != parent.revision + 1
+                or current.kind is not parent.kind
+                or current.egress_policy is not parent.egress_policy
+                or current.details != parent.details
+            ):
+                raise GraphWriteError("Asset lineage revision history is invalid")
+            backwards.append(parent)
+            seen.add(parent.id)
+            current = parent
+        root = current
+        if root.revision != 1:
+            raise GraphWriteError("Asset lineage root revision is invalid")
+        chain = [root]
+        seen = {root.id}
+        while True:
+            children = self._asset_children_tx(tx, chain[-1].id)
+            if len(children) > 1:
+                raise GraphWriteError("Asset lineage has multiple competing revisions")
+            if not children:
+                return tuple(chain)
+            child = children[0]
+            parent = chain[-1]
+            if (
+                child.id in seen or type(child) is not type(parent)
+                or child.revision != parent.revision + 1
+                or child.kind is not parent.kind
+                or child.egress_policy is not parent.egress_policy
+                or child.details != parent.details
+            ):
+                raise GraphWriteError("Asset lineage revision history is invalid")
+            chain.append(child)
+            seen.add(child.id)
 
     def capture_idea(
         self,
@@ -2048,7 +2265,13 @@ class Neo4jGraphGateway:
         )
         return receipt
 
-    def _put_node_tx(self, tx: Any, node: Any, node_type: NodeType, label: str, idempotency_key: str, expected_revision: int | None, operation: str, actor: str, fingerprint: str) -> WriteReceipt:
+    def _put_node_tx(self, tx: Any, node: Any, node_type: NodeType, label: str, idempotency_key: str, expected_revision: int | None, operation: str, actor: str, fingerprint: str, *, allow_asset_revision: bool = False) -> WriteReceipt:
+        if isinstance(node, Asset):
+            if allow_asset_revision:
+                if operation != "revise_asset" or node.revision < 2 or not node.supersedes_id:
+                    raise GraphWriteError("internal Asset revision command is invalid")
+            elif node.revision != 1 or node.supersedes_id is not None:
+                raise GraphWriteError("new Assets must start at revision one without a predecessor")
         replay = self._put_node_replay_tx(
             tx, operation=operation, idempotency_key=idempotency_key, fingerprint=fingerprint,
         )

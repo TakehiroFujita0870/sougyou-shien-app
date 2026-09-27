@@ -51,6 +51,18 @@ class FakeReadSession:
 
     def run(self, query: str, **params):
         self.calls.append((query, params))
+        all_node_rows = {row.get("id"): row for row in (*self.fetch_rows, *self.search_rows)}
+        if "WHERE n.node_type IN $node_types" in query and "$id" in query:
+            row = all_node_rows.get(params.get("id"))
+            return FakeResult([row] if row is not None else [])
+        if "supersedes_id: $parent_id" in query:
+            rows = [
+                row for row in all_node_rows.values()
+                if row.get("owner_id") == params.get("owner_id")
+                and row.get("supersedes_id") == params.get("parent_id")
+                and row.get("node_type") in params.get("node_types", ())
+            ]
+            return FakeResult(rows)
         if "IdeaBriefVersion" in query:
             return FakeResult(self.brief_rows)
         if "MATCH (i:Idea" in query:
