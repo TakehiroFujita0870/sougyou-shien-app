@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-27T01:21:43Z",
+  "updated_at": "2026-09-27T01:26:12Z",
   "baseline_main": "56ecf2aad992",
   "items": [
     {
@@ -23,8 +23,11 @@
     {
       "id": "phone_asset_write", "title": "スマホChatGPTからの資産保存", "scope": "chatgpt-mobile-asset-write-after-catalog-update",
       "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "verify",
-      "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから別内容で保存できた旨を報告。記録名・IDの照合と独立した別会話での取得はまだ未確認。故障中とは扱わない。",
-      "evidence": [{"recorded_at": "2026-09-27T01:21:43Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "現在の主会話での利用者報告: 指定例とは別の内容で書けたとの回答。記録タイトルと別会話の検索結果を非同期で確認依頼済み。時刻は報告の記録時刻であり試験実行時刻ではない。"}]
+      "note": "安全属性・catalog更新済み、main #289は資産保存を実装。利用者がスマホから自己紹介と2件のアイデアを保存した旨を報告。正本MCP search/fetchで対象2件のIdeaと関連2件のAssetを読取確認。自己紹介全体の網羅性とスマホの独立した別会話での取得は未確認。故障中とは扱わない。",
+      "evidence": [
+        {"recorded_at": "2026-09-27T01:21:43Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "現在の主会話での利用者報告: 指定例とは別の内容で書けたとの回答。記録タイトルと別会話の検索結果を非同期で確認依頼済み。時刻は報告の記録時刻であり試験実行時刻ではない。"},
+        {"recorded_at": "2026-09-27T01:26:12Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "主会話で対象情報3組の回答を受け、正本Dots search/fetchから2件のIdeaと関連2件のAssetを取得。重複登録や変更は行わず、個人情報・保存本文はGitへ転載しない。別のスマホ会話での検索結果はまだ未報告。"}
+      ]
     },
     {
       "id": "grounded_storage", "title": "根拠付き関係の保存と再起動後の取得", "scope": "isolated-neo4j-storage-main-288-290",
