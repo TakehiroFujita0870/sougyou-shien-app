@@ -18,10 +18,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const [home, setHome] = useState({ status: 'loading', ideas: [], assets: [], profile: null });
   const [selectedId, setSelectedId] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const [editingSelf, setEditingSelf] = useState(false);
-  const [selfDraft, setSelfDraft] = useState('');
-  const [selfSaving, setSelfSaving] = useState(false);
-  const [selfNotice, setSelfNotice] = useState('');
+  const [assetDraft, setAssetDraft] = useState(null);
+  const [assetSaving, setAssetSaving] = useState(false);
+  const [assetNotice, setAssetNotice] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -33,22 +32,29 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   }, [client, attempt]);
 
   const selectedIdea = home.ideas.find((idea) => idea.id === selectedId) ?? home.ideas[0] ?? null;
-  const selfIntroduction = home.assets.find((asset) => asset.name === '自己紹介') ?? null;
-  async function saveSelf(event) {
+  function editAsset(asset) {
+    setAssetDraft({ id: asset.id, name: asset.name, description: asset.description, revision: asset.revision });
+    setAssetNotice('');
+  }
+  async function saveAsset(event) {
     event.preventDefault();
-    if (!selfDraft.trim() || selfSaving) return;
-    setSelfSaving(true);
-    setSelfNotice('');
+    if (!assetDraft?.name.trim() || assetSaving) return;
+    setAssetSaving(true);
+    setAssetNotice('');
     try {
-      await client.saveSelfIntroduction(selfDraft, selfIntroduction?.id ?? null);
+      await client.saveAsset(assetDraft.id, {
+        name: assetDraft.name,
+        description: assetDraft.description,
+        expectedRevision: assetDraft.revision,
+      });
       const refreshed = await client.getHome();
       setHome(refreshed);
-      setEditingSelf(false);
-      setSelfNotice('自己紹介を保存しました。');
+      setAssetDraft(null);
+      setAssetNotice('変更を保存しました。');
     } catch (error) {
-      setSelfNotice(error?.kind === 'conflict' ? '別の更新がありました。ページを読み直してから編集してください。' : '保存できませんでした。内容は入力欄に残っています。');
+      setAssetNotice(error?.kind === 'conflict' ? '別の更新がありました。最新内容を読み直してから編集してください。' : '保存できませんでした。入力内容は残っています。');
     } finally {
-      setSelfSaving(false);
+      setAssetSaving(false);
     }
   }
   return <main className="local-home" aria-labelledby="local-home-heading">
@@ -89,13 +95,24 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">
-      <article className="local-home__panel"><p className="local-home__eyebrow">ABOUT YOU</p><h2>あなたについて</h2>{home.profile?.displayName && <p className="local-home__profile-name">{home.profile.displayName}</p>}
-        {!editingSelf && <><p>{selfIntroduction?.description || '自己紹介はまだ成文化されていません。ChatGPTとの壁打ちから記録できます。'}</p><button type="button" className="local-home__edit" onClick={() => { setSelfDraft(selfIntroduction?.description ?? ''); setSelfNotice(''); setEditingSelf(true); }}>この画面で編集</button></>}
-        {editingSelf && <form onSubmit={saveSelf} className="local-home__edit-form"><label htmlFor="self-intro-edit">自己紹介</label><textarea id="self-intro-edit" value={selfDraft} maxLength={4000} rows={8} onChange={(event) => setSelfDraft(event.target.value)} /><div><button type="submit" disabled={!selfDraft.trim() || selfSaving}>{selfSaving ? '保存中…' : '保存する'}</button><button type="button" disabled={selfSaving} onClick={() => setEditingSelf(false)}>キャンセル</button></div></form>}
-        {selfNotice && <p role="status">{selfNotice}</p>}
-        <p className="local-home__guidance">基本はChatGPTで壁打ちし、整理された内容をDots.へ記録します。この画面で保存した補足は、初期設定ではChatGPTに渡しません。</p>
-      </article>
-      <section className="local-home__panel"><h2>保有している資産</h2>{home.assets.length ? <ul>{home.assets.map((asset) => <li key={asset.id}><strong>{asset.name}</strong>{asset.description && <p>{asset.description}</p>}</li>)}</ul> : <p>まだ資産の記録はありません。</p>}</section>
+      <section className="local-home__panel" style={{ gridColumn: '1 / -1' }}>
+        <h2>アセット一覧 <span>{home.assets.length}件</span></h2>
+        {home.assets.length ? <div className="local-home__cards">{home.assets.map((asset) => <article key={asset.id} className="local-home__asset-card local-home__panel">
+          {assetDraft?.id === asset.id ? <form onSubmit={saveAsset} className="local-home__edit-form">
+            <label htmlFor={`asset-title-${asset.id}`}>題名</label>
+            <textarea id={`asset-title-${asset.id}`} name="title" rows={1} maxLength={200} required value={assetDraft.name} onChange={(event) => setAssetDraft((current) => ({ ...current, name: event.target.value }))} />
+            <label htmlFor={`asset-content-${asset.id}`}>内容</label>
+            <textarea id={`asset-content-${asset.id}`} name="content" rows={8} maxLength={4000} value={assetDraft.description} onChange={(event) => setAssetDraft((current) => ({ ...current, description: event.target.value }))} />
+            {assetNotice && <p role="alert">{assetNotice}</p>}
+            <div><button type="submit" disabled={!assetDraft.name.trim() || assetSaving}>{assetSaving ? '保存中…' : '保存する'}</button><button type="button" aria-label="キャンセル" disabled={assetSaving} onClick={() => { setAssetDraft(null); setAssetNotice(''); }}>キャンセル</button></div>
+          </form> : <>
+            <h3>{asset.name}</h3>
+            {asset.description ? <p>{asset.description}</p> : <p className="local-home__unwritten">内容はありません</p>}
+            <button type="button" className="local-home__edit" aria-label={`編集: ${asset.name}`} disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1} onClick={() => editAsset(asset)}>編集</button>
+          </>}
+        </article>)}</div> : <p className="local-home__notice">記録はまだありません。</p>}
+        {assetNotice && !assetDraft && <p role="status">{assetNotice}</p>}
+      </section>
     </section>}
     {tab === 'people' && <section className="local-home__notice" role="tabpanel"><h2>人的ネットワーク</h2><p>今後実装予定</p></section>}
   </main>;

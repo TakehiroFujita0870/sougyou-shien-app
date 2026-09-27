@@ -97,6 +97,7 @@ export function createLocalDashboardClient({
 } = {}) {
   const origin = assertLocalOrigin(location);
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch must be available.');
+  const assetWriteIntents = new Map();
 
   async function request(path, { method = 'GET', signal, headers = {}, body } = {}) {
     let response;
@@ -217,8 +218,11 @@ export function createLocalDashboardClient({
       return idea;
     });
     const assets = result.assets.map((item) => {
-      if (!item || typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.kind !== 'string' || typeof item.description !== 'string') throw new LocalDashboardClientError('error');
-      return { id: item.id, name: item.name, kind: item.kind, description: item.description };
+      if (!item || typeof item.id !== 'string' || !item.id || typeof item.name !== 'string' || typeof item.description !== 'string'
+        || !Number.isSafeInteger(item.revision) || item.revision < 1 || !['local_only', 'shareable'].includes(item.egress_policy)) {
+        throw new LocalDashboardClientError('error');
+      }
+      return { id: item.id, name: item.name, description: item.description, revision: item.revision, egress_policy: item.egress_policy };
     });
     const profile = result.profile && typeof result.profile.display_name === 'string' ? { displayName: result.profile.display_name } : null;
     return { status: result.status, ideas, assets, profile };
@@ -353,20 +357,35 @@ export function createLocalDashboardClient({
     return { status: result.status, facet_id: facetId, depth, hits };
   }
 
-  async function saveSelfIntroduction(text, expectedId, { signal } = {}) {
-    if (typeof text !== 'string' || !text.trim() || text.length > 4000 || (expectedId !== null && typeof expectedId !== 'string')) {
+  async function saveAsset(assetId, { name, description, expectedRevision } = {}, { signal } = {}) {
+    if (typeof assetId !== 'string' || !assetId || typeof name !== 'string' || !name.trim() || name.trim().length > 200
+      || typeof description !== 'string' || description.length > 4000 || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
       throw new LocalDashboardClientError('error');
     }
+    const normalizedName = name.trim();
+    const intent = JSON.stringify([normalizedName, description, expectedRevision]);
+    let write = assetWriteIntents.get(assetId);
+    if (!write || write.intent !== intent) {
+      const idempotencyKey = createIdempotencyKey();
+      if (typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 128) throw new LocalDashboardClientError('error');
+      write = { intent, idempotencyKey };
+      assetWriteIntents.set(assetId, write);
+    }
     const { csrfToken } = await readStatus(signal);
-    const idempotencyKey = createIdempotencyKey();
-    if (typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 128) throw new LocalDashboardClientError('error');
-    const result = await request('/api/self-introduction', {
-      method: 'POST', signal,
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken, 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify({ text: text.trim(), expected_id: expectedId }),
+    const result = await request(`/api/assets/${encodeURIComponent(assetId)}`, {
+      method: 'PUT', signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({
+        name: normalizedName,
+        description,
+        expected_revision: expectedRevision,
+        idempotency_key: write.idempotencyKey,
+      }),
     });
-    if (typeof result.id !== 'string' || !result.id) throw new LocalDashboardClientError('error');
-    return result.id;
+    if (typeof result.id !== 'string' || !result.id || !Number.isSafeInteger(result.revision) || result.revision !== expectedRevision + 1) {
+      throw new LocalDashboardClientError('error');
+    }
+    return { id: result.id, revision: result.revision };
   }
 
   async function operate(action, { signal } = {}) {
@@ -396,7 +415,7 @@ export function createLocalDashboardClient({
     getGraph,
     getSemanticEdgeProvenance,
     getFacetRegion,
-    saveSelfIntroduction,
+    saveAsset,
     start: (options) => operate('start', options),
     stop: (options) => operate('stop', options),
   });
