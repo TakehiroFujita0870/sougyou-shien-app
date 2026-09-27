@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 
 import pytest
 
 from dots.founder_graph import Asset, EgressPolicy, NodeType
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_write import GraphWriteError
+from dots.founder_graph_write import GraphWriteError, payload_fingerprint
 
 
 class _Result:
@@ -84,6 +85,28 @@ class _Driver:
         return self.value
 
 
+class _SerializedSameKeySession(_AssetRevisionSession):
+    """Model another transaction committing its receipt while this call waits for the node lock."""
+
+    def __init__(self, original, receipt):
+        super().__init__(original)
+        self.pending_receipt = receipt
+        self.audit_reads = 0
+        self.lock_acquired = False
+
+    def run(self, query, **params):
+        if "MATCH (a:FounderGraphAudit" in query:
+            self.calls.append((query, params))
+            self.audit_reads += 1
+            if self.audit_reads == 1:
+                return _Result()
+            assert self.lock_acquired
+            return _Result(self.pending_receipt)
+        if "_dots_revision_write_lock" in query:
+            self.lock_acquired = True
+        return super().run(query, **params)
+
+
 def test_neo4j_asset_writer_appends_and_replays_canonical_revision() -> None:
     original = Asset(owner_id="owner-1", id="persisted-asset", name="Original",
                      description="Original body", egress_policy=EgressPolicy.SHAREABLE)
@@ -104,6 +127,28 @@ def test_neo4j_asset_writer_appends_and_replays_canonical_revision() -> None:
     assert payload["supersedes_id"] == original.id and payload["revision"] == 2
     assert stored["supersedes_id"] == original.id
     assert payload["egress_policy"] == EgressPolicy.SHAREABLE.value
+
+
+def test_neo4j_asset_writer_rechecks_same_key_receipt_after_acquiring_lock() -> None:
+    original = Asset(owner_id="owner-1", id="persisted-asset", name="Original")
+    arguments = {
+        "asset_id": original.id, "name": "Updated", "description": "Updated body",
+        "expected_revision": 1, "idempotency_key": "concurrent-asset-edit",
+    }
+    successor_id = f"asset_{sha256(b'owner-1:concurrent-asset-edit').hexdigest()[:32]}"
+    session = _SerializedSameKeySession(original, {
+        "payload_fingerprint": payload_fingerprint(
+            "revise_asset", original.id, arguments["name"], arguments["description"], 1, "owner-1",
+        ),
+        "target_id": successor_id, "target_type": NodeType.ASSET.value, "revision": 2,
+    })
+    gateway = Neo4jGraphGateway(_Driver(session), "owner-1")
+
+    receipt = gateway.revise_asset(**arguments)
+
+    assert receipt.replayed and receipt.target_id == successor_id and receipt.revision == 2
+    assert session.audit_reads == 2 and session.lock_acquired
+    assert not session.created
 
 
 def test_neo4j_generic_asset_capture_rejects_nonroot_revision_before_storage() -> None:

@@ -1088,21 +1088,11 @@ class Neo4jGraphGateway:
         self, tx: Any, asset_id: str, name: str, description: str, expected_revision: int,
         key: str, actor: str, fingerprint: str, successor_id: str,
     ) -> WriteReceipt:
-        prior = _single(tx.run(
-            "MATCH (a:FounderGraphAudit {owner_id: $owner_id, idempotency_key: $key}) "
-            "RETURN a.payload_fingerprint AS fingerprint, a.target_id AS target_id, "
-            "a.target_type AS target_type, a.revision AS revision, a.operation AS operation",
-            owner_id=self.owner_id, key=key,
-        ))
-        if prior is not None:
-            if _record_value(prior, "fingerprint") != fingerprint:
-                raise IdempotencyConflictError("idempotency key was reused with a different payload")
-            if _record_value(prior, "operation") != "revise_asset":
-                raise IdempotencyConflictError("idempotency key was recorded for a different operation")
-            return WriteReceipt(
-                "revise_asset", _record_value(prior, "target_id"), _record_value(prior, "target_type"),
-                _record_value(prior, "revision"), key, replayed=True,
-            )
+        replay = self._put_node_replay_tx(
+            tx, operation="revise_asset", idempotency_key=key, fingerprint=fingerprint,
+        )
+        if replay is not None:
+            return replay
 
         record = None
         for node_type in (NodeType.ASSET, NodeType.PERSON):
@@ -1118,6 +1108,15 @@ class Neo4jGraphGateway:
                 break
         if record is None:
             raise GraphWriteNotFoundError("asset does not exist for the local owner")
+        # A concurrent request with the same key may have committed while this
+        # transaction waited for the predecessor's write lock. Recheck the
+        # canonical audit receipt before interpreting its new successor as a
+        # stale revision.
+        replay = self._put_node_replay_tx(
+            tx, operation="revise_asset", idempotency_key=key, fingerprint=fingerprint,
+        )
+        if replay is not None:
+            return replay
         chain = self._asset_chain_tx(tx, asset_id)
         current = chain[-1]
         if current.id != asset_id:
