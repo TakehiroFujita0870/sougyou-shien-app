@@ -13,6 +13,7 @@ from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_research import revoke_research_campaign, validate_research_run_timing
 from .founder_graph_write import GraphWriteError, GraphWritePort, IdempotencyConflictError, RevisionConflictError, WriteReceipt
 from .idea_brief import IdeaBriefSection, IdeaBriefVersion
+from .source_citations import evidence_lineage_is_current, researched_evidence_ids
 
 
 class ResearchCampaignInputError(DomainValidationError):
@@ -273,7 +274,7 @@ class McpResearchCampaignSurface:
         }
         return definitions + (regular_brief, {
             "name": "save_researched_idea_brief",
-            "description": "終了済みcompleted Runと現行許諾を検証した後にだけ、Ideaの8観点すべてが埋まった概要版を正式保存します。このツールは調査を実行しません。factの正しさも自動保証しません。通常の部分下書きはsave_idea_briefを使い、調査済みとは表示されません。",
+            "description": "終了済みcompleted Runと現行許諾を検証した後にだけ、Ideaの8観点すべてが埋まった概要版を正式保存します。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceはすべて同じ所有者・現行・共有可の出典系譜であることを検証します。外部根拠に依拠する章へ実在するIDを紐付け、出典のない章へ架空IDを付けないでください。このツールは調査やfactの正しさの保証を行いません。出典不足や部分下書きはsave_idea_briefを使います。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -592,6 +593,11 @@ class McpResearchCampaignSurface:
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
             receipt = prior_receipt or WriteReceipt("save_idea_brief", existing.id, "idea_brief_version", existing.revision, key)
             return replace(receipt, operation="save_researched_idea_brief", replayed=True)
+        evidence_ids = researched_evidence_ids(sections)
+        if not evidence_ids:
+            raise ResearchCampaignInputError("researched IdeaBrief requires at least one current, shareable Evidence citation")
+        if any(not evidence_lineage_is_current(self.writes, evidence_id, self.writes.owner_id) for evidence_id in evidence_ids):
+            raise ResearchCampaignInputError("researched IdeaBrief contains an invalid or non-current Evidence citation")
         previous = _latest_brief(self.brief_store, root_id)
         if previous is None:
             if expected != 0:

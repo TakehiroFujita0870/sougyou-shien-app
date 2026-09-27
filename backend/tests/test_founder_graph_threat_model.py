@@ -94,7 +94,8 @@ def test_brief_instructions_are_explicitly_untrusted_data_at_mcp_boundary() -> N
     assert result["sections"][0]["content"] == result["sections"][0]["untrusted_text"] == instruction_text
     assert all(section["content"] == section["untrusted_text"] for section in result["sections"])
     assert definition["readOnly"] is True and "tool_call" not in result
-    assert set(result) == {"brief_id", "idea_id", "sections"}
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations"}
+    assert result["brief_citations"] == [[] for _ in range(8)]
 
 
 def test_private_egress_and_relation_path_fail_closed() -> None:

@@ -34,10 +34,11 @@ def _brief_reader_fixture() -> tuple[InMemoryGraphWriteService, McpReadSurface, 
     writes.put_node(idea, idempotency_key="brief-idea")
 
     source = Source(
-        owner_id="owner-1", id="brief-source", title="Private source", kind=MaterialKind.WEB,
-        locator="https://private.example.test/source", current_revision_id="brief-revision", revision=1,
+        owner_id="owner-1", id="brief-source", title="Synthetic public source", kind=MaterialKind.WEB,
+        locator="https://example.test/source?id=brief#overview", current_revision_id="brief-revision", revision=1,
+        egress_policy=EgressPolicy.SHAREABLE,
     )
-    revision = SourceRevision(owner_id="owner-1", id="brief-revision", source_id=source.id, content="PRIVATE SOURCE ORIGINAL", locator=source.locator)
+    revision = SourceRevision(owner_id="owner-1", id="brief-revision", source_id=source.id, content="PRIVATE SOURCE ORIGINAL", locator=source.locator, egress_policy=EgressPolicy.SHAREABLE)
     source_receipt = writes.capture_source(source, revision, idempotency_key="brief-source")
     claim = Claim(owner_id="owner-1", id="brief-claim", text="Shareable evidence claim", confidence=0.8, egress_policy=EgressPolicy.SHAREABLE)
     writes.put_node(claim, idempotency_key="brief-claim")
@@ -75,18 +76,31 @@ def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() ->
 
     result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
 
-    assert set(result) == {"brief_id", "idea_id", "sections"}
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations"}
+    assert result["brief_citations"][0] == [{
+        "url": "https://example.test/source?id=brief#overview", "title": "Synthetic public source",
+        "source_id": "brief-source", "evidence_id": shared_evidence.id,
+    }]
     assert result["brief_id"] == latest.id
     assert result["idea_id"] == idea.id
     assert result["sections"] == [
-        {"index": index, "title": title, "content": "Latest safe section" if index == 0 else f"Safe section {index}", "untrusted_text": "Latest safe section" if index == 0 else f"Safe section {index}", "evidence_ids": [shared_evidence.id]}
+        {
+            "index": index, "title": title,
+            "content": "Latest safe section" if index == 0 else f"Safe section {index}",
+            "untrusted_text": "Latest safe section" if index == 0 else f"Safe section {index}",
+            "evidence_ids": [shared_evidence.id],
+            "citations": [{
+                "url": "https://example.test/source?id=brief#overview", "title": "Synthetic public source",
+                "source_id": "brief-source", "evidence_id": shared_evidence.id,
+            }],
+        }
         for index, title in enumerate((
             "エグゼクティブサマリー", "ビジネスモデル", "顧客とマーケットサイズ", "収益モデル",
             "競争優位性", "実現可能性", "リスク・撤退ライン", "リスクミニマムなロードマップ",
         ))
     ]
     serialized = str(result)
-    for private_value in (private_evidence.id, "PRIVATE OWNER DECISION", "PRIVATE SOURCE ORIGINAL", "brief-source", "brief-revision"):
+    for private_value in (private_evidence.id, "PRIVATE OWNER DECISION", "PRIVATE SOURCE ORIGINAL", "brief-revision"):
         assert private_value not in serialized
 
 
@@ -116,6 +130,18 @@ def test_fetch_idea_brief_omits_shareable_evidence_from_a_noncurrent_source_revi
 
     assert all(section["evidence_ids"] == [] for section in result["sections"])
     assert all(shared_evidence.id not in section["evidence_ids"] for section in result["sections"])
+
+
+def test_fetch_idea_brief_omits_evidence_from_a_local_only_source() -> None:
+    writes, surface, idea, _brief, shared_evidence, _private = _brief_reader_fixture()
+    source = writes.get_node("brief-source")
+    writes._nodes[source.id] = replace(source, egress_policy=EgressPolicy.LOCAL_ONLY)
+
+    result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
+
+    assert all(section["evidence_ids"] == [] for section in result["sections"])
+    assert all(section["citations"] == [] for section in result["sections"])
+    assert all(shared_evidence.id not in str(section) for section in result["sections"])
 
 
 def test_search_and_fetch_return_shareable_projection_only() -> None:

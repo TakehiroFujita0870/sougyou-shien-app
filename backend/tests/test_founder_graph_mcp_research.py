@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from dots.founder_graph import Idea
+import pytest
+
+from dots.founder_graph import Claim, EgressPolicy, Idea, MaterialKind, Source, SourceRevision
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from dots.founder_graph_write import InMemoryGraphWriteService
 
@@ -50,14 +52,39 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     }, owner_id=writes.owner_id)
     assert run.target_type == "research_run"
 
+    claim = Claim(owner_id=writes.owner_id, id="claim-mcp", text="Synthetic cited claim", egress_policy=EgressPolicy.SHAREABLE)
+    writes.put_node(claim, idempotency_key="claim-seed")
+    revision = SourceRevision(
+        owner_id=writes.owner_id, id="revision-mcp", source_id="source-mcp", content="Synthetic public source",
+        locator="https://example.test/source?id=1#section", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    source = Source(
+        owner_id=writes.owner_id, id="source-mcp", title="Synthetic public source",
+        locator="https://example.test/source?id=1#section", current_revision_id=revision.id,
+        revision=1, egress_policy=EgressPolicy.SHAREABLE, kind=MaterialKind.WEB,
+    )
+    captured = writes.capture_source(source, revision, idempotency_key="source-seed")
+    evidence = writes.capture_evidence(
+        claim.id, captured.content_chunk_ids[0], egress_policy=EgressPolicy.SHAREABLE,
+        idempotency_key="evidence-seed",
+    )
+    sections = [{"index": index, "content": f"Synthetic section {index}"} for index in range(8)]
+    sections[0]["evidence_ids"] = [evidence.target_id]
     brief = surface.call("save_researched_idea_brief", {
-        "idea_id": "idea-mcp", "expected_revision": 0,
-        "sections": [{"index": index, "content": f"Synthetic section {index}"} for index in range(8)],
+        "idea_id": "idea-mcp", "expected_revision": 0, "sections": sections,
         "research_run_ids": [run.target_id], "idempotency_key": "mcp-brief",
     }, owner_id=writes.owner_id)
     assert brief.target_type == "idea_brief_version"
     saved = writes.get_idea_brief(brief.target_id)
     assert saved is not None and saved.research_run_ids == (run.target_id,)
+
+    with pytest.raises(McpWriteError, match="current, shareable Evidence citation"):
+        surface.call("save_researched_idea_brief", {
+            "idea_id": "idea-mcp", "expected_revision": 1,
+            "sections": [{"index": index, "content": f"Synthetic section {index}"} for index in range(8)],
+            "research_run_ids": ["run-with-no-evidence"], "idempotency_key": "mcp-empty-brief",
+        }, owner_id=writes.owner_id)
+    assert writes.get_latest_idea_brief("idea-mcp").id == brief.target_id
 
 
 def test_researched_brief_rejects_wrong_owner_without_writing() -> None:
