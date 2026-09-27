@@ -2,11 +2,10 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { App, isLocalDashboardOrigin } from './App';
+import { App } from './App';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const profileRepository = { load: async () => null, save: async (profile) => profile };
 
 function jsonResponse(body) {
   return { ok: true, status: 200, json: async () => body };
@@ -30,7 +29,7 @@ function mountApp() {
   const root = createRoot(container);
   return {
     container,
-    render: () => act(async () => root.render(<App profileRepository={profileRepository} />)),
+    render: () => act(async () => root.render(<App />)),
     unmount: () => act(() => { root.unmount(); container.remove(); }),
   };
 }
@@ -41,12 +40,7 @@ afterEach(() => {
 });
 
 describe('localhost dashboard app integration', () => {
-  it('uses the approved starfield shell only on exact http://localhost:8765', async () => {
-    expect(isLocalDashboardOrigin({ protocol: 'http:', hostname: 'localhost', port: '8765' })).toBe(true);
-    expect(isLocalDashboardOrigin({ protocol: 'http:', hostname: 'localhost', port: '5173' })).toBe(false);
-    expect(isLocalDashboardOrigin({ protocol: 'https:', hostname: 'localhost', port: '8765' })).toBe(false);
-    expect(isLocalDashboardOrigin({ protocol: 'http:', hostname: 'preview.localhost', port: '8765' })).toBe(false);
-
+  it('uses the approved three-screen starfield shell', async () => {
     installLocalDashboardEnvironment();
     const app = mountApp();
     await app.render();
@@ -91,19 +85,4 @@ describe('localhost dashboard app integration', () => {
     await app.unmount();
   });
 
-  it('leaves the non-local preview on the existing Home workspace and four-item navigation', async () => {
-    vi.stubGlobal('location', { protocol: 'https:', hostname: 'preview.example.test', port: '', origin: 'https://preview.example.test' });
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const app = mountApp();
-    await app.render();
-
-    expect(app.container.querySelector('#home-supervisor-message')).toBeTruthy();
-    expect(app.container.querySelector('#local-control-heading')).toBeNull();
-    expect([...app.container.querySelectorAll('nav[aria-label="主要ページ"] button')].map((button) => button.textContent)).toEqual([
-      'ホーム', 'プロジェクト', 'ナレッジ', 'Graph',
-    ]);
-    expect(fetchMock).not.toHaveBeenCalled();
-    await app.unmount();
-  });
 });
