@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import math
+import re
 from typing import Any, Mapping
 from urllib.parse import quote
 
@@ -19,6 +21,26 @@ from .founder_graph_read import (
     RelationPathStep,
 )
 from .idea_brief import SECTION_TITLES
+
+
+_LOGGER = logging.getLogger(__name__)
+_UNAVAILABLE_EVENT = "founder_graph_read_unavailable"
+_SAFE_EXCEPTION_CLASS = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
+
+
+def _cause_class_names(error: BaseException, *, limit: int = 4) -> tuple[str, ...]:
+    names: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and len(names) < limit:
+        identity = id(current)
+        if identity in seen:
+            break
+        seen.add(identity)
+        class_name = type(current).__name__
+        names.append(class_name if _SAFE_EXCEPTION_CLASS.fullmatch(class_name) else "UnknownException")
+        current = current.__cause__
+    return tuple(names)
 
 
 class McpReadError(Exception):
@@ -96,6 +118,13 @@ class McpReadSurface:
         except GraphReadTimeoutError as error:
             raise McpReadError("read_timeout", str(error)) from error
         except GraphReadUnavailableError as error:
+            exception_classes = _cause_class_names(error)
+            _LOGGER.warning(
+                "%s causes=%s",
+                _UNAVAILABLE_EVENT,
+                exception_classes,
+                extra={"exception_classes": exception_classes},
+            )
             raise McpReadError("unavailable", "The local Founder Graph is unavailable; retry after it starts.") from error
         except GraphReadNotFoundError as error:
             raise McpReadError("not_found", "The requested graph result was not found.") from error
