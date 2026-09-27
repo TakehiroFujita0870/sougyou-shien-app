@@ -96,7 +96,7 @@ def _decode_home_brief_row(row: Mapping[str, Any], *, owner_id: str):
         "idea_lineage_root_id": row["root_id"],
         "supersedes_id": row.get("supersedes_id", payload.get("supersedes_id")),
         "payload_json": row["payload_json"],
-    }, owner_id=owner_id)
+    }, owner_id=owner_id, legacy_label_checked=True)
 
 
 def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "running") -> dict[str, Any]:

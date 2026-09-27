@@ -1,10 +1,20 @@
 {
-  "updated_at": "2026-09-27T09:51:00Z",
-  "baseline_main": "7d49ebc1c98a",
+  "updated_at": "2026-09-27T10:09:00Z",
+  "baseline_main": "e0e579a27a0a",
+  "source_cutover": {
+    "source": "清潔なdots-releaseをmainから作成し、依存・UIを準備。旧dots-liveは未変更。",
+    "schema": "family lockの一意制約だけ追加。重複0件。既存索引・データ・鍵を保持。",
+    "verification": "API/tunnel/画面の起動とpollは成功したが、旧概要3版のresearch_run_ids欠落でHome取得503を再現。",
+    "runtime": "rolled_back",
+    "rollback_verification": "旧参照先へ復帰しHome ready、11 ideas/9 assetsを確認。保存データ削除なし。",
+    "next_action": "既知の旧概要形式を厳密に読める修正後、保存と引用取得を事前検査して再反映する。"
+  },
   "runtime_citation_wiring": {
     "implementation": "OnDemandNeo4jHomeStoreへ出典取得の委譲を追加。",
     "verification": "runtime経路の接続漏れを失敗テストで再現後、正常・例外時の接続解放を含む29件成功。独立レビュー承認。",
-    "delivery": "working_tree",
+    "delivery": "main",
+    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/301",
+    "main_sha": "e0e579a27a0a",
     "runtime": "not_deployed"
   },
   "legacy_cleanup_delivery": {
@@ -30,7 +40,7 @@
     "verification": "関連39UI tests・4backend tests、1280×720の架空API実ビルド画面で引用到達・例外0、独立レビュー承認、CI quality成功。清潔なmainでUI39件とbuildも成功。",
     "delivery": "main",
     "runtime": "not_deployed",
-    "plugin_release": "1.0.6の更新用ファイルをmainへ保存。外部リリースは未更新。"
+    "plugin_release": "正本の非公開プラグインを1.0.6へ更新し、同じ接続・アイコン・開発者・公開範囲と会話手順をread-back確認。稼働コードは旧概要読取互換の修正待ちで旧参照先へ復帰中。"
   },
   "citation_delivery": {
     "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/298",

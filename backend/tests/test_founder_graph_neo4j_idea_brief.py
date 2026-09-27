@@ -57,6 +57,36 @@ def test_idea_brief_serializer_roundtrips_all_fields_eight_sections_and_created_
     assert json.loads(record["payload_json"])["created_at"] == brief.created_at.isoformat()
 
 
+def test_known_legacy_brief_requires_label_checked_opt_in_and_never_invents_run_references():
+    from dataclasses import replace
+    brief = replace(brief_fixture(), research_run_ids=())
+    record = record_for(brief)
+    payload = json.loads(record["payload_json"])
+    del payload["research_run_ids"]
+    record["payload_json"] = json.dumps(payload)
+    record["node_type"] = None
+    with pytest.raises(IdeaBriefValidationError):
+        _decode_persisted_idea_brief(record, owner_id=brief.owner_id)
+    decoded = _decode_persisted_idea_brief(record, owner_id=brief.owner_id, legacy_label_checked=True)
+    assert decoded == brief
+    assert decoded.research_run_ids == ()
+    assert "research_run_ids" not in json.loads(record["payload_json"])
+
+
+def test_legacy_mode_still_rejects_unrecognized_fields_and_explicit_wrong_type():
+    record = record_for(brief_fixture())
+    record["node_type"] = "source"
+    with pytest.raises(IdeaBriefValidationError):
+        _decode_persisted_idea_brief(record, owner_id="owner-brief", legacy_label_checked=True)
+    record["node_type"] = None
+    payload = json.loads(record["payload_json"])
+    payload["unexpected"] = "synthetic"
+    record["payload_json"] = json.dumps(payload)
+    with pytest.raises(IdeaBriefValidationError):
+        _decode_persisted_idea_brief(record, owner_id="owner-brief", legacy_label_checked=True)
+
+
+@pytest.mark.parametrize("legacy_label_checked", [False, True])
 @pytest.mark.parametrize(
     "corruption",
     [
@@ -67,7 +97,7 @@ def test_idea_brief_serializer_roundtrips_all_fields_eight_sections_and_created_
         "run_reference_whitespace", "evidence_reference_whitespace",
     ],
 )
-def test_idea_brief_decoder_fails_closed_without_filling_defaults(corruption: str):
+def test_idea_brief_decoder_fails_closed_without_filling_defaults(corruption: str, legacy_label_checked: bool):
     record = record_for(brief_fixture())
     corrupted = deepcopy(record)
     if corruption == "malformed_json":
@@ -138,7 +168,7 @@ def test_idea_brief_decoder_fails_closed_without_filling_defaults(corruption: st
         corrupted["payload_json"] = json.dumps(payload)
 
     with pytest.raises((IdeaBriefValidationError, ValueError)):
-        _decode_persisted_idea_brief(corrupted, owner_id="owner-brief")
+        _decode_persisted_idea_brief(corrupted, owner_id="owner-brief", legacy_label_checked=legacy_label_checked)
 
 
 def test_idea_brief_decoder_rejects_foreign_owner_and_wrong_node_type_without_echoing_payload():
