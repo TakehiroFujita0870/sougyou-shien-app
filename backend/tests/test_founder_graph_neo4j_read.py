@@ -138,7 +138,7 @@ def test_hybrid_reranks_only_top_forty_after_graph_expansion_and_keeps_tail(monk
         service,
         "_search_tx",
         lambda _tx, **_kwargs: (
-            views, scores, {}, {"idea-00": ("evidence-1",)}, {"idea-00": (path,)},
+            views, scores, {}, {"idea-00": ("evidence-1",)}, {"idea-00": (path,)}, {},
         ),
     )
 
@@ -599,6 +599,104 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     semantic = next(item for item in result["results"] if item["id"] == claim.id)["semantic_relation_path"][0]
     assert (semantic["relation_assertion_id"], semantic["evidence_ids"], semantic["based_on_brief_id"], semantic["based_on_brief_section_index"]) == (assertion.id, [evidence.id], brief.id, 0)
     assert all(secret not in str(result) for secret in ("A researched section", "must never leave the adapter"))
+
+
+def test_search_keeps_formal_path_for_directly_ranked_endpoint_without_changing_rank() -> None:
+    driver, reads = _gateway()
+    idea, claim, evidence, brief, assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+    unrelated = _node_row(
+        "idea-unrelated", node_type=NodeType.IDEA.value, title="Foundry unrelated",
+        search_text="Foundry unrelated",
+    )
+    driver.session_value.search_rows = [
+        {**endpoint_rows[idea.id], "search_text": "Foundry"},
+        {**endpoint_rows[claim.id], "search_text": "Foundry"},
+        unrelated,
+    ]
+
+    page = reads.search("Foundry", owner_id="owner-1")
+
+    hits = {hit.node.id: hit for hit in page.hits}
+    assert hits[idea.id].score == hits[claim.id].score == hits[unrelated["id"]].score
+    assert hits[claim.id].path == (idea.id, RelationType.ADDRESSES.value, claim.id)
+    assert len(hits[claim.id].relation_path) == 1
+    assert hits[claim.id].relation_path[0].relation_assertion_id == assertion.id
+    assert hits[claim.id].relation_path[0].evidence_ids == (evidence.id,)
+    assert hits[unrelated["id"]].relation_path == ()
+    mcp_page = McpReadSurface(reads).call("search", {"query": "Foundry"}, owner_id="owner-1")
+    claim_projection = next(item for item in mcp_page["results"] if item["id"] == claim.id)
+    assert claim_projection["semantic_relation_path"][0]["relation_assertion_id"] == assertion.id
+    assert claim_projection["semantic_relation_path"][0]["evidence_ids"] == [evidence.id]
+
+
+def test_search_keeps_two_hop_formal_path_for_directly_ranked_endpoint(monkeypatch) -> None:
+    driver, reads = _gateway()
+    person = _node_row("person-1", node_type=NodeType.PERSON.value, title="Foundry person", search_text="Foundry")
+    idea = _node_row("idea-mid", node_type=NodeType.IDEA.value, title="Intermediate idea")
+    claim = _node_row("claim-1", node_type=NodeType.CLAIM.value, title="Foundry claim", search_text="Foundry")
+    driver.session_value.search_rows = [person, claim]
+    driver.session_value.fetch_rows = [person, idea, claim]
+    intermediate = NodeView(
+        idea["id"], idea["node_type"], idea["owner_id"], idea["id"], idea["id"], idea["status"],
+        idea["revision"], MappingProxyType({"egress_policy": EgressPolicy.SHAREABLE.value}),
+    )
+    first = RelationPathStep(
+        from_id=person["id"], to_id=idea["id"], source_id=person["id"],
+        predicate=RelationType.CAN_CONTRIBUTE_TO.value, target_id=idea["id"],
+        traversal_direction="outgoing", evidence_ids=("evidence-1",),
+        relation_assertion_id="assertion-person-idea", status="inferred", valid_from="2026-01-01T00:00:00+00:00",
+    )
+    second = RelationPathStep(
+        from_id=idea["id"], to_id=claim["id"], source_id=idea["id"],
+        predicate=RelationType.ADDRESSES.value, target_id=claim["id"],
+        traversal_direction="outgoing", evidence_ids=("evidence-2",),
+        relation_assertion_id="assertion-idea-claim", status="inferred", valid_from="2026-01-01T00:00:00+00:00",
+    )
+    adjacency = {
+        person["id"]: [(idea["id"], first)],
+        idea["id"]: [(claim["id"], second)],
+    }
+    monkeypatch.setattr(reads, "_formal_adjacency", lambda *_args, **_kwargs: (adjacency, {idea["id"]: intermediate}))
+
+    page = reads.search("Foundry", owner_id="owner-1")
+
+    hits = {hit.node.id: hit for hit in page.hits}
+    assert hits[person["id"]].score == hits[claim["id"]].score
+    assert hits[claim["id"]].path == (
+        person["id"], RelationType.CAN_CONTRIBUTE_TO.value, idea["id"],
+        RelationType.ADDRESSES.value, claim["id"],
+    )
+    assert [step.relation_assertion_id for step in hits[claim["id"]].relation_path] == [
+        first.relation_assertion_id, second.relation_assertion_id,
+    ]
+
+
+def test_direct_hit_provenance_does_not_change_reranker_context(monkeypatch) -> None:
+    driver, reads = _gateway()
+    idea, claim, _evidence, _brief, assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
+    candidates = [endpoint_rows[idea.id], endpoint_rows[claim.id]]
+
+    class SearchModels:
+        candidate_texts = ()
+
+        def rerank(self, _query, candidate_texts):
+            self.candidate_texts = tuple(candidate_texts)
+            return [1.0] * len(candidate_texts)
+
+    models = SearchModels()
+    service = Neo4jGraphReadService(reads._gateway, search_models=models, rerank_enabled=True)
+    monkeypatch.setattr(
+        service, "_hybrid_candidates",
+        lambda *_args, **_kwargs: (tuple(candidates), {idea.id: 1.0, claim.id: 1.0}),
+    )
+
+    page = service.search("Foundry", owner_id="owner-1")
+
+    assert all("relation path:" not in candidate_text for candidate_text in models.candidate_texts)
+    claim_hit = next(hit for hit in page.hits if hit.node.id == claim.id)
+    assert claim_hit.relation_path[0].relation_assertion_id == assertion.id
 
 
 def test_search_and_fetch_project_inferred_successor_with_superseded_history_ref() -> None:
