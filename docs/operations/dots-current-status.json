@@ -8,7 +8,7 @@
     "delivery": "main",
     "runtime": "active",
     "runtime_note": "正式版の切替時に保存先確認が一度失敗しAPIが自動再試行で回復。API稼働後に接続を起動して正本3サービスactiveを確認。検索503の原因との同一性は未確認。",
-    "next_action": "更新された会話側の手順で、実際の自動整理と別会話での再利用を確認する。"
+    "next_action": "未調査の既存案を再利用した会話で調査提案が省略されたため、会話手順の入口を整合させて確認する。"
   },
   "research_run_decoder_delivery": {
     "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/304",
@@ -93,7 +93,7 @@
   },
   "remaining_plan": {
     "reference": "docs/plans/dots-mvp-remaining-plan-20260927.md",
-    "scope": "出典保存・関係訂正・引用取得・共通アセット編集・旧9ファイル整理・分類操作・実階層の奥行き投影・会話指示1.0.7はmainまたは正本プラグインと稼働版へ配送済み。検証用接続解除済み。実分類3階層・アセット画面編集・過去出典復元・最新関係の実検索は確認済み。更新手順での実会話確認は未完了。",
+    "scope": "出典保存・関係訂正・引用取得・共通アセット編集・旧9ファイル整理・分類操作・実階層の奥行き投影・会話指示1.0.7はmainまたは正本プラグインと稼働版へ配送済み。検証用接続解除済み。実分類3階層・アセット画面編集・過去出典復元・最新関係の実検索は確認済み。同じ実ChatGPTによる根拠付き分類保存と別会話での最新分類・関係・出典の再利用も確認済み。残件は未調査の既存案を再利用した際の一度の調査提案。",
     "graph_update_confirmation": "出典と正式概要の保存後は同じChatGPTが追加承認なしに意味関係・分類を整理する。調査許諾と共有境界は維持。",
     "asset_ui": "カテゴリー・分類見出し・自己紹介専用欄なしの共通カードと個別編集をPR307でmainと稼働版へ配送。1280×720の実画面を確認。通常DBの合成1件を実画面で題名・内容変更し、再読込み後の表示と実HTTP検索を確認。現行改訂2が1件、旧題名0件、共有可を保持。限定した本人所有の2IDだけのDB読取りで旧改訂1保持と後継リンクも確認。取得型をAssetに限定していた試験側の誤判定を訂正。本人の既存内容は変更していない。",
     "priority": "出典取り込みと意味関係の訂正が1番目、検証用接続と旧未使用資産の整理が2番目。",
@@ -142,8 +142,8 @@
     },
     {
       "id": "semantic_conversation_reuse", "title": "実会話で内容を読み解いた関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
-      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
-      "note": "調査→概要→根拠付き関係→IDを渡さない別会話再検索は1組確認済み。代表5組・訂正後再利用は未確認。#290の固定保存試験や#291の期待graphを実モデルの判断成功と混同しない。",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "既存の調査→概要→根拠付き関係→別会話再検索に加え、現行合成記録を実ChatGPTがID指定なしで検索し、最新訂正関係と出典を取得。同じChatGPTが根拠・最新Brief章付き分類を保存し、独立HTTP読取りで現行membershipと既存関係不変を照合。別のChatGPT会話で分類階層・最新関係・出典を取得し再利用できた。外部調査や本人実データの変更なし。代表5組を追加完成条件にしない。調査提案の未達はremaining_planへ分離。",
       "evidence": [{"recorded_at": "2026-09-26T12:06:19Z", "scope": "live-researched-idea-to-independent-chat", "result": "partial", "reference": "主会話の同時刻報告とlocal:/home/hp/projects/dots-live/docs/operations/dots-rp07-acceptance-inventory.mdの根拠付き意味関係行。"}]
     }
   ]
