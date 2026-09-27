@@ -68,6 +68,10 @@ def test_region_projection_is_owner_scoped_grounded_and_depth_limited() -> None:
     assert [(hit.entity.id, hit.facet_depth, hit.classification_status) for hit in deep] == [("asset-1", 2, "inferred"), ("idea-1", 0, "confirmed")]
     assert deep[0].taxonomy_status_path == ("confirmed", "inferred")
     assert deep[0].evidence_ids == ("ev-1", "ev-2", "ev-4")
+    assert [(item.facet_id, item.label, item.depth) for item in deep[0].facet_path] == [
+        ("business", "Business", 0), ("startup", "Startup", 1),
+        ("marketplace", "Marketplace", 2),
+    ]
 
 
 def test_region_projection_rejects_ungrounded_results_and_invalid_depth() -> None:
@@ -83,3 +87,31 @@ def test_region_projection_rejects_ungrounded_results_and_invalid_depth() -> Non
             facets, (), entities, (FacetClassification("owner-1", "idea-1", "foreign", status="proposed"),),
             owner_id="owner-1", root_facet_id="business",
         )
+
+
+def test_region_projection_keeps_distinct_memberships_but_one_best_path_per_membership() -> None:
+    facets = tuple(FacetNode("owner-1", key, key) for key in ("root", "left", "right", "leaf"))
+    taxonomy = (
+        FacetTaxonomyRelation("owner-1", "root", "left", "confirmed", ("ev-left",)),
+        FacetTaxonomyRelation("owner-1", "root", "right", "confirmed", ("ev-right",)),
+        FacetTaxonomyRelation("owner-1", "left", "leaf", "confirmed", ("ev-leaf",)),
+        FacetTaxonomyRelation("owner-1", "right", "leaf", "inferred", ("ev-leaf2",)),
+        FacetTaxonomyRelation("owner-1", "root", "leaf", "confirmed", ("ev-direct",)),
+    )
+    entities = (RegionEntity("owner-1", "idea-1", "idea", "Idea"),)
+    classifications = (
+        FacetClassification("owner-1", "idea-1", "left", "confirmed", ("ev-class-left",)),
+        FacetClassification("owner-1", "idea-1", "leaf", "confirmed", ("ev-class-leaf",)),
+        FacetClassification("owner-1", "idea-1", "right", "inferred", ("ev-class-right",)),
+    )
+
+    hits = project_facet_region(
+        facets, taxonomy, entities, classifications,
+        owner_id="owner-1", root_facet_id="root", max_facet_depth=3,
+    )
+
+    assert {(hit.entity.id, hit.matched_facet_id, hit.facet_depth) for hit in hits} == {
+        ("idea-1", "left", 1), ("idea-1", "right", 1), ("idea-1", "leaf", 1),
+    }
+    leaf = next(hit for hit in hits if hit.matched_facet_id == "leaf")
+    assert [item.facet_id for item in leaf.facet_path] == ["root", "leaf"]

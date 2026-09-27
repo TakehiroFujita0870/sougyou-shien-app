@@ -1128,6 +1128,16 @@ class Neo4jGraphReadService:
             max_facet_depth=max_facet_depth,
         )
 
+    def search_facets(
+        self, query: str, *, owner_id: str, limit: int = 20, cursor: str | None = None
+    ) -> SearchPage:
+        """Search current shareable Facets with filtering before pagination."""
+        from .founder_graph_facet_neo4j_read import search_facet_nodes
+
+        return search_facet_nodes(
+            self, query, owner_id=owner_id, limit=limit, cursor=cursor,
+        )
+
     def relations(self, node_id: str, *, owner_id: str) -> tuple[GraphRelationView, ...]:
         identifier = _required_node_id(node_id)
         owner = _required_owner(owner_id)

@@ -51,6 +51,15 @@ class RegionEntity:
 
 
 @dataclass(frozen=True, slots=True)
+class FacetPathNode:
+    """One already-authorized Facet in a root-to-match path."""
+
+    facet_id: str
+    label: str
+    depth: int
+
+
+@dataclass(frozen=True, slots=True)
 class FacetClassification:
     owner_id: str
     entity_id: str
@@ -69,6 +78,7 @@ class FacetRegionHit:
     classification_evidence_ids: tuple[str, ...]
     taxonomy_status_path: tuple[str, ...]
     taxonomy_evidence_path: tuple[tuple[str, ...], ...]
+    facet_path: tuple[FacetPathNode, ...] = ()
 
     @property
     def evidence_ids(self) -> tuple[str, ...]:
@@ -183,11 +193,13 @@ def project_facet_region(
 
     # A DAG may contain more than one route to the same Facet. Keep the
     # shallowest deterministic route so depth and evidence remain stable.
-    paths: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]] = {root_facet_id: ((), ())}
+    paths: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...], tuple[str, ...]]] = {
+        root_facet_id: ((), (), (root_facet_id,))
+    }
     queue = deque([root_facet_id])
     while queue:
         parent_id = queue.popleft()
-        statuses, evidence_path = paths[parent_id]
+        statuses, evidence_path, facet_ids = paths[parent_id]
         if len(statuses) >= max_facet_depth:
             continue
         for relation in children.get(parent_id, ()):
@@ -197,6 +209,7 @@ def project_facet_region(
             paths[child_id] = (
                 (*statuses, relation.status),
                 (*evidence_path, relation.evidence_ids),
+                (*facet_ids, child_id),
             )
             queue.append(child_id)
 
@@ -205,7 +218,7 @@ def project_facet_region(
         for entity in entities
         if entity.owner_id == owner_id and entity.kind in _REGION_ENTITY_KINDS
     }
-    best_hit_by_entity: dict[str, FacetRegionHit] = {}
+    best_hit_by_membership: dict[tuple[str, str], FacetRegionHit] = {}
     for classification in classifications:
         # Records from other owners are intentionally ignored at this boundary.
         if classification.owner_id != owner_id:
@@ -218,7 +231,7 @@ def project_facet_region(
             continue
         if classification.status not in _TRAVERSABLE_STATUSES:
             continue
-        taxonomy_statuses, taxonomy_evidence = paths[classification.facet_id]
+        taxonomy_statuses, taxonomy_evidence, facet_ids = paths[classification.facet_id]
         hit = FacetRegionHit(
             entity=entity,
             root_facet_id=root_facet_id,
@@ -228,12 +241,20 @@ def project_facet_region(
             classification_evidence_ids=classification.evidence_ids,
             taxonomy_status_path=taxonomy_statuses,
             taxonomy_evidence_path=taxonomy_evidence,
+            facet_path=tuple(
+                FacetPathNode(facet_id, facet_by_id[facet_id].label, depth)
+                for depth, facet_id in enumerate(facet_ids)
+            ),
         )
-        previous = best_hit_by_entity.get(entity.id)
+        membership_key = (entity.id, hit.matched_facet_id)
+        previous = best_hit_by_membership.get(membership_key)
         if previous is None or (hit.facet_depth, hit.matched_facet_id) < (previous.facet_depth, previous.matched_facet_id):
-            best_hit_by_entity[entity.id] = hit
+            best_hit_by_membership[membership_key] = hit
 
-    return tuple(sorted(best_hit_by_entity.values(), key=lambda hit: (hit.entity.id, hit.facet_depth)))
+    return tuple(sorted(
+        best_hit_by_membership.values(),
+        key=lambda hit: (hit.entity.id, hit.facet_depth, hit.matched_facet_id),
+    ))
 
 
 def facet_taxonomy_relation_from_assertion(
@@ -300,6 +321,7 @@ __all__ = [
     "FacetClassification",
     "FacetHierarchyError",
     "FacetNode",
+    "FacetPathNode",
     "FacetRegionHit",
     "FacetTaxonomyRelation",
     "RegionEntity",

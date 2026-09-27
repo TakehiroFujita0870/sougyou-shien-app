@@ -149,6 +149,14 @@ class GraphReadPort(Protocol):
     def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
         """Fetch one current, grounded, shareable relation assertion."""
 
+    def facet_region(self, root_facet_id: str, *, owner_id: str, max_facet_depth: int = 0) -> tuple[Any, ...]:
+        """Return current shareable entities assigned within one Facet region."""
+
+    def search_facets(
+        self, query: str, *, owner_id: str, limit: int = 20, cursor: str | None = None,
+    ) -> SearchPage:
+        """Search only current, shareable Facets before applying pagination."""
+
 
 _NON_CURRENT = frozenset({"retracted", "superseded", "expired", "cancelled", "revoked", "archived"})
 _FIELD_ALLOWLIST: dict[NodeType, tuple[str, ...]] = {
@@ -412,6 +420,27 @@ class GraphReadService:
             if not self._current_endpoint(node, owner_id, nodes):
                 raise GraphReadNotFoundError("node was not found")
         return _node_view(node)
+
+    def facet_region(self, root_facet_id: str, *, owner_id: str, max_facet_depth: int = 0) -> tuple[Any, ...]:
+        from .founder_graph_facet_memory_read import facet_region_from_snapshot
+
+        if owner_id != self.owner_id:
+            raise GraphReadNotFoundError("Facet region was not found")
+        return facet_region_from_snapshot(
+            self._writes.read_snapshot(), root_facet_id, owner_id=owner_id,
+            max_facet_depth=max_facet_depth,
+        )
+
+    def search_facets(
+        self, query: str, *, owner_id: str, limit: int = 20, cursor: str | None = None,
+    ) -> SearchPage:
+        from .founder_graph_facet_memory_read import facet_search_from_snapshot
+
+        if owner_id != self.owner_id:
+            raise GraphReadNotFoundError("Facet search was not found")
+        return facet_search_from_snapshot(
+            self._writes.read_snapshot(), query, owner_id=owner_id, limit=limit, cursor=cursor,
+        )
 
     def fetch_idea_brief(self, idea_id: str, *, owner_id: str) -> dict[str, Any]:
         identifier = idea_id.strip() if isinstance(idea_id, str) else ""
