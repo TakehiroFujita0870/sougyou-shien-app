@@ -54,6 +54,12 @@ from .idea_brief import IdeaBriefVersion
 from .source_citations import evidence_lineage_is_current, researched_evidence_ids
 
 
+_NON_CURRENT_IDEA_STATUSES = frozenset({
+    Status.ARCHIVED, Status.SUPERSEDED, Status.RETRACTED, Status.EXPIRED,
+    Status.CANCELLED, Status.REVOKED, Status.FAILED,
+})
+
+
 class GraphWriteError(DomainValidationError):
     """Base class for write-boundary failures."""
 
@@ -103,6 +109,30 @@ class GraphWritePort(Protocol):
         actor: str = "local-owner",
     ) -> "WriteReceipt":
         """Append one immutable revision to the current Asset family tip."""
+
+    def archive_idea(
+        self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Append an archived Idea revision to the current Idea family tip."""
+
+    def restore_idea(
+        self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Append a visible Idea revision after an archived current revision."""
+
+    def archive_asset(
+        self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Append an archived Asset revision to the current Asset family tip."""
+
+    def restore_asset(
+        self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> "WriteReceipt":
+        """Append a visible Asset revision after an archived current revision."""
 
     def capture_idea(
         self,
@@ -433,6 +463,10 @@ class InMemoryGraphWriteService:
         "capture_asset",
         "capture_facet",
         "revise_asset",
+        "archive_idea",
+        "restore_idea",
+        "archive_asset",
+        "restore_asset",
         "append_claim",
         "link_entities",
         "save_relation_assertion",
@@ -645,6 +679,191 @@ class InMemoryGraphWriteService:
             ):
                 raise GraphWriteError("asset lineage revision history is invalid")
             current = child
+
+    def _current_idea_locked(self, idea: Idea) -> Idea:
+        """Validate one complete, unbranched Idea history and return its tip."""
+        root = idea
+        seen: set[str] = set()
+        while root.supersedes_id is not None:
+            if root.id in seen or root.owner_id != self.owner_id:
+                raise GraphWriteError("Idea lineage is invalid")
+            seen.add(root.id)
+            parent = self._nodes.get(root.supersedes_id)
+            if (
+                not isinstance(parent, Idea) or parent.owner_id != self.owner_id
+                or root.revision != parent.revision + 1
+            ):
+                raise GraphWriteError("Idea lineage revision history is invalid")
+            root = parent
+
+        current = root
+        seen = set()
+        while True:
+            if current.id in seen or current.owner_id != self.owner_id:
+                raise GraphWriteError("Idea lineage is invalid")
+            seen.add(current.id)
+            children = [
+                node for node in self._nodes.values()
+                if isinstance(node, Idea) and node.owner_id == self.owner_id
+                and node.supersedes_id == current.id
+            ]
+            if len(children) > 1:
+                raise GraphWriteError("Idea lineage has multiple competing revisions")
+            if not children:
+                return current
+            child = children[0]
+            if child.revision != current.revision + 1 or child.id in seen:
+                raise GraphWriteError("Idea lineage revision history is invalid")
+            current = child
+
+    def _lifecycle_successor_locked(
+        self, current: Idea | Asset, *, status: Status, operation: str,
+        idempotency_key: str, actor: str, fingerprint: str,
+    ) -> WriteReceipt:
+        successor_id = f"{current.node_type.value}_{sha256(f'{self.owner_id}:{operation}:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        if successor_id in self._nodes or successor_id in self._idea_briefs:
+            raise NodeAlreadyExistsError("archive revision id is already registered")
+        provenance = Provenance(
+            actor=actor, operation=operation, target_id=successor_id,
+            source_id=current.id, idempotency_key=idempotency_key,
+        )
+        now = datetime.now(timezone.utc)
+        if isinstance(current, Idea):
+            successor = replace(
+                current, id=successor_id, status=status, revision=current.revision + 1,
+                supersedes_id=current.id, created_at=now, updated_at=None, provenance=provenance,
+            )
+            target_type = NodeType.IDEA.value
+        else:
+            successor = replace(
+                current.revise(
+                    id=successor_id, revision=current.revision + 1, provenance=provenance,
+                ),
+                status=status,
+            )
+            target_type = NodeType.ASSET.value
+        receipt = WriteReceipt(
+            operation, successor_id, target_type, self._revision(successor), idempotency_key,
+        )
+        self._nodes[successor_id] = successor
+        self._node_history[successor_id] = [successor]
+        audit_length = len(self._audit)
+        try:
+            self._append_audit(receipt, actor, fingerprint)
+        except Exception:
+            self._nodes.pop(successor_id, None)
+            self._node_history.pop(successor_id, None)
+            del self._audit[audit_length:]
+            raise
+        self._idempotency[idempotency_key] = (fingerprint, receipt)
+        return receipt
+
+    def _transition_idea_status(
+        self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str, operation: str, target_status: Status,
+    ) -> WriteReceipt:
+        operation = self._validate_command(operation, actor, idempotency_key)
+        idea_id = _required_text(idea_id, "idea_id")
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise GraphWriteError("expected Idea revision must be non-negative")
+        fingerprint = payload_fingerprint(
+            operation, idea_id, expected_revision, target_status.value, self.owner_id,
+        )
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            supplied = self._nodes.get(idea_id)
+            if not isinstance(supplied, Idea) or supplied.owner_id != self.owner_id:
+                raise GraphWriteNotFoundError("Idea does not exist for the local owner")
+            current = self._current_idea_locked(supplied)
+            if current.id != idea_id or current.revision != expected_revision:
+                raise RevisionConflictError("Idea changed; reload its current revision")
+            if target_status is Status.ARCHIVED:
+                if current.status in _NON_CURRENT_IDEA_STATUSES:
+                    raise GraphWriteNotFoundError("Idea does not exist for the local owner")
+            else:
+                if current.status is not Status.ARCHIVED:
+                    raise GraphWriteNotFoundError("archived Idea does not exist for the local owner")
+                prior = self._nodes.get(current.supersedes_id or "")
+                while isinstance(prior, Idea) and prior.status is Status.ARCHIVED:
+                    prior = self._nodes.get(prior.supersedes_id or "")
+                if not isinstance(prior, Idea) or prior.owner_id != self.owner_id or prior.status in _NON_CURRENT_IDEA_STATUSES:
+                    raise GraphWriteNotFoundError("Idea has no restorable current revision")
+                target_status = prior.status
+            return self._lifecycle_successor_locked(
+                current, status=target_status, operation=operation,
+                idempotency_key=idempotency_key, actor=actor, fingerprint=fingerprint,
+            )
+
+    def archive_idea(
+        self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self._transition_idea_status(
+            idea_id, expected_revision=expected_revision, idempotency_key=idempotency_key,
+            actor=actor, operation="archive_idea", target_status=Status.ARCHIVED,
+        )
+
+    def restore_idea(
+        self, idea_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self._transition_idea_status(
+            idea_id, expected_revision=expected_revision, idempotency_key=idempotency_key,
+            actor=actor, operation="restore_idea", target_status=Status.ACTIVE,
+        )
+
+    def _transition_asset_status(
+        self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str, operation: str, target_status: Status,
+    ) -> WriteReceipt:
+        operation = self._validate_command(operation, actor, idempotency_key)
+        asset_id = _required_text(asset_id, "asset_id")
+        if type(expected_revision) is not int or expected_revision < 1:
+            raise GraphWriteError("expected Asset revision must be positive")
+        fingerprint = payload_fingerprint(
+            operation, asset_id, expected_revision, target_status.value, self.owner_id,
+        )
+        with self._lock:
+            replay = self._replay_or_raise(idempotency_key, fingerprint)
+            if replay is not None:
+                return replay
+            supplied = self._nodes.get(asset_id)
+            if (
+                not isinstance(supplied, Asset)
+                or supplied.node_type is not NodeType.ASSET
+                or supplied.owner_id != self.owner_id
+            ):
+                raise GraphWriteNotFoundError("Asset does not exist for the local owner")
+            current = self._current_asset_locked(supplied)
+            if current.id != asset_id or current.revision != expected_revision:
+                raise RevisionConflictError("Asset changed; reload its current revision")
+            expected_status = Status.ACTIVE if target_status is Status.ARCHIVED else Status.ARCHIVED
+            if current.status is not expected_status:
+                raise GraphWriteNotFoundError("Asset is not available for this status change")
+            return self._lifecycle_successor_locked(
+                current, status=target_status, operation=operation,
+                idempotency_key=idempotency_key, actor=actor, fingerprint=fingerprint,
+            )
+
+    def archive_asset(
+        self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self._transition_asset_status(
+            asset_id, expected_revision=expected_revision, idempotency_key=idempotency_key,
+            actor=actor, operation="archive_asset", target_status=Status.ARCHIVED,
+        )
+
+    def restore_asset(
+        self, asset_id: str, *, expected_revision: int, idempotency_key: str,
+        actor: str = "local-owner",
+    ) -> WriteReceipt:
+        return self._transition_asset_status(
+            asset_id, expected_revision=expected_revision, idempotency_key=idempotency_key,
+            actor=actor, operation="restore_asset", target_status=Status.ACTIVE,
+        )
 
     def capture_idea(
         self,
