@@ -16,9 +16,11 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from .founder_graph import (
+    Asset,
     DomainValidationError,
     EgressPolicy,
     Evidence,
+    Idea,
     NodeType,
     Provenance,
     RelationAssertion,
@@ -43,6 +45,8 @@ from .founder_graph_read_contract import (
     single_record,
     tokens,
 )
+from .founder_graph_lifecycle_resolver import resolve_restored_idea_reference
+from .founder_graph_lifecycle_resolver import resolve_restored_asset_reference
 from .founder_graph_read import (
     GraphReadError,
     GraphReadNotFoundError,
@@ -81,7 +85,7 @@ class GraphRelationView:
 _FETCH_QUERY = (
     "MATCH (n) WHERE n.id = $node_id AND n.owner_id = $owner_id "
     "AND NOT coalesce(n.status, '') IN $non_current "
-    "AND NOT (n.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) }) "
+    "AND NOT (n.node_type IN ['idea', 'asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) }) "
     "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
     "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
     "n.search_text AS search_text LIMIT 1"
@@ -90,7 +94,7 @@ _FETCH_QUERY = (
 _SEARCH_QUERY = (
     "MATCH (n) WHERE n.owner_id = $owner_id AND n.node_type IN $searchable_node_types "
     "AND NOT coalesce(n.status, '') IN $non_current "
-    "AND NOT (n.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) }) "
+    "AND NOT (n.node_type IN ['idea', 'asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) }) "
     "AND any(token IN $tokens WHERE toLower(coalesce(n.search_text, '')) CONTAINS token) "
     "RETURN n.id AS id, n.owner_id AS owner_id, n.node_type AS node_type, "
     "n.status AS status, n.revision AS revision, n.payload_json AS payload_json, "
@@ -100,7 +104,7 @@ _SEARCH_QUERY = (
 _SEARCHABLE_FILTER = (
     "WHERE node.owner_id = $owner_id AND node.node_type IN $searchable_node_types "
     "AND NOT EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(node) } "
-    "AND NOT (node.node_type IN ['asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: node.id}) }) "
+    "AND NOT (node.node_type IN ['idea', 'asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: node.id}) }) "
     "AND NOT coalesce(node.status, '') IN $non_current "
     "AND NOT (node:SourceRevision AND EXISTS { MATCH (s:Source {id: node.source_id, owner_id: $owner_id}) WHERE s.status = 'archived' }) "
     "AND NOT (node:ContentChunk AND EXISTS { MATCH (r:SourceRevision {id: node.source_revision_id, owner_id: $owner_id})-[:HAS_SOURCE_REVISION]-(s:Source) WHERE s.status = 'archived' }) "
@@ -281,6 +285,47 @@ def node_view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: boo
 
 
 _view_from_row = node_view_from_row
+
+
+def _idea_node_view(idea: Idea) -> NodeView:
+    values = {
+        name: (getattr(idea, name).value if hasattr(getattr(idea, name), "value") else getattr(idea, name))
+        for name in FIELD_ALLOWLIST[NodeType.IDEA]
+        if hasattr(idea, name)
+    }
+    return NodeView(
+        id=idea.id,
+        node_type=NodeType.IDEA.value,
+        owner_id=idea.owner_id,
+        title=idea.title,
+        snippet=(idea.summary or idea.description or idea.title)[:320],
+        status=idea.status.value,
+        revision=idea.revision,
+        fields=MappingProxyType(values),
+    )
+
+
+def _revisioned_node_view(node: Idea | Asset) -> NodeView:
+    if isinstance(node, Idea):
+        return _idea_node_view(node)
+    node_type = node.node_type
+    values = {
+        name: (getattr(node, name).value if hasattr(getattr(node, name), "value") else getattr(node, name))
+        for name in FIELD_ALLOWLIST[node_type]
+        if hasattr(node, name)
+    }
+    title = next((str(values[key]) for key in ("name", "title") if values.get(key)), node.id)
+    snippet = next((str(values[key]) for key in ("description", "name", "title") if values.get(key)), title)
+    return NodeView(
+        id=node.id,
+        node_type=node_type.value,
+        owner_id=node.owner_id,
+        title=title,
+        snippet=snippet[:320],
+        status=node.status.value,
+        revision=node.revision,
+        fields=MappingProxyType(values),
+    )
 
 
 def required_owner(owner_id: str) -> str:
@@ -502,28 +547,57 @@ class Neo4jGraphReadService:
                     or set(actual_edges) != set(expected_edges)
                 ):
                     continue
-                source = ref_views.get(assertion.source_id)
-                target = ref_views.get(assertion.target_id)
+                restored_views: dict[str, NodeView] = {}
+                idea_chains: dict[str, tuple[Any, ...]] = {}
+                revisioned_endpoint_ids: set[str] = set()
+                for endpoint in (ref_views.get(assertion.source_id), ref_views.get(assertion.target_id)):
+                    if endpoint is None:
+                        continue
+                    if endpoint.node_type == NodeType.IDEA.value:
+                        root_id = self._gateway.read_idea_root_for_tx(tx, endpoint.id)
+                        chain = self._gateway.read_idea_chain_tx(tx, root_id)
+                        resolved = resolve_restored_idea_reference(endpoint.id, chain)
+                    elif self._is_revisioned_asset(endpoint):
+                        chain = self._gateway.read_asset_chain_tx(tx, endpoint.id)
+                        resolved = resolve_restored_asset_reference(endpoint.id, chain)
+                        revisioned_endpoint_ids.add(endpoint.id)
+                    else:
+                        continue
+                    if resolved is None:
+                        continue
+                    if endpoint.node_type == NodeType.IDEA.value:
+                        idea_chains[endpoint.id] = chain
+                    if resolved.id != endpoint.id:
+                        restored_views[endpoint.id] = _revisioned_node_view(resolved)
+                source = restored_views.get(assertion.source_id, ref_views.get(assertion.source_id))
+                target = restored_views.get(assertion.target_id, ref_views.get(assertion.target_id))
                 if source is None or target is None:
                     continue
                 if source.node_type != assertion.source_kind.value or target.node_type != assertion.target_kind.value:
                     continue
-                if (self._is_revisioned_asset(source) and not self._asset_current_tx(tx, source.id)) or (
-                    self._is_revisioned_asset(target) and not self._asset_current_tx(tx, target.id)
+                if (self._is_revisioned_asset(source) and source.id not in revisioned_endpoint_ids and not self._asset_current_tx(tx, source.id)) or (
+                    self._is_revisioned_asset(target) and target.id not in revisioned_endpoint_ids and not self._asset_current_tx(tx, target.id)
                 ):
                     continue
                 if any(view.status in _NON_CURRENT for view in (source, target)):
                     continue
                 idea_ends = [view for view in (source, target) if view.node_type == NodeType.IDEA.value]
-                for idea in idea_ends:
-                    root_id = self._gateway.read_idea_root_for_tx(tx, idea.id)
-                    chain = self._gateway.read_idea_chain_tx(tx, root_id)
-                    if not chain or chain[-1].id != idea.id:
-                        raise ValueError("Idea endpoint is not its current leaf")
+                if any(
+                    endpoint is None or endpoint[-1].id != current.id
+                    for endpoint, current in zip(
+                        (idea_chains.get(assertion.source_id), idea_chains.get(assertion.target_id)),
+                        (source, target), strict=False,
+                    ) if current.node_type == NodeType.IDEA.value
+                ):
+                    continue
                 if idea_ends:
                     if assertion.based_on_brief_id is None or assertion.based_on_brief_section_index is None:
                         continue
                     primary = source if source.node_type == NodeType.IDEA.value else target
+                    original_primary_id = assertion.source_id if source.node_type == NodeType.IDEA.value else assertion.target_id
+                    idea_chain = idea_chains.get(original_primary_id)
+                    if not idea_chain:
+                        continue
                     root_id = self._gateway.read_idea_root_for_tx(tx, primary.id)
                     briefs = self._gateway.read_idea_briefs_for_root_tx(tx, root_id)
                     if not briefs:
@@ -532,7 +606,7 @@ class Neo4jGraphReadService:
                     section_index = assertion.based_on_brief_section_index
                     if (
                         latest.id != assertion.based_on_brief_id
-                        or latest.based_on_idea_id != primary.id
+                        or resolve_restored_idea_reference(latest.based_on_idea_id, idea_chain) is not idea_chain[-1]
                         or not latest.research_run_ids
                         or type(section_index) is not int
                         or not 0 <= section_index < len(latest.sections)
@@ -743,7 +817,7 @@ class Neo4jGraphReadService:
             if (
                 latest.owner_id != owner
                 or latest.idea_lineage_root_id != root_id
-                or latest.based_on_idea_id != idea.id
+                or resolve_restored_idea_reference(latest.based_on_idea_id, chain) is not idea
                 or latest.egress_policy != EgressPolicy.SHAREABLE.value
             ):
                 return None
@@ -752,7 +826,7 @@ class Neo4jGraphReadService:
             for section in latest.sections:
                 citations = []
                 for evidence_id in section.evidence_ids:
-                    citation = self._evidence_citation(tx, evidence_id=evidence_id, owner_id=owner)
+                    citation = self.evidence_citation_tx(tx, evidence_id=evidence_id, owner_id=owner)
                     if citation is not None:
                         citations.append(citation)
                 if 0 <= section.index < len(brief_citations):
@@ -775,7 +849,8 @@ class Neo4jGraphReadService:
             raise GraphReadNotFoundError("idea brief was not found")
         return projection
 
-    def _evidence_citation(self, tx: Any, *, evidence_id: str, owner_id: str) -> dict[str, str] | None:
+    def evidence_citation_tx(self, tx: Any, *, evidence_id: str, owner_id: str) -> dict[str, str] | None:
+        """Project one validated citation inside an existing Neo4j transaction."""
         if not self._evidence_lineage_valid(tx, evidence_id=evidence_id, owner_id=owner_id):
             return None
         rows = _rows(tx.run(_EVIDENCE_LINEAGE_QUERY, evidence_id=evidence_id, owner_id=owner_id))
@@ -804,6 +879,8 @@ class Neo4jGraphReadService:
             return None
         return {**metadata, "source_id": str(source["id"]), "evidence_id": evidence_id}
 
+    _evidence_citation = evidence_citation_tx
+
     def validate_evidence_citation(self, evidence_id: str, *, owner_id: str) -> bool:
         """Return whether an evidence reference has a current shareable source citation."""
         identifier = _required_node_id(evidence_id)
@@ -812,7 +889,7 @@ class Neo4jGraphReadService:
             return False
         with self._read_session() as session:
             return self._gateway.execute_read(
-                session, lambda tx: self._evidence_citation(tx, evidence_id=identifier, owner_id=owner) is not None,
+                session, lambda tx: self.evidence_citation_tx(tx, evidence_id=identifier, owner_id=owner) is not None,
             )
 
     def project_evidence_citation(self, evidence_id: str, *, owner_id: str) -> dict[str, str] | None:
@@ -823,7 +900,7 @@ class Neo4jGraphReadService:
             return None
         with self._read_session() as session:
             return self._gateway.execute_read(
-                session, lambda tx: self._evidence_citation(tx, evidence_id=identifier, owner_id=owner),
+                session, lambda tx: self.evidence_citation_tx(tx, evidence_id=identifier, owner_id=owner),
             )
 
     def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:

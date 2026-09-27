@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, RelationAssertion, Source, SourceRevision
+from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, Provenance, RelationAssertion, Source, SourceRevision
 from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
@@ -66,6 +66,9 @@ class FakeReadSession:
         if "IdeaBriefVersion" in query:
             return FakeResult(self.brief_rows)
         if "MATCH (i:Idea" in query:
+            if "$id" in query:
+                rows = [row for row in self.idea_rows if row.get("id") == params.get("id")]
+                return FakeResult(rows)
             return FakeResult(self.idea_rows)
         if "EVIDENCE_FROM" in query:
             evidence_id = params.get("evidence_id")
@@ -84,7 +87,15 @@ class FakeReadSession:
         if "MATCH (a)-[r]->(b)" in query:
             return FakeResult(self.relation_rows)
         if "$node_id" in query:
-            return FakeResult([row for row in self.fetch_rows if row.get("id") == params.get("node_id")])
+            rows = [row for row in self.fetch_rows if row.get("id") == params.get("node_id")]
+            if "successor {owner_id: $owner_id, supersedes_id: n.id}" in query:
+                superseded_ids = {
+                    row.get("supersedes_id")
+                    for row in (*self.fetch_rows, *self.search_rows)
+                    if row.get("owner_id") == params.get("owner_id")
+                }
+                rows = [row for row in rows if row.get("id") not in superseded_ids]
+            return FakeResult(rows)
         return FakeResult(self.search_rows)
 
 
@@ -103,8 +114,25 @@ def _gateway() -> tuple[FakeReadDriver, Neo4jGraphReadService]:
     return driver, Neo4jGraphReadService(gateway)
 
 
+def test_read_adapter_exposes_one_managed_read_boundary() -> None:
+    driver, reads = _gateway()
+
+    with reads.read_session() as session:
+        result = reads.gateway.execute_read(session, lambda tx: tx)
+
+    assert result is driver.session_value
+    assert driver.session_value.read_transactions == 1
+
+
 def test_hybrid_fulltext_query_uses_escaped_or_terms_for_cjk() -> None:
     assert Neo4jGraphReadService._fulltext_query('創業者 graph "idea"') == '"創業者" OR "graph" OR "idea"'
+
+
+def test_legacy_search_query_hides_superseded_idea_revisions() -> None:
+    from dots.founder_graph_neo4j_read import _SEARCH_QUERY
+
+    assert "n.node_type IN ['idea', 'asset', 'person']" in _SEARCH_QUERY
+    assert "supersedes_id: n.id" in _SEARCH_QUERY
 
 
 def test_hybrid_reranks_only_top_forty_after_graph_expansion_and_keeps_tail(monkeypatch) -> None:
@@ -368,6 +396,50 @@ def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evid
     assert result["brief_citations"][1:] == [[] for _ in range(7)]
     assert all("run-1" not in str(section) and "owner_decisions" not in section for section in result["sections"])
     assert all("IdeaBriefVersion" not in query or params["owner_id"] == "owner-1" for query, params in driver.session_value.calls)
+
+
+def test_neo4j_archive_restore_hides_then_rebinds_existing_brief_and_assertion() -> None:
+    driver, reads = _gateway()
+    idea, claim, evidence, brief, assertion, endpoints, formal_rows, brief_row = _formal_fixture()
+    archived = replace(
+        idea, id="idea-archived", revision=1, supersedes_id=idea.id, status=Status.ARCHIVED,
+        provenance=Provenance(
+            actor="local-owner", operation="archive_idea", target_id="idea-archived",
+            source_id=idea.id, idempotency_key="archive",
+        ),
+    )
+    restored = replace(
+        archived, id="idea-restored", revision=2, supersedes_id=archived.id, status=Status.ACTIVE,
+        provenance=Provenance(
+            actor="local-owner", operation="restore_idea", target_id="idea-restored",
+            source_id=archived.id, idempotency_key="restore",
+        ),
+    )
+    state = driver.session_value
+    state.fetch_rows = [*endpoints.values(), _persisted_row(archived), _persisted_row(restored)]
+    state.idea_rows = [_persisted_row(idea), _persisted_row(archived), _persisted_row(restored)]
+    state.formal_rows = formal_rows
+    state.brief_rows = [brief_row]
+
+    state.search_rows = [_persisted_row(archived, search_text="Foundry search seed")]
+    archived_page = reads.search("Foundry search seed", owner_id="owner-1")
+    assert not archived_page.hits
+    with pytest.raises(GraphReadNotFoundError):
+        reads.fetch_idea_brief(idea.id, owner_id="owner-1")
+
+    state.search_rows = [_persisted_row(restored, search_text="Foundry search seed")]
+    restored_page = reads.search("Foundry search seed", owner_id="owner-1")
+    assert restored_page.hits[0].node.id == restored.id
+    assert any(
+        step.relation_assertion_id == assertion.id and step.to_id == claim.id
+        for hit in restored_page.hits for step in hit.relation_path
+    )
+    brief_result = reads.fetch_idea_brief(restored.id, owner_id="owner-1")
+    assert brief_result["idea_id"] == restored.id
+    assert len(brief_result["sections"]) == 8
+    assert brief_result["brief_citations"][0][0]["url"] == "https://example.test/reference?id=42#section"
+    with pytest.raises(GraphReadNotFoundError):
+        reads.fetch(idea.id, owner_id="owner-1")
 
 
 def test_fetch_idea_brief_preserves_prior_import_origin_and_only_current_public_citations():
