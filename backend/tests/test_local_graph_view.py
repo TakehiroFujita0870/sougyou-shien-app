@@ -1,5 +1,8 @@
 import json
+from dataclasses import replace
 
+from dots.founder_graph import Asset, EgressPolicy, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
+from dots.founder_graph_neo4j_codec import node_properties
 from dots.founder_graph_facet_hierarchy import FacetPathNode, FacetRegionHit, RegionEntity
 from dots.local_graph_view import read_local_facet_region, read_local_graph
 
@@ -57,3 +60,49 @@ def test_facet_region_projection_exposes_status_and_opaque_evidence_only():
     ]
     assert result["hits"][0]["evidence_ids"] == ["ev-tax", "ev-class"]
     assert "本文" not in str(result)
+
+
+def test_graph_restores_idea_asset_semantic_endpoints_only_for_lifecycle_successors():
+    idea0 = Idea(owner_id="owner-mvp", id="idea-0", title="Idea", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
+    idea1 = replace(
+        idea0, id="idea-1", revision=1, supersedes_id=idea0.id, status=Status.ARCHIVED,
+        provenance=Provenance(actor="owner", operation="archive_idea", target_id="idea-1", source_id=idea0.id),
+    )
+    idea2 = replace(
+        idea1, id="idea-2", revision=2, supersedes_id=idea1.id, status=Status.ACTIVE,
+        provenance=Provenance(actor="owner", operation="restore_idea", target_id="idea-2", source_id=idea1.id),
+    )
+    asset0 = Asset(owner_id="owner-mvp", id="asset-0", name="Asset", egress_policy=EgressPolicy.SHAREABLE)
+    asset1 = replace(
+        asset0, id="asset-1", revision=2, supersedes_id=asset0.id, status=Status.ARCHIVED,
+        provenance=Provenance(actor="owner", operation="archive_asset", target_id="asset-1", source_id=asset0.id),
+    )
+    asset2 = replace(
+        asset1, id="asset-2", revision=3, supersedes_id=asset1.id, status=Status.ACTIVE,
+        provenance=Provenance(actor="owner", operation="restore_asset", target_id="asset-2", source_id=asset1.id),
+    )
+    assertion = RelationAssertion(
+        owner_id="owner-mvp", id="relation", source_id=idea0.id, source_kind=NodeType.IDEA,
+        target_id=asset0.id, target_kind=NodeType.ASSET, predicate=RelationType.REUSES,
+        assertion_family_id="relation-family", status=RelationshipStatus.PROPOSED,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    records = (idea0, idea1, idea2, asset0, asset1, asset2, assertion)
+    superseded = {record.supersedes_id for record in records if record.supersedes_id}
+    rows = []
+    for record in records:
+        properties = node_properties(record)
+        rows.append({
+            "id": record.id, "owner_id": record.owner_id, "node_type": record.node_type.value,
+            "status": properties["status"], "payload_json": properties["payload_json"],
+            "has_successor": record.id in superseded,
+        })
+
+    result = read_local_graph(Store(rows), owner_id="owner-mvp")
+
+    assert {node["id"] for node in result["nodes"]} == {"idea-2", "asset-2", "relation"}
+    assert result["semantic_edges"] == [{
+        "id": "relation", "source_id": "idea-2", "target_id": "asset-2",
+        "predicate": "REUSES", "status": "proposed", "confidence": None,
+        "evidence_ids": [], "based_on_brief_id": None, "based_on_brief_section_index": None,
+    }]
