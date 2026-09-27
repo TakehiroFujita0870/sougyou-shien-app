@@ -8,6 +8,8 @@ from typing import Any, Mapping, Protocol, Sequence
 from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief
 from .founder_graph_neo4j import Neo4jGraphGateway
 from .founder_graph_neo4j_read import Neo4jGraphReadService
+from .founder_graph_neo4j_idea import decode_persisted_idea
+from .founder_graph_lifecycle_resolver import resolve_restored_idea_reference
 from .founder_graph_write import GraphWritePort, WriteReceipt
 
 
@@ -126,6 +128,89 @@ def _decode_home_brief_row(row: Mapping[str, Any], *, owner_id: str):
     }, owner_id=owner_id, legacy_label_checked=True)
 
 
+def _idea_lifecycle_aliases(ideas: Mapping[str, Any]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for idea in ideas.values():
+        chain = [idea]
+        seen = {idea.id}
+        while chain[-1].supersedes_id is not None:
+            parent = ideas.get(chain[-1].supersedes_id)
+            if parent is None or parent.id in seen:
+                break
+            chain.append(parent)
+            seen.add(parent.id)
+        else:
+            chain.reverse()
+            current = chain[-1]
+            while True:
+                children = [candidate for candidate in ideas.values() if candidate.supersedes_id == current.id]
+                if len(children) > 1:
+                    break
+                if not children:
+                    for candidate in chain:
+                        resolved = resolve_restored_idea_reference(candidate.id, chain)
+                        if resolved is not None:
+                            aliases[candidate.id] = resolved.id
+                    break
+                child = children[0]
+                if child.revision != current.revision + 1:
+                    break
+                chain.append(child)
+                seen.add(child.id)
+                current = child
+    return aliases
+
+
+def _decode_lifecycle_idea_families(
+    payloads: Mapping[str, Mapping[str, Any]], *, owner_id: str,
+) -> dict[str, Any]:
+    markers = {
+        identity for identity, payload in payloads.items()
+        if isinstance(payload.get("provenance"), Mapping)
+        and payload["provenance"].get("operation") in {"archive_idea", "restore_idea"}
+    }
+    if not markers:
+        return {}
+    family_ids: set[str] = set()
+    for marker in markers:
+        current = marker
+        seen = set()
+        while current in payloads and current not in seen:
+            seen.add(current)
+            family_ids.add(current)
+            parent = payloads[current].get("supersedes_id")
+            if not isinstance(parent, str):
+                break
+            current = parent
+        pending = [marker]
+        while pending:
+            parent_id = pending.pop()
+            children = [
+                identity for identity, payload in payloads.items()
+                if payload.get("supersedes_id") == parent_id and identity not in family_ids
+            ]
+            family_ids.update(children)
+            pending.extend(children)
+    decoded = {}
+    for identity in family_ids:
+        payload = payloads.get(identity)
+        if payload is None:
+            continue
+        persisted_payload = dict(payload)
+        persisted_payload.pop("node_type", None)
+        try:
+            decoded[identity] = decode_persisted_idea({
+                "id": identity,
+                "owner_id": owner_id,
+                "node_type": "idea",
+                "revision": payload.get("revision"),
+                "payload_json": json.dumps(persisted_payload, ensure_ascii=False),
+            }, owner_id=owner_id, expected_id=identity)
+        except (TypeError, ValueError):
+            return {}
+    return decoded
+
+
 def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "running") -> dict[str, Any]:
     if not isinstance(owner_id, str) or not owner_id.strip():
         raise ValueError("owner_id is required")
@@ -138,6 +223,7 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
         records = []
         ids = set()
         idea_payloads: dict[str, Mapping[str, Any]] = {}
+        idea_nodes: dict[str, Any] = {}
         idea_statuses: dict[str, Any] = {}
         superseded = set()
         superseded_assets = set()
@@ -153,8 +239,6 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
             if kind == "idea":
                 idea_payloads[identity] = payload
                 idea_statuses[identity] = row.get("status")
-            if str(row.get("status") or "").lower() in _EXCLUDED:
-                continue
             if kind == "idea" and isinstance(payload.get("supersedes_id"), str):
                 superseded.add(payload["supersedes_id"])
             if kind == "asset" and isinstance(payload.get("supersedes_id"), str):
@@ -163,7 +247,12 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                 prior = payload["details"].get("supersedes_id")
                 if isinstance(prior, str):
                     superseded_assets.add(prior)
+            if str(row.get("status") or "").lower() in _EXCLUDED:
+                continue
             records.append((identity, kind, payload, _timestamp(payload)))
+
+        idea_nodes = _decode_lifecycle_idea_families(idea_payloads, owner_id=owner_id)
+        idea_aliases = _idea_lifecycle_aliases(idea_nodes)
 
         briefs_by_root = {}
         read_briefs = getattr(store, "read_briefs", None)
@@ -206,15 +295,19 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
             if kind == "idea":
                 if identity in superseded:
                     continue
+                revision = payload.get("revision", 0)
+                if type(revision) is not int or revision < 0:
+                    raise ValueError("unexpected Idea revision")
                 display = {
                     "id": identity,
                     "title": _text(payload.get("title"), required=True),
                     "summary": _text(payload.get("summary")),
                     "description": _text(payload.get("description")),
+                    "revision": revision,
                     "research_status": _research_status(payload, idea_statuses.get(identity)),
                 }
                 brief = briefs_by_root.get(idea_root(identity)) if briefs_by_root else None
-                if brief is not None and brief.based_on_idea_id == identity:
+                if brief is not None and idea_aliases.get(brief.based_on_idea_id, brief.based_on_idea_id) == identity:
                     display["brief_sections"] = [section.content for section in brief.sections]
                     display["brief_revision"] = brief.revision
                     if brief.origin is not None:
