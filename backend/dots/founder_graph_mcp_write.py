@@ -641,6 +641,8 @@ class McpWriteSurface:
             predecessor = self.writes.get_node(supersedes_id)
             if not isinstance(predecessor, RelationAssertion) or predecessor.owner_id != self.writes.owner_id:
                 raise McpWriteError("not_found", "the relation to correct does not exist")
+            if predecessor.status is RelationshipStatus.CONFIRMED:
+                raise McpWriteError("invalid_input", "confirmed relation assertions cannot be corrected by this tool")
             if predecessor.revision != expected_family_revision:
                 raise RevisionConflictError("expected relation family revision is stale")
             if (predecessor.source_id, predecessor.target_id, predecessor.predicate) != (source_id, target_id, predicate):
@@ -649,8 +651,8 @@ class McpWriteSurface:
             revision = predecessor.revision + 1
             if arguments.get("egress_policy") is None:
                 egress_policy = predecessor.egress_policy
-            if arguments.get("status") is None:
-                status = predecessor.status
+            if status not in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED}:
+                raise McpWriteError("invalid_input", "Model-generated relations may only be proposed or inferred.")
             if brief_id is None and has_idea_endpoint:
                 brief_id = predecessor.based_on_brief_id
                 section_index = predecessor.based_on_brief_section_index
@@ -714,6 +716,8 @@ class McpWriteSurface:
         predecessor = self.writes.get_node(predecessor_id)
         if not isinstance(predecessor, RelationAssertion) or predecessor.owner_id != self.writes.owner_id:
             raise McpWriteError("not_found", "the relation to retract does not exist")
+        if predecessor.status is RelationshipStatus.CONFIRMED:
+            raise McpWriteError("invalid_input", "confirmed relation assertions cannot be retracted by this tool")
         expected = arguments.get("expected_family_revision")
         if type(expected) is not int or expected < 1:
             raise McpWriteError("invalid_input", "a positive expected_family_revision is required")
