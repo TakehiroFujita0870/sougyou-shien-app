@@ -830,7 +830,11 @@ class InMemoryGraphWriteService:
             if replay is not None:
                 return replay
             supplied = self._nodes.get(asset_id)
-            if type(supplied) is not Asset or supplied.owner_id != self.owner_id:
+            if (
+                not isinstance(supplied, Asset)
+                or supplied.node_type is not NodeType.ASSET
+                or supplied.owner_id != self.owner_id
+            ):
                 raise GraphWriteNotFoundError("Asset does not exist for the local owner")
             current = self._current_asset_locked(supplied)
             if current.id != asset_id or current.revision != expected_revision:

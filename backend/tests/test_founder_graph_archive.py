@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph import Asset, AssetKind, EgressPolicy, Idea, Status
-from dots.founder_graph_write import InMemoryGraphWriteService, RevisionConflictError
+from dots.founder_graph import Asset, AssetKind, EgressPolicy, Idea, KnowledgeAsset, PersonAsset, Status
+from dots.founder_graph_write import (
+    GraphWriteNotFoundError,
+    InMemoryGraphWriteService,
+    RevisionConflictError,
+)
 
 
 def test_idea_archive_restore_append_history_and_old_replay_does_not_rearchive() -> None:
@@ -104,3 +108,37 @@ def test_asset_archive_restore_preserve_sharing_and_are_idempotent() -> None:
     with pytest.raises(RevisionConflictError):
         writes.archive_asset(asset.id, expected_revision=asset.revision, idempotency_key="stale-archive")
     assert len(writes.audit_events()) == 3
+
+
+def test_knowledge_asset_archive_restore_preserves_asset_type() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    asset = KnowledgeAsset(owner_id="owner-1", id="knowledge-1", name="Pricing notes")
+    writes.put_node(asset, idempotency_key="capture-knowledge", operation="capture_asset")
+
+    archived = writes.archive_asset(
+        asset.id, expected_revision=asset.revision, idempotency_key="archive-knowledge",
+    )
+    archived_node = writes.get_node(archived.target_id)
+    assert isinstance(archived_node, KnowledgeAsset)
+    assert archived_node.node_type.value == "asset"
+    assert archived_node.status is Status.ARCHIVED
+
+    restored = writes.restore_asset(
+        archived.target_id, expected_revision=archived.revision,
+        idempotency_key="restore-knowledge",
+    )
+    restored_node = writes.get_node(restored.target_id)
+    assert isinstance(restored_node, KnowledgeAsset)
+    assert restored_node.status is Status.ACTIVE
+    assert restored_node.supersedes_id == archived.target_id
+
+
+def test_person_asset_is_not_archived_as_a_regular_asset() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    person = PersonAsset(owner_id="owner-1", id="person-1", name="Founder")
+    writes.put_node(person, idempotency_key="capture-person", operation="capture_person")
+
+    with pytest.raises(GraphWriteNotFoundError):
+        writes.archive_asset(
+            person.id, expected_revision=person.revision, idempotency_key="archive-person",
+        )
