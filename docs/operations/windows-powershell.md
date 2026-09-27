@@ -152,7 +152,6 @@ git --version
 ```powershell
 npm run test
 npm run build
-npm run build-storybook
 uv run pytest
 git diff --check
 ```
