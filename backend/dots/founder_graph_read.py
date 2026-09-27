@@ -33,6 +33,10 @@ from .founder_graph_read_contract import (
     NON_CURRENT_STATUSES,
     tokens,
 )
+from .founder_graph_lifecycle_resolver import (
+    resolve_restored_asset_reference,
+    resolve_restored_idea_reference,
+)
 from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
 from .idea_brief import SECTION_TITLES
 from .source_citations import citation_metadata
@@ -267,7 +271,7 @@ class GraphReadService:
             if isinstance(node, RelationAssertion):
                 continue
             if not self._visible(node, owner) or (
-                isinstance(node, Asset) and not self._current_endpoint(node, owner, node_by_id)
+                isinstance(node, (Idea, Asset)) and not self._current_endpoint(node, owner, node_by_id)
             ):
                 continue
             view = _node_view(node)
@@ -359,7 +363,7 @@ class GraphReadService:
         node = self._writes.get_node(node_id)
         if node is None or not self._visible(node, owner_id):
             raise GraphReadNotFoundError("node was not found")
-        if isinstance(node, Asset):
+        if isinstance(node, (Idea, Asset)):
             snapshot = self._writes.read_snapshot()
             nodes = {candidate.id: candidate for candidate in snapshot.nodes}
             if not self._current_endpoint(node, owner_id, nodes):
@@ -407,7 +411,7 @@ class GraphReadService:
             idea is None
             or not self._visible(idea, owner)
             or idea.egress_policy is not EgressPolicy.SHAREABLE
-            or any(candidate.supersedes_id == idea.id for candidate in ideas.values())
+            or not self._current_endpoint(idea, owner, ideas)
         ):
             raise GraphReadNotFoundError("idea brief was not found")
 
@@ -419,13 +423,19 @@ class GraphReadService:
                 raise GraphReadNotFoundError("idea brief was not found")
             seen.add(parent.id)
             root = parent
+        chain: list[Idea] = [idea]
+        current = idea
+        while current.supersedes_id is not None:
+            current = ideas[current.supersedes_id]
+            chain.append(current)
+        chain.reverse()
 
         latest = dict(snapshot.latest_idea_briefs).get(root.id)
         if (
             latest is None
             or latest.owner_id != owner
             or latest.idea_lineage_root_id != root.id
-            or latest.based_on_idea_id != idea.id
+            or resolve_restored_idea_reference(latest.based_on_idea_id, chain) is not idea
             or latest.egress_policy != EgressPolicy.SHAREABLE.value
         ):
             raise GraphReadNotFoundError("idea brief was not found")
@@ -602,8 +612,8 @@ class GraphReadService:
             actual_edges = outgoing.get(assertion.id, ())
             if len(actual_edges) != len(set(actual_edges)) or set(actual_edges) != set(expected_edges):
                 continue
-            source = node_by_id.get(assertion.source_id)
-            target = node_by_id.get(assertion.target_id)
+            source = self._restored_current_idea_endpoint(node_by_id.get(assertion.source_id), owner_id, node_by_id)
+            target = self._restored_current_idea_endpoint(node_by_id.get(assertion.target_id), owner_id, node_by_id)
             if (
                 not self._current_endpoint(source, owner_id, node_by_id)
                 or not self._current_endpoint(target, owner_id, node_by_id)
@@ -771,6 +781,78 @@ class GraphReadService:
         )
 
     @classmethod
+    def _restored_current_idea_endpoint(
+        cls, node: Any, owner_id: str, node_by_id: Mapping[str, Any],
+    ) -> Any | None:
+        if not isinstance(node, (Idea, Asset)):
+            return node
+        if cls._current_endpoint(node, owner_id, node_by_id):
+            return node
+        if isinstance(node, Idea):
+            return resolve_restored_idea_reference(node.id, cls._idea_chain(node, node_by_id))
+        return resolve_restored_asset_reference(node.id, cls._asset_chain(node, node_by_id))
+
+    @staticmethod
+    def _idea_chain(idea: Idea, node_by_id: Mapping[str, Any]) -> tuple[Idea, ...]:
+        chain = [idea]
+        seen = {idea.id}
+        while chain[-1].supersedes_id is not None:
+            parent = node_by_id.get(chain[-1].supersedes_id)
+            if not isinstance(parent, Idea) or parent.id in seen:
+                return ()
+            chain.append(parent)
+            seen.add(parent.id)
+        chain.reverse()
+        current = chain[-1]
+        while True:
+            children = [
+                candidate for candidate in node_by_id.values()
+                if isinstance(candidate, Idea) and candidate.owner_id == idea.owner_id
+                and candidate.supersedes_id == current.id
+            ]
+            if len(children) > 1:
+                return ()
+            if not children:
+                break
+            child = children[0]
+            if child.id in seen or child.revision != current.revision + 1:
+                return ()
+            chain.append(child)
+            seen.add(child.id)
+            current = child
+        return tuple(chain)
+
+    @staticmethod
+    def _asset_chain(asset: Asset, node_by_id: Mapping[str, Any]) -> tuple[Asset, ...]:
+        chain = [asset]
+        seen = {asset.id}
+        while chain[-1].supersedes_id is not None:
+            parent = node_by_id.get(chain[-1].supersedes_id)
+            if type(parent) is not type(asset) or parent.id in seen:
+                return ()
+            chain.append(parent)
+            seen.add(parent.id)
+        chain.reverse()
+        current = chain[-1]
+        while True:
+            children = [
+                candidate for candidate in node_by_id.values()
+                if type(candidate) is type(asset) and candidate.owner_id == asset.owner_id
+                and candidate.supersedes_id == current.id
+            ]
+            if len(children) > 1:
+                return ()
+            if not children:
+                break
+            child = children[0]
+            if child.id in seen or child.revision != current.revision + 1:
+                return ()
+            chain.append(child)
+            seen.add(child.id)
+            current = child
+        return tuple(chain)
+
+    @classmethod
     def _assertion_brief_reference(
         cls,
         assertion: RelationAssertion,
@@ -798,7 +880,10 @@ class GraphReadService:
         if (
             latest is None or latest.owner_id != owner_id or latest.idea_lineage_root_id != root.id
             or latest.id != assertion.based_on_brief_id
-            or latest.based_on_idea_id != primary.id or not latest.research_run_ids
+            or resolve_restored_idea_reference(
+                latest.based_on_idea_id, GraphReadService._idea_chain(primary, node_by_id),
+            ) is not primary
+            or not latest.research_run_ids
         ):
             return False, None
         section_index = assertion.based_on_brief_section_index
