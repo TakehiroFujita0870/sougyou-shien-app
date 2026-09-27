@@ -17,11 +17,13 @@ def _surface() -> tuple[InMemoryGraphWriteService, McpReadSurface]:
     return writes, McpReadSurface(GraphReadService(writes))
 
 
-def test_read_surface_exposes_only_search_fetch_and_idea_brief_fetch() -> None:
+def test_read_surface_exposes_search_brief_and_facet_reads() -> None:
     _writes, surface = _surface()
     definitions = surface.tool_definitions()
 
-    assert [definition["name"] for definition in definitions] == ["search", "fetch", "fetch_idea_brief"]
+    assert [definition["name"] for definition in definitions] == [
+        "search", "fetch", "fetch_idea_brief", "search_facets", "facet_region",
+    ]
     assert all(definition["readOnly"] is True for definition in definitions)
     assert all("additionalProperties" in definition["inputSchema"] for definition in definitions)
     with pytest.raises(McpReadError, match="read-only"):

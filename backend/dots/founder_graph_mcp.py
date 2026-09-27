@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from .founder_graph import NodeType, RelationType, RelationshipStatus, SHAREABLE_PROJECTION_ALLOWLIST
 from .founder_graph_mcp_annotations import mcp_tool_annotations
+from .founder_graph_mcp_facets import facet_read_tool_definitions
 from .founder_graph_read import (
     GraphReadError,
     GraphReadPort,
@@ -75,10 +76,10 @@ class McpReadSurface:
                     "additionalProperties": False,
                 },
             },
-        )
+        ) + facet_read_tool_definitions()
 
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> dict[str, Any]:
-        if tool_name not in {"search", "fetch", "fetch_idea_brief"}:
+        if tool_name not in {"search", "fetch", "fetch_idea_brief", "search_facets", "facet_region"}:
             raise McpReadError("unknown_tool", "Only the read-only search, fetch, and brief-fetch tools are available.")
         if not isinstance(arguments, Mapping):
             raise McpReadError("invalid_input", "Tool arguments must be an object.")
@@ -87,6 +88,10 @@ class McpReadSurface:
                 return self._search(arguments, owner_id=owner_id)
             if tool_name == "fetch":
                 return self._fetch(arguments, owner_id=owner_id)
+            if tool_name == "search_facets":
+                return self._search_facets(arguments, owner_id=owner_id)
+            if tool_name == "facet_region":
+                return self._facet_region(arguments, owner_id=owner_id)
             return self._fetch_idea_brief(arguments, owner_id=owner_id)
         except GraphReadTimeoutError as error:
             raise McpReadError("read_timeout", str(error)) from error
@@ -96,6 +101,99 @@ class McpReadSurface:
             raise McpReadError("not_found", "The requested graph result was not found.") from error
         except GraphReadError as error:
             raise McpReadError("invalid_input", str(error)) from error
+
+    def _search_facets(self, arguments: Mapping[str, Any], *, owner_id: str) -> dict[str, Any]:
+        self._reject_unknown(arguments, {"query", "limit", "cursor"})
+        query = arguments.get("query")
+        limit = arguments.get("limit", 20)
+        cursor = arguments.get("cursor")
+        if not isinstance(query, str) or not query.strip() or len(query) > 512:
+            raise McpReadError("invalid_input", "query must be a non-empty string of at most 512 characters.")
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise McpReadError("invalid_input", "limit must be an integer from 1 to 20.")
+        if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 100):
+            raise McpReadError("invalid_input", "cursor must be a bounded opaque string.")
+        search_facets = getattr(self.reads, "search_facets", None)
+        if not callable(search_facets):
+            raise McpReadError("unavailable", "Facet search is not available on this graph adapter.")
+        page = search_facets(query, owner_id=owner_id, limit=limit, cursor=cursor)
+        facets = []
+        for hit in page.hits:
+            projected = self._project_view(hit.node)
+            if projected is not None:
+                facets.append(projected)
+        return {"results": facets, "next_cursor": page.next_cursor}
+
+    def _facet_region(self, arguments: Mapping[str, Any], *, owner_id: str) -> dict[str, Any]:
+        self._reject_unknown(arguments, {"facet_id", "max_facet_depth"})
+        facet_id = arguments.get("facet_id")
+        depth = arguments.get("max_facet_depth", 0)
+        if not isinstance(facet_id, str) or not facet_id.strip() or len(facet_id) > 200:
+            raise McpReadError("invalid_input", "facet_id must be a non-empty string of at most 200 characters.")
+        if type(depth) is not int or not 0 <= depth <= 8:
+            raise McpReadError("invalid_input", "max_facet_depth must be an integer from 0 to 8.")
+        root = self.reads.fetch(facet_id.strip(), owner_id=owner_id)
+        if root.node_type != NodeType.FACET.value or self._project_view(root) is None:
+            raise McpReadError("not_found", "The requested Facet was not found.")
+        read_region = getattr(self.reads, "facet_region", None)
+        if not callable(read_region):
+            raise McpReadError("unavailable", "Facet-region search is not available on this graph adapter.")
+        try:
+            hits = read_region(facet_id.strip(), owner_id=owner_id, max_facet_depth=depth)
+        except ValueError as error:
+            raise McpReadError("invalid_input", str(error)) from error
+        results = []
+        for hit in hits:
+            try:
+                entity = self.reads.fetch(hit.entity.id, owner_id=owner_id)
+                matched_facet = self.reads.fetch(hit.matched_facet_id, owner_id=owner_id)
+            except GraphReadNotFoundError:
+                continue
+            projected_entity = self._project_view(entity)
+            projected_facet = self._project_view(matched_facet)
+            if projected_entity is None or projected_facet is None:
+                continue
+            facet_path = getattr(hit, "facet_path", ())
+            if (
+                not isinstance(facet_path, (tuple, list)) or not facet_path
+                or facet_path[0].facet_id != facet_id.strip()
+                or facet_path[-1].facet_id != hit.matched_facet_id
+                or len(facet_path) != hit.facet_depth + 1
+            ):
+                continue
+            projected_path = []
+            for depth_index, path_node in enumerate(facet_path):
+                if (
+                    path_node.depth != depth_index
+                    or not isinstance(path_node.facet_id, str) or not path_node.facet_id.strip()
+                    or not isinstance(path_node.label, str) or not path_node.label.strip()
+                ):
+                    projected_path = []
+                    break
+                try:
+                    path_view = self.reads.fetch(path_node.facet_id, owner_id=owner_id)
+                except GraphReadNotFoundError:
+                    projected_path = []
+                    break
+                safe_path_view = self._project_view(path_view)
+                if safe_path_view is None or safe_path_view["kind"] != NodeType.FACET.value:
+                    projected_path = []
+                    break
+                projected_path.append({
+                    "facet_id": path_node.facet_id,
+                    "label": path_node.label,
+                    "depth": depth_index,
+                })
+            if not projected_path:
+                continue
+            results.append({
+                "entity": projected_entity,
+                "matched_facet": projected_facet,
+                "facet_depth": hit.facet_depth,
+                "facet_path": projected_path,
+                "evidence_ids": list(self._shareable_evidence_ids(hit.evidence_ids, owner_id=owner_id)),
+            })
+        return {"root_facet": self._project_view(root), "results": results}
 
     def _fetch_idea_brief(self, arguments: Mapping[str, Any], *, owner_id: str) -> dict[str, Any]:
         self._reject_unknown(arguments, {"idea_id"})
