@@ -486,3 +486,76 @@ def test_invalid_input_timeout_and_owner_miss_are_safe_mcp_errors(monkeypatch: p
         surface.call("search", {"query": "x"}, owner_id="owner-1")
     assert stopped.value.code == "unavailable"
     assert "driver stopped" not in stopped.value.message
+
+
+def test_unavailable_read_logs_only_fixed_event_and_exception_class_names(caplog, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writes, surface = _surface()
+    private_query = "private-query-4cfb"
+    private_owner = "private-owner-85aa"
+
+    def unavailable(*_args, **_kwargs):
+        raise GraphReadUnavailableError("secret-token-in-exception-6b3a")
+
+    monkeypatch.setattr(surface.reads, "search", unavailable)
+    with pytest.raises(McpReadError) as stopped:
+        surface.call("search", {"query": private_query}, owner_id=private_owner)
+
+    assert stopped.value.code == "unavailable"
+    assert stopped.value.message == "The local Founder Graph is unavailable; retry after it starts."
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.getMessage() == "founder_graph_read_unavailable causes=('GraphReadUnavailableError',)"
+    assert record.exception_classes == ("GraphReadUnavailableError",)
+    assert private_query not in caplog.text
+    assert private_owner not in caplog.text
+    assert "secret-token-in-exception-6b3a" not in caplog.text
+
+
+def test_unavailable_read_logs_at_most_four_cause_classes(caplog, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writes, surface = _surface()
+    error = GraphReadUnavailableError("outer-secret")
+    first_cause = RuntimeError("first-secret")
+    second_cause = ValueError("second-secret")
+    third_cause = OSError("third-secret")
+    fourth_cause = PermissionError("fourth-secret")
+    error.__cause__ = first_cause
+    first_cause.__cause__ = second_cause
+    second_cause.__cause__ = third_cause
+    third_cause.__cause__ = fourth_cause
+    monkeypatch.setattr(surface.reads, "search", lambda *_args, **_kwargs: (_ for _ in ()).throw(error))
+
+    with pytest.raises(McpReadError):
+        surface.call("search", {"query": "synthetic"}, owner_id="owner-1")
+
+    assert caplog.records[0].getMessage() == "founder_graph_read_unavailable causes=('GraphReadUnavailableError', 'RuntimeError', 'ValueError', 'OSError')"
+    assert caplog.records[0].exception_classes == (
+        "GraphReadUnavailableError", "RuntimeError", "ValueError", "OSError",
+    )
+    assert "outer-secret" not in caplog.text
+    assert "fourth-secret" not in caplog.text
+
+
+def test_unavailable_read_cause_cycle_terminates_without_logging_messages(caplog, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writes, surface = _surface()
+    error = GraphReadUnavailableError("cycle-secret")
+    cause = RuntimeError("cause-secret")
+    error.__cause__ = cause
+    cause.__cause__ = error
+    monkeypatch.setattr(surface.reads, "search", lambda *_args, **_kwargs: (_ for _ in ()).throw(error))
+
+    with pytest.raises(McpReadError):
+        surface.call("search", {"query": "synthetic"}, owner_id="owner-1")
+
+    assert caplog.records[0].getMessage() == "founder_graph_read_unavailable causes=('GraphReadUnavailableError', 'RuntimeError')"
+    assert caplog.records[0].exception_classes == ("GraphReadUnavailableError", "RuntimeError")
+    assert "cycle-secret" not in caplog.text
+    assert "cause-secret" not in caplog.text
+
+
+def test_successful_read_does_not_emit_unavailable_diagnostic(caplog) -> None:
+    _writes, surface = _surface()
+
+    result = surface.call("search", {"query": "no matching graph content"}, owner_id="owner-1")
+
+    assert result == {"results": [], "next_cursor": None}
+    assert caplog.records == []
