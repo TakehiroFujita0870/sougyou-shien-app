@@ -1,6 +1,14 @@
 {
-  "updated_at": "2026-09-27T03:28:09Z",
-  "baseline_main": "c6be5719c38b",
+  "updated_at": "2026-09-27T08:49:54Z",
+  "baseline_main": "76bcdcaa81ee",
+  "remaining_plan": {
+    "reference": "docs/plans/dots-mvp-remaining-plan-20260927.md",
+    "scope": "計画の更新のみ。製品変更、サービス反映、接続解除、旧コード削除は未実施。",
+    "graph_update_confirmation": "出典と正式概要の保存後は同じChatGPTが追加承認なしに意味関係・分類を整理する。調査許諾と共有境界は維持。",
+    "asset_ui": "自己紹介専用欄を廃止し、全Assetの分類一覧と個別編集へ統一する計画。",
+    "priority": "出典取り込みと意味関係の訂正が1番目、検証用接続と旧未使用資産の整理が2番目。",
+    "citation_observation": "通常保存先の利用者報告1件を限定読取り。概要1版、調査Run参照0、全8章のClaim/Evidence参照0、意味関係0。本人は外部調査実施を確認。保存上の未調査は実際の未調査を意味せず、調査結果取り込み欠落として修正する。元URLと欠落操作は未特定。個人の題名・ID・本文・URLをGitへ転載しない。"
+  },
   "formal_integration": {
     "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/294",
     "main_sha": "c6be5719c38b",
