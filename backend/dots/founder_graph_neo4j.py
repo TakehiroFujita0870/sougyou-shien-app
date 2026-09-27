@@ -75,6 +75,8 @@ from .founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_
 from .founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
 from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief, _serialize_persisted_idea_brief
 from .founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
+from .founder_graph_neo4j_lifecycle import transition_asset_status_tx, transition_idea_status_tx
+from .founder_graph_neo4j_relation_assertion import validate_relation_assertion_evidence_tx
 from .founder_graph_research_run import validate_research_run_timing
 from .idea_brief import IdeaBriefValidationError, IdeaBriefVersion
 from .founder_graph_historical_brief import HistoricalResearchValidationError, validate_historical_researched_brief
@@ -1049,39 +1051,9 @@ class Neo4jGraphGateway:
         self, tx: Any, idea_id: str, expected_revision: int, key: str, actor: str,
         operation: str, target_status: Status, fingerprint: str, successor_id: str,
     ) -> WriteReceipt:
-        replay = self._put_node_replay_tx(tx, operation=operation, idempotency_key=key, fingerprint=fingerprint)
-        if replay is not None:
-            return replay
-        supplied = self._decode_idea_record(self._idea_record_tx(tx, idea_id), expected_id=idea_id)
-        root_id = self._idea_root_for_tx(tx, supplied.id)
-        chain = self._lock_current_idea_tx(tx, root_id)
-        replay = self._put_node_replay_tx(tx, operation=operation, idempotency_key=key, fingerprint=fingerprint)
-        if replay is not None:
-            return replay
-        current = chain[-1]
-        if current.id != idea_id or current.revision != expected_revision:
-            raise RevisionConflictError("Idea changed; reload its current revision")
-        if target_status is Status.ARCHIVED:
-            if current.status in _NON_CURRENT_IDEA_STATUSES:
-                raise GraphWriteNotFoundError("Idea does not exist for the local owner")
-        else:
-            if current.status is not Status.ARCHIVED:
-                raise GraphWriteNotFoundError("archived Idea does not exist for the local owner")
-            previous = next((item for item in reversed(chain[:-1]) if item.status is not Status.ARCHIVED), None)
-            if previous is None or previous.status in _NON_CURRENT_IDEA_STATUSES:
-                raise GraphWriteNotFoundError("Idea has no restorable current revision")
-            target_status = previous.status
-        successor = replace(
-            current, id=successor_id, status=target_status, revision=current.revision + 1,
-            supersedes_id=current.id, created_at=datetime.now(timezone.utc), updated_at=None,
-            provenance=Provenance(
-                actor=actor, operation=operation, target_id=successor_id,
-                source_id=current.id, idempotency_key=key,
-            ),
-        )
-        return self._put_node_tx(
-            tx, successor, NodeType.IDEA, self.label_for(NodeType.IDEA), key, 0,
-            operation, actor, fingerprint,
+        return transition_idea_status_tx(
+            self, tx, idea_id, expected_revision, key, actor, operation, target_status,
+            fingerprint, successor_id, _NON_CURRENT_IDEA_STATUSES,
         )
 
     def archive_asset(
@@ -1129,35 +1101,9 @@ class Neo4jGraphGateway:
         self, tx: Any, asset_id: str, expected_revision: int, key: str, actor: str,
         operation: str, target_status: Status, fingerprint: str, successor_id: str,
     ) -> WriteReceipt:
-        replay = self._put_node_replay_tx(tx, operation=operation, idempotency_key=key, fingerprint=fingerprint)
-        if replay is not None:
-            return replay
-        locked = self._lock_revisioned_node_tx(tx, self.label_for(NodeType.ASSET), asset_id)
-        if locked is None:
-            raise GraphWriteNotFoundError("Asset does not exist for the local owner")
-        replay = self._put_node_replay_tx(tx, operation=operation, idempotency_key=key, fingerprint=fingerprint)
-        if replay is not None:
-            return replay
-        chain = self._asset_chain_tx(tx, asset_id)
-        current = chain[-1]
-        if current.id != asset_id or current.revision != expected_revision:
-            raise RevisionConflictError("Asset changed; reload its current revision")
-        expected_status = Status.ACTIVE if target_status is Status.ARCHIVED else Status.ARCHIVED
-        if current.status is not expected_status:
-            raise GraphWriteNotFoundError("Asset is not available for this status change")
-        successor = replace(
-            current.revise(
-                id=successor_id, revision=current.revision + 1,
-                provenance=Provenance(
-                    actor=actor, operation=operation, target_id=successor_id,
-                    source_id=current.id, idempotency_key=key,
-                ),
-            ),
-            status=target_status,
-        )
-        return self._put_node_tx(
-            tx, successor, NodeType.ASSET, self.label_for(NodeType.ASSET), key, 0,
-            operation, actor, fingerprint, allow_asset_revision=True,
+        return transition_asset_status_tx(
+            self, tx, asset_id, expected_revision, key, actor, operation, target_status,
+            fingerprint, successor_id,
         )
 
     def _revise_asset_tx(
@@ -2779,54 +2725,7 @@ class Neo4jGraphGateway:
                 if successors:
                     raise GraphWriteError("relation assertion endpoint has a superseding revision")
 
-        if not assertion.evidence_ids:
-            raise GraphWriteError("formal relation assertion requires Evidence")
-        for evidence_id in assertion.evidence_ids:
-            evidence = _single(tx.run(
-                "MATCH (e:Evidence {id: $id}) RETURN e.owner_id AS owner_id, e.node_type AS node_type, "
-                "e.status AS status, e.egress_policy AS egress_policy",
-                id=evidence_id,
-            ))
-            if evidence is None or _record_value(evidence, "owner_id") != self.owner_id:
-                raise GraphWriteNotFoundError("relation assertion Evidence does not exist")
-            if _record_value(evidence, "node_type") != NodeType.EVIDENCE.value:
-                raise GraphWriteError("relation assertion Evidence has an invalid type")
-            if _record_value(evidence, "status") != Status.ACTIVE.value:
-                raise GraphWriteError("relation assertion Evidence must be active")
-            lineage = _single(tx.run(
-                "MATCH (e:Evidence {id: $evidence_id, owner_id: $owner_id}) "
-                "OPTIONAL MATCH (e)-[ef:EVIDENCE_FROM]->(evidence_target) "
-                "OPTIONAL MATCH (ch:ContentChunk) WHERE ch.id = e.content_chunk_id "
-                "OPTIONAL MATCH (e)-[expected_ef:EVIDENCE_FROM]->(expected_ch:ContentChunk "
-                "{owner_id: $owner_id}) WHERE expected_ch.id = e.content_chunk_id "
-                "OPTIONAL MATCH (chunk_origin)-[hc:HAS_CHUNK]->(ch) "
-                "OPTIONAL MATCH (r:SourceRevision {owner_id: $owner_id}) WHERE r.id = e.source_revision_id "
-                "OPTIONAL MATCH (r)-[expected_hc:HAS_CHUNK]->(ch) "
-                "RETURN e.content_chunk_id AS content_chunk_id, e.source_revision_id AS source_revision_id, "
-                "ch.id AS chunk_id, ch.node_type AS chunk_type, ch.status AS chunk_status, "
-                "r.id AS revision_id, r.node_type AS revision_type, r.status AS revision_status, "
-                "count(DISTINCT ef) AS evidence_edge_count, count(DISTINCT expected_ef) AS expected_evidence_edge_count, "
-                "count(DISTINCT hc) AS chunk_edge_count, count(DISTINCT expected_hc) AS expected_chunk_edge_count",
-                evidence_id=evidence_id, owner_id=self.owner_id,
-            ))
-            if (
-                lineage is None
-                or _record_value(lineage, "content_chunk_id") != _record_value(lineage, "chunk_id")
-                or _record_value(lineage, "source_revision_id") != _record_value(lineage, "revision_id")
-                or _record_value(lineage, "chunk_type") != NodeType.CONTENT_CHUNK.value
-                or _record_value(lineage, "revision_type") != NodeType.SOURCE_REVISION.value
-                or _record_value(lineage, "chunk_status") != Status.ACTIVE.value
-                or _record_value(lineage, "revision_status") != Status.ACTIVE.value
-                or _record_value(lineage, "evidence_edge_count") != 1
-                or _record_value(lineage, "expected_evidence_edge_count") != 1
-                or _record_value(lineage, "chunk_edge_count") != 1
-                or _record_value(lineage, "expected_chunk_edge_count") != 1
-            ):
-                raise GraphWriteError("relation assertion Evidence source-grounded lineage is invalid")
-            if assertion.egress_policy is EgressPolicy.SHAREABLE and _record_value(
-                evidence, "egress_policy"
-            ) != EgressPolicy.SHAREABLE.value:
-                raise GraphWriteError("shareable relation assertion requires shareable Evidence")
+        validate_relation_assertion_evidence_tx(self, tx, assertion)
 
         primary_idea = next((idea for idea in resolved_ideas if idea.id == assertion.source_id), None)
         if primary_idea is None and resolved_ideas:
