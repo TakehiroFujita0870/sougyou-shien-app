@@ -69,7 +69,7 @@ def test_home_lists_every_current_idea_and_safe_assets_without_raw_fields():
     result = read_local_home(Neo4jHomeStore(driver), owner_id="owner-a")
 
     assert result["status"] == "ready"
-    assert result["ideas"] == [{"id": "idea-new", "title": "New", "summary": "Summary", "description": "Detail", "research_status": "unknown"}]
+    assert result["ideas"] == [{"id": "idea-new", "title": "New", "summary": "Summary", "description": "Detail", "revision": 0, "research_status": "unknown"}]
     assert result["assets"] == [{
         "id": "asset-1", "name": "製造業経験", "kind": "experience", "description": "現場の経験",
         "revision": 1, "egress_policy": "local_only",
