@@ -153,7 +153,7 @@ def decode_persisted_research_run(
 ) -> ResearchRun:
     """Hydrate a complete owner-scoped Run projection without inventing values."""
 
-    if not isinstance(record, Mapping) or set(record) != _RECORD_KEYS:
+    if not isinstance(record, Mapping) or set(record.keys()) != _RECORD_KEYS:
         raise ResearchRunDecodeError("persisted ResearchRun record fields are invalid")
     _required_text(owner_id)
     if type(expected_id) is not str or not expected_id:

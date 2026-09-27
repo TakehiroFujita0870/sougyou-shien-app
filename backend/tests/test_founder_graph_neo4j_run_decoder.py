@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 
+from neo4j import Record
 import pytest
 
 from dots.founder_graph import (
@@ -84,6 +85,27 @@ def test_decoder_roundtrips_every_research_run_field_without_defaults():
     assert decoded.results == original.results
     assert decoded.transport_retries == original.transport_retries
     assert decoded.provenance == original.provenance
+
+
+def test_decoder_accepts_real_neo4j_record_using_exact_column_keys():
+    original, record = persisted_run_record()
+    neo4j_record = Record(record.items())
+
+    decoded = decode_persisted_research_run(neo4j_record, owner_id=OWNER_ID, expected_id=RUN_ID)
+
+    assert decoded == original
+
+
+@pytest.mark.parametrize("extra_field", [False, True])
+def test_decoder_still_rejects_missing_or_unknown_outer_record_keys(extra_field):
+    _original, record = persisted_run_record()
+    if extra_field:
+        record["unexpected"] = "synthetic"
+    else:
+        record.pop("payload_json")
+
+    with pytest.raises(ResearchRunDecodeError, match="record fields"):
+        decode_persisted_research_run(record, owner_id=OWNER_ID, expected_id=RUN_ID)
 
 
 def test_decoder_accepts_semantically_equivalent_timezone_representation():
