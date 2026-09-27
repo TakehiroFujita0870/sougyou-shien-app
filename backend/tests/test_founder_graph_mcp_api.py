@@ -79,6 +79,7 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
         "link_entities", "retract_relation_assertion", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
         "record_research_run", "save_idea_brief", "save_researched_idea_brief",
+        "capture_facet", "classify_entity", "relate_facets",
     }
 
     first = client.post(

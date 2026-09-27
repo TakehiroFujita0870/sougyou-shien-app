@@ -33,6 +33,11 @@ from .founder_graph import (
     Status,
 )
 from .founder_graph_mcp_annotations import mcp_tool_annotations
+from .founder_graph_mcp_facets import (
+    FACET_WRITE_TOOL_NAMES,
+    dispatch_facet_write,
+    facet_write_tool_definitions,
+)
 from .founder_graph_mcp_research import (
     McpResearchCampaignSurface,
     ResearchCampaignInputError,
@@ -334,20 +339,22 @@ class McpWriteSurface:
                 "inputSchema": schemas.get(name, {"type": "object", "additionalProperties": False}),
             }
             for name in self._TOOL_NAMES
-        ) + McpResearchCampaignSurface(self.writes, self.brief_store).tool_definitions()
+        ) + McpResearchCampaignSurface(self.writes, self.brief_store).tool_definitions() + facet_write_tool_definitions()
 
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> WriteReceipt:
         research_tools = {
             "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
             "record_research_run", "save_idea_brief", "save_researched_idea_brief",
         }
-        if tool_name not in self._TOOL_NAMES and tool_name not in research_tools:
+        if tool_name not in self._TOOL_NAMES and tool_name not in research_tools and tool_name not in FACET_WRITE_TOOL_NAMES:
             raise McpWriteError("unknown_tool", "Only the purpose-limited write tools are available.")
         if not isinstance(arguments, Mapping):
             raise McpWriteError("invalid_input", "Tool arguments must be an object.")
         if owner_id != self.writes.owner_id:
             raise McpWriteError("owner_mismatch", "The request owner is not the local owner.")
         try:
+            if tool_name in FACET_WRITE_TOOL_NAMES:
+                return dispatch_facet_write(self, tool_name, arguments)
             if tool_name in research_tools:
                 return McpResearchCampaignSurface(self.writes, self.brief_store).call(
                     tool_name, arguments, owner_id=owner_id,
@@ -613,8 +620,11 @@ class McpWriteSurface:
         section_index = arguments.get("based_on_brief_section_index")
         has_idea_endpoint = source_kind is NodeType.IDEA or target_kind is NodeType.IDEA
         if has_idea_endpoint:
-            brief_id = self._text(brief_id, "based_on_brief_id")
-            if type(section_index) is not int or not 0 <= section_index <= 7:
+            if (brief_id is None) != (section_index is None):
+                raise McpWriteError("invalid_input", "Idea relations require both Brief reference fields.")
+            if brief_id is not None:
+                brief_id = self._text(brief_id, "based_on_brief_id")
+            if section_index is not None and (type(section_index) is not int or not 0 <= section_index <= 7):
                 raise McpWriteError("invalid_input", "Idea relations require a Brief section index from 0 to 7.")
         elif brief_id is not None or section_index is not None:
             raise McpWriteError("invalid_input", "Brief references are accepted only for relations with an Idea endpoint.")
@@ -663,6 +673,8 @@ class McpWriteSurface:
             if "expires_at" not in arguments:
                 expires_at = predecessor.expires_at
         if supersedes_id is None:
+            if has_idea_endpoint and brief_id is None:
+                raise McpWriteError("invalid_input", "New Idea relations require a Brief reference and section index.")
             confidence = arguments.get("confidence")
         assertion = RelationAssertion(
             owner_id=self.writes.owner_id,

@@ -30,6 +30,7 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
         "link_entities", "retract_relation_assertion", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
         "record_research_run", "save_idea_brief", "save_researched_idea_brief",
+        "capture_facet", "classify_entity", "relate_facets",
     }
     assert len(tools) == len({tool["name"] for tool in tools})
     assert all("inputSchema" in tool and "readOnlyHint" in tool["annotations"] for tool in tools)

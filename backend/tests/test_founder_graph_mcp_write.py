@@ -247,6 +247,9 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "record_research_run",
         "save_idea_brief",
         "save_researched_idea_brief",
+        "capture_facet",
+        "classify_entity",
+        "relate_facets",
     ]
     assert all(definition["readOnly"] is False for definition in definitions)
 
