@@ -102,7 +102,7 @@
 ### 役割別モデルプロファイル
 
 - CEO室は `gpt-5.6-sol / low` を使う。統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
-- 例外: Dots全体計画の内部subagent worker/reviewerは、利用者の最新指定により`gpt-6-luna / medium`を使う。root coordinatorは利用者が指定する実行環境に従う。別モデルへ無断fallbackせず、指定モデルが利用不能なら対象scopeを停止する。新しい利用者向けタスクを作る許可を意味しない。
+- 例外: Dots全体計画の内部subagent worker/reviewerは、利用者の指定により`gpt-6-luna / medium`を使う。ただし`docs/plans/dots-ui-refactor-plan.md`をobjectiveとするactive goalでは最新ゴール指定の`gpt-6-luna / high`を使う。root coordinatorは利用者が指定する実行環境に従う。別モデルへ無断fallbackせず、指定モデルが利用不能なら対象scopeを停止する。新しい利用者向けタスクを作る許可を意味しない。
 - 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 
