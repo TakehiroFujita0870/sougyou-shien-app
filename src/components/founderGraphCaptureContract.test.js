@@ -14,7 +14,10 @@ function expectInOrder(...phrases) {
 }
 
 it('keeps draft capture, internal search, one proposal, permission, and both research routes in order', () => {
-  expectInOrder('`capture_idea`', 'Dots内を検索', '`create_research_campaign`', '`approve_research_campaign`', '通常のWeb検索とDeep Research');
+  expectInOrder('同一記録がないか先に確認', '`capture_idea`', '関連する既存Idea・Asset・Sourceを検索', '`create_research_campaign`', '`approve_research_campaign`', '通常のWeb検索とDeep Research');
+  expect(skill).toContain('調査を必ず一度提案する');
+  expect(skill).toContain('新規保存または既存記録の再利用で未調査Ideaを扱ったら');
+  expect(skill).toContain('既に提示または断られた同じ提案は繰り返さない');
 });
 
 it('requires original public source metadata and distinct claim, evidence, run, and brief records', () => {
@@ -39,4 +42,7 @@ it('allows evidence based relationship updates without extra graph approval whil
   expect(skill).toContain('曖昧な人物統合、削除、共有範囲の拡大には確認を得る');
   expect(skill).toContain('URL・タイトルを推測で作らない');
   expect(skill).toContain('訂正後の検索で旧判断を現行として返さない');
+  expectInOrder('`search_facets`', '`capture_facet`', '`classify_entity`', '`relate_facets`');
+  expect(skill).toContain('その判断を実際に支える共有可能なEvidence ID');
+  expect(skill).toContain('Ideaを含む意味関係およびIdeaの分類には最新版の概要IDと該当章番号も指定する');
 });
