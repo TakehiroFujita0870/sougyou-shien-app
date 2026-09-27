@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import fields, is_dataclass
 from datetime import datetime, timezone
+from enum import Enum
+import json
 from types import MappingProxyType
+from collections.abc import Mapping
 
 import pytest
 from fastapi.testclient import TestClient
 
+from dots.founder_graph import Asset, EgressPolicy, Idea, Status
 from dots.founder_graph_read import NodeView
+from dots.founder_graph_write import InMemoryGraphWriteService
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.local_control import LocalControl, create_local_control_app
-from dots.local_graph_provenance import GraphProvenanceNotFound, read_local_graph_provenance
+from dots.local_graph_provenance import (
+    GraphProvenanceNotFound,
+    Neo4jGraphProvenanceStore,
+    read_local_graph_provenance,
+)
 
 
 NOW = datetime(2026, 9, 26, tzinfo=timezone.utc)
@@ -35,6 +45,8 @@ class FakeStore:
         }
         self.successor = False
         self.idea_successor = False
+        self.asset_successor = False
+        self.lifecycle_aliases = {}
         self.latest_brief_id = "brief"
         self.brief = IdeaBriefVersion(
             id="brief", owner_id="owner", idea_lineage_root_id="idea", based_on_idea_id="idea",
@@ -53,6 +65,19 @@ class FakeStore:
     def has_idea_successor(self, idea_id: str, *, owner_id: str) -> bool:
         return self.idea_successor
 
+    def resolve_lifecycle_references(self, references, *, owner_id: str):
+        if owner_id != "owner":
+            return {identity: None for identity, _kind in references}
+        resolved = {}
+        for identity, kind in references:
+            if kind == "idea" and self.idea_successor:
+                resolved[identity] = self.lifecycle_aliases.get(identity)
+            elif kind == "asset" and self.asset_successor:
+                resolved[identity] = self.lifecycle_aliases.get(identity)
+            else:
+                resolved[identity] = identity
+        return resolved
+
     def get_brief(self, brief_id: str, *, owner_id: str):
         return self.brief if brief_id == self.brief.id and owner_id == self.brief.owner_id else None
 
@@ -62,6 +87,57 @@ class FakeStore:
 
 def _view(identity, kind, owner, status, fields):
     return NodeView(identity, kind, owner, identity, "", status, 1, MappingProxyType(fields))
+
+
+def _json_value(value):
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if is_dataclass(value):
+        return {field.name: _json_value(getattr(value, field.name)) for field in fields(value)}
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+class _LifecycleRowsDriver:
+    def __init__(self, rows):
+        self.rows = rows
+        self.calls = []
+
+    def session(self, *, database):
+        assert database == "neo4j"
+        return _LifecycleRowsSession(self)
+
+
+class _LifecycleRowsSession:
+    def __init__(self, driver):
+        self.driver = driver
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def run(self, query, **params):
+        self.driver.calls.append((query, params))
+        assert params["owner_id"] == "owner"
+        assert set(params["node_types"]) == {"idea", "asset"}
+        return self.driver.rows
+
+
+def _lifecycle_rows(writes):
+    return tuple({
+        "id": record.id,
+        "node_type": record.node_type.value,
+        "revision": record.revision,
+        "status": record.status.value,
+        "payload_json": json.dumps(_json_value(record), ensure_ascii=False),
+    } for record in writes.read_snapshot().nodes if isinstance(record, (Idea, Asset)))
 
 
 def test_provenance_returns_only_exact_brief_section_and_shareable_evidence_metadata():
@@ -78,7 +154,7 @@ def test_provenance_returns_only_exact_brief_section_and_shareable_evidence_meta
     assert "MUST NOT LEAK" not in repr(result)
 
 
-@pytest.mark.parametrize("case", ["successor", "idea_successor", "old_brief", "wrong_owner", "wrong_idea", "wrong_section", "malformed_evidence", "expired"])
+@pytest.mark.parametrize("case", ["successor", "idea_successor", "old_brief", "wrong_owner", "wrong_idea", "wrong_kind", "wrong_section", "malformed_evidence", "expired"])
 def test_provenance_fails_closed_for_noncurrent_or_mismatched_evidence(case):
     store = FakeStore()
     if case == "successor":
@@ -94,6 +170,10 @@ def test_provenance_fails_closed_for_noncurrent_or_mismatched_evidence(case):
             id="brief", owner_id="owner", idea_lineage_root_id="other-idea", based_on_idea_id="other-idea",
             sections=(IdeaBriefSection(index=2, content="wrong chapter", evidence_ids=("ev-share", "ev-private")),),
         )
+    elif case == "wrong_kind":
+        store.nodes["ra"] = _view("ra", "relation_assertion", "owner", "confirmed", {
+            **store.nodes["ra"].fields, "source_kind": "unknown",
+        })
     elif case == "wrong_section":
         store.nodes["ra"] = _view("ra", "relation_assertion", "owner", "confirmed", {
             **store.nodes["ra"].fields, "based_on_brief_section_index": 8,
@@ -117,6 +197,174 @@ def test_legacy_assertion_without_brief_has_null_section():
     })
     result = read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
     assert result["section"] is None
+
+
+def test_provenance_resolves_idea_endpoint_after_lifecycle_only_restore():
+    store = FakeStore()
+    store.nodes["idea"] = _view("idea", "idea", "owner", "superseded", {"title": "Idea"})
+    store.nodes["restored-idea"] = _view("restored-idea", "idea", "owner", "active", {"title": "Idea"})
+    store.idea_successor = True
+    store.lifecycle_aliases["idea"] = "restored-idea"
+
+    result = read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+
+    assert result["status"] == "ready"
+    assert result["assertion_id"] == "ra"
+    assert result["section"]["brief_id"] == "brief"
+    assert result["evidence"] == [{"id": "ev-share", "polarity": "supports", "confidence": 0.8, "status": "active"}]
+
+
+def test_provenance_does_not_alias_idea_across_a_normal_revision():
+    store = FakeStore()
+    store.nodes["idea"] = _view("idea", "idea", "owner", "superseded", {"title": "Idea"})
+    store.nodes["edited-idea"] = _view("edited-idea", "idea", "owner", "active", {"title": "Edited idea"})
+    store.idea_successor = True
+
+    with pytest.raises(GraphProvenanceNotFound):
+        read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+
+
+def test_legacy_provenance_store_without_batch_resolver_still_rejects_idea_successors():
+    store = FakeStore()
+    store.resolve_lifecycle_references = None
+    store.idea_successor = True
+
+    with pytest.raises(GraphProvenanceNotFound):
+        read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+
+
+def test_provenance_resolves_asset_endpoint_after_lifecycle_only_restore():
+    store = FakeStore()
+    store.nodes["asset"] = _view("asset", "asset", "owner", "superseded", {"name": "Asset"})
+    store.nodes["restored-asset"] = _view("restored-asset", "asset", "owner", "active", {"name": "Asset"})
+    store.asset_successor = True
+    store.lifecycle_aliases["asset"] = "restored-asset"
+
+    result = read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+
+    assert result["status"] == "ready"
+    assert result["section"]["brief_id"] == "brief"
+    assert result["evidence"] == [{"id": "ev-share", "polarity": "supports", "confidence": 0.8, "status": "active"}]
+
+
+def test_provenance_keeps_nonrevisioned_claim_endpoint_identity():
+    store = FakeStore()
+    store.nodes["claim"] = _view("claim", "claim", "owner", "active", {"statement": "Synthetic claim"})
+    store.nodes["ra"] = _view("ra", "relation_assertion", "owner", "confirmed", {
+        **store.nodes["ra"].fields,
+        "target_id": "claim", "target_kind": "claim", "predicate": "ADDRESSES",
+    })
+
+    result = read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+
+    assert result["status"] == "ready"
+    assert result["assertion_id"] == "ra"
+    assert result["section"]["brief_id"] == "brief"
+
+
+def test_provenance_does_not_alias_asset_across_a_normal_revision():
+    store = FakeStore()
+    store.nodes["asset"] = _view("asset", "asset", "owner", "superseded", {"name": "Asset"})
+    store.nodes["edited-asset"] = _view("edited-asset", "asset", "owner", "active", {"name": "Edited asset"})
+    store.asset_successor = True
+
+    with pytest.raises(GraphProvenanceNotFound):
+        read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+
+
+@pytest.mark.parametrize("kind", ["idea", "asset"])
+@pytest.mark.parametrize("normal_edit", [False, True])
+def test_neo4j_shaped_lifecycle_rows_resolve_only_archive_restore_suffix(kind, normal_edit):
+    writes = InMemoryGraphWriteService("owner")
+    idea = Idea(
+        owner_id="owner", id="idea-root", title="Synthetic idea", status=Status.ACTIVE,
+        egress_policy=EgressPolicy.SHAREABLE, revision=1,
+    )
+    asset = Asset(
+        owner_id="owner", id="asset-root", name="Synthetic asset", status=Status.ACTIVE,
+        egress_policy=EgressPolicy.SHAREABLE, revision=1,
+    )
+    writes.put_node(idea, idempotency_key="seed-idea", operation="capture_idea")
+    writes.put_node(asset, idempotency_key="seed-asset", operation="capture_asset")
+    if kind == "idea":
+        archived = writes.archive_idea(idea.id, expected_revision=1, idempotency_key="archive-idea")
+        restored_receipt = writes.restore_idea(
+            archived.target_id, expected_revision=archived.revision, idempotency_key="restore-idea",
+        )
+    else:
+        archived = writes.archive_asset(asset.id, expected_revision=1, idempotency_key="archive-asset")
+        restored_receipt = writes.restore_asset(
+            archived.target_id, expected_revision=archived.revision, idempotency_key="restore-asset",
+        )
+    restored = writes.get_node(restored_receipt.target_id)
+    if normal_edit:
+        if kind == "idea":
+            replacement = restored.revise(title="Edited after restore")
+            writes.record_correction(
+                restored.id, replacement, expected_revision=restored.revision,
+                idempotency_key="edit-idea-after-restore",
+            )
+        else:
+            writes.revise_asset(
+                asset_id=restored.id, name="Edited after restore", description=restored.description,
+                expected_revision=restored.revision, idempotency_key="edit-asset-after-restore",
+            )
+    driver = _LifecycleRowsDriver(_lifecycle_rows(writes))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(
+        ((idea.id, "idea"), (asset.id, "asset"), ("claim-1", "claim")), owner_id="owner",
+    )
+
+    assert len(driver.calls) == 1
+    idea_tip = max(
+        (node for node in writes.read_snapshot().nodes if isinstance(node, Idea)), key=lambda node: node.revision,
+    )
+    asset_tip = max(
+        (node for node in writes.read_snapshot().nodes if isinstance(node, Asset)), key=lambda node: node.revision,
+    )
+    assert resolved[idea.id] == (None if normal_edit and kind == "idea" else idea_tip.id)
+    assert resolved[asset.id] == (None if normal_edit and kind == "asset" else asset_tip.id)
+    assert resolved["claim-1"] == "claim-1"
+
+
+def test_lifecycle_reference_batch_is_owner_scoped_and_does_not_query_for_other_owner():
+    driver = _LifecycleRowsDriver(())
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(
+        (("idea-id", "idea"), ("asset-id", "asset")), owner_id="different-owner",
+    )
+
+    assert resolved == {"idea-id": None, "asset-id": None}
+    assert driver.calls == []
+
+
+def test_lifecycle_reference_batch_fails_closed_when_owner_scan_is_capped():
+    driver = _LifecycleRowsDriver(tuple({} for _ in range(1001)))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(
+        (("idea-id", "idea"), ("asset-id", "asset")), owner_id="owner",
+    )
+
+    assert resolved == {"idea-id": None, "asset-id": None}
+    assert len(driver.calls) == 1
+
+
+def test_lifecycle_reference_batch_fails_closed_on_malformed_revision_row():
+    driver = _LifecycleRowsDriver(({
+        "id": "unrelated-idea", "node_type": "idea", "revision": 1,
+        "status": "active", "payload_json": "{malformed",
+    },))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(
+        (("idea-id", "idea"), ("asset-id", "asset")), owner_id="owner",
+    )
+
+    assert resolved == {"idea-id": None, "asset-id": None}
+    assert len(driver.calls) == 1
 
 
 @pytest.mark.parametrize("field_case", ["confidence_none", "confidence_missing", "status_none", "status_missing", "status_mismatch"])
