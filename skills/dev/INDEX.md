@@ -24,6 +24,7 @@ docs-freshness は全工程で常時適用
 | --- | --- |
 | 「○○をやりたい」を実行可能な計画にする | [planning](planning/SKILL.md) |
 | コードまたは設定を変更する | [implementation](implementation/SKILL.md) |
+| Dots.のPC画面を変更する前後の横断監査 | [ui-cross-page-audit](ui-cross-page-audit/SKILL.md) |
 | 次工程のtaskへイベントを渡す、または受領確認を閉じる | [handoff-closure](handoff-closure/SKILL.md) |
 | CEO判断が必要な不明点を記録し、自動作業の停止上限を確認する | [ceo-decision-backlog](ceo-decision-backlog/SKILL.md) |
 | 変更の一区切り後にcommit、push、PR、mainへのmerge、main smokeまで閉じる | [finish-and-merge](finish-and-merge/SKILL.md) |
