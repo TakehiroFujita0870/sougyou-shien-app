@@ -10,6 +10,7 @@ from dots.local_dashboard_host import mount_local_dashboard
 from dots.local_graph_proxy import LocalGraphSearchProxy, create_local_graph_search_router
 from dots.local_overview import OverviewStore
 from dots.local_home import HomeStore, LocalAssetWriter
+from dots.local_record_lifecycle import LocalRecordLifecycleWriter
 from dots.local_graph_view import GraphViewStore
 from dots.local_self_intro import SelfIntroductionWriter
 
@@ -32,6 +33,7 @@ def create_local_dashboard_app(
     graph_view_store: GraphViewStore | None = None,
     self_intro_writer: SelfIntroductionWriter | None = None,
     asset_writer: LocalAssetWriter | None = None,
+    record_lifecycle_writer: LocalRecordLifecycleWriter | None = None,
     overview_owner_id: str,
     dist_dir: str | Path,
     graph_proxy: LocalGraphSearchProxy | None = None,
@@ -61,6 +63,7 @@ def create_local_dashboard_app(
         graph_view_store=graph_view_store,
         self_intro_writer=self_intro_writer,
         asset_writer=asset_writer,
+        record_lifecycle_writer=record_lifecycle_writer,
         overview_owner_id=overview_owner_id,
     )
     if graph_proxy is not None:
