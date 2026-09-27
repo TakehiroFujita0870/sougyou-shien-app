@@ -126,7 +126,7 @@ class _LifecycleRowsSession:
     def run(self, query, **params):
         self.driver.calls.append((query, params))
         assert params["owner_id"] == "owner"
-        assert set(params["node_types"]) == {"idea", "asset"}
+        assert set(params["node_types"]) and set(params["node_types"]).issubset({"idea", "asset"})
         return self.driver.rows
 
 
@@ -135,6 +135,7 @@ def _lifecycle_rows(writes):
         "id": record.id,
         "node_type": record.node_type.value,
         "revision": record.revision,
+        "supersedes_id": record.supersedes_id,
         "status": record.status.value,
         "payload_json": json.dumps(_json_value(record), ensure_ascii=False),
     } for record in writes.read_snapshot().nodes if isinstance(record, (Idea, Asset)))
@@ -328,6 +329,145 @@ def test_neo4j_shaped_lifecycle_rows_resolve_only_archive_restore_suffix(kind, n
     assert resolved["claim-1"] == "claim-1"
 
 
+@pytest.mark.parametrize("scalar_revision", [0, 1])
+def test_lifecycle_reference_resolves_legacy_initial_asset_row(scalar_revision):
+    writes = InMemoryGraphWriteService("owner")
+    asset = Asset(
+        owner_id="owner", id="asset-root", name="Synthetic capability", status=Status.ACTIVE,
+        egress_policy=EgressPolicy.SHAREABLE, revision=1,
+    )
+    writes.put_node(asset, idempotency_key="seed-legacy-asset", operation="capture_asset")
+    archived = writes.archive_asset(asset.id, expected_revision=1, idempotency_key="archive-legacy-asset")
+    restored_receipt = writes.restore_asset(
+        archived.target_id, expected_revision=archived.revision, idempotency_key="restore-legacy-asset",
+    )
+    rows = list(_lifecycle_rows(writes))
+    legacy_root = next(row for row in rows if row["id"] == asset.id)
+    payload = json.loads(legacy_root["payload_json"])
+    payload.pop("revision")
+    payload.pop("supersedes_id")
+    legacy_root["payload_json"] = json.dumps(payload, ensure_ascii=False)
+    legacy_root["revision"] = scalar_revision
+    legacy_root["supersedes_id"] = None
+    driver = _LifecycleRowsDriver(tuple(rows))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(((asset.id, "asset"),), owner_id="owner")
+
+    assert resolved == {asset.id: restored_receipt.target_id}
+    assert len(driver.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("row_revision", "row_supersedes", "missing_fields"),
+    [
+        (2, None, {"revision", "supersedes_id"}),
+        (0, None, {"revision"}),
+        (0, "asset-parent", {"revision", "supersedes_id"}),
+    ],
+)
+def test_lifecycle_reference_rejects_noninitial_or_inconsistent_legacy_asset_rows(
+    row_revision, row_supersedes, missing_fields,
+):
+    asset = Asset(owner_id="owner", id="legacy-asset", name="Synthetic capability")
+    payload = _json_value(asset)
+    for field in missing_fields:
+        payload.pop(field)
+    driver = _LifecycleRowsDriver(({
+        "id": asset.id,
+        "node_type": "asset",
+        "revision": row_revision,
+        "supersedes_id": row_supersedes,
+        "status": "active",
+        "payload_json": json.dumps(payload, ensure_ascii=False),
+    },))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(((asset.id, "asset"),), owner_id="owner")
+
+    assert resolved == {asset.id: None}
+    assert len(driver.calls) == 1
+
+
+def test_unrelated_unsupported_asset_kind_does_not_poison_requested_lineage():
+    writes = InMemoryGraphWriteService("owner")
+    asset = Asset(
+        owner_id="owner", id="requested-asset", name="Synthetic capability",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(asset, idempotency_key="seed-requested-asset", operation="capture_asset")
+    archived = writes.archive_asset(asset.id, expected_revision=1, idempotency_key="archive-requested-asset")
+    restored = writes.restore_asset(
+        archived.target_id, expected_revision=archived.revision, idempotency_key="restore-requested-asset",
+    )
+    rows = list(_lifecycle_rows(writes))
+    unrelated = _json_value(Asset(owner_id="owner", id="unrelated-legacy", name="Legacy capability"))
+    unrelated["kind"] = "capability"
+    unrelated.pop("revision")
+    unrelated.pop("supersedes_id")
+    rows.append({
+        "id": unrelated["id"], "node_type": "asset", "revision": 0,
+        "supersedes_id": None, "status": "active",
+        "payload_json": json.dumps(unrelated, ensure_ascii=False),
+    })
+    driver = _LifecycleRowsDriver(tuple(rows))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(((asset.id, "asset"),), owner_id="owner")
+
+    assert resolved == {asset.id: restored.target_id}
+    assert len(driver.calls) == 1
+
+
+def test_related_malformed_row_reached_through_scalar_parent_fails_closed():
+    asset = Asset(owner_id="owner", id="requested-asset", name="Synthetic capability")
+    # Include the requested root itself so only the malformed related child
+    # prevents the otherwise-current reference from resolving.
+    root_payload = _json_value(asset)
+    rows = [{
+        "id": asset.id, "node_type": "asset", "revision": 1,
+        "supersedes_id": None, "status": "active",
+        "payload_json": json.dumps(root_payload, ensure_ascii=False),
+    }, {
+        "id": "malformed-child", "node_type": "asset", "revision": 2,
+        "supersedes_id": asset.id, "status": "active", "payload_json": "{malformed",
+    }]
+    driver = _LifecycleRowsDriver(tuple(rows))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(((asset.id, "asset"),), owner_id="owner")
+
+    assert resolved == {asset.id: None}
+    assert len(driver.calls) == 1
+
+
+def test_related_payload_parent_mismatch_fails_closed_even_when_scalar_parent_differs():
+    asset = Asset(owner_id="owner", id="requested-asset", name="Synthetic capability")
+    rows = []
+    rows.append({
+        "id": asset.id, "node_type": "asset", "revision": 1,
+        "supersedes_id": None, "status": "active",
+        "payload_json": json.dumps(_json_value(asset), ensure_ascii=False),
+    })
+    child = _json_value(Asset(owner_id="owner", id="mismatched-child", name="Synthetic capability"))
+    child["revision"] = 2
+    child["supersedes_id"] = asset.id
+    child["provenance"]["target_id"] = child["id"]
+    child["provenance"]["source_id"] = asset.id
+    rows.append({
+        "id": child["id"], "node_type": "asset", "revision": 2,
+        "supersedes_id": "unrelated-parent", "status": "active",
+        "payload_json": json.dumps(child, ensure_ascii=False),
+    })
+    driver = _LifecycleRowsDriver(tuple(rows))
+    store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
+
+    resolved = store.resolve_lifecycle_references(((asset.id, "asset"),), owner_id="owner")
+
+    assert resolved == {asset.id: None}
+    assert len(driver.calls) == 1
+
+
 def test_lifecycle_reference_batch_is_owner_scoped_and_does_not_query_for_other_owner():
     driver = _LifecycleRowsDriver(())
     store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
@@ -355,7 +495,7 @@ def test_lifecycle_reference_batch_fails_closed_when_owner_scan_is_capped():
 def test_lifecycle_reference_batch_fails_closed_on_malformed_revision_row():
     driver = _LifecycleRowsDriver(({
         "id": "unrelated-idea", "node_type": "idea", "revision": 1,
-        "status": "active", "payload_json": "{malformed",
+        "supersedes_id": None, "status": "active", "payload_json": "{malformed",
     },))
     store = Neo4jGraphProvenanceStore(driver, owner_id="owner")
 
