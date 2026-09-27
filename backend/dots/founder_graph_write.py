@@ -26,6 +26,7 @@ from .founder_graph import (
     Evidence,
     EvidenceEdgeType,
     EvidencePolarity,
+    Facet,
     Idea,
     NodeType,
     PersonAsset,
@@ -429,6 +430,7 @@ class InMemoryGraphWriteService:
         "capture_person",
         "capture_organization",
         "capture_asset",
+        "capture_facet",
         "revise_asset",
         "append_claim",
         "link_entities",
@@ -1126,6 +1128,29 @@ class InMemoryGraphWriteService:
                     raise GraphWriteError("relation assertion Evidence source-grounded lineage is invalid")
                 if assertion.egress_policy is EgressPolicy.SHAREABLE and evidence.egress_policy is not EgressPolicy.SHAREABLE:
                     raise GraphWriteError("shareable relation assertion requires shareable Evidence")
+
+            if (
+                assertion.predicate is RelationType.CLASSIFIED_AS
+                and assertion.source_kind is NodeType.FACET
+                and assertion.target_kind is NodeType.FACET
+                and assertion.status is not RelationshipStatus.RETRACTED
+            ):
+                from .founder_graph_facet_hierarchy import FacetNode, FacetHierarchyError
+                from .founder_graph_facet_write_guard import validate_facet_taxonomy_write
+                try:
+                    validate_facet_taxonomy_write(
+                        owner_id=self.owner_id,
+                        assertion=assertion,
+                        facets=(
+                            FacetNode(owner_id=node.owner_id, id=node.id, label=node.value)
+                            for node in self._nodes.values() if isinstance(node, Facet)
+                        ),
+                        assertions=(
+                            node for node in self._nodes.values() if isinstance(node, RelationAssertion)
+                        ),
+                    )
+                except (FacetHierarchyError, ValueError):
+                    raise GraphWriteError("Facet taxonomy relation is invalid") from None
 
             idea_nodes = tuple(node for node in resolved.values() if isinstance(node, Idea))
             if idea_nodes:
