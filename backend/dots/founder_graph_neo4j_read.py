@@ -874,7 +874,7 @@ class Neo4jGraphReadService:
         tokens = _tokens(query)
         started = monotonic()
         with self._read_session() as session:
-            views, scores, paths, evidence_by_node, relation_paths = self._gateway._execute_read(
+            views, scores, paths, evidence_by_node, relation_paths, direct_hit_paths = self._gateway._execute_read(
                 session,
                 lambda tx: self._search_tx(tx, query=query, tokens=tokens, owner_id=owner,
                                            started=started, timeout_ms=timeout_ms),
@@ -905,6 +905,13 @@ class Neo4jGraphReadService:
                 if isinstance(error, GraphReadError):
                     raise
                 raise Neo4jReadUnavailableError("the pinned local reranker is unavailable") from error
+        # Keep alternate provenance separate until reranking is complete: a
+        # path must not change candidate text, relevance scores, or ordering.
+        for node_id, (path, evidence_ids, relation_path) in direct_hit_paths.items():
+            if node_id in scores and not paths.get(node_id):
+                paths[node_id] = path
+                evidence_by_node[node_id] = evidence_ids
+                relation_paths[node_id] = relation_path
         page_ids = ordered_ids[offset : offset + limit]
         next_cursor = str(offset + limit) if offset + limit < len(ordered_ids) else None
         return SearchPage(
@@ -963,6 +970,9 @@ class Neo4jGraphReadService:
                 if matched:
                     scores[view.id] = matched / len(tokens) + (0.25 if query.casefold() in haystack else 0.0)
 
+        directly_ranked_ids = set(scores)
+        direct_hit_paths: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[RelationPathStep, ...]]] = {}
+        direct_hit_path_scores: dict[str, float] = {}
         formal, formal_views = self._formal_adjacency(
             tx, owner_id=owner_id, at=datetime.now(timezone.utc), started=started, timeout_ms=timeout_ms,
         )
@@ -983,8 +993,6 @@ class Neo4jGraphReadService:
                         continue
                     candidate_score = scores[current_id] * 0.5
                     candidate_path = current_path + (step.predicate, neighbor_id) if current_path else (current_id, step.predicate, neighbor_id)
-                    if candidate_score <= scores.get(neighbor_id, -1.0):
-                        continue
                     prior_steps = relation_paths.get(current_id, ())
                     formal_candidate = not current_path or len(prior_steps) == (len(current_path) - 1) // 2
                     candidate_relation_path = (*prior_steps, step) if formal_candidate else ()
@@ -993,6 +1001,18 @@ class Neo4jGraphReadService:
                         if formal_candidate
                         else tuple(dict.fromkeys((*evidence_by_node.get(current_id, ()), *step.evidence_ids)))
                     )
+                    if candidate_score <= scores.get(neighbor_id, -1.0):
+                        if (
+                            neighbor_id in directly_ranked_ids
+                            and not paths.get(neighbor_id)
+                            and candidate_relation_path
+                            and candidate_score > direct_hit_path_scores.get(neighbor_id, -1.0)
+                        ):
+                            direct_hit_paths[neighbor_id] = (
+                                candidate_path, candidate_evidence, candidate_relation_path,
+                            )
+                            direct_hit_path_scores[neighbor_id] = candidate_score
+                        continue
                     scores[neighbor_id] = candidate_score
                     paths[neighbor_id] = candidate_path
                     relation_paths[neighbor_id] = candidate_relation_path
@@ -1042,7 +1062,7 @@ class Neo4jGraphReadService:
                     next_frontier.add(neighbor.id)
             frontier = next_frontier
         self._check_timeout(started, timeout_ms)
-        return views, scores, paths, evidence_by_node, relation_paths
+        return views, scores, paths, evidence_by_node, relation_paths, direct_hit_paths
 
     def _hybrid_candidates(
         self, tx: Any, *, query: str, owner_id: str, started: float, timeout_ms: int,
