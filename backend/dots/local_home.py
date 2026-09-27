@@ -6,6 +6,8 @@ import json
 from typing import Any, Mapping, Protocol, Sequence
 
 from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief
+from .founder_graph_neo4j import Neo4jGraphGateway
+from .founder_graph_neo4j_read import Neo4jGraphReadService
 
 
 _KINDS = ("idea", "asset", "owner_profile")
@@ -41,6 +43,16 @@ class Neo4jHomeStore:
     def read_briefs(self, owner_id: str) -> Sequence[Mapping[str, Any]]:
         with self._driver.session(database=self._database) as session:
             return tuple(dict(row) for row in session.run(self._BRIEFS, owner_id=owner_id))
+
+    def read_citations(self, owner_id: str, evidence_ids: Sequence[str]) -> Mapping[str, Mapping[str, str]]:
+        """Project only current, owner-bound, shareable source URL/title metadata."""
+        service = Neo4jGraphReadService(Neo4jGraphGateway(self._driver, owner_id, database=self._database))
+        result = {}
+        for evidence_id in dict.fromkeys(evidence_ids):
+            citation = service.project_evidence_citation(evidence_id, owner_id=owner_id)
+            if citation is not None:
+                result[evidence_id] = citation
+        return result
 
 
 def _text(value: Any, *, required: bool = False) -> str:
@@ -176,10 +188,26 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                 if brief is not None and brief.based_on_idea_id == identity:
                     display["brief_sections"] = [section.content for section in brief.sections]
                     display["brief_revision"] = brief.revision
+                    evidence_ids = tuple(dict.fromkeys(
+                        evidence_id for section in brief.sections for evidence_id in section.evidence_ids
+                    ))
+                    read_citations = getattr(store, "read_citations", None)
+                    citation_map = read_citations(owner_id, evidence_ids) if callable(read_citations) else {}
+                    chapter_citations: list[list[dict[str, str]]] = [[] for _ in range(8)]
+                    for section in brief.sections:
+                        if 0 <= section.index < 8:
+                            chapter_citations[section.index] = [
+                                {key: citation_map[evidence_id][key] for key in ("url", "title")}
+                                for evidence_id in section.evidence_ids
+                                if evidence_id in citation_map
+                            ]
+                    display["brief_citations"] = chapter_citations
+                    # Run references alone are not evidence of completed research.
+                    has_citations = any(display["brief_citations"])
                     # Only the gated researched-save route retains Run references.
                     # Ordinary draft edits clear them; expiry does not erase history.
-                    if brief.research_run_ids and all(section.content.strip() for section in brief.sections):
-                        display["research_status"] = "researched"
+                    if brief.research_run_ids and len(brief.sections) == 8 and all(section.content.strip() for section in brief.sections):
+                        display["research_status"] = "researched" if has_citations else "research_sources_missing"
                 ideas.append((timestamp, display))
             elif kind == "asset":
                 if identity in superseded_assets:

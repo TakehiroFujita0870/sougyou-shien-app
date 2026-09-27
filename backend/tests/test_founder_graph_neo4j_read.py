@@ -206,9 +206,9 @@ def _formal_edge_row(assertion, relation: str, target: dict[str, object]) -> dic
 def _formal_fixture(*, assertion_brief_id: str | None = None, evidence_refs: tuple[str, ...] | None = None, assertion_policy=EgressPolicy.SHAREABLE):
     idea = Idea(owner_id="owner-1", id="idea-1", title="Foundry search seed", status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE)
     claim = Claim(owner_id="owner-1", id="claim-1", text="A supported claim", egress_policy=EgressPolicy.SHAREABLE)
-    revision = SourceRevision(owner_id="owner-1", id="revision-1", source_id="source-1", content="grounded synthetic source")
-    source = Source(owner_id="owner-1", id="source-1", title="Synthetic source",
-                    current_revision_id=revision.id, revision=1)
+    revision = SourceRevision(owner_id="owner-1", id="revision-1", source_id="source-1", content="grounded synthetic source", egress_policy=EgressPolicy.SHAREABLE)
+    source = Source(owner_id="owner-1", id="source-1", title="Synthetic source", locator="https://example.test/reference?id=42#section",
+                    current_revision_id=revision.id, revision=1, egress_policy=EgressPolicy.SHAREABLE)
     chunk = ContentChunk(owner_id="owner-1", id="chunk-1", source_revision_id=revision.id, ordinal=0,
                          char_start=0, char_end=len(revision.content), text=revision.content)
     evidence = Evidence(owner_id="owner-1", id="evidence-1", claim_id=claim.id,
@@ -290,7 +290,11 @@ def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evid
         "title": "エグゼクティブサマリー",
         "content": "A researched section",
         "evidence_ids": [evidence.id],
+        "citations": [{"url": "https://example.test/reference?id=42#section", "title": "Synthetic source", "source_id": "source-1", "evidence_id": evidence.id}],
     }
+    assert len(result["brief_citations"]) == 8
+    assert result["brief_citations"][0] == [{"url": "https://example.test/reference?id=42#section", "title": "Synthetic source", "source_id": "source-1", "evidence_id": evidence.id}]
+    assert result["brief_citations"][1:] == [[] for _ in range(7)]
     assert all("run-1" not in str(section) and "owner_decisions" not in section for section in result["sections"])
     assert all("IdeaBriefVersion" not in query or params["owner_id"] == "owner-1" for query, params in driver.session_value.calls)
 

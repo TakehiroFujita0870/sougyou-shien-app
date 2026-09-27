@@ -181,4 +181,5 @@ def test_home_shows_researched_only_for_current_complete_brief_with_run_referenc
         sections=tuple(IdeaBriefSection(index=i, content=f"調査済み観点{i}") for i in range(8)),
     )
     result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")
-    assert result["ideas"][0]["research_status"] == "researched"
+    assert result["ideas"][0]["research_status"] == "research_sources_missing"
+    assert result["ideas"][0]["brief_citations"] == [[] for _ in range(8)]

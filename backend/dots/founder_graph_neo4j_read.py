@@ -50,6 +50,7 @@ from .founder_graph_read import (
     _tokens,
 )
 from .idea_brief import SECTION_TITLES
+from .source_citations import citation_metadata, parse_object
 
 
 class Neo4jReadUnavailableError(GraphReadUnavailableError):
@@ -690,24 +691,83 @@ class Neo4jGraphReadService:
             ):
                 return None
             sections = []
+            brief_citations: list[list[dict[str, str]]] = [[] for _ in SECTION_TITLES]
             for section in latest.sections:
-                safe_evidence_ids = [
-                    evidence_id for evidence_id in section.evidence_ids
-                    if self._evidence_lineage_valid(tx, evidence_id=evidence_id, owner_id=owner)
-                ]
+                citations = []
+                for evidence_id in section.evidence_ids:
+                    citation = self._evidence_citation(tx, evidence_id=evidence_id, owner_id=owner)
+                    if citation is not None:
+                        citations.append(citation)
+                if 0 <= section.index < len(brief_citations):
+                    brief_citations[section.index] = citations
                 sections.append({
                     "index": section.index,
                     "title": SECTION_TITLES[section.index],
                     "content": section.content,
-                    "evidence_ids": safe_evidence_ids,
+                    "evidence_ids": [item["evidence_id"] for item in citations],
+                    "citations": brief_citations[section.index] if 0 <= section.index < len(brief_citations) else [],
                 })
-            return {"brief_id": latest.id, "idea_id": idea.id, "sections": sections}
+            return {
+                "brief_id": latest.id, "idea_id": idea.id, "sections": sections,
+                "brief_citations": brief_citations,
+            }
 
         with self._read_session() as session:
             projection = self._gateway._execute_read(session, read)
         if projection is None:
             raise GraphReadNotFoundError("idea brief was not found")
         return projection
+
+    def _evidence_citation(self, tx: Any, *, evidence_id: str, owner_id: str) -> dict[str, str] | None:
+        if not self._evidence_lineage_valid(tx, evidence_id=evidence_id, owner_id=owner_id):
+            return None
+        rows = _rows(tx.run(_EVIDENCE_LINEAGE_QUERY, evidence_id=evidence_id, owner_id=owner_id))
+        if len(rows) != 1:
+            return None
+        lineages = _row_value(rows[0], "lineages")
+        if not isinstance(lineages, list) or len(lineages) != 1 or not isinstance(lineages[0], Mapping):
+            return None
+        lineage = lineages[0]
+        revision = parse_object(lineage.get("revision_payload_json"))
+        source = parse_object(lineage.get("source_payload_json"))
+        if (
+            revision is None or source is None
+            or revision.get("owner_id") != owner_id
+            or revision.get("status") != Status.ACTIVE.value
+            or revision.get("egress_policy") != EgressPolicy.SHAREABLE.value
+            or source.get("owner_id") != owner_id
+            or source.get("status") != Status.ACTIVE.value
+            or source.get("egress_policy") != EgressPolicy.SHAREABLE.value
+            or source.get("current_revision_id") != revision.get("id")
+            or lineage.get("revision_id") != revision.get("id")
+        ):
+            return None
+        metadata = citation_metadata(source)
+        if metadata is None:
+            return None
+        return {**metadata, "source_id": str(source["id"]), "evidence_id": evidence_id}
+
+    def validate_evidence_citation(self, evidence_id: str, *, owner_id: str) -> bool:
+        """Return whether an evidence reference has a current shareable source citation."""
+        identifier = _required_node_id(evidence_id)
+        owner = _required_owner(owner_id)
+        if owner != self._gateway.owner_id:
+            return False
+        with self._read_session() as session:
+            return self._gateway._execute_read(
+                session, lambda tx: self._evidence_citation(tx, evidence_id=identifier, owner_id=owner) is not None,
+            )
+
+    def project_evidence_citation(self, evidence_id: str, *, owner_id: str) -> dict[str, str] | None:
+        """Return a safe public citation projection for one validated Evidence ID."""
+        identifier = _required_node_id(evidence_id)
+        owner = _required_owner(owner_id)
+        if owner != self._gateway.owner_id:
+            return None
+        with self._read_session() as session:
+            return self._gateway._execute_read(
+                session, lambda tx: self._evidence_citation(tx, evidence_id=identifier, owner_id=owner),
+            )
 
     def fetch_relation_assertion(self, node_id: str, *, owner_id: str) -> RelationPathStep:
         identifier = _required_node_id(node_id)

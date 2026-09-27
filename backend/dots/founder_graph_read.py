@@ -29,6 +29,7 @@ from .founder_graph import (
 )
 from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
 from .idea_brief import SECTION_TITLES
+from .source_citations import citation_metadata
 
 
 class GraphReadError(Exception):
@@ -442,21 +443,31 @@ class GraphReadService:
             raise GraphReadNotFoundError("idea brief was not found")
 
         node_by_id = {node.id: node for node in snapshot.nodes}
-        sections = [
-            {
+        brief_citations: list[list[dict[str, str]]] = [[] for _ in SECTION_TITLES]
+        sections = []
+        for section in latest.sections:
+            citations = []
+            for evidence_id in section.evidence_ids:
+                if not self._shareable_current_brief_evidence(
+                    evidence_id, owner_id=owner, node_by_id=node_by_id, edges=snapshot.structural_edges,
+                ):
+                    continue
+                evidence = node_by_id[evidence_id]
+                revision = node_by_id[evidence.source_revision_id]
+                source = node_by_id[revision.source_id]
+                metadata = citation_metadata({"locator": source.locator, "title": source.title})
+                if metadata is not None:
+                    citations.append({**metadata, "source_id": source.id, "evidence_id": evidence.id})
+            if 0 <= section.index < len(brief_citations):
+                brief_citations[section.index] = citations
+            sections.append({
                 "index": section.index,
                 "title": SECTION_TITLES[section.index],
                 "content": section.content,
-                "evidence_ids": [
-                    evidence_id for evidence_id in section.evidence_ids
-                    if self._shareable_current_brief_evidence(
-                        evidence_id, owner_id=owner, node_by_id=node_by_id, edges=snapshot.structural_edges,
-                    )
-                ],
-            }
-            for section in latest.sections
-        ]
-        return {"brief_id": latest.id, "idea_id": idea.id, "sections": sections}
+                "evidence_ids": [item["evidence_id"] for item in citations],
+                "citations": citations,
+            })
+        return {"brief_id": latest.id, "idea_id": idea.id, "sections": sections, "brief_citations": brief_citations}
 
     @staticmethod
     def _shareable_current_brief_evidence(
@@ -493,11 +504,14 @@ class GraphReadService:
             or not isinstance(revision, SourceRevision)
             or revision.owner_id != owner_id
             or revision.status is not Status.ACTIVE
+            or revision.egress_policy is not EgressPolicy.SHAREABLE
             or chunk.source_revision_id != revision.id
             or not isinstance(source, Source)
             or source.owner_id != owner_id
             or source.status is not Status.ACTIVE
+            or source.egress_policy is not EgressPolicy.SHAREABLE
             or source.current_revision_id != revision.id
+            or citation_metadata({"locator": source.locator, "title": source.title}) is None
             or evidence.locator != f"chars:{evidence.char_start}-{evidence.char_end}"
             or evidence.content_hash != chunk.text_hash
         ):
