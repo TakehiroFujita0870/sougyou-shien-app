@@ -18,7 +18,7 @@
 | --- | --- |
 | `docs/inherited/` | 参照用資料であり、現行仕様への推測を防ぐため変更しない |
 | 現行の3画面、画面用通信と保護検査 | 旧入口・旧画面・Story・旧PDF/DOCX出力・専用検査・不要な依存を削除しても、現行の表示・保存・検索・復旧を守る |
-| backendのaccount、privacy、file、decision、research、market、project dossier関連 | 公開API・検査・移行/復旧との接続を調べて群別判断。個人情報保護や現行の共通処理を古い名前だけで削除しない |
+| backendの現行Founder Graph保存・検索・出典・復旧関連 | 旧HTTP経路と旧一時メモリ実装を外しても、現行MCPと画面の共通処理は保持する。名前だけで削除しない |
 
 ## 整理手順
 

@@ -86,7 +86,6 @@ Windows側からHTTPを確認する。
 ```powershell
 (Invoke-WebRequest -UseBasicParsing http://localhost:5174/).StatusCode
 (Invoke-WebRequest -UseBasicParsing http://localhost:8000/health).StatusCode
-(Invoke-WebRequest -UseBasicParsing http://localhost:8000/v1/runtime/status).Content
 ```
 
 ViteまたはAPIのunitが存在しない場合は、WSL停止後にtransient unitが破棄された状態である。上の起動コマンドを再実行する。恒久的なunit配布は別Issueで決定する。
