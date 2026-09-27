@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import StringIO
 import json
+import pytest
 
 from dots.founder_graph_mcp_stdio import FounderGraphStdioServer, create_stdio_server, run_stdio
 from dots.founder_graph_mcp_write import McpWriteError
@@ -204,6 +205,84 @@ def test_neo4j_backend_is_explicit_and_uses_environment_configuration(monkeypatc
 
     assert server.owner_id == "owner-persistent"
     assert server.reads.reads.owner_id == "owner-persistent"
+
+
+def test_stdio_closes_driver_created_for_its_own_session(monkeypatch) -> None:
+    class ClosableDriver:
+        close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    driver = ClosableDriver()
+    server = FounderGraphStdioServer(None, None, "owner-a")
+    driver_creations = []
+    monkeypatch.setattr(stdio_module, "resolve_graph_backend", lambda: "neo4j")
+    monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", lambda: driver_creations.append(driver) or driver)
+    monkeypatch.setattr(stdio_module, "_neo4j_stdio_read_only_preflight", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(stdio_module, "create_neo4j_stdio_server", lambda *_args, **_kwargs: server)
+
+    run_stdio(StringIO(""), StringIO())
+    assert driver_creations == [driver]
+    assert driver.close_calls == 1
+
+
+def test_stdio_closes_owned_driver_after_transport_exception(monkeypatch) -> None:
+    class ClosableDriver:
+        close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    class BrokenOutput:
+        def write(self, _value):
+            raise OSError("output failed")
+
+        def flush(self):
+            return None
+
+    driver = ClosableDriver()
+    server = FounderGraphStdioServer(None, None, "owner-a")
+    monkeypatch.setattr(stdio_module, "resolve_graph_backend", lambda: "neo4j")
+    monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", lambda: driver)
+    monkeypatch.setattr(stdio_module, "_neo4j_stdio_read_only_preflight", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(stdio_module, "create_neo4j_stdio_server", lambda *_args, **_kwargs: server)
+
+    with pytest.raises(OSError, match="output failed"):
+        run_stdio(StringIO('{"jsonrpc":"2.0","id":1,"method":"ping"}\n'), BrokenOutput())
+    assert driver.close_calls == 1
+
+
+def test_stdio_does_not_close_injected_server_driver(monkeypatch) -> None:
+    class ClosableDriver:
+        close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    driver = ClosableDriver()
+    server = FounderGraphStdioServer(None, None, "owner-a", _owned_driver=driver)
+    monkeypatch.setattr(stdio_module, "create_stdio_server", lambda: pytest.fail("must reuse injected server"))
+
+    run_stdio(StringIO(""), StringIO(), server=server)
+    assert driver.close_calls == 0
+
+
+def test_stdio_closes_driver_when_owned_server_construction_fails(monkeypatch) -> None:
+    class ClosableDriver:
+        close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    driver = ClosableDriver()
+    monkeypatch.setattr(stdio_module, "resolve_graph_backend", lambda: "neo4j")
+    monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", lambda: driver)
+    monkeypatch.setattr(stdio_module, "_neo4j_stdio_read_only_preflight", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("preflight failed")))
+
+    with pytest.raises(RuntimeError, match="preflight failed"):
+        create_stdio_server("owner-a")
+    assert driver.close_calls == 1
 
 
 def test_unknown_backend_does_not_silently_fall_back(monkeypatch) -> None:

@@ -730,6 +730,49 @@ def test_configured_app_wires_neo4j_when_selected(monkeypatch) -> None:
     assert session.calls == []
 
 
+def test_configured_app_closes_only_its_owned_driver_on_shutdown(monkeypatch) -> None:
+    class ClosableDriver(_Driver):
+        def __init__(self):
+            super().__init__(_Session({}))
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    driver = ClosableDriver()
+    monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", lambda: driver)
+
+    app = create_configured_app()
+    assert driver.close_calls == 0
+    with TestClient(app):
+        pass
+    assert driver.close_calls == 1
+
+    borrowed = ClosableDriver()
+    injected_app = create_neo4j_app(borrowed, "owner-injected")
+    with TestClient(injected_app):
+        pass
+    assert borrowed.close_calls == 0
+
+
+def test_configured_app_closes_driver_if_app_composition_fails(monkeypatch) -> None:
+    class ClosableDriver:
+        close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    driver = ClosableDriver()
+    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", lambda: driver)
+    monkeypatch.setattr(main_module, "create_neo4j_app", lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("composition failed")))
+
+    with pytest.raises(ValueError, match="composition failed"):
+        create_configured_app()
+    assert driver.close_calls == 1
+
+
 def test_configured_neo4j_outage_fails_closed_for_fastapi_and_stdio(monkeypatch) -> None:
     monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
     monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
