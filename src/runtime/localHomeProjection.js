@@ -9,6 +9,10 @@ export function projectLocalHome(result) {
   const ideas = result.ideas.map((item) => {
     if (!item || typeof item.id !== 'string' || typeof item.title !== 'string' || typeof item.summary !== 'string' || typeof item.description !== 'string') throw new LocalDashboardClientError('error');
     const idea = { id: item.id, title: item.title, summary: item.summary, description: item.description };
+    if (item.revision !== undefined) {
+      if (!Number.isSafeInteger(item.revision) || item.revision < 0) throw new LocalDashboardClientError('error');
+      idea.revision = item.revision;
+    }
     idea.research_status = item.research_status === 'unresearched' ? 'unresearched' : 'unknown';
     if (item.brief_sections !== undefined || item.brief_revision !== undefined) {
       if (!Array.isArray(item.brief_sections) || item.brief_sections.length !== 8

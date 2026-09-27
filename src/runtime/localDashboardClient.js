@@ -92,6 +92,7 @@ export function createLocalDashboardClient({
   const origin = assertLocalOrigin(location);
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch must be available.');
   const assetWriteIntents = new Map();
+  const recordLifecycleIntents = new Map();
 
   async function request(path, { method = 'GET', signal, headers = {}, body } = {}) {
     let response;
@@ -353,6 +354,42 @@ export function createLocalDashboardClient({
     return { id: result.id, revision: result.revision };
   }
 
+  async function getDeletedRecords({ signal } = {}) {
+    const result = await request('/api/deleted-records', { signal });
+    if (!['ready', 'empty', 'stopped', 'failed'].includes(result.status) || !Array.isArray(result.records)) throw new LocalDashboardClientError('error');
+    const seen = new Set();
+    const records = result.records.map((item) => {
+      if (!item || !['idea', 'asset'].includes(item.kind) || typeof item.id !== 'string' || !item.id
+        || typeof item.title !== 'string' || typeof item.description !== 'string'
+        || !Number.isSafeInteger(item.revision) || item.revision < (item.kind === 'idea' ? 0 : 1)) throw new LocalDashboardClientError('error');
+      const key = JSON.stringify([item.kind, item.id]);
+      if (seen.has(key)) throw new LocalDashboardClientError('error');
+      seen.add(key);
+      return { id: item.id, kind: item.kind, title: item.title, description: item.description, revision: item.revision };
+    });
+    return { status: result.status, records };
+  }
+
+  async function changeRecordStatus(action, kind, id, expectedRevision, { signal } = {}) {
+    if (!['idea', 'asset'].includes(kind) || typeof id !== 'string' || !id.trim() || id.length > 512
+      || !Number.isSafeInteger(expectedRevision) || expectedRevision >= Number.MAX_SAFE_INTEGER || expectedRevision < (kind === 'idea' ? 0 : 1)) throw new LocalDashboardClientError('error');
+    const intent = JSON.stringify([action, kind, id, expectedRevision]);
+    let key = recordLifecycleIntents.get(intent);
+    if (!key) {
+      key = createIdempotencyKey();
+      if (typeof key !== 'string' || !key.trim() || key.length > 128) throw new LocalDashboardClientError('error');
+      recordLifecycleIntents.set(intent, key);
+    }
+    const { csrfToken } = await readStatus(signal);
+    const result = await request(`/api/records/${kind}/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ expected_revision: expectedRevision, idempotency_key: key }),
+    });
+    if (typeof result.id !== 'string' || !result.id || !Number.isSafeInteger(result.revision) || result.revision !== expectedRevision + 1 || typeof result.replayed !== 'boolean') throw new LocalDashboardClientError('error');
+    return { id: result.id, revision: result.revision, replayed: result.replayed };
+  }
+
   async function operate(action, { signal } = {}) {
     const { csrfToken } = await readStatus(signal);
     const idempotencyKey = createIdempotencyKey();
@@ -381,6 +418,9 @@ export function createLocalDashboardClient({
     getSemanticEdgeProvenance,
     getFacetRegion,
     saveAsset,
+    getDeletedRecords,
+    archiveRecord: (kind, id, revision, options) => changeRecordStatus('archive', kind, id, revision, options),
+    restoreRecord: (kind, id, revision, options) => changeRecordStatus('restore', kind, id, revision, options),
     start: (options) => operate('start', options),
     stop: (options) => operate('stop', options),
   });
