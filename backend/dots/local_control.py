@@ -17,10 +17,11 @@ from typing import Protocol
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from dots.local_overview import COUNT_BASIS, OverviewResult, OverviewStore, read_local_overview
-from dots.local_home import HomeStore, read_local_home
+from dots.local_home import HomeStore, LocalAssetWriter, read_local_home
+from dots.founder_graph_write import GraphWriteNotFoundError, IdempotencyConflictError, RevisionConflictError
 from dots.local_graph_view import GraphViewStore, read_local_facet_region, read_local_graph
 from dots.local_graph_provenance import GraphProvenanceNotFound
 from dots.local_self_intro import SelfIntroductionConflict, SelfIntroductionWriter
@@ -43,6 +44,14 @@ class ControlAction(BaseModel):
 class SelfIntroductionEdit(BaseModel):
     text: str
     expected_id: str | None = None
+
+
+class AssetEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(max_length=4000)
+    expected_revision: StrictInt = Field(gt=0)
+    idempotency_key: str = Field(min_length=1, max_length=128)
 
 
 class LocalControl:
@@ -137,6 +146,7 @@ def create_local_control_app(
     home_store: HomeStore | None = None,
     graph_view_store: GraphViewStore | None = None,
     self_intro_writer: SelfIntroductionWriter | None = None,
+    asset_writer: LocalAssetWriter | None = None,
 ) -> FastAPI:
     """Create the API and reject non-loopback deployment configurations."""
     try:
@@ -302,6 +312,29 @@ def create_local_control_app(
         except Exception:
             return JSONResponse(status_code=503, content={"status": "failed"})
         return JSONResponse(content=result)
+
+    @app.put("/api/assets/{asset_id}")
+    async def save_asset(
+        asset_id: str, request: Request, payload: AssetEdit,
+        authorization: str | None = Header(default=None),
+        x_csrf_token: str | None = Header(default=None),
+    ) -> JSONResponse:
+        await authorize(request, authorization, x_csrf_token)
+        if asset_writer is None or not overview_owner_id:
+            raise HTTPException(status_code=503, detail="Asset editing is unavailable")
+        try:
+            receipt = asset_writer.save(asset_id, name=payload.name, description=payload.description,
+                                        expected_revision=payload.expected_revision,
+                                        idempotency_key=payload.idempotency_key)
+        except GraphWriteNotFoundError:
+            raise HTTPException(status_code=404, detail="Asset was not found") from None
+        except (RevisionConflictError, IdempotencyConflictError):
+            raise HTTPException(status_code=409, detail="Asset changed; reload before saving") from None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid asset edit") from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="Could not save asset") from None
+        return JSONResponse(content={"id": receipt.target_id, "revision": receipt.revision, "replayed": receipt.replayed})
 
     @app.post("/api/self-introduction")
     async def save_self_introduction(
