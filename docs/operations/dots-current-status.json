@@ -1,12 +1,21 @@
 {
   "updated_at": "2026-09-27T09:37:04Z",
-  "baseline_main": "6a6428f5cd2f",
+  "baseline_main": "d0a1b9e4a316",
   "test_connection_cleanup": {
     "implementation": "検証用のDots（架空試験）接続のみ解除。正本Dotsの依存接続を保持。",
     "verification": "解除APIはuninstalled、直後の読取は検証用not_installed・正本found。",
     "runtime": "applied",
+    "local_cleanup": "架空試験専用トンネルはinactive。架空試験のlogon/logoffタスクはDisabled。正本3サービスはactiveを維持。",
     "data_deleted": false,
     "rollback": "必要なら検証用接続を再登録できる。保存データと鍵は削除していない。"
+  },
+  "citation_surface_delivery": {
+    "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/299",
+    "main_sha": "d0a1b9e4a316",
+    "verification": "関連39UI tests・4backend tests、1280×720の架空API実ビルド画面で引用到達・例外0、独立レビュー承認、CI quality成功。",
+    "delivery": "main",
+    "runtime": "not_deployed",
+    "plugin_release": "1.0.6の更新用ファイルをmainへ保存。外部リリースは未更新。"
   },
   "citation_delivery": {
     "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/298",
