@@ -69,17 +69,22 @@ def _brief_reader_fixture() -> tuple[InMemoryGraphWriteService, McpReadSurface, 
     return writes, surface, idea, brief, shared_evidence, private_evidence
 
 
-def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() -> None:
+@pytest.mark.parametrize("heading_prefix", ("#", "##"), ids=("h1", "h2"))
+def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection(heading_prefix: str) -> None:
     writes, surface, idea, brief, shared_evidence, private_evidence = _brief_reader_fixture()
     report_markdown = "\n\n".join(
-        f"## {title}\n\nMarkdown section {index}"
+        f"{heading_prefix} {title}\n\nMarkdown section {index}"
         + ("\n\n[Public link](https://example.test/public)" if index == 2 else "")
         for index, title in enumerate(SECTION_TITLES)
     )
     latest = brief.revise(
-        sections=(IdeaBriefSection(index=0, content="Latest safe section", evidence_ids=(shared_evidence.id, private_evidence.id)),),
+        sections=tuple(
+            IdeaBriefSection(index=index, evidence_ids=(shared_evidence.id, private_evidence.id))
+            for index in range(8)
+        ),
         report_markdown=report_markdown,
     )
+    assert all(not section.content for section in latest.sections)
     writes.save_idea_brief(latest, expected_latest_revision=1, idempotency_key="brief-save-latest")
 
     result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")

@@ -384,9 +384,16 @@ class McpResearchCampaignSurface:
             "candidate_processing.stateとerror_codeで結果を確認してください。省略は未評価pending、candidates: []は候補なしを確認済みです。"
             "処理状態は候補の反映件数を示しません。"
         )
+        heading_note = (
+            "章見出しは正規タイトルのH1（例: `# エグゼクティブサマリー`）またはH2（例: `## エグゼクティブサマリー`）を使えます（章ごとの混在可）。"
+            "H3以上、重複、順不同の見出しは章投影に使いません。"
+        )
+        markdown_edit_note = (
+            "sections[].contentだけでは既存Markdownの章本文は編集されません。章本文を変更する場合はreport_markdown全文を指定してください。"
+        )
         regular_brief = {
             "name": "save_idea_brief",
-            "description": "既存のIdeaを8観点で育てます。旧版は残ります。未確認の内容を事実として記載せず、根拠IDがある場合だけ添えてください。未指定の観点は前版を維持します。初回はexpected_revision=0です。" + candidate_note,
+            "description": "既存のIdeaを8観点で育てます。旧版は残ります。未確認の内容を事実として記載せず、根拠IDがある場合だけ添えてください。未指定の観点は前版を維持します。初回はexpected_revision=0です。" + heading_note + markdown_edit_note + candidate_note,
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -402,14 +409,14 @@ class McpResearchCampaignSurface:
                             "type": "object", "required": ["index", "content"],
                             "properties": {
                                 "index": {"type": "integer", "minimum": 0, "maximum": 7},
-                                "content": {"type": "string", "maxLength": 4000},
+                                "content": {"type": "string", "maxLength": 4000, "description": markdown_edit_note},
                                 "facts": ids, "inferences": ids, "unconfirmed": ids,
                                 "owner_decisions": ids, "claim_ids": ids, "evidence_ids": ids,
                             }, "additionalProperties": False,
                         },
                     },
                     "change_reason": {"type": "string", "maxLength": 500},
-                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "図表・公開画像・出典リンクを含むレポート全文。8観点と同じ版に保存します。省略時は前版の本文を維持し、文字列を指定すると全文を置き換えます。HTMLは画面で実行しません。"},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "図表・公開画像・出典リンクを含むレポート全文。8観点と同じ版に保存します。" + heading_note + markdown_edit_note + "省略時は前版の本文を維持し、文字列を指定すると全文を置き換えます。HTMLは画面で実行しません。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "origin": {"type": "string", "enum": ["prior_research_import"], "description": "既に実施済みの過去調査を示す場合だけ指定します。現在のCampaign/Runの許諾や実行履歴は作りません。"},
                     "relation_candidate_manifest": _relation_candidate_manifest_schema(),
@@ -442,7 +449,7 @@ class McpResearchCampaignSurface:
         }
         return definitions + (regular_brief, append_finding, {
             "name": "save_researched_idea_brief",
-            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。本文の正本はMarkdownです。sectionsには各章のindexと必要なClaim/Evidence等の注釈だけを渡し、contentは省略できます（旧クライアント互換のcontentは受け付けますが保存しません）。完成稿には正規8見出しを順番どおり一度ずつ含め、各章に本文を含めてください。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。" + candidate_note + "概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
+            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。本文の正本はMarkdownです。sectionsには各章のindexと必要なClaim/Evidence等の注釈だけを渡し、contentは省略できます（旧クライアント互換のcontentは受け付けますが保存しません）。完成稿には正規8見出しを順番どおり一度ずつ含め、各章に本文を含めてください。" + heading_note + markdown_edit_note + "対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。" + candidate_note + "概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -458,7 +465,7 @@ class McpResearchCampaignSurface:
                             "type": "object", "required": ["index"],
                             "properties": {
                                 "index": {"type": "integer", "minimum": 0, "maximum": 7},
-                                "content": {"type": "string", "maxLength": 4000, "description": "旧クライアント互換用。保存時は無視され、本文はreport_markdownから読み戻されます。"},
+                                "content": {"type": "string", "maxLength": 4000, "description": "旧クライアント互換用。保存時は無視され、本文はreport_markdownから読み戻されます。" + markdown_edit_note},
                                 "facts": ids, "inferences": ids, "unconfirmed": ids,
                                 "owner_decisions": ids, "claim_ids": ids, "evidence_ids": ids,
                             }, "additionalProperties": False,
@@ -466,7 +473,7 @@ class McpResearchCampaignSurface:
                     },
                     "research_run_ids": {"type": "array", "minItems": 1, "maxItems": 20, "items": {**text, "maxLength": 200}},
                     "change_reason": {"type": "string", "maxLength": 500},
-                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成したMarkdown完成稿。正規8見出しを順番どおり一度ずつ含め、根拠を確認した出典URLを記します。必要に応じて表・公開画像・図を含めます。画像や数値を創作しません。8観点と出典IDの対応はsectionsにも保持します。"},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成したMarkdown完成稿。正規8見出しを順番どおり一度ずつ含め、根拠を確認した出典URLを記します。" + heading_note + markdown_edit_note + "必要に応じて表・公開画像・図を含めます。画像や数値を創作しません。8観点と出典IDの対応はsectionsにも保持します。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "relation_candidate_manifest": _relation_candidate_manifest_schema(),
                     "idempotency_key": idempotency,

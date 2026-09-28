@@ -605,6 +605,23 @@ def test_all_brief_save_tools_expose_optional_bounded_candidate_manifest():
     assert support_schema["oneOf"][1]["properties"]["section_index"]["maximum"] == 7
 
 
+def test_markdown_brief_tools_document_heading_levels_and_text_edit_contract():
+    writes = InMemoryGraphWriteService("owner-mcp-markdown-heading-contract")
+    tools = {tool["name"]: tool for tool in McpWriteSurface(writes).tool_definitions()}
+
+    for tool_name in ("save_idea_brief", "save_researched_idea_brief"):
+        tool = tools[tool_name]
+        description = tool["description"]
+        report_description = tool["inputSchema"]["properties"]["report_markdown"]["description"]
+        section_description = tool["inputSchema"]["properties"]["sections"]["items"]["properties"]["content"]["description"]
+        for text in (description, report_description):
+            assert "H1（例: `# エグゼクティブサマリー`）" in text
+            assert "H2（例: `## エグゼクティブサマリー`）" in text
+            assert "sections[].contentだけでは既存Markdownの章本文は編集されません" in text
+        assert "sections[].contentだけでは既存Markdownの章本文は編集されません" in section_description
+        assert "H3以上" in description
+
+
 @pytest.mark.parametrize("tool_name,base_args", [
     ("save_idea_brief", {
         "expected_revision": 0, "sections": [{"index": 0, "content": "A short note"}],

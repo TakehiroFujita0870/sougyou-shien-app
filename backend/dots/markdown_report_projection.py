@@ -43,7 +43,7 @@ class MarkdownReportProjection:
 
 _MAX_MARKDOWN_CHARS = 60_000
 _MAX_LINKS = 128
-_ATX_H2 = re.compile(r"^ {0,3}##(?!#)[ \t]+(.+?)[ \t]*#*[ \t]*$")
+_ATX_HEADING = re.compile(r"^ {0,3}#{1,2}(?!#)[ \t]+(.+?)[ \t]*#*[ \t]*$")
 _FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 _INLINE_RUN = re.compile(r"`+")
@@ -167,7 +167,7 @@ def project_markdown_report(markdown: str) -> MarkdownReportProjection:
     offset = 0
     for line in visible.splitlines(keepends=True):
         content = line.rstrip("\r\n")
-        match = _ATX_H2.match(content)
+        match = _ATX_HEADING.match(content)
         if match:
             title = match.group(1).strip()
             boundaries.append((offset, title_indexes.get(title), title, offset + len(line)))
