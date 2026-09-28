@@ -5,7 +5,7 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import Evidence, NodeType, RelationAssertionBasis, RelationType, Status
+from dots.founder_graph import EgressPolicy, Evidence, NodeType, RelationAssertionBasis, RelationType, Status
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.relation_candidate_manifest import (
     CandidateEntityRef,
@@ -31,12 +31,12 @@ def brief(markdown=MD, evidence_ids=(), section_content="説明"):
     )
 
 
-def evidence(owner=OWNER, status=Status.ACTIVE):
+def evidence(owner=OWNER, status=Status.ACTIVE, egress_policy=EgressPolicy.SHAREABLE):
     return Evidence(
         id="evidence-test", owner_id=owner, claim_id="claim-test",
         source_revision_id="revision-test", content_chunk_id="chunk-test",
         char_start=0, char_end=4, locator="chars:0-4", content_hash="a" * 64,
-        status=status,
+        status=status, egress_policy=egress_policy,
     )
 
 
@@ -106,6 +106,7 @@ def test_external_basis_needs_section_registered_active_source_grounded_evidence
         ({}, "does not exist"),
         ({ev.id: evidence(owner="foreign")}, "owner"),
         ({ev.id: evidence(status=Status.ARCHIVED)}, "active source-grounded"),
+        ({ev.id: evidence(egress_policy=EgressPolicy.LOCAL_ONLY)}, "shareable"),
         ({"invented": ev}, "does not exist"),
     ):
         reject(raw, b, error, evidence_map=mapping)

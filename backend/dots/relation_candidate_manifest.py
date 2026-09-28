@@ -6,10 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 import json
-from typing import Literal
+from typing import Literal, cast
 
 from .founder_graph import (
     DomainValidationError,
+    EgressPolicy,
     Evidence,
     NodeType,
     Provenance,
@@ -173,7 +174,10 @@ def _support_anchor(
 
 
 def _is_source_grounded_evidence(evidence: Evidence, owner_id: str) -> bool:
-    return evidence.owner_id == owner_id and evidence.status is Status.ACTIVE and evidence.content_chunk_id is not None
+    return (
+        evidence.owner_id == owner_id and evidence.status is Status.ACTIVE
+        and evidence.egress_policy is EgressPolicy.SHAREABLE and evidence.content_chunk_id is not None
+    )
 
 
 def _resolve_predicate(value: object) -> RelationType:
@@ -186,6 +190,38 @@ def _resolve_predicate(value: object) -> RelationType:
     if predicate not in _SEMANTIC_PREDICATES:
         _fail("candidate semantic predicate is not supported by the Brief contract")
     return predicate
+
+
+def preflight_relation_candidate_manifest(
+    manifest: Mapping[str, object],
+) -> tuple[Mapping[str, object], ...]:
+    """Apply bounded envelope checks before callers resolve any graph references."""
+    _canonical_json(manifest)
+    raw_manifest = _exact_fields(manifest, _MANIFEST_FIELDS, "manifest")
+    if type(raw_manifest["version"]) is not int or raw_manifest["version"] != 1:
+        _fail("manifest version must be 1")
+    _identifier(raw_manifest["idea_id"], "manifest Idea ID")
+    raw_candidates = raw_manifest["candidates"]
+    if not isinstance(raw_candidates, (list, tuple)) or len(raw_candidates) > MAX_CANDIDATES:
+        _fail("candidate count must be between 0 and 64")
+
+    candidates: list[Mapping[str, object]] = []
+    for raw_candidate in raw_candidates:
+        raw = _exact_fields(raw_candidate, _CANDIDATE_FIELDS, "candidate")
+        source_id = _identifier(raw["source_id"], "source ID")
+        target_id = _identifier(raw["target_id"], "target ID")
+        evidence_values = raw["evidence_ids"]
+        if not isinstance(evidence_values, (list, tuple)) or len(evidence_values) > MAX_EVIDENCE_IDS:
+            _fail("candidate Evidence IDs must be a bounded sequence")
+        evidence_ids = tuple(_identifier(item, "Evidence ID") for item in evidence_values)
+        if len(evidence_ids) != len(set(evidence_ids)):
+            _fail("candidate Evidence IDs must not contain duplicates")
+        candidate = dict(raw)
+        candidate.update({
+            "source_id": source_id, "target_id": target_id, "evidence_ids": evidence_ids,
+        })
+        candidates.append(candidate)
+    return tuple(candidates)
 
 
 def validate_relation_candidate_manifest(
@@ -212,24 +248,17 @@ def validate_relation_candidate_manifest(
     projection = project_markdown_report(markdown)
     actual_markdown_hash = sha256(markdown.encode("utf-8")).hexdigest()
 
-    _canonical_json(manifest)
-    raw_manifest = _exact_fields(manifest, _MANIFEST_FIELDS, "manifest")
-    if type(raw_manifest["version"]) is not int or raw_manifest["version"] != 1:
-        _fail("manifest version must be 1")
-    if _identifier(raw_manifest["idea_id"], "manifest Idea ID") != current_idea_id:
+    raw_candidates = preflight_relation_candidate_manifest(manifest)
+    if manifest["idea_id"] != current_idea_id:
         _fail("manifest Idea does not match the current Idea")
-    raw_candidates = raw_manifest["candidates"]
-    if not isinstance(raw_candidates, (list, tuple)) or len(raw_candidates) > MAX_CANDIDATES:
-        _fail("candidate count must be between 0 and 64")
     if not isinstance(entity_refs, Mapping) or not isinstance(source_grounded_evidence, Mapping):
         _fail("resolved endpoint and Evidence maps are required")
 
     candidates: list[ValidatedRelationCandidate] = []
     semantic_keys: set[tuple[str, RelationType, str]] = set()
-    for raw_candidate in raw_candidates:
-        raw = _exact_fields(raw_candidate, _CANDIDATE_FIELDS, "candidate")
-        source_id = _identifier(raw["source_id"], "source ID")
-        target_id = _identifier(raw["target_id"], "target ID")
+    for raw in raw_candidates:
+        source_id = cast(str, raw["source_id"])
+        target_id = cast(str, raw["target_id"])
         if source_id == target_id:
             _fail("candidate endpoints must be different")
         source_ref = entity_refs.get(source_id)
@@ -255,12 +284,7 @@ def validate_relation_candidate_manifest(
             basis = RelationAssertionBasis(basis_value)
         except (TypeError, ValueError):
             _fail("candidate basis must be brief_hypothesis or external_evidence")
-        evidence_values = raw["evidence_ids"]
-        if not isinstance(evidence_values, (list, tuple)) or len(evidence_values) > MAX_EVIDENCE_IDS:
-            _fail("candidate Evidence IDs must be a bounded sequence")
-        evidence_ids = tuple(_identifier(item, "Evidence ID") for item in evidence_values)
-        if len(evidence_ids) != len(set(evidence_ids)):
-            _fail("candidate Evidence IDs must not contain duplicates")
+        evidence_ids = cast(tuple[str, ...], raw["evidence_ids"])
         support = _support_anchor(raw["support"], markdown=markdown, projection=projection)
 
         if basis is RelationAssertionBasis.BRIEF_HYPOTHESIS:
@@ -287,7 +311,7 @@ def validate_relation_candidate_manifest(
                 if evidence.owner_id != latest_brief.owner_id:
                     _fail("candidate Evidence owner does not match the Brief")
                 if not _is_source_grounded_evidence(evidence, latest_brief.owner_id):
-                    _fail("candidate Evidence must be active source-grounded Evidence")
+                    _fail("candidate Evidence must be active source-grounded, shareable Evidence")
 
         semantic_key = (source_id, predicate, target_id)
         if semantic_key in semantic_keys:
@@ -333,6 +357,9 @@ def validate_relation_candidate_manifest(
                 valid_from=latest_brief.created_at,
                 based_on_brief_id=latest_brief.id,
                 based_on_brief_section_index=support.section_index,
+                based_on_brief_revision=latest_brief.revision,
+                based_on_brief_quote_start=support.char_start,
+                based_on_brief_quote_end=support.char_end,
                 provenance=Provenance(
                     actor="dots_candidate_manifest",
                     operation="validate_candidate",
