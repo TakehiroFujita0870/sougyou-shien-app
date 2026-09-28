@@ -54,6 +54,7 @@ from .founder_graph import (
     relation_assertion_structural_edges,
 )
 from .idea_brief import IdeaBriefVersion
+from .idea_brief_read_projection import brief_section_has_readable_body
 from .source_citations import evidence_lineage_is_current, researched_evidence_ids
 
 
@@ -1421,7 +1422,10 @@ class InMemoryGraphWriteService:
                         raise GraphWriteError("Brief hypothesis requires a non-empty latest Brief Markdown locator")
                 else:
                     section = latest_brief.sections[assertion.based_on_brief_section_index]
-                    if not section.content.strip() or not set(assertion.evidence_ids).issubset(section.evidence_ids):
+                    if (
+                        not brief_section_has_readable_body(latest_brief, assertion.based_on_brief_section_index)
+                        or not set(assertion.evidence_ids).issubset(section.evidence_ids)
+                    ):
                         raise GraphWriteError("relation Evidence must be cited by the selected Brief section")
                 self._validate_brief_research_locked(latest_brief, based_on_idea)
             elif assertion.based_on_brief_id is not None:

@@ -18,6 +18,7 @@ from .founder_graph import (
     validate_campaign_idea_reference,
 )
 from .idea_brief import IdeaBriefSection, IdeaBriefVersion
+from .idea_brief_read_projection import project_idea_brief_for_read
 
 
 class HistoricalResearchValidationError(ValueError):
@@ -104,10 +105,22 @@ def validate_historical_researched_brief(
         raise HistoricalResearchValidationError("typed brief and Idea values are required")
     if brief.owner_id != idea.owner_id or brief.based_on_idea_id != idea.id:
         raise HistoricalResearchValidationError("brief must reference the same owner and Idea")
-    if len(brief.sections) != 8 or not all(
-        isinstance(section, IdeaBriefSection) and section.content.strip()
-        for section in brief.sections
-    ):
+    try:
+        projection = project_idea_brief_for_read(brief.report_markdown, brief.sections)
+    except (TypeError, ValueError):
+        raise HistoricalResearchValidationError("all eight brief sections must contain text") from None
+    if brief.report_markdown is None:
+        valid_section_text = all(
+            isinstance(section, IdeaBriefSection) and section.content.strip()
+            for section in brief.sections
+        )
+    else:
+        valid_section_text = (
+            projection.markdown_projection is not None
+            and projection.markdown_projection.heading_status == "complete"
+            and all(content.strip() for content in projection.section_contents)
+        )
+    if len(brief.sections) != 8 or not valid_section_text:
         raise HistoricalResearchValidationError("all eight brief sections must contain text")
     if not brief.research_run_ids:
         raise HistoricalResearchValidationError("a researched brief requires at least one Run")

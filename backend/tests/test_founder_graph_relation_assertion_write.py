@@ -26,7 +26,7 @@ from dots.founder_graph import (
     SourceRevision,
     relation_assertion_structural_edges,
 )
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
 from dots.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
@@ -88,7 +88,11 @@ def _setup():
     brief = IdeaBriefVersion(
         id="brief-relation", owner_id=writes.owner_id, idea_lineage_root_id=idea.id,
         based_on_idea_id=idea.id, research_run_ids=(run.id,),
-        sections=tuple(IdeaBriefSection(index=i, content=f"Synthetic section {i}", evidence_ids=(evidence.id,)) for i in range(8)),
+        sections=tuple(IdeaBriefSection(index=i, evidence_ids=(evidence.id,)) for i in range(8)),
+        report_markdown="\n\n".join(
+            f"## {title}\n\nMarkdown section {index}"
+            for index, title in enumerate(SECTION_TITLES)
+        ),
     )
     writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key="save-brief")
     assertion = RelationAssertion(

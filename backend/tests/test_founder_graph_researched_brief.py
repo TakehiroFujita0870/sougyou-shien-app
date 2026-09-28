@@ -11,12 +11,20 @@ from dots.founder_graph import (
     ResearchRun,
     Status,
 )
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
 from dots.founder_graph_researched_brief import ResearchedBriefValidationError, validate_researched_brief
 
 
 UTC = timezone.utc
 AT = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
+
+
+def _complete_markdown(*, empty_section: int | None = None, indexes=None) -> str:
+    order = tuple(range(8)) if indexes is None else tuple(indexes)
+    return "\n\n".join(
+        f"## {SECTION_TITLES[index]}" + ("" if index == empty_section else f"\n\nMarkdown section {index}")
+        for index in order
+    )
 
 
 def _provenance(target_id: str, operation: str, occurred_at: datetime) -> Provenance:
@@ -69,7 +77,8 @@ def _fixture(*, campaign_target_id: str | None = None):
         owner_id=idea.owner_id,
         idea_lineage_root_id=idea.id,
         based_on_idea_id=idea.id,
-        sections=tuple(IdeaBriefSection(index=index, content=f"Synthetic section {index}") for index in range(8)),
+        sections=tuple(IdeaBriefSection(index=index) for index in range(8)),
+        report_markdown=_complete_markdown(),
         research_run_ids=(run_id,),
     )
     registry = CampaignAuthorizationRegistry(campaigns=(approved, current))
@@ -129,14 +138,26 @@ def test_researched_brief_rejects_empty_research_run_references():
         validate_researched_brief(empty, idea, (run,), registry, at=AT)
 
 
-@pytest.mark.parametrize("section_index", range(8))
-def test_researched_brief_requires_content_in_every_section(section_index):
+def test_researched_brief_accepts_empty_legacy_bodies_when_markdown_is_complete():
     brief, idea, run, _, registry = _fixture()
-    sections = tuple(
-        IdeaBriefSection(index=index, content="" if index == section_index else f"Synthetic section {index}")
-        for index in range(8)
-    )
-    incomplete = replace(brief, sections=sections)
+    assert all(not section.content for section in brief.sections)
+    assert validate_researched_brief(brief, idea, (run,), registry, at=AT) is None
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        None,
+        f"## {SECTION_TITLES[0]}\n\nOnly one section",
+        _complete_markdown(indexes=tuple(reversed(range(8)))),
+        _complete_markdown(indexes=(0, 1, 2, 3, 4, 5, 6, 7, 7)),
+        _complete_markdown(empty_section=4),
+    ],
+    ids=("missing", "partial", "out-of-order", "duplicate", "empty-body"),
+)
+def test_researched_brief_requires_complete_unambiguous_nonempty_markdown(markdown):
+    brief, idea, run, _, registry = _fixture()
+    incomplete = replace(brief, report_markdown=markdown)
 
     with pytest.raises(ResearchedBriefValidationError):
         validate_researched_brief(incomplete, idea, (run,), registry, at=AT)

@@ -18,6 +18,7 @@ from dots.founder_graph import (
 )
 from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_mcp import McpReadSurface, McpReadError
+from dots.idea_brief import SECTION_TITLES
 from test_founder_graph_relation_assertion_write import _setup
 
 
@@ -268,10 +269,11 @@ def test_brief_hypothesis_path_is_hidden_when_its_draft_brief_is_stale():
     assert writes.get_node(hypothesis.id) == hypothesis
 
 
-def test_empty_selected_brief_section_hides_formal_path():
+def test_ambiguous_markdown_hides_formal_path_without_guessing_section():
     writes, _, _, _, brief, assertion = _setup()
     writes.save_relation_assertion(assertion, expected_family_revision=None, idempotency_key="formal-read")
-    writes._idea_briefs[brief.id] = replace(brief, sections=tuple(replace(s, content=" ") if s.index == assertion.based_on_brief_section_index else s for s in brief.sections))
+    ambiguous = brief.report_markdown + f"\n\n## {SECTION_TITLES[0]}\n\nDuplicate section"
+    writes._idea_briefs[brief.id] = replace(brief, report_markdown=ambiguous)
     assert all(step.relation_assertion_id != assertion.id for step in _assertion_hit(GraphReadService(writes), "Synthetic target").relation_path)
 
 

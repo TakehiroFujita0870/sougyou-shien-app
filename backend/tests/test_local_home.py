@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 
 from dots.founder_graph import Idea, Provenance, Status
 from dots.founder_graph_neo4j import _node_properties
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
 from dots.local_home import Neo4jHomeStore, read_local_home
 
 
@@ -241,6 +241,34 @@ def test_home_shows_researched_only_for_current_complete_brief_with_run_referenc
     result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")
     assert result["ideas"][0]["research_status"] == "research_sources_missing"
     assert result["ideas"][0]["brief_citations"] == [[] for _ in range(8)]
+
+
+def test_home_derives_researched_sections_from_markdown_without_duplicate_bodies():
+    rows = [node("idea-markdown", "idea", {"title": "調査された案", "status": "draft", "created_at": "2026-09-26T00:00:00Z"}, status="draft")]
+    report_markdown = "\n\n".join(
+        f"## {title}\n\nMarkdown section {index}"
+        + ("\n\n[Public](https://example.test/public)" if index == 3 else "")
+        for index, title in enumerate(SECTION_TITLES)
+    )
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id="idea-markdown", based_on_idea_id="idea-markdown",
+        research_run_ids=("validated-run",), report_markdown=report_markdown, egress_policy="shareable",
+        sections=tuple(IdeaBriefSection(index=i, evidence_ids=("evidence-public",) if i == 0 else ()) for i in range(8)),
+    )
+    store = Neo4jHomeStore(Driver(rows, (brief_row(brief),)))
+    store.read_citations = lambda _owner, ids: {"evidence-public": {"url": "https://example.test/evidence", "title": "Verified evidence"}} if ids == ("evidence-public",) else {}
+
+    result = read_local_home(store, owner_id="owner-a")
+    idea = result["ideas"][0]
+
+    assert idea["research_status"] == "researched"
+    assert idea["brief_sections"] == [
+        f"Markdown section {index}" + ("\n\n[Public](https://example.test/public)" if index == 3 else "")
+        for index in range(8)
+    ]
+    assert idea["brief_citations"][0] == [{"url": "https://example.test/evidence", "title": "Verified evidence"}]
+    assert idea["report_projection"]["links"][0]["verification_status"] == "url_only"
+    assert idea["report_projection"]["links"][0]["evidence_ids"] == []
 
 
 def test_home_keeps_prior_research_origin_and_current_citations_without_campaign_run():

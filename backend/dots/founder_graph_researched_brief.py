@@ -14,7 +14,8 @@ from .founder_graph import (
     validate_campaign_idea_reference,
     validate_run_campaign_reference,
 )
-from .idea_brief import IdeaBriefSection, IdeaBriefVersion
+from .idea_brief import IdeaBriefVersion
+from .idea_brief_read_projection import project_idea_brief_for_read
 
 
 class ResearchedBriefValidationError(ValueError):
@@ -48,8 +49,16 @@ def validate_researched_brief(
         raise ResearchedBriefValidationError("brief and Idea values are required")
     if brief.owner_id != idea.owner_id or brief.based_on_idea_id != idea.id:
         raise ResearchedBriefValidationError("brief must reference the same owner and Idea")
-    if len(brief.sections) != 8 or not all(isinstance(section, IdeaBriefSection) and section.content.strip() for section in brief.sections):
-        raise ResearchedBriefValidationError("all eight brief sections must contain text")
+    try:
+        projection = project_idea_brief_for_read(brief.report_markdown, brief.sections)
+    except (TypeError, ValueError):
+        raise ResearchedBriefValidationError("researched Markdown must contain all eight canonical sections") from None
+    if (
+        projection.markdown_projection is None
+        or projection.markdown_projection.heading_status != "complete"
+        or not all(content.strip() for content in projection.section_contents)
+    ):
+        raise ResearchedBriefValidationError("researched Markdown must contain all eight non-empty canonical sections")
     if not brief.research_run_ids:
         raise ResearchedBriefValidationError("a researched brief requires at least one Run")
     if not isinstance(authorization_registry, CampaignAuthorizationRegistry):

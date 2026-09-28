@@ -82,6 +82,7 @@ from .founder_graph_neo4j_lifecycle import transition_asset_status_tx, transitio
 from .founder_graph_neo4j_relation_assertion import validate_relation_assertion_evidence_tx
 from .founder_graph_research_run import validate_research_run_timing
 from .idea_brief import IdeaBriefValidationError, IdeaBriefVersion
+from .idea_brief_read_projection import brief_section_has_readable_body
 from .founder_graph_historical_brief import HistoricalResearchValidationError, validate_historical_researched_brief
 from .source_citations import researched_evidence_ids
 
@@ -1877,7 +1878,10 @@ class Neo4jGraphGateway:
             if type(section_index) is not int or not 0 <= section_index < 8:
                 raise GraphWriteError("researched IdeaBrief section is invalid")
             section = brief.sections[section_index]
-            if not section.content.strip() or not set(selected_evidence).issubset(section.evidence_ids):
+            if (
+                not brief_section_has_readable_body(brief, section_index)
+                or not set(selected_evidence).issubset(section.evidence_ids)
+            ):
                 raise GraphWriteError("evidence is outside the selected researched section")
         if brief.research_run_ids:
             self._validate_brief_run_history_tx(tx, brief, primary)

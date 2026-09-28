@@ -13,6 +13,8 @@ from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_research import revoke_research_campaign, validate_research_run_timing
 from .founder_graph_write import GraphWriteError, GraphWritePort, IdempotencyConflictError, RevisionConflictError, WriteReceipt
 from .idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion, _REPORT_MARKDOWN_OMITTED
+from .idea_brief_read_projection import project_idea_brief_for_read
+from .markdown_report_projection import project_markdown_report
 from .source_citations import citation_metadata, evidence_lineage_is_current, researched_evidence_ids
 
 
@@ -297,7 +299,7 @@ class McpResearchCampaignSurface:
         }
         return definitions + (regular_brief, append_finding, {
             "name": "save_researched_idea_brief",
-            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。完成稿には正規8見出しを順番どおり一度ずつ含めてください。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。保存成功後にfetch_idea_briefで最新版を読み戻し、その内容と実在Evidenceを根拠にlink_entities・classify_entityで意味関係を登録してください。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
+            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。本文の正本はMarkdownです。sectionsには各章のindexと必要なClaim/Evidence等の注釈だけを渡し、contentは省略できます（旧クライアント互換のcontentは受け付けますが保存しません）。完成稿には正規8見出しを順番どおり一度ずつ含め、各章に本文を含めてください。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。保存成功後にfetch_idea_briefで最新版を読み戻し、その内容と実在Evidenceを根拠にlink_entities・classify_entityで意味関係を登録してください。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -310,10 +312,10 @@ class McpResearchCampaignSurface:
                     "sections": {
                         "type": "array", "minItems": 8, "maxItems": 8,
                         "items": {
-                            "type": "object", "required": ["index", "content"],
+                            "type": "object", "required": ["index"],
                             "properties": {
                                 "index": {"type": "integer", "minimum": 0, "maximum": 7},
-                                "content": {"type": "string", "maxLength": 4000},
+                                "content": {"type": "string", "maxLength": 4000, "description": "旧クライアント互換用。保存時は無視され、本文はreport_markdownから読み戻されます。"},
                                 "facts": ids, "inferences": ids, "unconfirmed": ids,
                                 "owner_decisions": ids, "claim_ids": ids, "evidence_ids": ids,
                             }, "additionalProperties": False,
@@ -737,14 +739,23 @@ class McpResearchCampaignSurface:
         if not isinstance(raw_sections, (tuple, list)) or len(raw_sections) != 8:
             raise ResearchCampaignInputError("researched IdeaBrief requires exactly eight viewpoints")
         try:
-            sections = tuple(IdeaBriefSection(**item) for item in raw_sections)
+            sections = tuple(replace(IdeaBriefSection(**item), content="") for item in raw_sections)
         except (TypeError, ValueError) as error:
             raise ResearchCampaignInputError("section content is invalid") from error
         report_markdown = args.get("report_markdown")
         if not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000:
             raise ResearchCampaignInputError("report_markdown must contain 1 through 60000 characters")
-        if _markdown_h2_headings(report_markdown) != SECTION_TITLES:
-            raise ResearchCampaignInputError("report_markdown must contain the canonical eight headings in order")
+        try:
+            markdown_projection = project_markdown_report(report_markdown)
+            read_projection = project_idea_brief_for_read(report_markdown, sections)
+        except (TypeError, ValueError):
+            raise ResearchCampaignInputError("report_markdown must contain the canonical eight headings in order") from None
+        if (
+            markdown_projection.heading_status != "complete"
+            or read_projection.markdown_projection is None
+            or not all(content.strip() for content in read_projection.section_contents)
+        ):
+            raise ResearchCampaignInputError("report_markdown must contain canonical eight headings in order with non-empty sections")
         if {section.index for section in sections} != set(range(8)):
             raise ResearchCampaignInputError("researched IdeaBrief must provide each viewpoint exactly once")
         change_reason = args.get("change_reason", "researched brief")
@@ -833,30 +844,6 @@ def _receipt(receipt: WriteReceipt, proposal: Mapping[str, Any] | None = None) -
 def _append_markdown_finding(current: str | None, finding: str, source_url: str) -> str:
     entry = f"- {finding}\n  - 出典: <{source_url}>"
     return f"{current.rstrip()}\n\n{entry}" if current and current.strip() else entry
-
-
-def _markdown_h2_headings(markdown: str) -> tuple[str, ...]:
-    headings: list[str] = []
-    fence_marker: str | None = None
-    fence_length = 0
-    for line in markdown.splitlines():
-        indent = len(line) - len(line.lstrip(" "))
-        stripped = line[indent:]
-        if indent <= 3 and stripped[:1] in {"`", "~"}:
-            marker = stripped[0]
-            length = len(stripped) - len(stripped.lstrip(marker))
-            if length >= 3:
-                remainder = stripped[length:]
-                if fence_marker is None:
-                    fence_marker, fence_length = marker, length
-                elif marker == fence_marker and length >= fence_length and not remainder.strip():
-                    fence_marker, fence_length = None, 0
-                continue
-        if fence_marker is not None:
-            continue
-        if indent <= 3 and stripped.startswith("## ") and not stripped.startswith("### "):
-            headings.append(stripped[3:].strip())
-    return tuple(headings)
 
 
 def _lookup_receipt(writes: Any, key: str, operation: str) -> WriteReceipt | None:

@@ -12,6 +12,7 @@ from .founder_graph_neo4j_idea import decode_persisted_idea
 from .founder_graph_lifecycle_resolver import resolve_restored_idea_reference
 from .founder_graph_write import GraphWritePort, WriteReceipt
 from .founder_graph import AssetKind
+from .idea_brief_read_projection import project_idea_brief_for_read
 
 
 _KINDS = ("idea", "asset", "owner_profile")
@@ -331,10 +332,12 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                 }
                 brief = briefs_by_root.get(idea_root(identity)) if briefs_by_root else None
                 if brief is not None and idea_aliases.get(brief.based_on_idea_id, brief.based_on_idea_id) == identity:
-                    display["brief_sections"] = [section.content for section in brief.sections]
+                    report_projection = project_idea_brief_for_read(brief.report_markdown, brief.sections)
+                    display["brief_sections"] = list(report_projection.section_contents)
                     display["brief_revision"] = brief.revision
                     if brief.report_markdown is not None:
                         display["report_markdown"] = brief.report_markdown
+                        display["report_projection"] = report_projection.metadata
                     if brief.origin is not None:
                         display["brief_origin"] = brief.origin
                     evidence_ids = tuple(dict.fromkeys(
@@ -355,7 +358,7 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                     has_citations = any(display["brief_citations"])
                     # Only the gated researched-save route retains Run references.
                     # Ordinary draft edits clear them; expiry does not erase history.
-                    if brief.research_run_ids and len(brief.sections) == 8 and all(section.content.strip() for section in brief.sections):
+                    if brief.research_run_ids and all(content.strip() for content in report_projection.section_contents):
                         display["research_status"] = "researched" if has_citations else "research_sources_missing"
                     elif brief.origin == "prior_research_import":
                         display["research_status"] = "prior_research_import" if has_citations else "prior_research_sources_missing"
