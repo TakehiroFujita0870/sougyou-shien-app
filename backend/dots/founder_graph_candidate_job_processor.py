@@ -34,6 +34,7 @@ from .relation_candidate_manifest import (
     preflight_relation_candidate_manifest,
     validate_relation_candidate_manifest,
 )
+from .source_citations import evidence_lineage_is_current
 
 
 class CandidateManifestConflictError(ValueError):
@@ -70,6 +71,10 @@ class RelationCandidateJobProcessor:
         current = self.jobs.get(job_id)
         if current is None or current.owner_id != self.owner_id:
             return None
+        if current.state is JobState.SUPERSEDED:
+            # Save-key replay for a stale Brief returns its truthful terminal state;
+            # this job can no longer write, regardless of any replayed manifest.
+            return current
         if raw_manifest is not None:
             if current.candidate_payload_persisted:
                 self._assert_manifest_matches_job(current, raw_manifest)
@@ -220,7 +225,9 @@ class RelationCandidateJobProcessor:
             entity_refs[identifier] = CandidateEntityRef(identifier, owner_id, kind)
             if kind is NodeType.EVIDENCE:
                 hydrated = self._hydrate_evidence(node)
-                if hydrated is not None:
+                if hydrated is not None and evidence_lineage_is_current(
+                    self.writes, identifier, self.owner_id,
+                ):
                     evidence[identifier] = hydrated
         return entity_refs, evidence
 

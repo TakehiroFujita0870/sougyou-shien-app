@@ -10,6 +10,7 @@ from typing import Literal, cast
 
 from .founder_graph import (
     DomainValidationError,
+    EgressPolicy,
     Evidence,
     NodeType,
     Provenance,
@@ -173,7 +174,10 @@ def _support_anchor(
 
 
 def _is_source_grounded_evidence(evidence: Evidence, owner_id: str) -> bool:
-    return evidence.owner_id == owner_id and evidence.status is Status.ACTIVE and evidence.content_chunk_id is not None
+    return (
+        evidence.owner_id == owner_id and evidence.status is Status.ACTIVE
+        and evidence.egress_policy is EgressPolicy.SHAREABLE and evidence.content_chunk_id is not None
+    )
 
 
 def _resolve_predicate(value: object) -> RelationType:
@@ -307,7 +311,7 @@ def validate_relation_candidate_manifest(
                 if evidence.owner_id != latest_brief.owner_id:
                     _fail("candidate Evidence owner does not match the Brief")
                 if not _is_source_grounded_evidence(evidence, latest_brief.owner_id):
-                    _fail("candidate Evidence must be active source-grounded Evidence")
+                    _fail("candidate Evidence must be active source-grounded, shareable Evidence")
 
         semantic_key = (source_id, predicate, target_id)
         if semantic_key in semantic_keys:

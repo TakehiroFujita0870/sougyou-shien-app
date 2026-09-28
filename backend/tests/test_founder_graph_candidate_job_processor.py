@@ -2,7 +2,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 
 from dots.founder_graph import (
-    Asset, Claim, Evidence, Idea, MaterialKind, NodeType, RelationAssertion,
+    Asset, Claim, EgressPolicy, Evidence, Idea, MaterialKind, NodeType, RelationAssertion,
     Source, SourceRevision, Status,
 )
 from dots.founder_graph_job_store import (
@@ -288,16 +288,22 @@ def test_external_evidence_candidate_is_rechecked_and_applied_with_source_ground
     source = Source(
         owner_id=OWNER, id="source-test", title="倉庫調査", kind=MaterialKind.WEB,
         locator="https://example.test/warehouse", current_revision_id="revision-test", revision=1,
+        egress_policy=EgressPolicy.SHAREABLE,
     )
     revision = SourceRevision(
         owner_id=OWNER, id="revision-test", source_id=source.id,
         content="A warehouse is required.", locator=source.locator, revision=1,
+        egress_policy=EgressPolicy.SHAREABLE,
     )
     source_receipt = writes.capture_source(source, revision, idempotency_key="source")
-    claim = Claim(owner_id=OWNER, id="claim-test", text="A warehouse is required")
+    claim = Claim(
+        owner_id=OWNER, id="claim-test", text="A warehouse is required",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
     writes.put_node(claim, idempotency_key="claim", operation="append_claim")
     evidence_receipt = writes.capture_evidence(
-        claim.id, source_receipt.content_chunk_ids[0], idempotency_key="evidence",
+        claim.id, source_receipt.content_chunk_ids[0], egress_policy=EgressPolicy.SHAREABLE,
+        idempotency_key="evidence",
     )
     evidence = writes.get_node(evidence_receipt.target_id)
     assert isinstance(evidence, Evidence)
@@ -328,6 +334,46 @@ def test_external_evidence_candidate_is_rechecked_and_applied_with_source_ground
     assert assertions[0].based_on_brief_quote_end is None
 
 
+def test_stale_lineage_evidence_is_rejected_before_assertion_write(monkeypatch):
+    writes = InMemoryGraphWriteService(OWNER)
+    idea = Idea(id=IDEA, owner_id=OWNER, title="倉庫案", status=Status.ACTIVE)
+    asset = Asset(id=ASSET, owner_id=OWNER, name="倉庫", description="保管場所")
+    writes.put_node(idea, idempotency_key="idea", expected_revision=0)
+    writes.put_node(asset, idempotency_key="asset", expected_revision=0)
+    evidence = Evidence(
+        owner_id=OWNER, id="evidence-stale", claim_id="claim-test",
+        source_revision_id="old-revision", content_chunk_id="old-chunk",
+        char_start=0, char_end=4, locator="chars:0-4", content_hash="a" * 64,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    get_node = writes.get_node
+    monkeypatch.setattr(
+        writes, "get_node",
+        lambda identifier: evidence if identifier == evidence.id else get_node(identifier),
+    )
+    brief = _brief()
+    jobs = MemoryJobStore(brief)
+    writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key="brief")
+    monkeypatch.setattr(
+        "dots.founder_graph_candidate_job_processor.evidence_lineage_is_current",
+        lambda *_args: False,
+    )
+    processor = RelationCandidateJobProcessor(
+        jobs=jobs, writes=writes, brief_store=writes, worker_id="inline-worker",
+    )
+    manifest = _manifest() | {"candidates": [{
+        "source_id": IDEA, "target_id": ASSET, "predicate": "REQUIRES_CAPABILITY",
+        "basis": "external_evidence", "support": {"section_index": 0},
+        "evidence_ids": [evidence.id],
+    }]}
+
+    result = processor.process_specific(jobs.job.id, raw_manifest=manifest)
+
+    assert result.state is JobState.PENDING
+    assert result.last_error_code == "candidate_manifest_invalid"
+    assert not any(isinstance(node, RelationAssertion) for node in writes.nodes())
+
+
 def test_old_job_is_superseded_before_applying_against_new_brief():
     writes, brief = _context()
     jobs = MemoryJobStore(brief)
@@ -341,3 +387,5 @@ def test_old_job_is_superseded_before_applying_against_new_brief():
 
     assert result.state is JobState.SUPERSEDED and result.last_error_code == "stale_version"
     assert not any(isinstance(node, RelationAssertion) for node in writes.nodes())
+    replay = processor.process_specific(jobs.job.id, raw_manifest=_manifest())
+    assert replay == result
