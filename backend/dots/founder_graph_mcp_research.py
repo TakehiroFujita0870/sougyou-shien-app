@@ -276,12 +276,12 @@ class McpResearchCampaignSurface:
         }
         return definitions + (regular_brief, {
             "name": "save_researched_idea_brief",
-            "description": "終了済みcompleted Runと現行許諾を検証した後にだけ、Ideaの8観点すべてが埋まった概要版を正式保存します。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceはすべて同じ所有者・現行・共有可の出典系譜であることを検証します。外部根拠に依拠する章へ実在するIDを紐付け、出典のない章へ架空IDを付けないでください。このツールは調査やfactの正しさの保証を行いません。出典不足や部分下書きはsave_idea_briefを使います。",
+            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。全文は必須です。保存成功後にfetch_idea_briefで最新版を読み戻し、その内容と実在Evidenceを根拠にlink_entities・classify_entityで意味関係を登録してください。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
                 "type": "object",
-                "required": ["idea_id", "expected_revision", "sections", "research_run_ids", "idempotency_key"],
+                "required": ["idea_id", "expected_revision", "sections", "research_run_ids", "report_markdown", "idempotency_key"],
                 "properties": {
                     "idea_id": {**text, "maxLength": 200},
                     "idea_lineage_root_id": {**text, "maxLength": 200},
@@ -300,7 +300,7 @@ class McpResearchCampaignSurface:
                     },
                     "research_run_ids": {"type": "array", "minItems": 1, "maxItems": 20, "items": {**text, "maxLength": 200}},
                     "change_reason": {"type": "string", "maxLength": 500},
-                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成したMarkdownレポート全文。8観点と出典IDの対応を別途保持します。"},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成した8章のMarkdownレポート全文。根拠を確認した出典URLを記し、必要に応じて表・公開画像・図を含めます。画像や数値を創作しません。8観点と出典IDの対応はsectionsにも保持します。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "idempotency_key": idempotency,
                 }, "additionalProperties": False,
@@ -601,7 +601,7 @@ class McpResearchCampaignSurface:
         except (TypeError, ValueError) as error:
             raise ResearchCampaignInputError("section content is invalid") from error
         report_markdown = args.get("report_markdown")
-        if report_markdown is not None and (not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000):
+        if not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000:
             raise ResearchCampaignInputError("report_markdown must contain 1 through 60000 characters")
         if {section.index for section in sections} != set(range(8)):
             raise ResearchCampaignInputError("researched IdeaBrief must provide each viewpoint exactly once")

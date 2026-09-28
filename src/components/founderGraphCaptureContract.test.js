@@ -31,9 +31,12 @@ it('requires original public source metadata and distinct claim, evidence, run, 
 });
 
 it('requires evidence for a researched brief without fabricating evidence for every chapter', () => {
-  expect(skill).toContain('概要全体で少なくとも1件の現行・共有可能な出典Evidence');
+  expect(skill).toContain('少なくとも1件の現行・共有可能な出典Evidence');
   expect(skill).toContain('外部根拠に依拠する章だけに実在IDを紐付け');
   expect(skill).toContain('全8章にEvidence IDを捏造しない');
+  expectInOrder('Markdownの完成稿として先に書く', '全文を必ず`report_markdown`へ渡し', '`save_researched_idea_brief`の成功結果', '`fetch_idea_brief`', '`link_entities`');
+  expect(skill).toContain('保存した関係・分類を読み戻して確認する');
+  expect(skill).toContain('レポートは保存済み・グラフは未完了と分けて伝える');
 });
 
 it('allows evidence based relationship updates without extra graph approval while retaining safety boundaries', () => {
@@ -43,6 +46,6 @@ it('allows evidence based relationship updates without extra graph approval whil
   expect(skill).toContain('URL・タイトルを推測で作らない');
   expect(skill).toContain('訂正後の検索で旧判断を現行として返さない');
   expectInOrder('`search_facets`', '`capture_facet`', '`classify_entity`', '`relate_facets`');
-  expect(skill).toContain('その判断を実際に支える共有可能なEvidence ID');
-  expect(skill).toContain('Ideaを含む意味関係およびIdeaの分類には最新版の概要IDと該当章番号も指定する');
+  expect(skill).toContain('実際に支える現行・共有可能なEvidence ID');
+  expect(skill).toContain('Ideaを含む場合は読み戻した最新版概要IDと該当章番号を指定する');
 });
