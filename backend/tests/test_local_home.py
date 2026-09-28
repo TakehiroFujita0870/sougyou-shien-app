@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
+from dots.founder_graph import Idea, Provenance, Status
+from dots.founder_graph_neo4j import _node_properties
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.local_home import Neo4jHomeStore, read_local_home
 
@@ -177,6 +179,43 @@ def test_home_does_not_overlay_a_brief_based_on_a_previous_idea_revision():
     assert result["ideas"][0]["summary"] == "現在の説明"
     assert "brief_sections" not in result["ideas"][0]
     assert "改訂前だけの説明" not in json.dumps(result, ensure_ascii=False)
+
+
+def test_local_title_edit_keeps_current_research_brief_visible():
+    original = Idea(id="idea-root", owner_id="owner-a", title="元の題名", status=Status.ACTIVE)
+    revised = original.revise(title="新しい題名")
+    revised = replace(revised, provenance=Provenance(
+        actor="local-owner", operation="revise_idea", target_id=revised.id, source_id=original.id,
+        idempotency_key="edit-idea",
+    ))
+    rows = [_node_properties(idea) for idea in (original, revised)]
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id=original.id, based_on_idea_id=original.id,
+        sections=(IdeaBriefSection(index=0, content="調査結果を維持する"),),
+    )
+    result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")
+    assert result["status"] == "ready"
+    assert len(result["ideas"]) == 1
+    assert result["ideas"][0]["title"] == "新しい題名"
+    assert result["ideas"][0]["brief_sections"][0] == "調査結果を維持する"
+
+
+def test_local_description_edit_keeps_old_brief_in_history_not_current_display():
+    original = Idea(id="idea-root", owner_id="owner-a", title="元の題名", status=Status.ACTIVE)
+    revised = original.revise(description="事業内容を変更")
+    revised = replace(revised, provenance=Provenance(
+        actor="local-owner", operation="revise_idea", target_id=revised.id, source_id=original.id,
+        idempotency_key="edit-description",
+    ))
+    rows = [_node_properties(idea) for idea in (original, revised)]
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id=original.id, based_on_idea_id=original.id,
+        sections=(IdeaBriefSection(index=0, content="変更前の調査結果"),),
+    )
+    result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")
+    assert result["status"] == "ready"
+    assert "brief_sections" not in result["ideas"][0]
+    assert result["ideas"][0]["research_status"] == "unresearched"
 
 
 def test_home_shows_researched_only_for_current_complete_brief_with_run_references():

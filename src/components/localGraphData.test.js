@@ -1,12 +1,13 @@
 import { expect, it } from 'vitest';
 import { semanticGraphData, regionGraphData } from './localGraphData.js';
 
-it('keeps semantic assertions and hides internal revision scaffolding without changing the input', () => {
-  const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' }],
+it('keeps semantic assertions and hides internal research and revision records without changing the input', () => {
+  const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' },
+    { id: 'claim', kind: 'claim', label: 'claim' }, { id: 'brief', kind: 'idea_brief_version', label: 'idea brief version' }],
     edges: [{ source: 'idea', target: 'history', label: 'HAS_REVISION' }],
     semantic_edges: [{ id: 'relation', source_id: 'idea', target_id: 'asset', predicate: 'REUSES', status: 'inferred', evidence_ids: ['evidence'] }] };
   const original = JSON.stringify(graph);
-  expect(semanticGraphData(graph).edges).toMatchObject([{ source: 'idea', target: 'asset', assertionId: 'relation', label: 'REUSES', evidenceIds: ['evidence'] }]);
+  expect(semanticGraphData(graph).edges).toMatchObject([{ source: 'idea', target: 'asset', assertionId: 'relation', label: '再利用する', evidenceIds: ['evidence'] }]);
   expect(semanticGraphData(graph).nodes.map(node => node.id)).toEqual(['idea', 'asset']);
   expect(JSON.stringify(graph)).toBe(original);
 });

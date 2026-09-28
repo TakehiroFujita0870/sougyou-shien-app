@@ -92,6 +92,7 @@ export function createLocalDashboardClient({
   const origin = assertLocalOrigin(location);
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch must be available.');
   const assetWriteIntents = new Map();
+  const ideaWriteIntents = new Map();
   const recordLifecycleIntents = new Map();
 
   async function request(path, { method = 'GET', signal, headers = {}, body } = {}) {
@@ -354,6 +355,37 @@ export function createLocalDashboardClient({
     return { id: result.id, revision: result.revision };
   }
 
+  async function saveIdea(ideaId, { title, description, expectedRevision } = {}, { signal } = {}) {
+    if (typeof ideaId !== 'string' || !ideaId || typeof title !== 'string' || !title.trim() || title.trim().length > 200
+      || typeof description !== 'string' || description.length > 4000 || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      throw new LocalDashboardClientError('error');
+    }
+    const normalizedTitle = title.trim();
+    const intent = JSON.stringify([normalizedTitle, description, expectedRevision]);
+    let write = ideaWriteIntents.get(ideaId);
+    if (!write || write.intent !== intent) {
+      const idempotencyKey = createIdempotencyKey();
+      if (typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 128) throw new LocalDashboardClientError('error');
+      write = { intent, idempotencyKey };
+      ideaWriteIntents.set(ideaId, write);
+    }
+    const { csrfToken } = await readStatus(signal);
+    const result = await request(`/api/ideas/${encodeURIComponent(ideaId)}`, {
+      method: 'PUT', signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({
+        title: normalizedTitle,
+        description,
+        expected_revision: expectedRevision,
+        idempotency_key: write.idempotencyKey,
+      }),
+    });
+    if (typeof result.id !== 'string' || !result.id || !Number.isSafeInteger(result.revision) || result.revision !== expectedRevision + 1) {
+      throw new LocalDashboardClientError('error');
+    }
+    return { id: result.id, revision: result.revision };
+  }
+
   async function getDeletedRecords({ signal } = {}) {
     const result = await request('/api/deleted-records', { signal });
     if (!['ready', 'empty', 'stopped', 'failed'].includes(result.status) || !Array.isArray(result.records)) throw new LocalDashboardClientError('error');
@@ -418,6 +450,7 @@ export function createLocalDashboardClient({
     getSemanticEdgeProvenance,
     getFacetRegion,
     saveAsset,
+    saveIdea,
     getDeletedRecords,
     archiveRecord: (kind, id, revision, options) => changeRecordStatus('archive', kind, id, revision, options),
     restoreRecord: (kind, id, revision, options) => changeRecordStatus('restore', kind, id, revision, options),

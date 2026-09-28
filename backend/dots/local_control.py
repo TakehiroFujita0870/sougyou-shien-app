@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
 from dots.local_overview import COUNT_BASIS, OverviewResult, OverviewStore, read_local_overview
-from dots.local_home import HomeStore, LocalAssetWriter, read_local_home
+from dots.local_home import HomeStore, LocalAssetWriter, LocalIdeaWriter, read_local_home
 from dots.founder_graph_write import GraphWriteNotFoundError, IdempotencyConflictError, RevisionConflictError
 from dots.founder_graph_neo4j import Neo4jGatewayError, Neo4jUnavailableError
 from dots.local_record_lifecycle import LocalRecordLifecycleWriter, read_local_deleted_records
@@ -53,6 +53,14 @@ class AssetEdit(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(max_length=4000)
     expected_revision: StrictInt = Field(gt=0)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class IdeaEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(max_length=4000)
+    expected_revision: StrictInt = Field(ge=0)
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
@@ -155,6 +163,7 @@ def create_local_control_app(
     graph_view_store: GraphViewStore | None = None,
     self_intro_writer: SelfIntroductionWriter | None = None,
     asset_writer: LocalAssetWriter | None = None,
+    idea_writer: LocalIdeaWriter | None = None,
     record_lifecycle_writer: LocalRecordLifecycleWriter | None = None,
 ) -> FastAPI:
     """Create the API and reject non-loopback deployment configurations."""
@@ -340,6 +349,31 @@ def create_local_control_app(
         except Exception:
             return JSONResponse(status_code=503, content={"status": "failed"})
         return JSONResponse(content=result)
+
+    @app.put("/api/ideas/{idea_id}")
+    async def save_idea(
+        idea_id: str, request: Request, payload: IdeaEdit,
+        authorization: str | None = Header(default=None),
+        x_csrf_token: str | None = Header(default=None),
+    ) -> JSONResponse:
+        await authorize(request, authorization, x_csrf_token)
+        if idea_writer is None or not overview_owner_id:
+            raise HTTPException(status_code=503, detail="Idea editing is unavailable")
+        try:
+            receipt = idea_writer.save(
+                idea_id, title=payload.title, description=payload.description,
+                expected_revision=payload.expected_revision,
+                idempotency_key=payload.idempotency_key,
+            )
+        except GraphWriteNotFoundError:
+            raise HTTPException(status_code=404, detail="Idea was not found") from None
+        except (RevisionConflictError, IdempotencyConflictError):
+            raise HTTPException(status_code=409, detail="Idea changed; reload before saving") from None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Idea edit") from None
+        except Exception:
+            return JSONResponse(status_code=503, content={"status": "failed"})
+        return JSONResponse(content={"id": receipt.target_id, "revision": receipt.revision, "replayed": receipt.replayed})
 
     @app.put("/api/assets/{asset_id}")
     async def save_asset(

@@ -47,6 +47,14 @@ def test_resolver_does_not_revive_reference_across_content_edit() -> None:
     assert resolve_restored_idea_reference(root.id, (root, archived, restored, edited)) is None
 
 
+def test_title_only_local_correction_retains_reference_but_description_change_does_not() -> None:
+    root = Idea(id="idea-original", owner_id="owner", title="旧題名", status=Status.ACTIVE)
+    renamed = replace(_successor(root, node_id="idea-renamed", status=Status.ACTIVE, operation="revise_idea"), title="新題名")
+    assert resolve_restored_idea_reference(root.id, (root, renamed)) is renamed
+    changed = replace(_successor(root, node_id="idea-changed", status=Status.ACTIVE, operation="revise_idea"), description="新しい事業内容")
+    assert resolve_restored_idea_reference(root.id, (root, changed)) is None
+
+
 def test_resolver_rejects_changed_share_policy_and_wrong_owner() -> None:
     root, archived, restored = _restored_chain()
     changed = replace(restored, egress_policy=EgressPolicy.SHAREABLE)

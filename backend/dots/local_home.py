@@ -84,6 +84,24 @@ class LocalAssetWriter:
         )
 
 
+class LocalIdeaWriter:
+    """Owner-scoped title/description revisions for the selected Idea."""
+
+    def __init__(self, writes: Any) -> None:
+        if not callable(getattr(writes, "revise_idea", None)):
+            raise TypeError("idea writer must support canonical revisions")
+        self._writes = writes
+
+    def save(
+        self, idea_id: str, *, title: str, description: str,
+        expected_revision: int, idempotency_key: str,
+    ) -> WriteReceipt:
+        return self._writes.revise_idea(
+            idea_id=idea_id, title=title, description=description,
+            expected_revision=expected_revision, idempotency_key=idempotency_key,
+        )
+
+
 def _text(value: Any, *, required: bool = False) -> str:
     if not isinstance(value, str):
         if required:
@@ -167,7 +185,7 @@ def _decode_lifecycle_idea_families(
     markers = {
         identity for identity, payload in payloads.items()
         if isinstance(payload.get("provenance"), Mapping)
-        and payload["provenance"].get("operation") in {"archive_idea", "restore_idea"}
+        and payload["provenance"].get("operation") in {"archive_idea", "restore_idea", "revise_idea"}
     }
     if not markers:
         return {}
@@ -334,6 +352,9 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                         display["research_status"] = "researched" if has_citations else "research_sources_missing"
                     elif brief.origin == "prior_research_import":
                         display["research_status"] = "prior_research_import" if has_citations else "prior_research_sources_missing"
+                elif brief is not None and isinstance(payload.get("provenance"), Mapping) and payload["provenance"].get("operation") == "revise_idea":
+                    # Research for the prior content remains in history, not current.
+                    display["research_status"] = "unresearched"
                 ideas.append((timestamp, display))
             elif kind == "asset":
                 if identity in superseded_assets:

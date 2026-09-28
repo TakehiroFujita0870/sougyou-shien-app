@@ -3,7 +3,7 @@
   --color-surface: #1b293b;
   --color-muted: #aab8ce;
   --color-text: #e9eef8;
-  --color-text-muted: #aab8ce;
+  --color-text-muted: #c7d3e6;
   --color-border-subtle: #344158;
   --color-primary: #cbd9f3;
   --color-focus: #d5b97f;
@@ -23,7 +23,7 @@
 .local-shell__brand-mark img { width: 69px; height: 69px; left: -16px; top: -7px; }
 .local-shell__brand-word img { width: 163px; height: 163px; left: -33px; top: -121px; }
 .local-shell__nav { display: grid; gap: 6px; margin-top: 34px; }
-.local-shell__nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: #bac7db; font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
+.local-shell__nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: #d3deef; font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
 .local-shell__nav button[aria-current='page'], .local-shell__nav button:hover { background: #232e42; color: #eef3ff; }
 .local-shell__nav button[aria-current='page'] { box-shadow: inset 3px 0 #c6d9f8; }
 .local-shell__nav button span { width: 18px; flex: none; font-size: 18px; line-height: 18px; text-align: center; }

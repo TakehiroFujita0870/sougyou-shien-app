@@ -1,0 +1,5 @@
+.local-control__lamp { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 50%; }
+.local-control__lamp--running { background: #48d597; box-shadow: 0 0 0 2px #164332; }
+.local-control__lamp--stopped { background: #fb6b72; box-shadow: 0 0 0 2px #63252b; }
+.local-control__stop-button { border-color: #b74650; background: #9e2734; color: #fff; }
+.local-control__stop-button:hover:not(:disabled) { background: #b33340; }

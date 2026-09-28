@@ -150,6 +150,44 @@ def _seed_gateway(node: Idea | Asset):
     return driver, Neo4jGraphGateway(driver, node.owner_id)
 
 
+def test_neo4j_idea_edit_preserves_research_fields_and_replays_without_new_revision() -> None:
+    original = Idea(id="idea-edit", owner_id="owner-lifecycle", title="元の題名",
+                    description="元の説明", summary="調査済み概要", status=Status.ACTIVE)
+    driver, gateway = _seed_gateway(original)
+    result = gateway.revise_idea(
+        idea_id=original.id, title="新しい題名", description="元の説明",
+        expected_revision=0, idempotency_key="edit-idea-1",
+    )
+    saved = gateway._decode_idea_record(driver.session_value._record(driver.session_value.nodes[result.target_id]))
+    assert saved.title == "新しい題名" and saved.description == "元の説明"
+    assert saved.summary == original.summary and saved.status == original.status
+    assert saved.supersedes_id == original.id and saved.revision == 1
+    assert driver.session_value.nodes[original.id]["status"] == Status.ACTIVE.value
+    replay = gateway.revise_idea(
+        idea_id=original.id, title="新しい題名", description="元の説明",
+        expected_revision=0, idempotency_key="edit-idea-1",
+    )
+    assert replay.replayed and replay.target_id == result.target_id
+    assert len(driver.session_value.nodes) == 2
+    with pytest.raises(RevisionConflictError):
+        gateway.revise_idea(idea_id=original.id, title="別案", description="", expected_revision=0, idempotency_key="edit-idea-2")
+    with pytest.raises(IdempotencyConflictError):
+        gateway.revise_idea(idea_id=original.id, title="別案", description="", expected_revision=0, idempotency_key="edit-idea-1")
+
+
+def test_neo4j_idea_description_edit_does_not_reuse_old_research_summary() -> None:
+    original = Idea(id="idea-description", owner_id="owner-lifecycle", title="事業案",
+                    description="旧内容", summary="旧内容に基づく調査", status=Status.ACTIVE)
+    driver, gateway = _seed_gateway(original)
+    receipt = gateway.revise_idea(
+        idea_id=original.id, title=original.title, description="新内容",
+        expected_revision=0, idempotency_key="edit-description",
+    )
+    saved = gateway._decode_idea_record(driver.session_value._record(driver.session_value.nodes[receipt.target_id]))
+    assert saved.description == "新内容" and saved.summary == ""
+    assert gateway._decode_idea_record(driver.session_value._record(driver.session_value.nodes[original.id])).summary == "旧内容に基づく調査"
+
+
 @pytest.mark.parametrize("kind", ["idea", "asset"])
 def test_neo4j_lifecycle_archive_restore_matches_memory_and_replay_is_noop(kind: str) -> None:
     owner_id = "owner-lifecycle"

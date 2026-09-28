@@ -184,11 +184,11 @@ def decode_asset_lifecycle_record(
 
 
 def resolve_restored_idea_reference(reference_id: str, chain: Sequence[Idea]) -> Idea | None:
-    """Return the active tip only when ``reference_id`` crosses lifecycle-only successors.
+    """Return the active tip across lifecycle or title-only corrections.
 
-    This is deliberately not a general revision alias: any content revision,
-    malformed lineage, branch, owner change, or altered shareability/content
-    permanently prevents old references from becoming current again.
+    This is deliberately not a general content-revision alias: description,
+    research content, lineage, owner, or shareability changes invalidate old
+    references. A title correction alone does not change the cited substance.
     """
 
     if not isinstance(reference_id, str) or not reference_id or not chain:
@@ -211,7 +211,7 @@ def resolve_restored_idea_reference(reference_id: str, chain: Sequence[Idea]) ->
         provenance = current.provenance
         operation = provenance.operation
         if (
-            current.title != previous.title
+            (current.title != previous.title and operation != "revise_idea")
             or current.summary != previous.summary
             or current.description != previous.description
             or current.source_text != previous.source_text
@@ -230,6 +230,9 @@ def resolve_restored_idea_reference(reference_id: str, chain: Sequence[Idea]) ->
             expected = next((item.status for item in reversed(chain[:position - 1])
                              if item.status is not Status.ARCHIVED), None)
             if expected in _NON_CURRENT_IDEA_STATUSES or current.status is not expected:
+                return None
+        elif operation == "revise_idea":
+            if previous.status in _NON_CURRENT_IDEA_STATUSES or current.status is not previous.status:
                 return None
         else:
             return None

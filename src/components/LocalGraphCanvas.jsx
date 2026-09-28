@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { graphDepthForKind, nextGraphDepth, visibleAtGraphDepth, visibleGraphLink } from './localGraphDepth';
-import { COLORS, relationStatusLabel, initialPosition, shortLabel } from './localGraphPresentation.js';
+import { COLORS, nodeKindLabel, relationStatusLabel, initialPosition, shortLabel } from './localGraphPresentation.js';
 
 export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, regionHits = [], anchorId = '' }) {
   const container = useRef(null);
@@ -198,7 +198,7 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
     <div ref={container} className="local-graph__canvas" role="img" aria-label={`立体の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。スクロールで奥の詳細へ進む`} />
     <p className="local-graph__depth" role="status">深度 {depth + 1} / 4 · スクロールで抽象から具体へ</p>
     {renderError && <p role="alert">立体グラフを描画できませんでした。このPCの描画機能を確認してください。</p>}
-    {selected?.type === 'node' && <aside className="local-graph__selected"><span>{selected.kind.replaceAll('_', ' ')}</span><strong>{selected.label}</strong></aside>}
+    {selected?.type === 'node' && <aside className="local-graph__selected"><span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong></aside>}
     {selected?.type === 'semantic-edge' && <aside className="local-graph__selected" aria-label="意味関係と根拠">
       <span>{relationStatusLabel(selected.status)}{typeof selected.confidence === 'number' ? ` · 確信度 ${Math.round(selected.confidence * 100)}%` : ''}</span>
       <strong>{selected.label}</strong>
