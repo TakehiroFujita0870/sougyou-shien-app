@@ -40,6 +40,14 @@ def test_graph_stopped_empty_and_foreign_owner_fail_closed():
     assert read_local_graph(Store([node("x", owner="other")]), owner_id="owner-mvp")["status"] == "failed"
 
 
+def test_graph_uses_japanese_kind_label_when_safe_title_is_missing():
+    claim = node("claim-1", kind="claim")
+    claim["payload_json"] = json.dumps({"id": "claim-1", "owner_id": "owner-mvp", "text": "非公開の主張"})
+    result = read_local_graph(Store([claim]), owner_id="owner-mvp")
+    assert result["nodes"] == [{"id": "claim-1", "kind": "claim", "label": "主張"}]
+    assert "非公開の主張" not in str(result)
+
+
 def test_facet_region_projection_exposes_status_and_opaque_evidence_only():
     store = Store()
     store.facet_hits = (FacetRegionHit(

@@ -14,6 +14,16 @@ MAX_NODES = 200
 MAX_EDGES = 400
 _EXCLUDED = frozenset({"deleted", "archived", "superseded", "retracted", "expired", "cancelled", "revoked"})
 _TITLES = {"idea": "title", "asset": "name", "person": "name", "organization": "name", "owner_profile": "display_name", "source": "title", "research_campaign": "title", "facet": "value"}
+_KIND_LABELS = {
+    "owner_profile": "本人", "idea": "アイデア", "asset": "アセット", "person": "人物",
+    "organization": "組織", "source": "出典", "research_material": "調査資料",
+    "source_revision": "出典の版", "evidence": "根拠", "claim": "主張",
+    "research_campaign": "調査", "research_run": "調査の実行", "report_version": "調査レポート",
+    "report_section": "レポートの章", "decision": "判断", "experiment": "実験",
+    "instruction_artifact": "作業指示", "entity_revision": "記録の版",
+    "relation_assertion": "関係", "content_chunk": "資料の一部", "facet": "分類",
+    "idea_brief_version": "アイデアの概要", "audit_event": "変更履歴", "capture_audit": "保存履歴",
+}
 _EMPTY = {"status": "empty", "nodes": [], "edges": [], "semantic_edges": [], "truncated": False}
 _ACTIVE_ASSERTION_STATUSES = frozenset({"proposed", "inferred", "confirmed"})
 
@@ -111,7 +121,7 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
             field = _TITLES.get(kind)
             label = payload.get(field) if field else None
             if not isinstance(label, str) or not label.strip():
-                label = kind.replace("_", " ")
+                label = _KIND_LABELS.get(kind, "記録")
             nodes.append({"id": identity, "kind": kind, "label": label.strip()[:100]})
         included = {node["id"] for node in nodes}
         raw_edges = store.read_edges(owner_id, list(included)) if included else ()

@@ -1006,6 +1006,65 @@ class Neo4jGraphGateway:
                 fingerprint, successor_id,
             ))
 
+    def revise_idea(
+        self, *, idea_id: str, title: str, description: str,
+        expected_revision: int, idempotency_key: str, actor: str = "local-owner",
+    ) -> WriteReceipt:
+        """Append a title/description correction without altering research evidence."""
+        if not isinstance(idea_id, str) or not idea_id.strip():
+            raise GraphWriteError("idea_id must be a non-empty string")
+        if not isinstance(title, str) or not title.strip() or len(title.strip()) > 200:
+            raise GraphWriteError("idea title must contain 1 to 200 characters")
+        if not isinstance(description, str) or len(description) > 4000:
+            raise GraphWriteError("idea description must contain at most 4000 characters")
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise GraphWriteError("expected Idea revision must be non-negative")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise GraphWriteError("idempotency_key must be a non-empty string")
+        if not isinstance(actor, str) or not actor.strip():
+            raise GraphWriteError("actor must be a non-empty string")
+        idea_id, title, idempotency_key, actor = idea_id.strip(), title.strip(), idempotency_key.strip(), actor.strip()
+        fingerprint = payload_fingerprint("revise_idea", idea_id, title, description, expected_revision, self.owner_id)
+        successor_id = f"idea_{sha256(f'{self.owner_id}:revise_idea:{idempotency_key}'.encode()).hexdigest()[:32]}"
+        with self._session() as session:
+            return self._execute_write(session, lambda tx: self._revise_idea_tx(
+                tx, idea_id, title, description, expected_revision, idempotency_key, actor,
+                fingerprint, successor_id,
+            ))
+
+    def _revise_idea_tx(
+        self, tx: Any, idea_id: str, title: str, description: str, expected_revision: int,
+        key: str, actor: str, fingerprint: str, successor_id: str,
+    ) -> WriteReceipt:
+        replay = self._put_node_replay_tx(tx, operation="revise_idea", idempotency_key=key, fingerprint=fingerprint)
+        if replay is not None:
+            return replay
+        supplied = self._decode_idea_record(self._idea_record_tx(tx, idea_id), expected_id=idea_id)
+        root_id = self._idea_root_for_tx(tx, supplied.id)
+        chain = self._lock_current_idea_tx(tx, root_id)
+        replay = self._put_node_replay_tx(tx, operation="revise_idea", idempotency_key=key, fingerprint=fingerprint)
+        if replay is not None:
+            return replay
+        current = chain[-1]
+        if current.id != idea_id or current.revision != expected_revision:
+            raise RevisionConflictError("Idea changed; reload its current revision")
+        if current.status in _NON_CURRENT_IDEA_STATUSES:
+            raise GraphWriteNotFoundError("Idea is not available for editing")
+        successor = replace(
+            current, id=successor_id, title=title, description=description,
+            summary=current.summary if description == current.description else "",
+            revision=current.revision + 1, supersedes_id=current.id,
+            created_at=datetime.now(timezone.utc), updated_at=None,
+            provenance=Provenance(
+                actor=actor, operation="revise_idea", target_id=successor_id,
+                source_id=current.id, idempotency_key=key,
+            ),
+        )
+        return self._put_node_tx(
+            tx, successor, NodeType.IDEA, self.label_for(NodeType.IDEA),
+            key, 0, "revise_idea", actor, fingerprint,
+        )
+
     def archive_idea(
         self, idea_id: str, *, expected_revision: int, idempotency_key: str,
         actor: str = "local-owner",

@@ -258,8 +258,8 @@ describe('LocalGraphSurface Facet exploration', () => {
     const projection = semanticGraphData(await client.getGraph());
     expect(projection.nodes.map((node) => node.id)).toEqual(['idea-1', 'asset-1']);
     expect(projection.edges).toEqual([
-      expect.objectContaining({ source: 'idea-1', target: 'asset-1', label: 'USES', assertionId: 'meaning-1' }),
-      expect.objectContaining({ source: 'asset-1', target: 'idea-1', label: 'SUPPORTS', assertionId: 'meaning-confirmed' }),
+      expect.objectContaining({ source: 'idea-1', target: 'asset-1', label: '利用する', assertionId: 'meaning-1' }),
+      expect.objectContaining({ source: 'asset-1', target: 'idea-1', label: '支える', assertionId: 'meaning-confirmed' }),
     ]);
     expect(semanticGraphData({ ...(await client.getGraph()), semantic_edges: undefined }).edges).toEqual([]);
     expect(container.textContent).not.toContain('assertion-1');

@@ -12,7 +12,7 @@ const IDEA_SECTIONS = [
   '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
 ];
 const researchStatusLabel = (status) => status === 'prior_research_sources_missing' ? '過去調査・現在の出典を表示できません' : status === 'prior_research_import' ? '過去調査を取り込みました' : status === 'research_sources_missing' ? '調査済み・出典を表示できません' : status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '調査状態未確認';
-const compactResearchStatusLabel = (status) => status === 'prior_research_sources_missing' || status === 'prior_research_import' ? '過去調査あり' : status === 'research_sources_missing' ? '調査済み・出典未表示' : status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '状態未確認';
+const compactResearchStatusLabel = (status) => ['prior_research_sources_missing', 'prior_research_import', 'research_sources_missing', 'researched'].includes(status) ? '調査済み' : status === 'unresearched' ? '未調査' : null;
 
 function HomeTabIcon({ name }) {
   const paths = {
@@ -43,6 +43,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const [assetDraft, setAssetDraft] = useState(null);
   const [assetSaving, setAssetSaving] = useState(false);
   const [assetNotice, setAssetNotice] = useState('');
+  const [ideaDraft, setIdeaDraft] = useState(null);
+  const [ideaSaving, setIdeaSaving] = useState(false);
+  const [ideaNotice, setIdeaNotice] = useState('');
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState('');
@@ -105,6 +108,32 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   }, [deleteConfirmation, deletePending]);
 
   const selectedIdea = home.ideas.find((idea) => idea.id === selectedId) ?? home.ideas[0] ?? null;
+  function editIdea(idea) {
+    setIdeaDraft({ id: idea.id, title: idea.title, description: idea.description ?? '', revision: idea.revision });
+    setIdeaNotice('');
+  }
+  async function saveIdea(event) {
+    event.preventDefault();
+    if (!ideaDraft?.title.trim() || ideaSaving) return;
+    setIdeaSaving(true);
+    setIdeaNotice('');
+    try {
+      const saved = await client.saveIdea(ideaDraft.id, {
+        title: ideaDraft.title,
+        description: ideaDraft.description,
+        expectedRevision: ideaDraft.revision,
+      });
+      const refreshed = await client.getHome();
+      setHome(refreshed);
+      setSelectedId(saved.id);
+      setIdeaDraft(null);
+      setIdeaNotice('変更を保存しました。');
+    } catch (error) {
+      setIdeaNotice(error?.kind === 'conflict' ? '別の更新がありました。最新内容を読み直してから編集してください。' : '保存できませんでした。入力内容は残っています。');
+    } finally {
+      setIdeaSaving(false);
+    }
+  }
   function editAsset(asset) {
     setAssetDraft({ id: asset.id, name: asset.name, description: asset.description, revision: asset.revision });
     setAssetNotice('');
@@ -203,23 +232,36 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           const summary = idea.brief_sections?.[0]?.trim() || idea.summary;
           const isPriorResearch = idea.research_status?.startsWith('prior_research');
           const statusAnnouncement = `${researchStatusLabel(idea.research_status)}${isPriorResearch ? '（実行済み調査ではありません）' : ''}`;
-          const canDelete = canArchiveRecord('idea', idea.revision);
           return <article key={idea.id} className="local-home__idea-card" data-selected={selectedIdea?.id === idea.id ? 'true' : 'false'}>
-            <button type="button" className="local-home__idea-select" aria-pressed={selectedIdea?.id === idea.id} onClick={() => setSelectedId(idea.id)}>
-              <span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong><span className="local-home__status-badge" data-research-state={idea.research_status ?? 'unknown'} aria-label={statusAnnouncement}>{compactResearchStatusLabel(idea.research_status)}</span></span>
+            <button type="button" className="local-home__idea-select" aria-pressed={selectedIdea?.id === idea.id} onClick={() => { setSelectedId(idea.id); setIdeaDraft(null); setIdeaNotice(''); }}>
+              <span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong></span>
+              {compactResearchStatusLabel(idea.research_status) && <span className="local-home__status-badge" data-research-state={idea.research_status} aria-label={statusAnnouncement}>{compactResearchStatusLabel(idea.research_status)}</span>}
               {summary && <span className="local-home__idea-summary">{summary}</span>}
             </button>
-            <div className="local-home__card-actions">
-              <button type="button" className="local-home__icon-button" aria-label={`削除: ${idea.title}`} title={canDelete ? `「${idea.title}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canDelete || deletePending} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: idea.id, kind: 'idea', title: idea.title, revision: idea.revision }); }}><TrashIcon /></button>
-            </div>
           </article>;
         })}</div> : <p className="local-home__notice">まだアイデアの記録はありません。ChatGPTで話したアイデアをDots.へ保存すると、ここに並びます。</p>}
       </div>
       {selectedIdea && <article className="local-home__idea-detail" aria-labelledby="selected-idea-heading">
-        <p className="local-home__eyebrow">IDEA</p>
-        <h2 id="selected-idea-heading">{selectedIdea.title}</h2>
-        <p>{researchStatusLabel(selectedIdea.research_status)}</p>
-        {selectedIdea.research_status !== 'researched' && selectedIdea.description && <p className="local-home__idea-description">{selectedIdea.description}</p>}
+        <div className="local-home__detail-header">
+          <h2 id="selected-idea-heading">{selectedIdea.title}</h2>
+          {!ideaDraft && <div className="local-home__card-actions">
+            <button type="button" className="local-home__icon-button" aria-label={`編集: ${selectedIdea.title}`} title="題名と説明を編集" disabled={!canArchiveRecord('idea', selectedIdea.revision)} onClick={() => editIdea(selectedIdea)}><EditIcon /></button>
+            <button type="button" className="local-home__icon-button" aria-label={`削除: ${selectedIdea.title}`} title={canArchiveRecord('idea', selectedIdea.revision) ? `「${selectedIdea.title}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('idea', selectedIdea.revision) || deletePending} onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: selectedIdea.id, kind: 'idea', title: selectedIdea.title, revision: selectedIdea.revision }); }}><TrashIcon /></button>
+          </div>}
+        </div>
+        {ideaDraft?.id === selectedIdea.id ? <form onSubmit={saveIdea} className="local-home__edit-form local-home__idea-edit-form">
+          <p>題名だけの変更は調査結果を引き継ぎます。説明を変えると以前の調査は履歴に残り、この案の現行調査からは外れます。</p>
+          <label htmlFor="idea-edit-title">題名</label>
+          <textarea id="idea-edit-title" rows={1} maxLength={200} required value={ideaDraft.title} onChange={(event) => setIdeaDraft((current) => ({ ...current, title: event.target.value }))} />
+          <label htmlFor="idea-edit-description">説明</label>
+          <textarea id="idea-edit-description" rows={6} maxLength={4000} value={ideaDraft.description} onChange={(event) => setIdeaDraft((current) => ({ ...current, description: event.target.value }))} />
+          {ideaNotice && <p role="alert">{ideaNotice}</p>}
+          <div><button type="submit" disabled={!ideaDraft.title.trim() || ideaSaving}>{ideaSaving ? '保存中…' : '保存する'}</button><button type="button" disabled={ideaSaving} onClick={() => { setIdeaDraft(null); setIdeaNotice(''); }}>キャンセル</button></div>
+        </form> : <>
+          <p className="local-home__research-status">{researchStatusLabel(selectedIdea.research_status)}</p>
+          {selectedIdea.research_status !== 'researched' && selectedIdea.description && <p className="local-home__idea-description">{selectedIdea.description}</p>}
+        </>}
+        {ideaNotice && !ideaDraft && <p role="status">{ideaNotice}</p>}
         <div className="local-home__section-list">{IDEA_SECTIONS.map((heading, index) => {
           const saved = selectedIdea.brief_sections?.[index]?.trim();
           const content = saved || (index === 0 ? selectedIdea.summary : '') || '未整理';
@@ -227,7 +269,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
             ? selectedIdea.brief_citations[index].filter((citation) => citation && typeof citation.title === 'string' && citation.title.trim() && safePublicCitationUrl(citation.url))
             : [];
           return <section key={heading}>
-            <h3>{index}. {heading}</h3>
+            <h3>{heading}</h3>
             <p className={content === '未整理' ? 'local-home__unwritten' : ''}>{content}</p>
             {citations.length > 0 && <p className="local-home__citation">出典: {citations.map((citation, citationIndex) => <span key={`${citation.source_id ?? citation.evidence_id ?? citation.url}-${citationIndex}`}>
               {citationIndex > 0 ? '、' : ''}<a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()}</a>
@@ -237,9 +279,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">
-      <section className="local-home__panel" style={{ gridColumn: '1 / -1' }}>
+      <div className="local-home__asset-list">
         <h2>アセット一覧 <span>{home.assets.length}件</span></h2>
-        {home.assets.length ? <div className="local-home__cards">{home.assets.map((asset) => <article key={asset.id} className="local-home__asset-card local-home__panel">
+        {home.assets.length ? <div className="local-home__cards">{home.assets.map((asset) => <article key={asset.id} className="local-home__asset-card">
           {assetDraft?.id === asset.id ? <form onSubmit={saveAsset} className="local-home__edit-form">
             <label htmlFor={`asset-title-${asset.id}`}>題名</label>
             <textarea id={`asset-title-${asset.id}`} name="title" rows={1} maxLength={200} required value={assetDraft.name} onChange={(event) => setAssetDraft((current) => ({ ...current, name: event.target.value }))} />
@@ -257,7 +299,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           </>}
         </article>)}</div> : <p className="local-home__notice">記録はまだありません。</p>}
         {assetNotice && !assetDraft && <p role="status">{assetNotice}</p>}
-      </section>
+      </div>
     </section>}
     {deleteNotice && <p role="status" aria-live="polite" className="local-home__delete-notice">{deleteNotice}{homeReloadNeeded && <button type="button" onClick={() => { setDeleteNotice(''); setHomeReloadNeeded(false); setAttempt((value) => value + 1); }}>ホームを再読み込み</button>}</p>}
     {deleteConfirmation && <div className="local-home__delete-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !deletePending) setDeleteConfirmation(null); }}>

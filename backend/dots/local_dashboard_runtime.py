@@ -16,7 +16,7 @@ from dots.local_dashboard_app import create_local_dashboard_app
 from dots.local_dashboard_driver import managed_neo4j_driver
 from dots.local_graph_proxy import LocalGraphSearchProxy
 from dots.local_overview import Neo4jOverviewStore, OverviewStore, StoredOverviewNode
-from dots.local_home import Neo4jHomeStore, HomeStore, LocalAssetWriter
+from dots.local_home import Neo4jHomeStore, HomeStore, LocalAssetWriter, LocalIdeaWriter
 from dots.local_record_lifecycle import LocalRecordLifecycleWriter
 from dots.local_graph_view import GraphViewStore, Neo4jGraphViewStore
 from dots.local_graph_provenance import Neo4jGraphProvenanceStore, read_local_graph_provenance
@@ -82,6 +82,16 @@ class OnDemandAssetWriter:
             )
 
 
+class OnDemandIdeaWriter:
+    def save(self, idea_id: str, *, title: str, description: str,
+             expected_revision: int, idempotency_key: str):
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
+            return LocalIdeaWriter(Neo4jGraphGateway(driver, LIVE_OWNER_ID)).save(
+                idea_id, title=title, description=description,
+                expected_revision=expected_revision, idempotency_key=idempotency_key,
+            )
+
+
 class OnDemandRecordLifecycleWriter:
     def transition(self, kind: str, action: str, record_id: str, *,
                    expected_revision: int, idempotency_key: str):
@@ -118,6 +128,7 @@ def create_runtime_app(*, dist_dir: Path = DEFAULT_DIST_DIR):
         graph_view_store=OnDemandNeo4jGraphViewStore(),
         self_intro_writer=OnDemandSelfIntroductionWriter(),
         asset_writer=OnDemandAssetWriter(),
+        idea_writer=OnDemandIdeaWriter(),
         record_lifecycle_writer=OnDemandRecordLifecycleWriter(),
         overview_owner_id=LIVE_OWNER_ID,
         dist_dir=dist_dir,

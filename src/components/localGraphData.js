@@ -1,26 +1,42 @@
-const INTERNAL_NODE_KINDS = new Set([
-  'relation_assertion', 'entity_revision', 'source_revision', 'content_chunk', 'evidence',
-  'audit_event', 'capture_audit', 'report_version',
+const VISIBLE_NODE_KINDS = new Set([
+  'idea', 'asset', 'person', 'organization', 'owner_profile', 'source',
+  'research_material', 'decision', 'experiment', 'instruction_artifact', 'facet',
 ]);
 const INTERNAL_EDGE_LABELS = new Set([
   'SUPERSEDES', 'HAS_REVISION', 'CURRENT_REVISION', 'CURRENT_SOURCE_REVISION',
   'HAS_SOURCE_REVISION', 'HAS_CHUNK', 'EVIDENCE_FROM', 'HAS_AUDIT_EVENT',
 ]);
+const RELATION_LABELS = {
+  OWNS: '保有する', GOVERNED_BY: '方針に従う', USES_SKILL: 'スキルを使う',
+  REUSES: '再利用する', USES: '利用する', SUPPORTS: '支える', ADDRESSES: '課題に応える', DERIVED_FROM: '派生した',
+  EVALUATED_BY: '評価された', WORKS_AT: '所属する', HAS_CAPABILITY: '能力を持つ',
+  CAN_CONTRIBUTE_TO: '貢献できる', INTRODUCED_BY: '紹介された',
+  REQUIRES_CAPABILITY: '能力を要する', CLASSIFIED_AS: '分類される',
+  SERVES: '対象とする', COMPETES_WITH: '競合する', DEPENDS_ON: '依存する',
+  MERGED_INTO: '統合された', SUPPORTED_BY: '裏付けられる',
+  CONTRADICTED_BY: '反証される', BASED_ON: '基づく',
+};
+
+function displayRelation(label) {
+  if (RELATION_LABELS[label]) return RELATION_LABELS[label];
+  return /^[A-Z][A-Z_]+$/.test(label) ? '関係する' : label;
+}
 
 export function semanticGraphData(graph) {
-  const nodes = (graph.nodes ?? []).filter((node) => !INTERNAL_NODE_KINDS.has(node.kind));
+  const nodes = (graph.nodes ?? []).filter((node) => VISIBLE_NODE_KINDS.has(node.kind));
   const nodeIds = new Set(nodes.map((node) => node.id));
   const isScaffoldEdge = (edge) => INTERNAL_EDGE_LABELS.has(edge.label)
     || edge.label?.startsWith('ASSERTS_') || edge.label === 'EVIDENCED_BY';
   const edges = (graph.edges ?? []).filter((edge) => nodeIds.has(edge.source)
-    && nodeIds.has(edge.target) && !isScaffoldEdge(edge));
+    && nodeIds.has(edge.target) && !isScaffoldEdge(edge))
+    .map((edge) => ({ ...edge, label: displayRelation(edge.label) }));
   for (const assertion of graph.semantic_edges ?? []) {
     if (!assertion?.id || !nodeIds.has(assertion.source_id) || !nodeIds.has(assertion.target_id)
       || typeof assertion.predicate !== 'string' || !assertion.predicate) continue;
     edges.push({
       source: assertion.source_id,
       target: assertion.target_id,
-      label: assertion.predicate,
+      label: displayRelation(assertion.predicate),
       assertionId: assertion.id,
       status: assertion.status,
       confidence: assertion.confidence,

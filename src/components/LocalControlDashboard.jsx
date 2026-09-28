@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LocalDeletedRecords } from './LocalDeletedRecords';
+import './LocalControlDashboard.css';
 
 const EMPTY_COUNTS = { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 };
 const COUNT_LABELS = { Idea: 'アイデアの記録', Person: '人の記録', Asset: '資産の記録', ReportVersion: '調査レポートの版' };
@@ -108,7 +109,7 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
     <main className="mx-auto grid w-full max-w-5xl gap-6 px-4 pb-6 pt-0 sm:px-6" aria-labelledby="local-control-heading">
       <header className="grid gap-2">
         <h1 id="local-control-heading" className="sr-only">サービス管理</h1>
-        <section className="grid gap-3 rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 sm:grid-cols-[1fr_auto] sm:items-center" aria-labelledby="runtime-heading">
+        <section className="grid gap-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center" aria-labelledby="runtime-heading">
           <div>
             <h2 id="runtime-heading" className="text-base font-semibold">稼働状態</h2>
             <p className="mt-1" role={state === 'error' ? 'alert' : undefined} aria-live="polite" data-dashboard-state={state}>
@@ -116,18 +117,18 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
               <span className="block text-sm text-[var(--color-text-muted)]">{status.detail}</span>
             </p>
           </div>
-          <button ref={actionButtonRef} type="button" disabled={pending || state === 'loading' || state === 'error'} onClick={() => setConfirmation(action)} className="min-h-11 rounded-xl border border-[var(--color-border-subtle)] px-4 py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:cursor-not-allowed disabled:opacity-50">
+          <button ref={actionButtonRef} type="button" disabled={pending || state === 'loading' || state === 'error'} onClick={() => setConfirmation(action)} className={`min-h-11 rounded-xl border border-[var(--color-border-subtle)] px-4 py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:cursor-not-allowed disabled:opacity-50 ${action === 'stop' ? 'local-control__stop-button' : ''}`}>
             {pending ? '処理中…' : action === 'stop' ? 'Dots.を停止' : 'Dots.を起動'}
           </button>
         </section>
         {snapshot?.services && <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="サービスごとの状態">
-          {Object.entries(SERVICE_LABELS).map(([name, label]) => <div key={name} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border-subtle)] px-4 py-2 text-sm">
-            <dt>{label}</dt><dd className="font-medium">{SERVICE_STATUS_LABELS[snapshot.services[name]] ?? '確認できません'}</dd>
+          {Object.entries(SERVICE_LABELS).map(([name, label]) => <div key={name} data-service={name} className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-2 py-2 text-sm">
+            <dt>{label}</dt><dd className="flex items-center gap-2 font-medium">{['running', 'stopped'].includes(snapshot.services[name]) && <span aria-hidden="true" className={`local-control__lamp local-control__lamp--${snapshot.services[name]}`} />}{SERVICE_STATUS_LABELS[snapshot.services[name]] ?? '確認できません'}</dd>
           </div>)}
         </dl>}
       </header>
 
-      {serviceOnly && <section className="rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4" aria-label="削除済みの記録を管理">
+      {serviceOnly && <section className="border-t border-[var(--color-border-subtle)] pt-4" aria-label="削除済みの記録を管理">
         <LocalDeletedRecords client={client} />
       </section>}
 
@@ -170,7 +171,7 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
           <p id="control-confirm-description" className="text-sm leading-6 text-[var(--color-text-muted)]">{confirmation === 'stop' ? 'ChatGPT接続、通常API、保存先の順に停止します。操作盤と保存データは残ります。停止中はChatGPTから検索できません。' : '既存の保存先を起動し、準備できた後に通常APIと承認済み接続を起動します。保存データは削除されません。'}</p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button type="button" disabled={pending} onClick={() => setConfirmation(null)} className="min-h-11 rounded-xl border border-[var(--color-border-subtle)] px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:opacity-50">キャンセル</button>
-            <button ref={confirmButtonRef} type="button" disabled={pending} onClick={() => { void confirmAction(); }} className="local-control-confirm-button min-h-11 rounded-xl bg-[var(--color-primary)] px-4 py-2 font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:opacity-50">{pending ? '処理中…' : confirmation === 'stop' ? '停止する' : '起動する'}</button>
+            <button ref={confirmButtonRef} type="button" disabled={pending} onClick={() => { void confirmAction(); }} className={`local-control-confirm-button min-h-11 rounded-xl bg-[var(--color-primary)] px-4 py-2 font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:opacity-50 ${confirmation === 'stop' ? 'local-control__stop-button' : ''}`}>{pending ? '処理中…' : confirmation === 'stop' ? '停止する' : '起動する'}</button>
           </div>
         </section>
       </div>}

@@ -128,6 +128,9 @@ describe('LocalControlDashboard', () => {
     }) } });
     expect(view.querySelector('[data-dashboard-state="degraded"]')?.textContent).toContain('一部利用できません');
     expect(view.querySelector('[aria-label="サービスごとの状態"]')?.textContent).toContain('ChatGPT接続停止中');
+    expect(view.querySelector('[data-service="database"] .local-control__lamp--running')).not.toBeNull();
+    expect(view.querySelector('[data-service="tunnel"] .local-control__lamp--stopped')).not.toBeNull();
+    expect(view.querySelector('[data-service="api"] .local-control__lamp')).toBeNull();
     expect(view.querySelector('[aria-labelledby="counts-heading"]')).toBeNull();
   });
 

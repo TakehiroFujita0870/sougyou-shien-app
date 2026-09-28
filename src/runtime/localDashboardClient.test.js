@@ -78,6 +78,24 @@ it('updates one asset with CSRF, expected revision and stable idempotency key, r
   for (const request of requests) expect(JSON.parse(request.body)).not.toHaveProperty('egress_policy');
 });
 
+it('edits an idea through the local guarded endpoint with a stable retry key', async () => {
+  let generated = 0;
+  const fetchImpl = vi.fn()
+    .mockResolvedValueOnce(statusResponse())
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'idea-next', revision: 1 }));
+  const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => `idea-edit-${++generated}` });
+  const edit = { title: '修正した案', description: '内容', expectedRevision: 0 };
+  await expect(client.saveIdea('idea/old', edit)).rejects.toMatchObject({ kind: 'unavailable' });
+  await expect(client.saveIdea('idea/old', edit)).resolves.toEqual({ id: 'idea-next', revision: 1 });
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/status', '/api/ideas/idea%2Fold', '/api/status', '/api/ideas/idea%2Fold']);
+  const sent = [fetchImpl.mock.calls[1][1], fetchImpl.mock.calls[3][1]];
+  expect(sent[0].headers['X-CSRF-Token']).toBe('csrf-from-status');
+  expect(JSON.parse(sent[0].body)).toEqual({ title: '修正した案', description: '内容', expected_revision: 0, idempotency_key: 'idea-edit-1' });
+  expect(JSON.parse(sent[1].body).idempotency_key).toBe('idea-edit-1');
+});
+
 it('keeps the same asset idempotency key when a save transport fails and is retried', async () => {
   let generated = 0;
   const fetchImpl = vi.fn()
