@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 import pytest
 
 from dots.founder_graph import EgressPolicy, Idea, ResearchMaterial
@@ -295,3 +296,30 @@ def test_capture_evidence_api_accepts_only_persisted_references_and_returns_comm
         "excerpt": "caller text", "idempotency_key": "api-evidence-extra",
     })
     assert rejected.status_code == 422
+
+
+def test_mcp_api_brief_save_returns_candidate_processing_state_only():
+    writes = InMemoryGraphWriteService("owner-candidate-api")
+    idea = Idea(owner_id=writes.owner_id, id="idea-candidate-api", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="candidate-api-seed")
+
+    class CompletedCandidateProcessor:
+        def process_specific(self, job_id, *, raw_manifest):
+            assert raw_manifest == {"version": 1, "idea_id": idea.id, "candidates": []}
+            return SimpleNamespace(state="succeeded", last_error_code="stale_error")
+
+    client = TestClient(create_app(
+        founder_graph_write_service=writes, founder_graph_owner_id=writes.owner_id,
+        founder_graph_candidate_processor=CompletedCandidateProcessor(),
+    ))
+    response = client.post("/v1/founder-graph/mcp/write/save_idea_brief", headers={
+        "X-Local-Owner-Id": writes.owner_id,
+    }, json={
+        "idea_id": idea.id, "expected_revision": 0,
+        "sections": [{"index": 0, "content": "Private synthetic report."}],
+        "relation_candidate_manifest": {"version": 1, "idea_id": idea.id, "candidates": []},
+        "idempotency_key": "candidate-api-brief",
+    })
+
+    assert response.json()["candidate_processing"] == {"state": "succeeded", "error_code": None}
+    assert "Private synthetic report." not in response.text

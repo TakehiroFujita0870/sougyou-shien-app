@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from io import StringIO
 import json
+from types import SimpleNamespace
 import pytest
 
 from dots.founder_graph_mcp_stdio import FounderGraphStdioServer, create_stdio_server, run_stdio
-from dots.founder_graph_mcp_write import McpWriteError
+from dots.founder_graph_mcp import McpReadSurface
+from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from dots.founder_graph import Idea
+from dots.founder_graph_read import GraphReadService
+from dots.founder_graph_write import InMemoryGraphWriteService
 import dots.founder_graph_mcp_stdio as stdio_module
 
 
@@ -51,6 +56,35 @@ def test_write_tools_publish_actionable_input_contracts() -> None:
     assert tools["confirm_person_merge"]["inputSchema"]["required"] == ["winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"]
     assert tools["capture_evidence"]["inputSchema"]["required"] == ["claim_id", "content_chunk_id", "idempotency_key"]
     assert "excerpt" not in tools["capture_evidence"]["inputSchema"]["properties"]
+    for name in ("save_idea_brief", "append_research_finding", "save_researched_idea_brief"):
+        assert "relation_candidate_manifest" in tools[name]["inputSchema"]["properties"]
+        assert "relation_candidate_manifest" not in tools[name]["inputSchema"]["required"]
+
+
+def test_stdio_brief_save_reports_candidate_processing_state_without_report_text():
+    writes = InMemoryGraphWriteService("owner-candidate-stdio")
+    idea = Idea(owner_id=writes.owner_id, id="idea-candidate-stdio", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="candidate-stdio-seed")
+
+    class PendingProcessor:
+        def process_specific(self, job_id, *, raw_manifest):
+            assert raw_manifest is None
+            return SimpleNamespace(state="pending", last_error_code=None)
+
+    server = FounderGraphStdioServer(
+        McpReadSurface(GraphReadService(writes)),
+        McpWriteSurface(writes, candidate_processor=PendingProcessor()),
+        writes.owner_id,
+    )
+    response = server.handle(request("tools/call", 21, {"name": "save_idea_brief", "arguments": {
+        "idea_id": idea.id, "expected_revision": 0,
+        "sections": [{"index": 0, "content": "Private synthetic report phrase."}],
+        "idempotency_key": "candidate-stdio-brief",
+    }}))
+    receipt = response["result"]["structuredContent"]
+
+    assert receipt["candidate_processing"] == {"state": "pending", "error_code": None}
+    assert "Private synthetic report phrase." not in response["result"]["content"][0]["text"]
 
 
 def test_tools_call_delegates_read_and_idempotent_write() -> None:

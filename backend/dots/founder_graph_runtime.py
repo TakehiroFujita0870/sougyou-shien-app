@@ -11,10 +11,12 @@ import shutil
 import subprocess
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from .founder_graph_neo4j import Neo4jGraphGateway
 from .founder_graph_neo4j_read import Neo4jGraphReadService
-from .founder_graph_neo4j_write import Neo4jGraphWriteService
+from .founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
+from .founder_graph_job_store import FounderGraphJobStore
 from .founder_graph_local_models import LocalSearchModels
 
 
@@ -242,6 +244,21 @@ def create_neo4j_graph_composition(
     )
 
 
+def create_relation_candidate_job_processor(composition: Neo4jGraphComposition) -> Any:
+    """Build the owner-bound processor shared by the API and stdio surfaces."""
+    from .founder_graph_candidate_job_processor import RelationCandidateJobProcessor
+
+    gateway = composition.gateway
+    return RelationCandidateJobProcessor(
+        jobs=FounderGraphJobStore(
+            gateway.driver, owner_id=gateway.owner_id, database=gateway.database,
+        ),
+        writes=composition.writes,
+        brief_store=Neo4jIdeaBriefStore(gateway),
+        worker_id=f"mcp-{uuid4().hex}",
+    )
+
+
 def _validate_live_search_target(*, owner_id: str, database: str) -> None:
     """Fail closed unless live identity, rotation, review, and Docker target match."""
 
@@ -430,5 +447,6 @@ __all__ = [
     "Neo4jGraphComposition",
     "create_neo4j_driver_from_env",
     "create_neo4j_graph_composition",
+    "create_relation_candidate_job_processor",
     "resolve_graph_backend",
 ]

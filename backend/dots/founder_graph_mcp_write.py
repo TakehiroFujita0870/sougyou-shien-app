@@ -67,6 +67,7 @@ class McpWriteError(Exception):
 class McpWriteSurface:
     writes: GraphWritePort
     brief_store: Any | None = None
+    candidate_processor: Any | None = None
 
     _TOOL_NAMES = (
         "capture_idea",
@@ -306,7 +307,9 @@ class McpWriteSurface:
                 "inputSchema": schemas.get(name, {"type": "object", "additionalProperties": False}),
             }
             for name in self._TOOL_NAMES
-        ) + McpResearchCampaignSurface(self.writes, self.brief_store).tool_definitions() + facet_write_tool_definitions()
+        ) + McpResearchCampaignSurface(
+            self.writes, self.brief_store, self.candidate_processor,
+        ).tool_definitions() + facet_write_tool_definitions()
 
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> WriteReceipt:
         research_tools = {
@@ -323,7 +326,9 @@ class McpWriteSurface:
             if tool_name in FACET_WRITE_TOOL_NAMES:
                 return dispatch_facet_write(self, tool_name, arguments)
             if tool_name in research_tools:
-                return McpResearchCampaignSurface(self.writes, self.brief_store).call(
+                return McpResearchCampaignSurface(
+                    self.writes, self.brief_store, self.candidate_processor,
+                ).call(
                     tool_name, arguments, owner_id=owner_id,
                 )
             handler = getattr(self, f"_{tool_name}")
