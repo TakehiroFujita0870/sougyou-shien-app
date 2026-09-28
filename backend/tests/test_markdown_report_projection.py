@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from dots.idea_brief import SECTION_TITLES
-from dots.markdown_report_projection import project_markdown_report
+from dots.markdown_report_projection import (
+    find_unique_visible_quote,
+    has_visible_markdown_content,
+    project_markdown_report,
+)
 
 
 def test_partial_markdown_projects_canonical_positions_and_public_links_only() -> None:
@@ -114,3 +118,26 @@ def test_unsafe_or_non_public_urls_are_not_projected() -> None:
     assert projection.links[1].label is None
     assert all(item.verification_status == "url_only" for item in projection.links)
     assert all(item.evidence_ids == () for item in projection.links)
+
+
+def test_unique_visible_quote_returns_exact_offsets_but_ignores_code_and_ambiguity() -> None:
+    markdown = "Intro `inline secret`.\n\nVisible quote.\n```text\nHidden quote.\n```\n"
+
+    assert find_unique_visible_quote(markdown, "Visible quote.") == (
+        markdown.index("Visible quote."), markdown.index("Visible quote.") + len("Visible quote."),
+    )
+    assert find_unique_visible_quote(markdown, "Hidden quote.") is None
+    assert find_unique_visible_quote(markdown, "inline secret") is None
+    assert find_unique_visible_quote(markdown + "\nVisible quote.", "Visible quote.") is None
+    assert find_unique_visible_quote(markdown, "not present") is None
+
+
+def test_visible_section_content_ignores_fenced_code_and_checks_offset_ranges() -> None:
+    markdown = f"## {SECTION_TITLES[0]}\n\nVisible prose.\n\n```text\nOnly code.\n```\n"
+    projection = project_markdown_report(markdown)
+    heading = projection.headings[0]
+
+    assert has_visible_markdown_content(markdown, heading.body_offset, heading.end_offset)
+    code_only = "```text\nOnly code.\n```\n"
+    assert not has_visible_markdown_content(code_only, 0, len(code_only))
+    assert not has_visible_markdown_content(markdown, -1, len(markdown))
