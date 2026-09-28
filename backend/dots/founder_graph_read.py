@@ -41,6 +41,7 @@ from .founder_graph_lifecycle_resolver import (
 )
 from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
 from .idea_brief import SECTION_TITLES
+from .idea_brief_read_projection import brief_section_has_readable_body, project_idea_brief_for_read
 from .source_citations import citation_metadata
 
 
@@ -444,6 +445,7 @@ class GraphReadService:
             raise GraphReadNotFoundError("idea brief was not found")
 
         node_by_id = {node.id: node for node in snapshot.nodes}
+        report_projection = project_idea_brief_for_read(latest.report_markdown, latest.sections)
         brief_citations: list[list[dict[str, str]]] = [[] for _ in SECTION_TITLES]
         sections = []
         for section in latest.sections:
@@ -464,11 +466,11 @@ class GraphReadService:
             sections.append({
                 "index": section.index,
                 "title": SECTION_TITLES[section.index],
-                "content": section.content,
+                "content": report_projection.section_contents[section.index],
                 "evidence_ids": [item["evidence_id"] for item in citations],
                 "citations": citations,
             })
-        return {
+        result = {
             "brief_id": latest.id,
             "idea_id": idea.id,
             "sections": sections,
@@ -476,6 +478,9 @@ class GraphReadService:
             "origin": latest.origin,
             "report_markdown": latest.report_markdown,
         }
+        if report_projection.metadata is not None:
+            result["report_projection"] = report_projection.metadata
+        return result
 
     @staticmethod
     def _shareable_current_brief_evidence(
@@ -901,7 +906,7 @@ class GraphReadService:
         if type(section_index) is not int or not 0 <= section_index < len(latest.sections):
             return False, None
         section = latest.sections[section_index]
-        if not section.content.strip(): return False, None
+        if not brief_section_has_readable_body(latest, section_index): return False, None
         if not set(assertion.evidence_ids).issubset(section.evidence_ids):
             return False, None
         return latest.id, section_index

@@ -71,10 +71,11 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
         claim.id, captured.content_chunk_ids[0], egress_policy=EgressPolicy.SHAREABLE,
         idempotency_key="evidence-seed",
     )
-    sections = [{"index": index, "content": f"Synthetic section {index}"} for index in range(8)]
+    sections = [{"index": index} for index in range(8)]
     sections[0]["evidence_ids"] = [evidence.target_id]
     researched_tool = tools["save_researched_idea_brief"]
     assert "report_markdown" in researched_tool["inputSchema"]["required"]
+    assert "content" not in researched_tool["inputSchema"]["properties"]["sections"]["items"]["required"]
     assert "egress_policy=shareable" in researched_tool["description"]
     report_markdown = "\n\n".join(
         f"## {title}\n\nSynthetic section {index}."
@@ -97,6 +98,7 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     assert brief.target_type == "idea_brief_version"
     saved = writes.get_idea_brief(brief.target_id)
     assert saved is not None and saved.research_run_ids == (run.target_id,)
+    assert all(not section.content for section in saved.sections)
     assert saved.origin is None
     assert saved.report_markdown == report_markdown
     fetched = McpReadSurface(GraphReadService(writes)).call(
@@ -104,7 +106,17 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     )
     assert fetched["brief_id"] == brief.target_id
     assert fetched["report_markdown"] == report_markdown
+    assert fetched["sections"][0]["content"] == "Synthetic section 0."
     assert fetched["sections"][0]["evidence_ids"] == [evidence.target_id]
+    assert fetched["brief_citations"][0][0]["evidence_id"] == evidence.target_id
+    assert fetched["report_projection"]["links"] == [{
+        "url": "https://example.test/source?id=1#section",
+        "label": None,
+        "offset": report_markdown.index("https://example.test/source?id=1#section"),
+        "section_index": 7,
+        "verification_status": "url_only",
+        "evidence_ids": [],
+    }]
     link = surface.call("link_entities", {
         "source_id": "idea-mcp", "target_id": claim.id, "relation": "ADDRESSES",
         "evidence_ids": [evidence.target_id], "based_on_brief_id": fetched["brief_id"],

@@ -26,7 +26,8 @@ from .founder_graph_read import (
     GraphReadUnavailableError,
     RelationPathStep,
 )
-from .idea_brief import SECTION_TITLES
+from .idea_brief import SECTION_TITLES, IdeaBriefSection
+from .idea_brief_read_projection import project_idea_brief_for_read
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -257,6 +258,9 @@ class McpReadSurface:
         report_markdown = projection.get("report_markdown")
         if report_markdown is not None and (not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000):
             raise McpReadError("unavailable", "The local Founder Graph returned an invalid Markdown report.")
+        report_read = project_idea_brief_for_read(
+            report_markdown, tuple(IdeaBriefSection(index=index) for index in range(len(SECTION_TITLES))),
+        )
         if raw_brief_citations is not None and (
             not isinstance(raw_brief_citations, (tuple, list))
             or len(raw_brief_citations) != len(SECTION_TITLES)
@@ -276,6 +280,8 @@ class McpReadSurface:
                 or not all(isinstance(item, str) and item.strip() for item in evidence_ids)
             ):
                 raise McpReadError("unavailable", "The local Founder Graph returned an invalid brief projection.")
+            if report_read.metadata is not None:
+                content = report_read.section_contents[index]
             raw_citations = (
                 raw_brief_citations[index] if raw_brief_citations is not None
                 else section.get("citations", ())
@@ -307,11 +313,14 @@ class McpReadSurface:
                 )),
                 "citations": safe_citations,
             })
-        return {
+        result = {
             "brief_id": brief_id, "idea_id": idea_id.strip(), "sections": safe_sections,
             "brief_citations": brief_citations, "origin": origin,
             "report_markdown": report_markdown,
         }
+        if report_read.metadata is not None:
+            result["report_projection"] = report_read.metadata
+        return result
 
     def _search(self, arguments: Mapping[str, Any], *, owner_id: str) -> dict[str, Any]:
         self._reject_unknown(arguments, {"query", "limit", "cursor"})

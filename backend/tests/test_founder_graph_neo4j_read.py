@@ -9,7 +9,7 @@ import pytest
 
 from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, Provenance, RelationAssertion, RelationAssertionBasis, Source, SourceRevision
 from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
 from dots.founder_graph_mcp import McpReadError, McpReadSurface
@@ -373,7 +373,17 @@ def test_fetch_hydrates_allowlisted_view_without_exposing_raw_payload() -> None:
 
 def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evidence_only() -> None:
     driver, reads = _gateway()
-    idea, _claim, evidence, _brief, _assertion, _endpoints, rows, brief_row = _formal_fixture()
+    idea, _claim, evidence, legacy, _assertion, _endpoints, rows, _brief_row = _formal_fixture()
+    report_markdown = "\n\n".join(
+        f"## {title}\n\nMarkdown section {index}"
+        + ("\n\n[Public](https://example.test/public)" if index == 0 else "")
+        for index, title in enumerate(SECTION_TITLES)
+    )
+    brief = replace(
+        legacy, report_markdown=report_markdown,
+        sections=tuple(IdeaBriefSection(index=index, evidence_ids=(evidence.id,) if index == 0 else ()) for index in range(8)),
+    )
+    brief_row = _serialize_persisted_idea_brief(brief)
     driver.session_value.idea_rows = [_persisted_row(idea)]
     driver.session_value.brief_rows = [brief_row]
     driver.session_value.formal_rows = rows
@@ -383,11 +393,15 @@ def test_fetch_idea_brief_returns_latest_current_shareable_brief_with_valid_evid
     assert result["brief_id"] == "brief-1"
     assert result["idea_id"] == idea.id
     assert result["origin"] is None
+    assert result["report_projection"]["heading_status"] == "complete"
+    assert result["report_projection"]["links"][0]["verification_status"] == "url_only"
+    assert result["report_projection"]["links"][0]["evidence_ids"] == []
+    assert result["report_projection"]["links"][0]["section_index"] == 0
     assert len(result["sections"]) == 8
     assert result["sections"][0] == {
         "index": 0,
         "title": "エグゼクティブサマリー",
-        "content": "A researched section",
+        "content": "Markdown section 0\n\n[Public](https://example.test/public)",
         "evidence_ids": [evidence.id],
         "citations": [{"url": "https://example.test/reference?id=42#section", "title": "Synthetic source", "source_id": "source-1", "evidence_id": evidence.id}],
     }
@@ -690,7 +704,10 @@ def test_search_expands_two_parameterized_relation_queries_to_two_hops() -> None
 
 def test_search_projects_current_formal_assertion_from_one_read_transaction() -> None:
     driver, reads = _gateway()
-    idea, claim, evidence, brief, assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()
+    idea, claim, evidence, legacy, assertion, endpoint_rows, formal_rows, _brief_row = _formal_fixture()
+    report_markdown = "\n\n".join(f"## {title}\n\nMarkdown section {index}" for index, title in enumerate(SECTION_TITLES))
+    brief = replace(legacy, report_markdown=report_markdown, sections=(IdeaBriefSection(index=0, evidence_ids=(evidence.id,)),))
+    brief_row = _serialize_persisted_idea_brief(brief)
     _seed_formal_search(driver, idea, endpoint_rows, formal_rows, brief_row)
 
     page = reads.search("Foundry", owner_id="owner-1")
@@ -704,6 +721,22 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     semantic = next(item for item in result["results"] if item["id"] == claim.id)["semantic_relation_path"][0]
     assert (semantic["relation_assertion_id"], semantic["evidence_ids"], semantic["based_on_brief_id"], semantic["based_on_brief_section_index"]) == (assertion.id, [evidence.id], brief.id, 0)
     assert all(secret not in str(result) for secret in ("A researched section", "must never leave the adapter"))
+
+
+def test_search_fails_closed_for_relations_when_markdown_heading_projection_is_ambiguous() -> None:
+    driver, reads = _gateway()
+    idea, _claim, evidence, legacy, _assertion, endpoint_rows, formal_rows, _brief_row = _formal_fixture()
+    complete = "\n\n".join(f"## {title}\n\nMarkdown section {index}" for index, title in enumerate(SECTION_TITLES))
+    ambiguous = complete + f"\n\n## {SECTION_TITLES[0]}\n\nDuplicate"
+    brief = replace(
+        legacy, report_markdown=ambiguous,
+        sections=(IdeaBriefSection(index=0, evidence_ids=(evidence.id,)),),
+    )
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, _serialize_persisted_idea_brief(brief))
+
+    page = reads.search("Foundry", owner_id="owner-1")
+
+    assert all(item.node.id != "claim-1" for item in page.hits)
 
 
 def test_search_keeps_formal_path_for_directly_ranked_endpoint_without_changing_rank() -> None:

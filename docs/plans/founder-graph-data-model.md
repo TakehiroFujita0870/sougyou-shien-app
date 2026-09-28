@@ -88,6 +88,14 @@ Source一件は「同じlocatorで更新される原本系列」とする。
 7. Claim、RelationAssertion、ResearchRun、ReportVersionは不変とし、訂正時はSUPERSEDES chainを作る。
 8. current pointerが二件、欠落、別ownerを指す場合はwriteをrollbackする。
 
+## IdeaBriefとMarkdown読取projection
+
+`IdeaBriefVersion.report_markdown`がある版では、それを人が読むレポート本文の正本とする。新しい調査済み保存は本文をMarkdownで検証し、`sections`には章ごとのfacts、inferences、unconfirmed、owner_decisions、Claim ID、Evidence IDを保持する。章本文を`sections[].content`へ重複入力する必要はなく、互換のため受け取った場合も新しい保存版には残さない。
+
+read adapterはMarkdown本文を変更せず、T-3a parserが返す文字offsetから必要な章本文を読み取り時に導出する。derived bodyは既存APIの`sections[].content`形状を維持するための応答値であり、別の保存正本ではない。Markdownがない既存Briefは、旧`sections[].content`をそのまま返す。
+
+正規見出しが重複・順不同でprojectionがambiguousの場合、Markdown由来の章本文を空にし、URLの章対応とその版を根拠とするrelation pathを返さない。公開URLは`citation_metadata`で検証したURL-onlyリンクとしてEvidence citationsと別に投影する。Evidence citationsは既存`evidence_ids`から所有者、状態、shareability、現行Source系譜を検証したものだけを返す。見出しやURLが存在するだけではClaim・Evidenceを生成しない。
+
 ## RelationAssertion契約
 
 業務上の意味関係はNeo4j relationship propertyだけを正本にせず、RelationAssertionノードを正本とする。

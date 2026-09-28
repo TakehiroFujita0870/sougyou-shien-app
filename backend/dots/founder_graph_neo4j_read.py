@@ -59,6 +59,7 @@ from .founder_graph_read import (
     SearchPage,
 )
 from .idea_brief import SECTION_TITLES
+from .idea_brief_read_projection import brief_section_has_readable_body, project_idea_brief_for_read
 from .source_citations import citation_metadata, parse_object
 
 
@@ -623,7 +624,7 @@ class Neo4jGraphReadService:
                             continue
                         section = latest.sections[section_index]
                         if (
-                            not section.content.strip()
+                            not brief_section_has_readable_body(latest, section_index)
                             or not set(assertion.evidence_ids).issubset(section.evidence_ids)
                         ):
                             continue
@@ -831,6 +832,7 @@ class Neo4jGraphReadService:
                 or latest.egress_policy != EgressPolicy.SHAREABLE.value
             ):
                 return None
+            report_projection = project_idea_brief_for_read(latest.report_markdown, latest.sections)
             sections = []
             brief_citations: list[list[dict[str, str]]] = [[] for _ in SECTION_TITLES]
             for section in latest.sections:
@@ -844,15 +846,18 @@ class Neo4jGraphReadService:
                 sections.append({
                     "index": section.index,
                     "title": SECTION_TITLES[section.index],
-                    "content": section.content,
+                    "content": report_projection.section_contents[section.index],
                     "evidence_ids": [item["evidence_id"] for item in citations],
                     "citations": brief_citations[section.index] if 0 <= section.index < len(brief_citations) else [],
                 })
-            return {
+            result = {
                 "brief_id": latest.id, "idea_id": idea.id, "sections": sections,
                 "brief_citations": brief_citations, "origin": latest.origin,
                 "report_markdown": latest.report_markdown,
             }
+            if report_projection.metadata is not None:
+                result["report_projection"] = report_projection.metadata
+            return result
 
         with self._read_session() as session:
             projection = self._gateway.execute_read(session, read)

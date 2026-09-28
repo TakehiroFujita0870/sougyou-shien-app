@@ -9,7 +9,7 @@ from dots.founder_graph import Claim, EgressPolicy, Evidence, Idea, MaterialKind
 from dots.founder_graph_mcp import McpReadError, McpReadSurface
 from dots.founder_graph_read import GraphReadService, GraphReadTimeoutError, GraphReadUnavailableError, NodeView, RelationPathStep, SearchHit
 from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
 
 
 def _surface() -> tuple[InMemoryGraphWriteService, McpReadSurface]:
@@ -71,15 +71,20 @@ def _brief_reader_fixture() -> tuple[InMemoryGraphWriteService, McpReadSurface, 
 
 def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() -> None:
     writes, surface, idea, brief, shared_evidence, private_evidence = _brief_reader_fixture()
+    report_markdown = "\n\n".join(
+        f"## {title}\n\nMarkdown section {index}"
+        + ("\n\n[Public link](https://example.test/public)" if index == 2 else "")
+        for index, title in enumerate(SECTION_TITLES)
+    )
     latest = brief.revise(
         sections=(IdeaBriefSection(index=0, content="Latest safe section", evidence_ids=(shared_evidence.id, private_evidence.id)),),
-        report_markdown="## 概要\n\n公開情報の表です。",
+        report_markdown=report_markdown,
     )
     writes.save_idea_brief(latest, expected_latest_revision=1, idempotency_key="brief-save-latest")
 
     result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
 
-    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin", "report_markdown"}
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin", "report_markdown", "report_projection"}
     assert result["report_markdown"] == latest.report_markdown
     assert result["origin"] is None
     assert result["brief_citations"][0] == [{
@@ -88,11 +93,17 @@ def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() ->
     }]
     assert result["brief_id"] == latest.id
     assert result["idea_id"] == idea.id
+    assert result["report_projection"]["heading_status"] == "complete"
+    assert result["report_projection"]["links"] == [{
+        "url": "https://example.test/public", "label": "Public link",
+        "offset": report_markdown.index("https://example.test/public"), "section_index": 2,
+        "verification_status": "url_only", "evidence_ids": [],
+    }]
     assert result["sections"] == [
         {
             "index": index, "title": title,
-            "content": "Latest safe section" if index == 0 else f"Safe section {index}",
-            "untrusted_text": "Latest safe section" if index == 0 else f"Safe section {index}",
+            "content": f"Markdown section {index}" + ("\n\n[Public link](https://example.test/public)" if index == 2 else ""),
+            "untrusted_text": f"Markdown section {index}" + ("\n\n[Public link](https://example.test/public)" if index == 2 else ""),
             "evidence_ids": [shared_evidence.id],
             "citations": [{
                 "url": "https://example.test/source?id=brief#overview", "title": "Synthetic public source",
@@ -107,6 +118,16 @@ def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() ->
     serialized = str(result)
     for private_value in (private_evidence.id, "PRIVATE OWNER DECISION", "PRIVATE SOURCE ORIGINAL", "brief-revision"):
         assert private_value not in serialized
+
+
+def test_fetch_idea_brief_preserves_legacy_sections_when_markdown_is_absent() -> None:
+    _writes, surface, idea, brief, _shared_evidence, _private_evidence = _brief_reader_fixture()
+
+    result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
+
+    assert "report_projection" not in result
+    assert result["sections"][0]["content"] == "Safe section 0"
+    assert result["report_markdown"] is None
 
 
 def test_fetch_idea_brief_hides_wrong_owner_stale_idea_and_unshareable_brief() -> None:
