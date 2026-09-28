@@ -1,0 +1,52 @@
+// @vitest-environment happy-dom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, expect, it, vi } from 'vitest';
+import { MarkdownReport } from './MarkdownReport.jsx';
+
+vi.mock('mermaid', () => ({ default: {
+  initialize: vi.fn(),
+  render: vi.fn(async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" onload="window.evil=true"><text>図の内容</text></svg>' })),
+} }));
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+let mounted;
+afterEach(async () => {
+  if (mounted) await act(async () => { mounted.root.unmount(); mounted.container.remove(); });
+  mounted = null;
+});
+
+it('shows Markdown tables, safe citations and public images without executing HTML or unsafe URLs', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  const markdown = [
+    '## 顧客と課題',
+    '| 顧客 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |',
+    '[公開出典](https://example.test/source)',
+    '[危険なリンク](javascript:alert(1))',
+    '![公開図](https://example.test/chart.png)',
+    '![内部画像](http://localhost:8765/private.png)',
+    '<script>window.evil = true</script>',
+  ].join('\n\n');
+  await act(async () => root.render(<MarkdownReport markdown={markdown} />));
+  expect(container.querySelector('h2')?.textContent).toBe('顧客と課題');
+  expect(container.querySelector('table')?.textContent).toContain('店舗');
+  expect(container.querySelectorAll('a')).toHaveLength(1);
+  expect(container.querySelector('a')?.getAttribute('href')).toBe('https://example.test/source');
+  expect(container.querySelectorAll('img')).toHaveLength(1);
+  expect(container.querySelector('img')?.getAttribute('referrerpolicy')).toBe('no-referrer');
+  expect(container.querySelector('script')).toBeNull();
+  expect(container.innerHTML).not.toContain('localhost:8765/private.png');
+});
+
+it('renders Mermaid diagrams as sanitized SVG', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<MarkdownReport markdown={'```mermaid\ngraph LR\nA-->B\n```'} />));
+  expect(container.querySelector('figure[aria-label="レポート内の図"]')?.textContent).toBe('図の内容');
+  expect(container.innerHTML).not.toContain('onload');
+});

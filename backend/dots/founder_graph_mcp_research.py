@@ -267,6 +267,7 @@ class McpResearchCampaignSurface:
                         },
                     },
                     "change_reason": {"type": "string", "maxLength": 500},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "図表・公開画像・出典リンクを含むレポート全文。8観点と同じ版に保存します。HTMLは画面で実行しません。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "origin": {"type": "string", "enum": ["prior_research_import"], "description": "既に実施済みの過去調査を示す場合だけ指定します。現在のCampaign/Runの許諾や実行履歴は作りません。"},
                     "idempotency_key": idempotency,
@@ -299,6 +300,7 @@ class McpResearchCampaignSurface:
                     },
                     "research_run_ids": {"type": "array", "minItems": 1, "maxItems": 20, "items": {**text, "maxLength": 200}},
                     "change_reason": {"type": "string", "maxLength": 500},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成したMarkdownレポート全文。8観点と出典IDの対応を別途保持します。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "idempotency_key": idempotency,
                 }, "additionalProperties": False,
@@ -332,7 +334,7 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("idea brief storage is unavailable on this connection")
         if _brief_store_owner(self.brief_store) != self.writes.owner_id:
             raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
-        _reject_unknown(args, {"idea_id", "idea_lineage_root_id", "expected_revision", "sections", "change_reason", "egress_policy", "origin", "idempotency_key"})
+        _reject_unknown(args, {"idea_id", "idea_lineage_root_id", "expected_revision", "sections", "report_markdown", "change_reason", "egress_policy", "origin", "idempotency_key"})
         key = _text(args.get("idempotency_key"), "idempotency_key")
         idea_id = _text(args.get("idea_id"), "idea_id", maximum=200)
         root_id = _text(args.get("idea_lineage_root_id", idea_id), "idea_lineage_root_id", maximum=200)
@@ -346,6 +348,9 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("section content is invalid") from error
         if not any(section.content.strip() for section in sections):
             raise ResearchCampaignInputError("at least one viewpoint needs content")
+        report_markdown = args.get("report_markdown")
+        if report_markdown is not None and (not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000):
+            raise ResearchCampaignInputError("report_markdown must contain 1 through 60000 characters")
         change_reason = args.get("change_reason", "initial")
         if not isinstance(change_reason, str) or not change_reason.strip() or len(change_reason) > 500:
             raise ResearchCampaignInputError("change_reason must contain 1 through 500 characters")
@@ -364,6 +369,7 @@ class McpResearchCampaignSurface:
             if (prior_receipt is not None and prior_receipt.target_id != brief_id) or existing is None or existing.revision != expected + 1 or not _brief_matches(
                 existing, root_id=root_id, idea_id=idea_id, sections=sections,
                 run_ids=(), change_reason=change_reason, egress_policy=egress_policy,
+                report_markdown=report_markdown,
                 origin=(requested_origin if requested_origin is not None else existing.origin),
             ):
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
@@ -377,6 +383,7 @@ class McpResearchCampaignSurface:
             brief = IdeaBriefVersion(
                 owner_id=self.writes.owner_id, idea_lineage_root_id=root_id,
                 based_on_idea_id=idea_id, sections=sections, id=brief_id,
+                report_markdown=report_markdown,
                 change_reason=change_reason, egress_policy=egress_policy, origin=effective_origin,
             )
             expected_latest_revision = None
@@ -384,7 +391,7 @@ class McpResearchCampaignSurface:
             if previous.revision != expected:
                 raise RevisionConflictError("brief changed; reload its current revision")
             brief = replace(previous.revise(
-                sections=sections, based_on_idea_id=idea_id, research_run_ids=(),
+                sections=sections, report_markdown=report_markdown, based_on_idea_id=idea_id, research_run_ids=(),
                 change_reason=change_reason, egress_policy=egress_policy, origin=effective_origin,
             ), id=brief_id)
             expected_latest_revision = expected
@@ -576,7 +583,7 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
         allowed = {
             "idea_id", "idea_lineage_root_id", "expected_revision", "sections", "research_run_ids",
-            "change_reason", "egress_policy", "idempotency_key",
+            "change_reason", "egress_policy", "report_markdown", "idempotency_key",
         }
         _reject_unknown(args, allowed)
         key = _text(args.get("idempotency_key"), "idempotency_key")
@@ -593,6 +600,9 @@ class McpResearchCampaignSurface:
             sections = tuple(IdeaBriefSection(**item) for item in raw_sections)
         except (TypeError, ValueError) as error:
             raise ResearchCampaignInputError("section content is invalid") from error
+        report_markdown = args.get("report_markdown")
+        if report_markdown is not None and (not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000):
+            raise ResearchCampaignInputError("report_markdown must contain 1 through 60000 characters")
         if {section.index for section in sections} != set(range(8)):
             raise ResearchCampaignInputError("researched IdeaBrief must provide each viewpoint exactly once")
         change_reason = args.get("change_reason", "researched brief")
@@ -609,6 +619,7 @@ class McpResearchCampaignSurface:
             if (prior_receipt is not None and prior_receipt.target_id != brief_id) or existing is None or existing.revision != expected + 1 or not _brief_matches(
                 existing, root_id=root_id, idea_id=idea_id, sections=sections,
                 run_ids=run_ids, change_reason=change_reason, egress_policy=egress_policy,
+                report_markdown=report_markdown,
             ):
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
             receipt = prior_receipt or WriteReceipt("save_idea_brief", existing.id, "idea_brief_version", existing.revision, key)
@@ -625,6 +636,7 @@ class McpResearchCampaignSurface:
             brief = IdeaBriefVersion(
                 owner_id=self.writes.owner_id, idea_lineage_root_id=root_id, based_on_idea_id=idea_id,
                 sections=sections, id=brief_id, research_run_ids=run_ids,
+                report_markdown=report_markdown,
                 change_reason=change_reason, egress_policy=egress_policy,
             )
             expected_latest_revision = None
@@ -632,7 +644,7 @@ class McpResearchCampaignSurface:
             if previous.revision != expected:
                 raise RevisionConflictError("brief changed; reload its current revision")
             brief = replace(previous.revise(
-                sections=sections, based_on_idea_id=idea_id, research_run_ids=run_ids,
+                sections=sections, report_markdown=report_markdown, based_on_idea_id=idea_id, research_run_ids=run_ids,
                 change_reason=change_reason, egress_policy=egress_policy,
             ), id=brief_id)
             expected_latest_revision = expected
@@ -699,7 +711,7 @@ def _latest_brief(store: Any, root_id: str) -> IdeaBriefVersion | None:
 def _brief_matches(
     brief: IdeaBriefVersion, *, root_id: str, idea_id: str,
     sections: tuple[IdeaBriefSection, ...], run_ids: tuple[str, ...],
-    change_reason: str, egress_policy: str, origin: str | None = None,
+    change_reason: str, egress_policy: str, report_markdown: str | None = None, origin: str | None = None,
 ) -> bool:
     return (
         brief.idea_lineage_root_id == root_id
@@ -708,6 +720,7 @@ def _brief_matches(
         and tuple(brief.research_run_ids) == run_ids
         and brief.change_reason == change_reason
         and brief.egress_policy == egress_policy
+        and brief.report_markdown == report_markdown
         and brief.origin == origin
     )
 

@@ -166,6 +166,15 @@ describe('Local dashboard client', () => {
     const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
     expect(home.ideas[0].research_status).toBe('researched');
   });
+  it('projects a bounded Markdown report only with its saved brief', async () => {
+    const markdown = '## 事業モデル\n\n| 顧客 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |';
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'ready', assets: [], profile: null,
+      ideas: [{ id: 'idea-1', title: '調査案', summary: '', description: '', brief_sections: Array(8).fill('概要'), brief_revision: 1, report_markdown: markdown }],
+    }));
+    const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+    expect(home.ideas[0].report_markdown).toBe(markdown);
+  });
   it('preserves an explicit prior-research origin only with validated citations', async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
       status: 'ready', assets: [], profile: null,

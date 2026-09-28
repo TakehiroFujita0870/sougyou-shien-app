@@ -471,6 +471,7 @@ class GraphReadService:
             "sections": sections,
             "brief_citations": brief_citations,
             "origin": latest.origin,
+            "report_markdown": latest.report_markdown,
         }
 
     @staticmethod

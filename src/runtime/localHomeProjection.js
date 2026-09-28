@@ -22,6 +22,10 @@ export function projectLocalHome(result) {
       }
       idea.brief_sections = [...item.brief_sections];
       idea.brief_revision = item.brief_revision;
+      if (item.report_markdown !== undefined) {
+        if (typeof item.report_markdown !== 'string' || !item.report_markdown.trim() || item.report_markdown.length > 60_000) throw new LocalDashboardClientError('error');
+        idea.report_markdown = item.report_markdown;
+      }
       if (item.brief_citations !== undefined) {
         if (!Array.isArray(item.brief_citations) || item.brief_citations.length !== 8
           || item.brief_citations.some((chapter) => !Array.isArray(chapter) || chapter.length > 100)) {

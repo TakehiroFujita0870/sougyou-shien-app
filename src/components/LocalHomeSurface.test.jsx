@@ -78,6 +78,25 @@ it('shows a saved latest idea brief in its matching viewpoint', async () => {
   expect(container.textContent).toContain('未整理');
 });
 
+it('prefers the saved Markdown report over duplicate section text and keeps cited sources', async () => {
+  const client = { getHome: vi.fn(async () => ({
+    status: 'ready', assets: [], profile: null,
+    ideas: [{ id: 'idea-1', title: '新事業', summary: '', description: '', research_status: 'researched',
+      brief_sections: Array(8).fill('検索用の章'), report_markdown: '## 顧客\n\n| 層 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |',
+      brief_citations: [[{ url: 'https://example.test/source', title: '公開資料' }], ...Array.from({ length: 7 }, () => [])],
+    }],
+  })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  expect(container.querySelector('.markdown-report table')?.textContent).toContain('店舗');
+  expect(container.textContent).not.toContain('検索用の章');
+  expect(container.querySelector('.local-home__citation a')?.getAttribute('href')).toBe('https://example.test/source');
+  expect(container.querySelector('.local-home__detail-status-row .local-home__status-badge')?.textContent).toBe('調査済み');
+});
+
 it('shows draft and unknown research states without inferring completion from a brief', async () => {
   const brief = Array(8).fill('');
   brief[0] = '保存された概要';
@@ -99,12 +118,12 @@ it('shows draft and unknown research states without inferring completion from a 
   expect(container.textContent).toContain('未調査');
   expect(container.querySelectorAll('.local-home__status-badge')).toHaveLength(1);
   await act(async () => [...container.querySelectorAll('.local-home__idea-select')].find((button) => button.textContent.includes('状態不明案')).click());
-  expect(container.textContent).toContain('状態未確認');
+  expect(container.querySelector('.local-home__detail-status-row')).toBeNull();
   expect(container.textContent).toContain('保存された概要');
   expect(container.textContent).not.toContain('調査済み');
 });
 
-it('keeps only researched or unresearched badges at the card corner', async () => {
+it('keeps only titles in the idea list and a two-state badge at the right of the detail', async () => {
   const client = { getHome: vi.fn(async () => ({
     status: 'ready', assets: [], profile: null,
     ideas: [
@@ -123,13 +142,15 @@ it('keeps only researched or unresearched badges at the card corner', async () =
   expect(cards).toHaveLength(3);
   for (const card of cards) {
     expect(card.querySelector('.local-home__idea-heading')).not.toBeNull();
-    expect(card.querySelector('.local-home__status-badge')).not.toBeNull();
-    expect(card.querySelector('.local-home__idea-select > .local-home__status-badge')).not.toBeNull();
+    expect(card.querySelector('.local-home__status-badge')).toBeNull();
+    expect(card.querySelector('.local-home__idea-summary')).toBeNull();
   }
-  expect(cards.map((card) => card.querySelector('.local-home__status-badge').textContent)).toEqual(['未調査', '調査済み', '調査済み']);
-  expect(cards.map((card) => card.querySelector('.local-home__status-badge').getAttribute('data-research-state'))).toEqual(['unresearched', 'researched', 'prior_research_import']);
+  expect(container.querySelector('.local-home__detail-status-row .local-home__status-badge').textContent).toBe('未調査');
+  expect(container.querySelector('.local-home__status-badge').getAttribute('data-research-state')).toBe('unresearched');
+  await act(async () => cards[2].querySelector('button').click());
+  expect(container.querySelector('.local-home__detail-status-row .local-home__status-badge').textContent).toBe('調査済み');
   expect(cards[2].textContent).not.toContain('ResearchRun');
-  expect(cards[2].querySelector('.local-home__status-badge').getAttribute('aria-label')).toBe('過去調査を取り込みました（実行済み調査ではありません）');
+  expect(container.textContent).not.toContain('過去調査を取り込みました');
 });
 
 it('places asset editing in a small, keyboard-reachable icon button at the card corner', async () => {
@@ -422,7 +443,7 @@ it('labels a server-validated researched idea in its card and detail', async () 
   const root = createRoot(container);
   mounted = { root, container };
   await act(async () => root.render(<LocalHomeSurface client={client} />));
-  expect(container.textContent.match(/調査済み/g)).toHaveLength(2);
+  expect(container.textContent.match(/調査済み/g)).toHaveLength(1);
   expect(container.textContent).not.toContain('調査状態未確認');
   expect(container.textContent).not.toContain('下書き時点では調査未実施');
   expect(container.textContent).toContain('確認した概要');
@@ -438,7 +459,7 @@ it('distinguishes completed research with missing current sources from drafts an
   const root = createRoot(container);
   mounted = { root, container };
   await act(async () => root.render(<LocalHomeSurface client={client} />));
-  expect(container.textContent.match(/調査済み・出典を表示できません/g)).toHaveLength(1);
+  expect(container.textContent).not.toContain('調査済み・出典を表示できません');
   expect(container.querySelector('.local-home__status-badge').textContent).toBe('調査済み');
   expect(container.querySelector('.local-home__status-badge').getAttribute('data-research-state')).toBe('research_sources_missing');
   expect(container.textContent).not.toContain('未調査');
@@ -460,11 +481,11 @@ it('uses the same researched badge for imported research while retaining citatio
   const root = createRoot(container);
   mounted = { root, container };
   await act(async () => root.render(<LocalHomeSurface client={client} />));
-  expect(container.textContent).toContain('過去調査を取り込みました');
-  expect([...container.querySelectorAll('.local-home__status-badge')].map((badge) => badge.textContent)).toEqual(['調査済み', '調査済み']);
-  expect(container.querySelectorAll('.local-home__status-badge[data-research-state^="prior_research"]')).toHaveLength(2);
+  expect(container.textContent).not.toContain('過去調査を取り込みました');
+  expect([...container.querySelectorAll('.local-home__status-badge')].map((badge) => badge.textContent)).toEqual(['調査済み']);
+  expect(container.querySelectorAll('.local-home__status-badge[data-research-state^="prior_research"]')).toHaveLength(1);
   expect(container.textContent).not.toContain('未調査');
-  expect([...container.querySelectorAll('.local-home__citation a')].map((link) => link.textContent)).toContain('公開出典');
+  expect([...container.querySelectorAll('.local-home__citation a')].map((link) => link.textContent)).toContain('公開出典 ↗');
 });
 
 it('edits title and content through the same form for any asset and supports cancel', async () => {

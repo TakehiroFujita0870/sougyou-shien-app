@@ -105,7 +105,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(mockGraphs).toHaveLength(0);
   });
 
-  it('keeps the 3D canvas and follows the actual parent-child-record path as wheel depth changes', async () => {
+  it('keeps depth scrolling without the classification selector', async () => {
     globalThis.ResizeObserver = class { observe() {} disconnect() {} };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const hit = {
@@ -148,35 +148,20 @@ describe('LocalGraphSurface Facet exploration', () => {
 
     expect(container.querySelector('.local-graph__canvas')).toBeTruthy();
     expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('select')).toBeNull();
+    expect(container.textContent).not.toContain('分類から探す');
+    expect(container.textContent).not.toContain('全体の意味グラフ');
     expect(client.getFacetRegion).not.toHaveBeenCalled();
-    await act(async () => {
-      const select = container.querySelector('select');
-      select.value = 'facet-root';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    await flushEffects();
-    expect(client.getFacetRegion).toHaveBeenCalledWith('facet-root', 0, expect.any(Object));
     await act(async () => container.querySelector('.local-graph__canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true })));
     await flushEffects();
-    expect(client.getFacetRegion).toHaveBeenCalledWith('facet-root', 1, expect.any(Object));
+    expect(container.textContent).toContain('深度 2 / 4');
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 270)); });
     await act(async () => container.querySelector('.local-graph__canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true })));
     await flushEffects();
-    expect(client.getFacetRegion).toHaveBeenCalledWith('facet-root', 2, expect.any(Object));
-    expect(container.textContent).toContain('確定');
-    expect(container.textContent).toContain('推測');
-    expect(container.textContent).toContain('小規模な食品店');
-    expect(container.querySelectorAll('aside[aria-label="分類領域の記録と根拠"] article')).toHaveLength(2);
-    expect(container.textContent).not.toContain('Facet');
-    expect(container.textContent).toContain('ev-class');
+    expect(container.textContent).toContain('深度 3 / 4');
+    expect(client.getFacetRegion).not.toHaveBeenCalled();
     const graphInstance = mockGraphs.at(-1);
-    expect(graphInstance.data.nodes.map(({ id, depth }) => [id, depth])).toEqual([
-      ['facet-root', 0], ['facet-middle', 1], ['facet-child', 2], ['idea-child', 2],
-    ]);
-    expect(graphInstance.data.links.map(({ source, target }) => [source, target])).toEqual([
-      ['facet-root', 'facet-middle'], ['facet-middle', 'facet-child'], ['facet-child', 'idea-child'],
-      ['facet-root', 'idea-child'],
-    ]);
+    expect(graphInstance.data.nodes.map(({ id }) => id)).toEqual(['facet-root', 'facet-middle', 'facet-child', 'idea-child']);
     expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique key/i);
     const canvas = container.querySelector('.local-graph__canvas');
     const removeListener = vi.spyOn(canvas, 'removeEventListener');

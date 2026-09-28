@@ -73,6 +73,7 @@ class IdeaBriefVersion:
     idea_lineage_root_id: str
     based_on_idea_id: str
     sections: tuple[IdeaBriefSection, ...] = ()
+    report_markdown: str | None = None
     research_run_ids: tuple[str, ...] | list[str] = ()
     origin: IdeaBriefOrigin | None = None
     id: str = field(default_factory=lambda: f"idea-brief_{uuid4().hex}")
@@ -105,6 +106,12 @@ class IdeaBriefVersion:
         if len(by_index) != len(self.sections):
             raise IdeaBriefValidationError("section indexes must be unique")
         object.__setattr__(self, "sections", tuple(by_index.get(index, IdeaBriefSection(index=index)) for index in range(len(SECTION_TITLES))))
+        if self.report_markdown is not None and (
+            not isinstance(self.report_markdown, str)
+            or not self.report_markdown.strip()
+            or len(self.report_markdown) > 60_000
+        ):
+            raise IdeaBriefValidationError("report_markdown must contain 1 through 60000 characters")
         run_ids = _strings(self.research_run_ids, "research_run_ids")
         object.__setattr__(self, "research_run_ids", run_ids)
         if self.origin not in {None, "prior_research_import"}:
@@ -116,6 +123,7 @@ class IdeaBriefVersion:
         self,
         *,
         sections: tuple[IdeaBriefSection, ...] = (),
+        report_markdown: str | None = None,
         change_reason: str = "revision",
         based_on_idea_id: str | None = None,
         research_run_ids: tuple[str, ...] | list[str] | None = None,
@@ -140,6 +148,7 @@ class IdeaBriefVersion:
             research_run_ids=run_ids,
             origin=next_origin,
             sections=tuple(merged.values()),
+            report_markdown=report_markdown,
             change_reason=change_reason,
             egress_policy=self.egress_policy if egress_policy is None else egress_policy,
             created_at=datetime.now(timezone.utc),

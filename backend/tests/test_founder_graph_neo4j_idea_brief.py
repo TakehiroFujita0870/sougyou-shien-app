@@ -69,6 +69,18 @@ def test_prior_research_origin_roundtrips_without_run_history():
     assert decoded.research_run_ids == ()
 
 
+def test_markdown_roundtrips_and_older_payload_without_it_remains_readable():
+    from dataclasses import replace
+
+    brief = replace(brief_fixture(), report_markdown="## 概要\n\n![図](https://example.test/chart.png)")
+    record = record_for(brief)
+    assert _decode_persisted_idea_brief(record, owner_id=brief.owner_id).report_markdown == brief.report_markdown
+    payload = json.loads(record["payload_json"])
+    del payload["report_markdown"]
+    record["payload_json"] = json.dumps(payload, ensure_ascii=False)
+    assert _decode_persisted_idea_brief(record, owner_id=brief.owner_id).report_markdown is None
+
+
 def test_known_legacy_brief_requires_label_checked_opt_in_and_never_invents_run_references():
     from dataclasses import replace
     brief = replace(brief_fixture(), research_run_ids=())

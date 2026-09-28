@@ -73,12 +73,14 @@ def test_fetch_idea_brief_returns_only_latest_safe_eight_section_projection() ->
     writes, surface, idea, brief, shared_evidence, private_evidence = _brief_reader_fixture()
     latest = brief.revise(
         sections=(IdeaBriefSection(index=0, content="Latest safe section", evidence_ids=(shared_evidence.id, private_evidence.id)),),
+        report_markdown="## 概要\n\n公開情報の表です。",
     )
     writes.save_idea_brief(latest, expected_latest_revision=1, idempotency_key="brief-save-latest")
 
     result = surface.call("fetch_idea_brief", {"idea_id": idea.id}, owner_id="owner-1")
 
-    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin"}
+    assert set(result) == {"brief_id", "idea_id", "sections", "brief_citations", "origin", "report_markdown"}
+    assert result["report_markdown"] == latest.report_markdown
     assert result["origin"] is None
     assert result["brief_citations"][0] == [{
         "url": "https://example.test/source?id=brief#overview", "title": "Synthetic public source",
