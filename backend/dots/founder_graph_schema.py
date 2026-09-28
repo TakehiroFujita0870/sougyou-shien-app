@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from .founder_graph import NodeType, Relationship, _ALLOWED_RELATION_ENDPOINTS
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 SCHEMA_NAME = "dots-founder-graph"
 
 
@@ -39,7 +39,8 @@ _V1_LABELS = (
 )
 _V2_LABELS = ("EntityRevision", "RelationAssertion", "ContentChunk", "Facet")
 _V3_LABELS = ("IdeaBriefVersion",)
-_LABELS = _V1_LABELS + _V2_LABELS + _V3_LABELS
+_V4_LABELS = ("FounderGraphJob",)
+_LABELS = _V1_LABELS + _V2_LABELS + _V3_LABELS + _V4_LABELS
 
 
 def _create_queries(labels: tuple[str, ...]) -> tuple[str, ...]:
@@ -130,6 +131,16 @@ _MIGRATIONS = (
             "OPTIONS {indexConfig: {`vector.dimensions`: 768, `vector.similarity_function`: 'cosine'}}",
         ),
     ),
+    SchemaMigration(
+        version=8,
+        # Durable jobs are not searchable graph content; uniqueness fences duplicate enqueue.
+        queries=_create_queries(_V4_LABELS) + (
+            "CREATE CONSTRAINT dots_foundergraphjob_owner_brief IF NOT EXISTS "
+            "FOR (node:FounderGraphJob) REQUIRE (node.owner_id, node.brief_id) IS UNIQUE",
+            "CREATE CONSTRAINT dots_foundergraphjobqueuelock_owner IF NOT EXISTS "
+            "FOR (node:FounderGraphJobQueueLock) REQUIRE node.owner_id IS UNIQUE",
+        ),
+    ),
 )
 
 
@@ -165,6 +176,11 @@ def rollback_queries(current_version: int = SCHEMA_VERSION, target_version: int 
     if target_version < 1:
         raise ValueError("rollback below schema v1 is not supported")
     queries: tuple[str, ...] = ()
+    if current_version >= 8 and target_version < 8:
+        queries = (
+            "DROP CONSTRAINT dots_foundergraphjobqueuelock_owner IF EXISTS",
+            "DROP CONSTRAINT dots_foundergraphjob_owner_brief IF EXISTS",
+        ) + _drop_queries(_V4_LABELS)
     if current_version >= 4 and target_version < 4:
         queries += ("DROP CONSTRAINT dots_assertion_family_lock_owner_key IF EXISTS",)
     if current_version >= 5 and target_version < 5:
