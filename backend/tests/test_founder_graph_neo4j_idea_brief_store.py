@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 import json
@@ -7,6 +8,7 @@ import json
 import pytest
 
 from dots.founder_graph import EgressPolicy, Idea, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
+from dots.founder_graph_job_store import FounderGraphJobStore, JobState
 from dots.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
 from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
 from dots.founder_graph_neo4j_write import Neo4jIdeaBriefStore
@@ -35,12 +37,34 @@ class BriefTx:
         self.run_campaign = None
         self.campaign_history = ()
         self.calls = []
+        self.transaction_calls = []
+        self.jobs = {}
+        self.fail_job_supersede = False
+        self.rollback_callback_errors = False
         self.fail_after_write = False
         self.fail_recovery_read = False
         self.receipt_revision_override = None
 
     def run(self, query, **params):
         self.calls.append((query, params))
+        self.transaction_calls.append((query, params, id(self)))
+        if "// graph_job:enqueue" in query:
+            identity = (params["owner_id"], params["brief_id"])
+            job = self.jobs.setdefault(identity, dict(params["properties"]))
+            return Result(({"job": dict(job)},))
+        if "// graph_job:supersede" in query:
+            if self.fail_job_supersede:
+                self.fail_job_supersede = False
+                raise RuntimeError("synthetic queue transaction failure")
+            stale = [job for job in self.jobs.values()
+                     if job["owner_id"] == params["owner_id"]
+                     and job["idea_lineage_root_id"] == params["idea_lineage_root_id"]
+                     and job["brief_id"] != params["current_brief_id"]
+                     and job["state"] in {"pending", "leased"}]
+            for job in stale:
+                job.update(state="superseded", lease_owner=None, lease_token=None,
+                           lease_expires_at=None, updated_at=params["now"])
+            return Result(({"count": len(stale)},))
         if "operation: 'record_research_run'" in query:
             return Result((self.run_audit,) if self.run_audit else ())
         if "MATCH (a:FounderGraphAudit" in query:
@@ -120,7 +144,16 @@ class Session(BriefTx):
         return None
 
     def execute_write(self, callback):
-        result = callback(self)
+        snapshot = None
+        if self.state.rollback_callback_errors:
+            snapshot = tuple(deepcopy(getattr(self.state, name))
+                             for name in ("briefs", "audits", "jobs"))
+        try:
+            result = callback(self)
+        except Exception:
+            if snapshot is not None:
+                self.state.briefs, self.state.audits, self.state.jobs = snapshot
+            raise
         if self.state.fail_after_write:
             self.state.fail_after_write = False
             if self.state.receipt_revision_override is not None:
@@ -205,6 +238,8 @@ def test_store_replay_is_idempotent_and_changed_intent_conflicts_without_mutatio
     with pytest.raises(GraphWriteError):
         store.save(changed, expected_latest_revision=None, idempotency_key="brief-key")
     assert len(state.briefs) == len(state.audits) == 1
+    assert len(state.jobs) == 1
+    assert sum("// graph_job:enqueue" in query for query, _params in state.calls) == 1
 
 
 def test_store_rejects_stale_latest_revision_without_mutation():
@@ -228,6 +263,45 @@ def test_store_appends_exact_successor_revision_and_reads_it_as_latest():
     assert store.get(brief.id) == brief
     assert store.get_latest(idea.id) == revised
     assert len(state.briefs) == 2 and len(state.audits) == 2
+
+
+def test_brief_queue_write_rolls_back_with_brief_and_receipt_in_one_transaction():
+    _idea, brief, state, store = fixtures()
+    state.rollback_callback_errors = True
+    state.fail_job_supersede = True
+
+    with pytest.raises(Neo4jUnavailableError):
+        store.save(brief, expected_latest_revision=None, idempotency_key="atomic-brief")
+
+    assert not state.briefs and not state.audits and not state.jobs
+    writes = [entry for entry in state.transaction_calls if any(marker in entry[0] for marker in (
+        "CREATE (b:IdeaBriefVersion", "CREATE (a:FounderGraphAudit", "// graph_job:enqueue",
+        "// graph_job:supersede",
+    ))]
+    assert len({transaction_id for _query, _params, transaction_id in writes}) == 1
+
+
+def test_new_brief_supersedes_only_active_jobs_for_same_owner_and_idea_lineage():
+    idea, brief, state, store = fixtures()
+    store.save(brief, expected_latest_revision=None, idempotency_key="first-brief")
+    old_key = (brief.owner_id, brief.id)
+    state.jobs[old_key].update(
+        state="leased", lease_owner="worker", lease_token="lease-token",
+        lease_expires_at="2026-09-29T00:01:00Z",
+    )
+    other_owner = replace(brief, owner_id="another-owner", id="other-owner-brief")
+    other_lineage = replace(brief, id="other-lineage-brief", idea_lineage_root_id="another-idea")
+    FounderGraphJobStore.enqueue_tx(state, other_owner, owner_id=other_owner.owner_id)
+    FounderGraphJobStore.enqueue_tx(state, other_lineage, owner_id=other_lineage.owner_id)
+    revised = brief.revise(sections=(IdeaBriefSection(index=0, content="revised synthetic"),))
+
+    store.save(revised, expected_latest_revision=1, idempotency_key="next-brief")
+
+    assert state.jobs[old_key]["state"] == JobState.SUPERSEDED.value
+    assert state.jobs[old_key]["lease_token"] is None
+    assert state.jobs[(revised.owner_id, revised.id)]["state"] == JobState.PENDING.value
+    assert state.jobs[(other_owner.owner_id, other_owner.id)]["state"] == JobState.PENDING.value
+    assert state.jobs[(other_lineage.owner_id, other_lineage.id)]["state"] == JobState.PENDING.value
 
 
 def test_idea_scalar_successor_chain_selects_brief_leaf_and_rejects_sibling_fork():
