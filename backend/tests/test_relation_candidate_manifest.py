@@ -92,6 +92,52 @@ def test_hypothesis_is_proposed_unfounded_by_external_evidence_and_retry_stable(
     assert first.brief_markdown_sha256 == sha256(MD.encode()).hexdigest()
 
 
+def test_assertion_is_shareable_only_when_endpoints_brief_and_current_idea_allow_it():
+    b = brief()
+    shareable_brief = b.revise(egress_policy=EgressPolicy.SHAREABLE)
+    refs = {
+        IDEA: CandidateEntityRef(IDEA, OWNER, NodeType.IDEA, EgressPolicy.SHAREABLE),
+        "asset-test": CandidateEntityRef("asset-test", OWNER, NodeType.ASSET, EgressPolicy.SHAREABLE),
+    }
+
+    shared = validate(manifest(shareable_brief, candidate()), shareable_brief, refs=refs).candidates[0].assertion
+    private_endpoint_refs = dict(refs)
+    private_endpoint_refs["asset-test"] = CandidateEntityRef("asset-test", OWNER, NodeType.ASSET)
+    private_endpoint = validate(
+        manifest(shareable_brief, candidate()), shareable_brief, refs=private_endpoint_refs,
+    ).candidates[0].assertion
+    private_idea_refs = dict(refs)
+    private_idea_refs[IDEA] = CandidateEntityRef(IDEA, OWNER, NodeType.IDEA)
+    private_idea = validate(
+        manifest(shareable_brief, candidate()), shareable_brief, refs=private_idea_refs,
+    ).candidates[0].assertion
+    private_brief = validate(manifest(b, candidate()), b, refs=refs).candidates[0].assertion
+
+    assert shared.egress_policy is EgressPolicy.SHAREABLE
+    assert private_endpoint.egress_policy is EgressPolicy.LOCAL_ONLY
+    assert private_idea.egress_policy is EgressPolicy.LOCAL_ONLY
+    assert private_brief.egress_policy is EgressPolicy.LOCAL_ONLY
+
+
+@pytest.mark.parametrize("value", ["invalid", None])
+def test_candidate_endpoint_egress_policy_defaults_fail_closed(value):
+    ref = CandidateEntityRef("asset-test", OWNER, NodeType.ASSET, value)
+
+    assert ref.egress_policy is EgressPolicy.LOCAL_ONLY
+
+
+def test_candidate_endpoint_egress_policy_defaults_local_when_omitted():
+    ref = CandidateEntityRef("asset-test", OWNER, NodeType.ASSET)
+
+    assert ref.egress_policy is EgressPolicy.LOCAL_ONLY
+
+
+def test_candidate_endpoint_retains_valid_nonshareable_policy():
+    ref = CandidateEntityRef("asset-test", OWNER, NodeType.ASSET, EgressPolicy.EXPLICIT)
+
+    assert ref.egress_policy is EgressPolicy.EXPLICIT
+
+
 def test_reuses_candidate_can_point_to_a_past_idea_without_becoming_derived_from():
     b = brief()
     refs = {

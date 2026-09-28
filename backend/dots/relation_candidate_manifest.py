@@ -64,6 +64,7 @@ class CandidateEntityRef:
     id: str
     owner_id: str
     kind: NodeType
+    egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id.strip() or len(self.id) > 200:
@@ -74,9 +75,18 @@ class CandidateEntityRef:
             kind = self.kind if isinstance(self.kind, NodeType) else NodeType(self.kind)
         except (TypeError, ValueError):
             raise CandidateManifestValidationError("endpoint reference kind is invalid") from None
+        try:
+            egress_policy = (
+                self.egress_policy
+                if isinstance(self.egress_policy, EgressPolicy)
+                else EgressPolicy(self.egress_policy)
+            )
+        except (TypeError, ValueError):
+            egress_policy = EgressPolicy.LOCAL_ONLY
         object.__setattr__(self, "id", self.id.strip())
         object.__setattr__(self, "owner_id", self.owner_id.strip())
         object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "egress_policy", egress_policy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,6 +297,14 @@ def validate_relation_candidate_manifest(
         evidence_ids = cast(tuple[str, ...], raw["evidence_ids"])
         support = _support_anchor(raw["support"], markdown=markdown, projection=projection)
 
+        egress_policy = EgressPolicy.LOCAL_ONLY
+        if (
+            source_ref.egress_policy is EgressPolicy.SHAREABLE
+            and target_ref.egress_policy is EgressPolicy.SHAREABLE
+            and latest_brief.can_share_with_chatgpt(idea_egress_policy=idea_ref.egress_policy)
+        ):
+            egress_policy = EgressPolicy.SHAREABLE
+
         if basis is RelationAssertionBasis.BRIEF_HYPOTHESIS:
             if evidence_ids:
                 _fail("Brief hypotheses cannot cite Evidence")
@@ -360,6 +378,7 @@ def validate_relation_candidate_manifest(
                 based_on_brief_revision=latest_brief.revision,
                 based_on_brief_quote_start=support.char_start,
                 based_on_brief_quote_end=support.char_end,
+                egress_policy=egress_policy,
                 provenance=Provenance(
                     actor="dots_candidate_manifest",
                     operation="validate_candidate",

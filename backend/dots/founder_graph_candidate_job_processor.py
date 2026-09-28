@@ -214,15 +214,20 @@ class RelationCandidateJobProcessor:
             owner_id = getattr(node, "owner_id", None)
             node_id = getattr(node, "id", None)
             raw_kind = getattr(node, "node_type", None)
+            raw_egress_policy = getattr(node, "egress_policy", None)
             if isinstance(node, PersistedNodeReference):
                 raw_kind = node.node_type
+                fields = node.fields
+                raw_egress_policy = fields.get("egress_policy") if isinstance(fields, Mapping) else None
             if owner_id != self.owner_id or node_id != identifier:
                 continue
             try:
                 kind = raw_kind if isinstance(raw_kind, NodeType) else NodeType(raw_kind)
             except (TypeError, ValueError):
                 continue
-            entity_refs[identifier] = CandidateEntityRef(identifier, owner_id, kind)
+            entity_refs[identifier] = CandidateEntityRef(
+                identifier, owner_id, kind, raw_egress_policy,
+            )
             if kind is NodeType.EVIDENCE:
                 hydrated = self._hydrate_evidence(node)
                 if hydrated is not None and evidence_lineage_is_current(
