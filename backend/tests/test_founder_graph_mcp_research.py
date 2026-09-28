@@ -101,6 +101,16 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     assert fetched["brief_id"] == brief.target_id
     assert fetched["report_markdown"] == report_markdown
     assert fetched["sections"][0]["evidence_ids"] == [evidence.target_id]
+    link = surface.call("link_entities", {
+        "source_id": "idea-mcp", "target_id": claim.id, "relation": "ADDRESSES",
+        "evidence_ids": [evidence.target_id], "based_on_brief_id": fetched["brief_id"],
+        "based_on_brief_section_index": 0, "egress_policy": "shareable",
+        "idempotency_key": "mcp-report-graph-link",
+    }, owner_id=writes.owner_id)
+    linked = McpReadSurface(GraphReadService(writes)).call(
+        "fetch", {"id": link.target_id}, owner_id=writes.owner_id,
+    )
+    assert linked["id"] == link.target_id
 
     with pytest.raises(McpWriteError, match="current, shareable Evidence citation"):
         surface.call("save_researched_idea_brief", {
