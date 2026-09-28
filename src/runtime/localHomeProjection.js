@@ -57,7 +57,7 @@ export function projectLocalHome(result) {
       || !Number.isSafeInteger(item.revision) || item.revision < 1 || !['local_only', 'shareable'].includes(item.egress_policy)) {
       throw new LocalDashboardClientError('error');
     }
-    return { id: item.id, name: item.name, description: item.description, revision: item.revision, egress_policy: item.egress_policy };
+    return { id: item.id, name: item.name, description: item.description, revision: item.revision, egress_policy: item.egress_policy, kind: item.kind === 'barrier' ? 'barrier' : 'asset' };
   });
   const profile = result.profile && typeof result.profile.display_name === 'string' ? { displayName: result.profile.display_name } : null;
   return { status: result.status, ideas, assets, profile };

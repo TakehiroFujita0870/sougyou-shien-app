@@ -74,6 +74,22 @@ def test_capture_asset_is_metadata_only_create_only_and_owner_scoped() -> None:
     assert len(writes.audit_events()) == 2
 
 
+def test_capture_barrier_is_searchable_but_not_shared_by_default() -> None:
+    writes, surface = _surface()
+    receipt = surface.call("capture_asset", {"name": "販売への迷い", "kind": "barrier", "summary": "顧客開拓が不安", "idempotency_key": "barrier-key"}, owner_id="owner-1")
+    asset = writes.get_node(receipt.target_id)
+    assert isinstance(asset, Asset)
+    assert asset.kind.value == "barrier"
+    assert asset.egress_policy is EgressPolicy.LOCAL_ONLY
+    reader = McpReadSurface(GraphReadService(writes))
+    with pytest.raises(McpReadError):
+        reader.call("fetch", {"id": receipt.target_id}, owner_id="owner-1")
+    shared = surface.call("capture_asset", {"name": "創業時の営業不安", "kind": "barrier", "summary": "初回顧客獲得の方法が未定", "egress_policy": "shareable", "idempotency_key": "shared-barrier"}, owner_id="owner-1")
+    result = reader.call("search", {"query": "創業時の営業不安"}, owner_id="owner-1")
+    assert any(item["id"] == shared.target_id and item["fields"]["kind"] == "barrier" for item in result["results"])
+    assert all(item["id"] != receipt.target_id for item in result["results"])
+
+
 def _capture_link_evidence(
     writes: InMemoryGraphWriteService, claim_id: str, *, key: str,
     egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY,

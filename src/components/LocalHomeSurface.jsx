@@ -274,9 +274,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">
-      <div className="local-home__asset-list">
-        <h2>アセット一覧 <span>{home.assets.length}件</span></h2>
-        {home.assets.length ? <div className="local-home__cards">{home.assets.map((asset) => <article key={asset.id} className="local-home__asset-card">
+      {[{ id: 'strength', label: '強み・経験', items: home.assets.filter((asset) => asset.kind !== 'barrier') }, { id: 'barrier', label: '弱み・迷い', items: home.assets.filter((asset) => asset.kind === 'barrier') }].map((column) => <div key={column.id} className="local-home__asset-list" data-asset-column={column.id}>
+        <h2>{column.label} <span>{column.items.length}件</span></h2>
+        {column.items.length ? <div className="local-home__cards">{column.items.map((asset) => <article key={asset.id} className="local-home__asset-card">
           {assetDraft?.id === asset.id ? <form onSubmit={saveAsset} className="local-home__edit-form">
             <label htmlFor={`asset-title-${asset.id}`}>題名</label>
             <textarea id={`asset-title-${asset.id}`} name="title" rows={1} maxLength={200} required value={assetDraft.name} onChange={(event) => setAssetDraft((current) => ({ ...current, name: event.target.value }))} />
@@ -293,8 +293,8 @@ export function LocalHomeSurface({ client, onOpenServices }) {
             </div>
           </>}
         </article>)}</div> : <p className="local-home__notice">記録はまだありません。</p>}
-        {assetNotice && !assetDraft && <p role="status">{assetNotice}</p>}
-      </div>
+      </div>)}
+      {assetNotice && !assetDraft && <p role="status" className="local-home__asset-notice">{assetNotice}</p>}
     </section>}
     {deleteNotice && <p role="status" aria-live="polite" className="local-home__delete-notice">{deleteNotice}{homeReloadNeeded && <button type="button" onClick={() => { setDeleteNotice(''); setHomeReloadNeeded(false); setAttempt((value) => value + 1); }}>ホームを再読み込み</button>}</p>}
     {deleteConfirmation && <div className="local-home__delete-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !deletePending) setDeleteConfirmation(null); }}>

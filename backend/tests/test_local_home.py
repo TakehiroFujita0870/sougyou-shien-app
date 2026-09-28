@@ -63,6 +63,7 @@ def test_home_lists_every_current_idea_and_safe_assets_without_raw_fields():
         node("idea-old", "idea", {"title": "Old", "summary": "old", "created_at": "2026-09-01T00:00:00Z"}),
         node("idea-new", "idea", {"title": "New", "summary": "Summary", "description": "Detail", "source_text": "private raw conversation", "supersedes_id": "idea-old", "created_at": "2026-09-02T00:00:00Z"}),
         node("asset-1", "asset", {"name": "製造業経験", "kind": "experience", "description": "現場の経験", "details": {"secret": "private"}, "created_at": "2026-09-03T00:00:00Z"}),
+        node("asset-2", "asset", {"name": "営業への迷い", "kind": "barrier", "description": "初回顧客獲得に不安", "created_at": "2026-09-04T00:00:00Z"}),
         node("profile-1", "owner_profile", {"display_name": "Takehiro", "created_at": "2026-09-01T00:00:00Z"}),
         node("foreign", "idea", {"title": "Foreign"}, owner="owner-b"),
         node("archived", "idea", {"title": "Archived"}, status="archived"),
@@ -73,6 +74,9 @@ def test_home_lists_every_current_idea_and_safe_assets_without_raw_fields():
     assert result["status"] == "ready"
     assert result["ideas"] == [{"id": "idea-new", "title": "New", "summary": "Summary", "description": "Detail", "revision": 0, "research_status": "unknown"}]
     assert result["assets"] == [{
+        "id": "asset-2", "name": "営業への迷い", "kind": "barrier", "description": "初回顧客獲得に不安",
+        "revision": 1, "egress_policy": "local_only",
+    }, {
         "id": "asset-1", "name": "製造業経験", "kind": "experience", "description": "現場の経験",
         "revision": 1, "egress_policy": "local_only",
     }]

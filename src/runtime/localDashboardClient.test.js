@@ -33,7 +33,7 @@ it('maps common asset revisions and sharing policy without exposing other server
     assets: [{ id: 'asset-1', name: '経験', kind: 'experience', description: '内容', revision: 3, egress_policy: 'shareable', details: 'PRIVATE' }],
   }));
   const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
-  expect(home.assets).toEqual([{ id: 'asset-1', name: '経験', description: '内容', revision: 3, egress_policy: 'shareable' }]);
+  expect(home.assets).toEqual([{ id: 'asset-1', name: '経験', description: '内容', revision: 3, egress_policy: 'shareable', kind: 'asset' }]);
   expect(JSON.stringify(home)).not.toContain('PRIVATE');
 });
 
