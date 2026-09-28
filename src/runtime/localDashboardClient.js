@@ -1,5 +1,6 @@
 import { LocalDashboardClientError } from './localDashboardClientError.js';
 import { projectLocalHome } from './localHomeProjection.js';
+import { safePublicCitationUrl } from './publicCitationUrl.js';
 export { LocalDashboardClientError } from './localDashboardClientError.js';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -187,7 +188,8 @@ export function createLocalDashboardClient({
     }
     const nodes = result.nodes.map((item) => {
       if (!item || typeof item.id !== 'string' || typeof item.kind !== 'string' || typeof item.label !== 'string') throw new LocalDashboardClientError('error');
-      return { id: item.id, kind: item.kind, label: item.label };
+      const url = item.kind === 'source' ? safePublicCitationUrl(item.url) : null;
+      return { id: item.id, kind: item.kind, label: item.label, ...(url ? { url } : {}) };
     });
     const ids = new Set(nodes.map((node) => node.id));
     const edges = result.edges.map((item) => {

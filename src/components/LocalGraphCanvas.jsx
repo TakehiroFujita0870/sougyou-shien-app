@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { graphDepthForKind, nextGraphDepth, visibleAtGraphDepth, visibleGraphLink } from './localGraphDepth';
 import { COLORS, nodeKindLabel, relationStatusLabel, initialPosition, shortLabel } from './localGraphPresentation.js';
+import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
 export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, regionHits = [], anchorId = '' }) {
   const container = useRef(null);
@@ -20,6 +21,17 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
     setSelected({ type: 'semantic-edge', ...edge });
     setProvenance(null);
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
+  };
+
+  const selectNode = (node) => {
+    const url = node.kind === 'source' ? safePublicCitationUrl(node.url) : null;
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setProvenance(null);
+    setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
+    setSelected({ type: 'node', id: node.id, kind: node.kind, label: node.label });
   };
 
   useEffect(() => {
@@ -137,7 +149,7 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
         .d3VelocityDecay(.35)
         .warmupTicks(45)
         .cooldownTicks(180)
-        .onNodeClick((node) => { setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); setSelected({ type: 'node', id: node.id, kind: node.kind, label: node.label }); })
+        .onNodeClick(selectNode)
         .onLinkClick((link) => { if (link.assertionId) selectSemanticEdge(link); else { setSelected(null); setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); } })
         .onBackgroundClick(() => { setSelected(null); setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); });
       graph.d3Force('charge').strength(-22);
