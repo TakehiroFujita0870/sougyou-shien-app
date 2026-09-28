@@ -196,6 +196,49 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(client.getFacetRegion).not.toHaveBeenCalled();
   });
 
+  it('opens safe source URLs in a new tab and preserves selection for other nodes', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });
+    globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const nodes = [
+      { id: 'source-public', kind: 'source', label: '公開資料', url: 'https://example.test/research' },
+      { id: 'source-unsafe', kind: 'source', label: '危険な出典', url: 'javascript:alert(1)' },
+      { id: 'source-missing', kind: 'source', label: 'URLなし' },
+      { id: 'idea-1', kind: 'idea', label: '事業案' },
+    ];
+    const client = {
+      getGraph: vi.fn().mockResolvedValue({ status: 'ready', truncated: false, nodes, edges: [] }),
+      getFacetRegion: vi.fn(),
+    };
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
+    await flushEffects();
+    const graph = mockGraphs.at(-1);
+
+    act(() => graph.nodeClick(nodes[0]));
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith('https://example.test/research', '_blank', 'noopener,noreferrer');
+    expect(container.querySelector('.local-graph__canvas')).toBeTruthy();
+    expect(container.querySelector('.local-graph__selected')).toBeNull();
+
+    act(() => graph.nodeClick(nodes[1]));
+    expect(open).toHaveBeenCalledOnce();
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('危険な出典');
+
+    act(() => graph.nodeClick(nodes[2]));
+    expect(open).toHaveBeenCalledOnce();
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('URLなし');
+
+    act(() => graph.nodeClick(nodes[3]));
+    expect(open).toHaveBeenCalledOnce();
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('事業案');
+  });
+
   it('renders semantic assertions without scaffold nodes and shows safe provenance when an edge is selected', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 });

@@ -34,6 +34,38 @@ def test_graph_projects_safe_owner_nodes_and_relations():
     assert "PRIVATE" not in str(result)
 
 
+def test_graph_exposes_only_safe_source_urls_for_navigation():
+    public = node("source-public", kind="source")
+    public["payload_json"] = json.dumps({
+        "id": "source-public", "owner_id": "owner-mvp", "title": "公開資料",
+        "locator": "https://example.test/research?id=1", "content": "PRIVATE SOURCE CONTENT",
+    })
+    unsafe = node("source-unsafe", kind="source")
+    unsafe["payload_json"] = json.dumps({
+        "id": "source-unsafe", "owner_id": "owner-mvp", "title": "共有キー付き資料",
+        "locator": "https://example.test/research?access_token=private-value", "content": "PRIVATE SOURCE CONTENT",
+    })
+    missing = node("source-missing", kind="source")
+    missing["payload_json"] = json.dumps({
+        "id": "source-missing", "owner_id": "owner-mvp", "title": "URLなし", "content": "PRIVATE SOURCE CONTENT",
+    })
+    non_source = node("idea-with-locator", kind="idea")
+    non_source["payload_json"] = json.dumps({
+        "id": "idea-with-locator", "owner_id": "owner-mvp", "title": "アイデア",
+        "locator": "https://example.test/should-not-open",
+    })
+
+    result = read_local_graph(Store([public, unsafe, missing, non_source]), owner_id="owner-mvp")
+    by_id = {item["id"]: item for item in result["nodes"]}
+
+    assert by_id["source-public"]["url"] == "https://example.test/research?id=1"
+    assert "url" not in by_id["source-unsafe"]
+    assert "url" not in by_id["source-missing"]
+    assert "url" not in by_id["idea-with-locator"]
+    assert "private-value" not in str(result)
+    assert "PRIVATE SOURCE CONTENT" not in str(result)
+
+
 def test_graph_stopped_empty_and_foreign_owner_fail_closed():
     assert read_local_graph(Store(), owner_id="owner-mvp")["status"] == "empty"
     assert read_local_graph(Store(), owner_id="owner-mvp", storage_status="stopped")["status"] == "stopped"

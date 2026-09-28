@@ -246,6 +246,31 @@ describe('Local dashboard client', () => {
       body: JSON.stringify({ name: '題名', description: '内容', expected_revision: 1, idempotency_key: 'edit-one' }),
     }));
   });
+  it('keeps only safe public URLs on source nodes in the graph projection', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'ready',
+      nodes: [
+        { id: 'source-public', kind: 'source', label: '公開資料', url: 'https://EXAMPLE.test/research?id=1', private_note: 'PRIVATE' },
+        { id: 'source-unsafe', kind: 'source', label: '危険な出典', url: 'https://example.test/research?access_token=secret' },
+        { id: 'source-invalid', kind: 'source', label: '危険な形式', url: 'javascript:alert(1)' },
+        { id: 'source-missing', kind: 'source', label: 'URLなし' },
+        { id: 'idea-1', kind: 'idea', label: '事業案', url: 'https://example.test/ignored' },
+      ],
+      edges: [], truncated: false,
+    }));
+
+    const result = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getGraph();
+
+    expect(result.nodes).toEqual([
+      { id: 'source-public', kind: 'source', label: '公開資料', url: 'https://example.test/research?id=1' },
+      { id: 'source-unsafe', kind: 'source', label: '危険な出典' },
+      { id: 'source-invalid', kind: 'source', label: '危険な形式' },
+      { id: 'source-missing', kind: 'source', label: 'URLなし' },
+      { id: 'idea-1', kind: 'idea', label: '事業案' },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+    expect(JSON.stringify(result)).not.toContain('secret');
+  });
   it('validates and allowlists semantic Facet region results', async () => {
     const payload = {
       status: 'ready', facet_id: 'facet/root', depth: 1,

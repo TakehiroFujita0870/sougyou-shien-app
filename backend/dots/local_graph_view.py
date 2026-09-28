@@ -8,6 +8,7 @@ from typing import Any, Mapping, Protocol, Sequence
 
 from .founder_graph_lifecycle_resolver import decode_asset_lifecycle_record, lifecycle_reference_aliases
 from .founder_graph_neo4j_idea import decode_persisted_idea
+from .source_citations import citation_metadata
 
 
 MAX_NODES = 500
@@ -132,7 +133,12 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
             label = payload.get(field) if field else None
             if not isinstance(label, str) or not label.strip():
                 label = _KIND_LABELS.get(kind, "記録")
-            nodes.append({"id": identity, "kind": kind, "label": label.strip()[:100]})
+            projected_node = {"id": identity, "kind": kind, "label": label.strip()[:100]}
+            if kind == "source":
+                citation = citation_metadata(payload)
+                if citation is not None:
+                    projected_node["url"] = citation["url"]
+            nodes.append(projected_node)
         included = {node["id"] for node in nodes}
         raw_edges = store.read_edges(owner_id, list(included)) if included else ()
         truncated = truncated or len(raw_edges) > MAX_EDGES
