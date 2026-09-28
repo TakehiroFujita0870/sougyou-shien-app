@@ -35,6 +35,41 @@ class JobState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class CandidatePayloadSupport:
+    kind: str
+    char_start: int | None = None
+    char_end: int | None = None
+    section_index: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RelationCandidatePayload:
+    candidate_id: str
+    source_id: str
+    source_kind: str
+    target_id: str
+    target_kind: str
+    predicate: str
+    basis: str
+    evidence_ids: tuple[str, ...]
+    support: CandidatePayloadSupport
+
+
+@dataclass(frozen=True, slots=True)
+class CandidatePayloadManifest:
+    version: int
+    idea_id: str
+    brief_id: str
+    brief_revision: int
+    brief_markdown_sha256: str
+    candidates: tuple[RelationCandidatePayload, ...]
+
+    @property
+    def candidate_ids(self) -> tuple[str, ...]:
+        return tuple(candidate.candidate_id for candidate in self.candidates)
+
+
+@dataclass(frozen=True, slots=True)
 class GraphJob:
     id: str
     owner_id: str
@@ -51,6 +86,7 @@ class GraphJob:
     last_transition: str | None
     last_lease_token: str | None
     candidate_ids: tuple[str, ...] | None
+    candidate_payload_persisted: bool
     last_error_code: str | None
     created_at: datetime
     updated_at: datetime
@@ -59,6 +95,9 @@ class GraphJob:
 _JOB_ID_PREFIX = "graph-job_"
 _ERROR_CODE = re.compile(r"^[a-z0-9][a-z0-9:_-]{0,63}$")
 _CANDIDATE_ID = re.compile(r"^[A-Za-z0-9:_-]{1,200}$")
+_ENUM_VALUE = re.compile(r"^[a-z][a-z0-9:_-]{0,63}$")
+_SHA256 = re.compile(r"^[a-f0-9]{64}$")
+_MAX_CANDIDATE_PAYLOAD_BYTES = 64 * 1024
 
 _ENQUEUE = """// graph_job:enqueue
 MERGE (job:FounderGraphJob {owner_id: $owner_id, brief_id: $brief_id})
@@ -85,11 +124,18 @@ SET job.state = 'leased', job.attempt_count = job.attempt_count + CASE WHEN same
 RETURN properties(job) AS job"""
 _GET = """// graph_job:get
 MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id}) RETURN properties(job) AS job"""
+_PAYLOADS = """// graph_job:payloads
+MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id})
+WHERE job.state = 'leased' AND job.lease_token = $lease_token AND job.lease_expires_at > $now
+RETURN properties(job) AS job"""
 _MANIFEST = """// graph_job:manifest
 MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id})
 WHERE job.state = 'leased' AND job.lease_token = $lease_token AND job.lease_expires_at > $now
-  AND (job.candidate_manifest_json IS NULL OR job.candidate_manifest_json = $manifest_json)
-SET job.candidate_manifest_json = $manifest_json, job.updated_at = $now
+  AND job.based_on_idea_id = $idea_id AND job.brief_id = $brief_id
+  AND ((job.candidate_manifest_json IS NULL AND job.candidate_payloads_json IS NULL) OR
+       (job.candidate_manifest_json = $manifest_json AND job.candidate_payloads_json = $candidate_payloads_json))
+SET job.candidate_manifest_json = $manifest_json, job.candidate_payloads_json = $candidate_payloads_json,
+    job.updated_at = CASE WHEN job.candidate_manifest_json IS NULL THEN $now ELSE job.updated_at END
 RETURN properties(job) AS job"""
 _COMPLETE = """// graph_job:complete
 MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id})
@@ -147,17 +193,189 @@ def _job_id(owner_id: str, brief_id: str) -> str:
     return f"{_JOB_ID_PREFIX}{hashlib.sha256(f'{owner_id}\0{brief_id}'.encode()).hexdigest()[:32]}"
 
 
+def _value(obj: Any, name: str) -> Any:
+    return obj.get(name) if isinstance(obj, Mapping) else getattr(obj, name)
+
+
+def _enum_value(value: Any, name: str) -> str:
+    value = getattr(value, "value", value)
+    if not isinstance(value, str) or not _ENUM_VALUE.fullmatch(value):
+        raise JobStoreError(f"candidate {name} is invalid")
+    return value
+
+
+def _payload_mapping(value: Any) -> dict[str, Any]:
+    """Project only the validator's safe metadata; quote/report text is never read."""
+    try:
+        candidates = []
+        for candidate in _value(value, "candidates"):
+            assertion = _value(candidate, "assertion")
+            support = _value(candidate, "support")
+            kind = _enum_value(_value(support, "kind"), "support kind")
+            payload_support: dict[str, Any] = {"kind": kind}
+            if kind == "quote":
+                payload_support.update(
+                    char_start=_value(support, "char_start"),
+                    char_end=_value(support, "char_end"),
+                    section_index=_value(support, "section_index"),
+                )
+            elif kind == "section":
+                payload_support["section_index"] = _value(support, "section_index")
+            else:
+                raise JobStoreError("candidate support kind is invalid")
+            candidates.append({
+                "candidate_id": _value(candidate, "candidate_id"),
+                "source_id": _value(assertion, "source_id"),
+                "source_kind": _value(assertion, "source_kind"),
+                "target_id": _value(assertion, "target_id"),
+                "target_kind": _value(assertion, "target_kind"),
+                "predicate": _value(assertion, "predicate"),
+                "basis": _value(assertion, "basis"),
+                "evidence_ids": list(_value(assertion, "evidence_ids")),
+                "support": payload_support,
+            })
+        return {
+            "version": 1,
+            "idea_id": _value(value, "idea_id"),
+            "brief_id": _value(value, "brief_id"),
+            "brief_revision": _value(value, "brief_revision"),
+            "brief_markdown_sha256": _value(value, "brief_markdown_sha256"),
+            "candidates": candidates,
+        }
+    except (AttributeError, TypeError) as exc:
+        raise JobStoreError("validated candidate manifest fields are invalid") from exc
+
+
+def _payload_from_mapping(value: Any) -> CandidatePayloadManifest:
+    expected = {
+        "version", "idea_id", "brief_id", "brief_revision", "brief_markdown_sha256", "candidates",
+    }
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise JobStoreError("candidate payload manifest fields are invalid")
+    if type(value["version"]) is not int or value["version"] != 1:
+        raise JobStoreError("candidate payload version is unsupported")
+    idea_id, brief_id = _identifier(value["idea_id"], "idea_id"), _identifier(value["brief_id"], "brief_id")
+    revision = value["brief_revision"]
+    digest = value["brief_markdown_sha256"]
+    if type(revision) is not int or revision < 1 or not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+        raise JobStoreError("candidate payload Brief binding is invalid")
+    raw_candidates = value["candidates"]
+    if not isinstance(raw_candidates, (list, tuple)) or not 1 <= len(raw_candidates) <= 64:
+        raise JobStoreError("candidate payload must contain between 1 and 64 candidates")
+    candidates: list[RelationCandidatePayload] = []
+    for raw in raw_candidates:
+        keys = {
+            "candidate_id", "source_id", "source_kind", "target_id", "target_kind",
+            "predicate", "basis", "evidence_ids", "support",
+        }
+        if not isinstance(raw, Mapping) or set(raw) != keys:
+            raise JobStoreError("candidate payload fields are invalid")
+        candidate_id = raw["candidate_id"]
+        if not isinstance(candidate_id, str) or not _CANDIDATE_ID.fullmatch(candidate_id):
+            raise JobStoreError("candidate ID is invalid")
+        ids = [_identifier(raw[key], key) for key in ("source_id", "target_id")]
+        values = [_enum_value(raw[key], key) for key in ("source_kind", "target_kind", "predicate", "basis")]
+        evidence = raw["evidence_ids"]
+        if not isinstance(evidence, (list, tuple)) or len(evidence) > 32:
+            raise JobStoreError("candidate Evidence IDs exceed the limit")
+        evidence_ids = tuple(sorted(_identifier(item, "evidence_id") for item in evidence))
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise JobStoreError("candidate Evidence IDs must be unique")
+        raw_support = raw["support"]
+        if not isinstance(raw_support, Mapping) or raw_support.get("kind") not in {"quote", "section"}:
+            raise JobStoreError("candidate support fields are invalid")
+        kind = raw_support["kind"]
+        if kind == "quote":
+            if set(raw_support) != {"kind", "char_start", "char_end", "section_index"}:
+                raise JobStoreError("quote support fields are invalid")
+            start, end, section = raw_support["char_start"], raw_support["char_end"], raw_support["section_index"]
+            if (type(start) is not int or type(end) is not int or start < 0 or end <= start
+                    or end > 60_000 or end - start > 1_200):
+                raise JobStoreError("quote support offsets are invalid")
+            if section is not None and (type(section) is not int or not 0 <= section <= 7):
+                raise JobStoreError("quote support section index is invalid")
+            if section is None and values[3] != "brief_hypothesis":
+                raise JobStoreError("unsectioned quote support requires a Brief hypothesis")
+            support = CandidatePayloadSupport(kind, start, end, section)
+        else:
+            if set(raw_support) != {"kind", "section_index"}:
+                raise JobStoreError("section support fields are invalid")
+            section = raw_support["section_index"]
+            if type(section) is not int or not 0 <= section <= 7:
+                raise JobStoreError("section support index is invalid")
+            support = CandidatePayloadSupport(kind, section_index=section)
+        candidates.append(RelationCandidatePayload(
+            candidate_id, ids[0], values[0], ids[1], values[1], values[2], values[3], evidence_ids, support,
+        ))
+    candidates.sort(key=lambda item: item.candidate_id)
+    if len({candidate.candidate_id for candidate in candidates}) != len(candidates):
+        raise JobStoreError("candidate IDs must be unique")
+    return CandidatePayloadManifest(1, idea_id, brief_id, revision, digest, tuple(candidates))
+
+
+def _payload_to_mapping(manifest: CandidatePayloadManifest) -> dict[str, Any]:
+    candidates = []
+    for candidate in manifest.candidates:
+        support = {"kind": candidate.support.kind}
+        if candidate.support.kind == "quote":
+            support.update(char_start=candidate.support.char_start, char_end=candidate.support.char_end,
+                           section_index=candidate.support.section_index)
+        else:
+            support["section_index"] = candidate.support.section_index
+        candidates.append({
+            "candidate_id": candidate.candidate_id, "source_id": candidate.source_id,
+            "source_kind": candidate.source_kind, "target_id": candidate.target_id,
+            "target_kind": candidate.target_kind, "predicate": candidate.predicate,
+            "basis": candidate.basis, "evidence_ids": list(candidate.evidence_ids), "support": support,
+        })
+    return {
+        "version": 1, "idea_id": manifest.idea_id, "brief_id": manifest.brief_id,
+        "brief_revision": manifest.brief_revision, "brief_markdown_sha256": manifest.brief_markdown_sha256,
+        "candidates": candidates,
+    }
+
+
+def _encode_candidate_payload(value: Any) -> tuple[CandidatePayloadManifest, str]:
+    payload = _payload_from_mapping(_payload_mapping(value))
+    encoded = json.dumps(_payload_to_mapping(payload), ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    if len(encoded.encode("utf-8")) > _MAX_CANDIDATE_PAYLOAD_BYTES:
+        raise JobStoreError("candidate payload exceeds 64 KiB")
+    return payload, encoded
+
+
+def _parse_candidate_payload(encoded: str) -> CandidatePayloadManifest:
+    if not isinstance(encoded, str) or len(encoded.encode("utf-8")) > _MAX_CANDIDATE_PAYLOAD_BYTES:
+        raise ValueError("candidate payload size is invalid")
+    try:
+        payload = _payload_from_mapping(json.loads(encoded))
+        canonical = json.dumps(_payload_to_mapping(payload), ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        if canonical != encoded:
+            raise ValueError("candidate payload is not canonical")
+        return payload
+    except (TypeError, json.JSONDecodeError, JobStoreError) as exc:
+        raise ValueError("candidate payload is invalid") from exc
+
+
 def _job_from_row(row: Any) -> GraphJob | None:
     if row is None:
         return None
     try:
         props = dict(row["job"])
-        candidates = props.pop("candidate_manifest_json")
+        candidates = props.pop("candidate_manifest_json", None)
+        payload_json = props.pop("candidate_payloads_json", None)
         candidates = None if candidates is None else json.loads(candidates)
         if candidates is not None and (not isinstance(candidates, list) or
             any(not isinstance(item, str) or not _CANDIDATE_ID.fullmatch(item) for item in candidates) or
             len(candidates) != len(set(candidates))): raise ValueError
-        props["candidate_ids"], props["state"] = None if candidates is None else tuple(candidates), JobState(props["state"])
+        payload = None if payload_json is None else _parse_candidate_payload(payload_json)
+        candidate_ids = None if candidates is None else tuple(candidates)
+        if (payload is not None and (candidate_ids != payload.candidate_ids or
+                props.get("brief_id") != payload.brief_id or props.get("based_on_idea_id") != payload.idea_id)):
+            raise ValueError
+        if payload_json is not None and candidate_ids is None:
+            raise ValueError
+        props["candidate_ids"], props["candidate_payload_persisted"] = candidate_ids, payload is not None
+        props["state"] = JobState(props["state"])
         for key in ("available_at", "created_at", "updated_at", "lease_expires_at"):
             if props.get(key) is not None: props[key] = _parsed_time(props[key])
         job = GraphJob(**props)
@@ -203,6 +421,7 @@ class FounderGraphJobStore:
             "available_at": at, "lease_owner": None, "lease_token": None,
             "lease_expires_at": None, "last_transition": None, "last_lease_token": None,
             "candidate_manifest_json": None,
+            "candidate_payloads_json": None,
             "last_error_code": None, "created_at": at, "updated_at": at,
         }
         row = tx.run(_ENQUEUE, owner_id=owner, brief_id=brief.id, properties=properties).single()
@@ -233,24 +452,48 @@ class FounderGraphJobStore:
             return session.execute_write(claim_tx)
 
     def persist_candidate_manifest(self, job_id: str, lease_token: str,
-                                   candidate_ids: tuple[str, ...] | list[str], *,
-                                   now: datetime | None = None) -> GraphJob:
-        candidates = self._candidate_ids(candidate_ids)
+                                   validated_manifest: Any, *, now: datetime | None = None) -> GraphJob:
+        """Atomically freeze candidate IDs and their bounded, quote-free retry payload."""
+        payload, payload_json = _encode_candidate_payload(validated_manifest)
+        candidates = payload.candidate_ids
         instant = _time(now)
         encoded = json.dumps(candidates, ensure_ascii=True, separators=(",", ":"))
         row = self._run_write(_MANIFEST, job_id=job_id, lease_token=lease_token,
-                              manifest_json=encoded, now=_stored_time(instant))
+                              manifest_json=encoded, candidate_payloads_json=payload_json,
+                              brief_id=payload.brief_id, idea_id=payload.idea_id,
+                              now=_stored_time(instant))
         if row is None:
             current = self.get(job_id)
-            if current and current.candidate_ids is not None and current.candidate_ids != candidates:
+            if (current and current.state is JobState.LEASED and current.lease_token == lease_token
+                    and current.lease_expires_at is not None and current.lease_expires_at > instant):
                 raise JobConflictError("candidate manifest is immutable")
             raise JobLeaseError("job lease is no longer active")
         return row
 
+    def get_candidate_payloads(self, job_id: str, lease_token: str, *,
+                               now: datetime | None = None) -> CandidatePayloadManifest | None:
+        """Read retry data only for the job's current, unexpired lease."""
+        instant = _time(now)
+        with self.driver.session(database=self.database) as session:
+            row = session.execute_read(lambda tx: tx.run(
+                _PAYLOADS, owner_id=self.owner_id, job_id=_identifier(job_id, "job_id"),
+                lease_token=lease_token, now=_stored_time(instant),
+            ).single())
+        if row is None:
+            raise JobLeaseError("job lease is no longer active")
+        job = _job_from_row(row)
+        raw = dict(row["job"]).get("candidate_payloads_json")
+        if job is None or raw is None:
+            return None
+        payload = _parse_candidate_payload(raw)
+        if payload.brief_id != job.brief_id or payload.idea_id != job.based_on_idea_id:
+            raise JobStoreError("persisted candidate payload is bound to another Brief")
+        return payload
+
     @staticmethod
     def _candidate_ids(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-        if not isinstance(values, (tuple, list)) or len(values) > 256:
-            raise JobStoreError("candidate manifest must contain at most 256 IDs")
+        if not isinstance(values, (tuple, list)) or len(values) > 64:
+            raise JobStoreError("candidate manifest must contain at most 64 IDs")
         candidates = tuple(values)
         if any(not isinstance(item, str) or not _CANDIDATE_ID.fullmatch(item) for item in candidates):
             raise JobStoreError("candidate manifest IDs are invalid")
