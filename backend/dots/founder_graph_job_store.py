@@ -409,6 +409,11 @@ class FounderGraphJobStore:
         self.owner_id = _identifier(owner_id, "owner_id")
         self.database = _identifier(database, "database")
 
+    @staticmethod
+    def job_id_for(owner_id: str, brief_id: str) -> str:
+        """Return the canonical durable job ID for an owner and saved Brief."""
+        return _job_id(_identifier(owner_id, "owner_id"), _identifier(brief_id, "brief_id"))
+
     def enqueue(self, brief: IdeaBriefVersion, *, now: datetime | None = None,
                 max_attempts: int = 5) -> GraphJob:
         with self.driver.session(database=self.database) as session:
@@ -426,7 +431,7 @@ class FounderGraphJobStore:
         if type(max_attempts) is not int or not 1 <= max_attempts <= 100:
             raise JobStoreError("max_attempts must be between 1 and 100")
         instant = _time(now)
-        identity = _job_id(owner, brief.id)
+        identity = FounderGraphJobStore.job_id_for(owner, brief.id)
         at = _stored_time(instant)
         properties = {
             "id": identity, "owner_id": owner, "brief_id": brief.id,

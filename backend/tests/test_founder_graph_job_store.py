@@ -139,6 +139,16 @@ def _validated_manifest(*, brief_id="brief-1", idea_id="idea-r1", candidates=Non
     )
 
 
+def test_canonical_job_id_is_public_and_bound_to_owner_and_brief():
+    store = _store()
+    job = store.enqueue(_brief(), now=_time())
+
+    assert FounderGraphJobStore.job_id_for(job.owner_id, job.brief_id) == job.id
+    assert FounderGraphJobStore.job_id_for("another-owner", job.brief_id) != job.id
+    with pytest.raises(JobStoreError):
+        FounderGraphJobStore.job_id_for("owner-1", "")
+
+
 def test_enqueue_is_idempotent_owner_scoped_and_does_not_copy_report_text():
     driver = Driver(); store = _store(driver)
     first, replay = store.enqueue(_brief(), now=_time()), store.enqueue(_brief(), now=_time(1))
