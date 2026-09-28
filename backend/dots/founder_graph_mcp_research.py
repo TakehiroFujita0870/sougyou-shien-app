@@ -391,9 +391,13 @@ class McpResearchCampaignSurface:
         markdown_edit_note = (
             "sections[].contentだけでは既存Markdownの章本文は編集されません。章本文を変更する場合はreport_markdown全文を指定してください。"
         )
+        draft_section_body_note = (
+            "Markdownを含める初回保存、または現行版にMarkdownがある更新ではsections[].contentを省略・空にできます。"
+            "Markdownなしの初回下書きでは少なくとも一観点の本文が必要です。"
+        )
         regular_brief = {
             "name": "save_idea_brief",
-            "description": "既存のIdeaを8観点で育てます。旧版は残ります。未確認の内容を事実として記載せず、根拠IDがある場合だけ添えてください。未指定の観点は前版を維持します。初回はexpected_revision=0です。" + heading_note + markdown_edit_note + candidate_note,
+            "description": "既存のIdeaを8観点で育てます。旧版は残ります。未確認の内容を事実として記載せず、根拠IDがある場合だけ添えてください。未指定の観点は前版を維持します。初回はexpected_revision=0です。" + heading_note + markdown_edit_note + draft_section_body_note + candidate_note,
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -406,10 +410,13 @@ class McpResearchCampaignSurface:
                     "sections": {
                         "type": "array", "minItems": 1, "maxItems": 8,
                         "items": {
-                            "type": "object", "required": ["index", "content"],
+                            "type": "object", "required": ["index"],
                             "properties": {
                                 "index": {"type": "integer", "minimum": 0, "maximum": 7},
-                                "content": {"type": "string", "maxLength": 4000, "description": markdown_edit_note},
+                                "content": {
+                                    "type": "string", "maxLength": 4000,
+                                    "description": "任意です。" + draft_section_body_note + markdown_edit_note,
+                                },
                                 "facts": ids, "inferences": ids, "unconfirmed": ids,
                                 "owner_decisions": ids, "claim_ids": ids, "evidence_ids": ids,
                             }, "additionalProperties": False,
@@ -524,8 +531,6 @@ class McpResearchCampaignSurface:
             sections = tuple(IdeaBriefSection(**item) for item in raw_sections)
         except (TypeError, ValueError) as error:
             raise ResearchCampaignInputError("section content is invalid") from error
-        if not any(section.content.strip() for section in sections):
-            raise ResearchCampaignInputError("at least one viewpoint needs content")
         report_markdown = args.get("report_markdown", _REPORT_MARKDOWN_OMITTED)
         if report_markdown is not _REPORT_MARKDOWN_OMITTED and (
             not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000
@@ -545,6 +550,18 @@ class McpResearchCampaignSurface:
         effective_origin = requested_origin if requested_origin is not None else (previous.origin if previous else None)
         prior_receipt = _lookup_receipt(self.writes, key, "save_idea_brief")
         existing = self.brief_store.get(brief_id)
+        if report_markdown is not _REPORT_MARKDOWN_OMITTED:
+            markdown_for_request = report_markdown
+        elif existing is not None:
+            markdown_for_request = existing.report_markdown
+        elif previous is not None:
+            markdown_for_request = previous.report_markdown
+        else:
+            markdown_for_request = None
+        if not any(section.content.strip() for section in sections) and not (
+            isinstance(markdown_for_request, str) and markdown_for_request.strip()
+        ):
+            raise ResearchCampaignInputError("at least one viewpoint needs content when no Markdown report is available")
         if prior_receipt is not None or existing is not None:
             if (
                 (prior_receipt is not None and prior_receipt.target_id != brief_id)
