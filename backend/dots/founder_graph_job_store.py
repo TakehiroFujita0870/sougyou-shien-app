@@ -11,6 +11,7 @@ import re
 from secrets import token_urlsafe
 from typing import Any
 
+from .founder_graph import RelationType
 from .idea_brief import IdeaBriefVersion
 
 
@@ -96,6 +97,7 @@ _JOB_ID_PREFIX = "graph-job_"
 _ERROR_CODE = re.compile(r"^[a-z0-9][a-z0-9:_-]{0,63}$")
 _CANDIDATE_ID = re.compile(r"^[A-Za-z0-9:_-]{1,200}$")
 _ENUM_VALUE = re.compile(r"^[a-z][a-z0-9:_-]{0,63}$")
+_RELATION_PREDICATE_VALUES = frozenset(predicate.value for predicate in RelationType)
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _MAX_CANDIDATE_PAYLOAD_BYTES = 64 * 1024
 
@@ -229,6 +231,13 @@ def _enum_value(value: Any, name: str) -> str:
     return value
 
 
+def _relation_predicate(value: Any) -> str:
+    value = getattr(value, "value", value)
+    if not isinstance(value, str) or value not in _RELATION_PREDICATE_VALUES:
+        raise JobStoreError("candidate predicate is invalid")
+    return value
+
+
 def _payload_mapping(value: Any) -> dict[str, Any]:
     """Project only the validator's safe metadata; quote/report text is never read."""
     try:
@@ -299,7 +308,11 @@ def _payload_from_mapping(value: Any) -> CandidatePayloadManifest:
         if not isinstance(candidate_id, str) or not _CANDIDATE_ID.fullmatch(candidate_id):
             raise JobStoreError("candidate ID is invalid")
         ids = [_identifier(raw[key], key) for key in ("source_id", "target_id")]
-        values = [_enum_value(raw[key], key) for key in ("source_kind", "target_kind", "predicate", "basis")]
+        source_kind = _enum_value(raw["source_kind"], "source_kind")
+        target_kind = _enum_value(raw["target_kind"], "target_kind")
+        predicate = _relation_predicate(raw["predicate"])
+        basis = _enum_value(raw["basis"], "basis")
+        values = [source_kind, target_kind, predicate, basis]
         evidence = raw["evidence_ids"]
         if not isinstance(evidence, (list, tuple)) or len(evidence) > 32:
             raise JobStoreError("candidate Evidence IDs exceed the limit")

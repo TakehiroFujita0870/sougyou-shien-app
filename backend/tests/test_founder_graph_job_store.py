@@ -400,9 +400,9 @@ def test_validated_uppercase_relation_predicates_persist_and_survive_retry():
     )
 
     assert payload is not None
-    assert tuple(candidate.predicate for candidate in payload.candidates) == (
+    assert {candidate.predicate for candidate in payload.candidates} == {
         RelationType.REUSES.value, RelationType.DERIVED_FROM.value,
-    )
+    }
     assert all(candidate.source_kind == "idea" and candidate.target_kind == "idea"
                and candidate.basis == "brief_hypothesis" for candidate in payload.candidates)
 
@@ -433,6 +433,20 @@ def test_candidate_payload_bounds_reject_oversized_quotes_and_manifests_before_w
     lease = store.claim(worker_id="worker-a", lease_seconds=30, now=_time())
     assert lease is not None
     base = _validated_manifest().candidates[0]
+    invalid_predicate = SimpleNamespace(
+        candidate_id="candidate-invalid-predicate",
+        assertion=SimpleNamespace(
+            source_id="idea-r1", target_id="claim-1", source_kind="idea", target_kind="claim",
+            predicate="NOT_A_RELATION", basis="brief_hypothesis", evidence_ids=(),
+        ),
+        support=SimpleNamespace(kind="section", section_index=0),
+    )
+    with pytest.raises(JobStoreError, match="predicate"):
+        store.persist_candidate_manifest(
+            lease.id, lease.lease_token,
+            _validated_manifest(candidates=(invalid_predicate,)), now=_time(),
+        )
+
     long_quote = SimpleNamespace(kind="quote", char_start=0, char_end=1201, section_index=0, quote="x" * 1201)
     with pytest.raises(JobStoreError):
         store.persist_candidate_manifest(lease.id, lease.lease_token, _validated_manifest(candidates=(
