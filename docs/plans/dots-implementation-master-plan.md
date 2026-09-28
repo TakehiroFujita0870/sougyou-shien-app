@@ -31,6 +31,8 @@ Dots. は本人一人が使う創業専用の知識グラフである。製品�
 
 完成稿の見出しは次の名称をこの順に置く。画面に章番号を表示しない。
 
+各章は正確な見出し名をH1（`# タイトル`）またはH2（`## タイトル`）で一度ずつ書く。同じ文書でH1とH2を混在してよい。H3以上、重複、順不同の見出しは章投影に使わない。コードフェンス内の見出しも無視する。
+
 1. エグゼクティブサマリー
 2. ビジネスモデル
 3. 顧客とマーケットサイズ
@@ -112,8 +114,8 @@ Then: 現行案、関係の種類、根拠、元のURL、推測か確認済み�
 | T-0 | 読取専用スパイク。通常保存先の旧ReportVersion、IdeaBriefの版、消えたように見える本文、公開中のMCP呼出実績を識別子と件数だけで確認する。 | 検査: 本文・秘密を出力せず移行対象と復元可能性を列挙 | 未知・先行スパイク |
 | T-1 | 保存時の本文省略・明示置換・旧版表示を分け、欠落を防ぐ。T-0で対象を限定する。 | 検査: 省略更新、置換、競合、再送、再起動、旧版読取の試験 | 類推可能 |
 | T-2 | `append_research_finding`でIdeaBriefのMarkdownに発見と公開HTTP(S) URLを一件ずつ追記する。初回下書きは章本文・ResearchRun・Claim・Evidenceを要求せず、同じkeyの再送は一版だけを返し、古いrevisionは拒否する。完成稿は正規8見出しを順番どおり要求する。旧`save_research_report`だけをMCPの公開一覧・呼出経路から外し、ReportVersionの保存形式と読取を残す。 | 検査: 3件追記・順序・同一key再送・revision競合・8見出し完成稿・URL本文読戻し・旧tool非公開化・既存ReportVersion読取 | 類推可能 |
-| T-3a | 純粋なMarkdown parser/projectionで正規8章の位置と安全な公開URL・リンクラベルを抽出する。fenced codeは無視し、部分下書きは許す。重複・順不同の正規見出しがあれば曖昧として章・リンクの対応を推測しない。URLのみは検証済みEvidenceと区別し、本文をprojection metadataへ複製しない。 | 検査: 部分・完成・曖昧な見出し、fenced code、公開URL・危険URL、URL-only状態、本文非複製を純粋関数試験で確認 | 類推可能 |
-| T-3b | T-3aのprojectionを既存read/searchへ接続する。新しい調査済み保存は完全で本文のある正規8章をMarkdownで検証し、`sections`には章別の根拠・注釈だけを保持して本文入力を省略できるようにする。読取本文はMarkdown位置から導出し、Markdownなしの旧版は保存済み本文を維持する。曖昧なMarkdownから章・リンク・関係を推測せず、URL-onlyと検証済みEvidenceを分ける。 | 検査: 本文導出・旧版互換・本文省略保存・曖昧見出しのfail-closed・URL-onlyと検証済みEvidenceの分離・Graph RAG検索回帰 | 類推可能 |
+| T-3a | 純粋なMarkdown parser/projectionで正規8章の位置と安全な公開URL・リンクラベルを抽出する。正規H1/H2見出しを認識し、fenced codeは無視して部分下書きを許す。重複・順不同の正規見出しがあれば曖昧として章・リンクの対応を推測しない。URLのみは検証済みEvidenceと区別し、本文をprojection metadataへ複製しない。 | 検査: H1/H2の部分・完成・混在、H3の非認識、曖昧な見出し、fenced code、公開URL・危険URL、URL-only状態、本文非複製を純粋関数試験で確認 | 類推可能 |
+| T-3b | T-3aのprojectionを既存read/searchへ接続する。新しい調査済み保存は完全で本文のある正規8章をMarkdownで検証し、`sections`には章別の根拠・注釈だけを保持して本文入力を省略できるようにする。H1/H2のどちらでも読取本文はMarkdown位置から導出し、Markdownなしの旧版は保存済み本文を維持する。曖昧なMarkdownから章・リンク・関係を推測せず、URL-onlyと検証済みEvidenceを分ける。 | 検査: H1/H2の本文導出・旧版互換・本文省略保存・曖昧見出しのfail-closed・URL-onlyと検証済みEvidenceの分離・Graph RAG検索回帰 | 類推可能 |
 | T-4 | 先行スパイク。下書きと過去調査取り込みから作る候補関係の根拠契約、古い関係の失効、保存時の永続的な処理待ちを設計する。 | 検査: 現行Neo4jの拒否条件、再起動・重複・版競合の失敗例を再現し、変更箇所を特定 | 未知・先行スパイク |
 | T-5 | T-4の契約に従い、IdeaBriefと書込receiptの保存と同じNeo4jトランザクションで版ごとの整理待ちを記録する。owner+Brief IDで冪等化し、新しい版の保存時に同じowner・Idea系譜の旧pending/leased jobをsupersedeする。`append_research_finding`と正式調査の保存は共通gatewayを通す。検証済み候補はBriefのID・revision・hashに結び付く上限付きの不変payloadとしてjobへ原子的に保存し、レポート本文・引用文を複製せずworkerが再読込できるようにする。後続のDots処理器は外部事実の根拠と本人の仮説を区別する。 | 検査: 原子rollback、再送時のjob重複なし、owner・系譜分離、旧pending/leasedのsupersede、候補payloadの同一再送・異なる内容拒否、再起動後の部分再試行、古いlease拒否、下書き・過去調査・正式調査経路の共通保存契約、Neo4j `properties(job)`で欠落するnullable fieldの復元 | 類推可能 |
 | T-6a | T-5のjob状態をowner必須のread-only集計APIで読み、サービス管理に状態別件数を表示する。Neo4j停止・読取失敗はゼロ件にせず確認不能と示す。job store・processor・MCP保存経路は変更しない。 | 検査: owner条件付きの単一行集計query、停止・失敗時の確認不能表示、pending/leased/succeeded/failed/supersededの誤訳なし、PC 1280×720の表示 | 既知 |
@@ -131,7 +133,7 @@ T-1は最優先とする。T-2とT-8はT-1の後に独立して進められる�
 | --- | --- | --- | --- |
 | レポート正本 | Markdown本文とその不変の版を唯一の人向け原稿とし、8章と検索用投影をそこから得る。 | Markdown本文と別の章本文を手で二重保存する案は、不一致と全文欠落を招く。 | 旧ReportVersionを調査後に公開書込から退役させる。 |
 | 部分追記と旧形式 | 発見と公開URLをidempotency key付きの追記commandでMarkdownへ保存し、完成稿だけに8つの正規見出しを要求する。旧ReportVersionの読取・保存形式は互換性のため残し、公開MCP書込toolだけを退役させる。 | 下書きでも8章全文やResearchRun・Evidenceを必須にする案は、短い発見の保存を妨げる。旧記録を移行・削除する案はT-2に不要なデータ変更を持ち込む。 | Markdownが唯一の人向け報告経路となり、既存ReportVersionは読取可能な履歴として残る。 |
-| Markdown projection契約 | 正規見出しの部分列から位置を投影し、重複・順不同では対応を推測せず曖昧を返す。fenced code内の見出し・リンクは除外し、URLは`citation_metadata`の公開契約を通してURL-onlyとして返す。projection metadataは本文を持たない。新しい調査済みBriefはMarkdownを本文正本とし、sections本文入力は省略できる。 | 欠けた章を前後の文章から推測する案は誤った根拠を結び付ける。URLをEvidenceとして扱う案は未検証の主張を確定済みに見せる。本文を保存項目へ二重入力する案は不一致を招く。 | T-3aは純粋な位置・リンクprojection、T-3bは本文の読取時導出と旧section保存版の互換を担う。Markdownが曖昧なら関係・リンクの章対応を返さない。 |
+| Markdown projection契約 | 正確な正規見出しをH1またはH2として扱い、部分列から位置を投影する。重複・順不同では対応を推測せず曖昧を返す。fenced code内の見出し・リンクは除外し、URLは`citation_metadata`の公開契約を通してURL-onlyとして返す。projection metadataは本文を持たない。新しい調査済みBriefはMarkdownを本文正本とし、sections本文入力は省略できる。 | 欠けた章を前後の文章から推測する案は誤った根拠を結び付ける。URLをEvidenceとして扱う案は未検証の主張を確定済みに見せる。本文を保存項目へ二重入力する案は不一致を招く。 | T-3aはH1/H2双方の純粋な位置・リンクprojection、T-3bは本文の読取時導出と旧section保存版の互換を担う。Markdownが曖昧なら関係・リンクの章対応を返さない。 |
 | 更新意味論 | 本文の省略は維持、明示置換は新しい版、削除は別操作とする。旧調査が現行案に合わない場合は旧版表示へ移す。 | 省略を空欄扱いする案は、今回の消失症状を再発させる。 | 旧版を残し、現在の本文を黙って消さない。 |
 | 調査の粒度 | 発見単位で下書き保存し、完成稿へ段階的に昇格する。URLと検証済みEvidenceを区別する。 | 全出典が揃うまで保存を拒む案は、会話中の発見を失う。 | 調査済み表示は完成稿と実際の出典に限る。 |
 | 意味関係 | 現行の概要箇所を根拠とする候補関係を許し、外部の事実を断定する関係には出典根拠を要求する。保存時の処理待ちをDotsが持つ。 | 正式調査の実行履歴がないと一切関係を作れない案は、下書きと取り込み済み調査を孤立させる。 | 人物の同一性確定と破壊的変更は従来の確認境界を維持する。 |
@@ -166,4 +168,5 @@ T-1は最優先とする。T-2とT-8はT-1の後に独立して進められる�
 | 2026-09-29 | 調査済み保存の章本文をMarkdown正本へ寄せ、read/searchの旧版互換と曖昧時のfail-closed条件を明記 | T-3a projectionの受け入れ後、二重本文入力を除くため | T-3b |
 | 2026-09-29 | 検証済み関係候補の再試行用payloadを本文・引用文なしでjobへ不変保存し、Brief版・lease・ownerに束縛する条件を追加 | worker再起動後も再質問なしで安全に部分適用を再開するため | T-5 |
 | 2026-09-29 | Neo4jの`properties(job)`でnull値プロパティが省かれる形状をT-5の受け入れ検査に追加 | 初回Brief保存でnullable job field復元が失敗する本番不具合を防ぐため | T-5 |
+| 2026-09-29 | 正規章見出しにH1/H2双方を認め、H1見出しのread projectionをT-3a/T-3b契約に追加 | Markdownを正しく保存しても一般的なH1形式が8章として読み戻されないため | T-3a・T-3b |
 | 2026-09-29 | T-7をowner限定・最大20件の安全なローカルCLIと、デプロイ後に管理担当が設定する定期実行へ分割。manifest未提出はpendingのまま、terminal failedは自動再開しない条件を追加 | 定期点検が成功を捏造したりterminal failureを無制限に再開したりしないよう、実装と運用設定の境界を分けるため | T-7a・T-7b |

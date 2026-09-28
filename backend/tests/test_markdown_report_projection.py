@@ -41,24 +41,36 @@ def test_partial_markdown_projects_canonical_positions_and_public_links_only() -
     assert not hasattr(projection, "markdown")
 
 
-def test_eight_canonical_headings_in_order_are_complete() -> None:
-    markdown = "\n\n".join(f"## {title}\n本文" for title in SECTION_TITLES)
+@pytest.mark.parametrize("heading_prefix", ("#", "##"), ids=("h1", "h2"))
+def test_eight_canonical_headings_in_order_are_complete(heading_prefix: str) -> None:
+    markdown = "\n\n".join(f"{heading_prefix} {title}\n本文" for title in SECTION_TITLES)
 
     projection = project_markdown_report(markdown)
 
     assert projection.heading_status == "complete"
     assert [item.section_index for item in projection.headings] == list(range(8))
     assert all(
-        markdown[item.heading_offset : item.heading_offset + len(item.title) + 3]
-        == f"## {item.title}"
+        markdown.startswith(f"{heading_prefix} {item.title}", item.heading_offset)
         for item in projection.headings
     )
+
+
+def test_h1_and_h2_canonical_headings_may_be_mixed() -> None:
+    markdown = "\n\n".join(
+        f"{'#' if index % 2 == 0 else '##'} {title}\n本文"
+        for index, title in enumerate(SECTION_TITLES)
+    )
+
+    projection = project_markdown_report(markdown)
+
+    assert projection.heading_status == "complete"
+    assert [item.section_index for item in projection.headings] == list(range(8))
 
 
 def test_fenced_and_inline_code_headings_and_links_are_ignored() -> None:
     markdown = (
         "```markdown\n"
-        f"## {SECTION_TITLES[0]}\n[偽リンク](https://ignored.test)\n"
+        f"# {SECTION_TITLES[0]}\n[偽リンク](https://ignored.test)\n"
         "```\n"
         f"## {SECTION_TITLES[1]}\n"
         "`[inline](https://inline-ignored.test)`\n"
@@ -97,6 +109,25 @@ def test_ambiguous_heading_sequence_does_not_guess_link_associations(
     assert [item.section_index for item in projection.headings] == list(indexes)
     assert projection.links
     assert all(item.section_index is None for item in projection.links)
+
+
+def test_duplicate_canonical_heading_across_h1_and_h2_remains_ambiguous() -> None:
+    markdown = f"# {SECTION_TITLES[0]}\n\nFirst body.\n\n## {SECTION_TITLES[0]}\n\nSecond body."
+
+    projection = project_markdown_report(markdown)
+
+    assert projection.heading_status == "ambiguous"
+    assert projection.ambiguity_reasons == ("duplicate_heading",)
+    assert [item.section_index for item in projection.headings] == [0, 0]
+
+
+def test_h3_canonical_titles_are_not_chapter_headings() -> None:
+    markdown = "\n\n".join(f"### {title}\n本文" for title in SECTION_TITLES)
+
+    projection = project_markdown_report(markdown)
+
+    assert projection.heading_status == "partial"
+    assert projection.headings == ()
 
 
 def test_unsafe_or_non_public_urls_are_not_projected() -> None:
