@@ -12,6 +12,11 @@ class Result:
     def single(self, **_kwargs): return self.row
 
 
+class RowsResult:
+    def __init__(self, rows): self.rows = rows
+    def data(self): return self.rows
+
+
 class Driver:
     def __init__(self): self.jobs = {}
     def session(self, *, database): return Session(self)
@@ -41,6 +46,13 @@ class Session:
                 j.update(state="failed", last_error_code="attempts_exhausted",
                          updated_at=params["now"], **self.clear_lease())
             return Result({"expired": len(exhausted)})
+        if kind == "inspection":
+            selected = [job for job in jobs.values() if job["owner_id"] == params["owner_id"]
+                        and (job["state"] == "failed" or
+                             job["state"] == "pending" and job["available_at"] <= params["now"])]
+            selected.sort(key=lambda job: (job["state"] != "pending", job["available_at"],
+                                           job["updated_at"], job["id"]))
+            return RowsResult([{"job": dict(job)} for job in selected[:params["limit"]]])
         if kind == "claim":
             ready = []
             for job in jobs.values():
@@ -418,3 +430,62 @@ def test_stale_supersede_is_lease_fenced_and_replayable():
         job.id, second_lease.lease_token, current_brief_id="brief-new",
         current_idea_id="idea-r2", now=_time(2),
     ) == stale
+
+
+def test_inspection_list_is_owner_scoped_and_returns_only_due_pending_or_failed_jobs():
+    driver = Driver()
+    store = _store(driver)
+
+    pending = store.enqueue(_brief(brief_id="pending-payload"), now=_time())
+    pending_lease = store.claim_specific(pending.id, worker_id="test-worker", now=_time())
+    store.persist_candidate_manifest(
+        pending.id, pending_lease.lease_token,
+        _validated_manifest(brief_id=pending.brief_id), now=_time(),
+    )
+    store.fail(pending.id, pending_lease.lease_token, error_code="retryable", now=_time())
+
+    missing = store.enqueue(_brief(brief_id="pending-no-manifest"), now=_time())
+    future = store.enqueue(_brief(brief_id="pending-future"), now=_time(1))
+
+    failed = store.enqueue(_brief(brief_id="terminal-failed"), now=_time(), max_attempts=1)
+    failed_lease = store.claim_specific(failed.id, worker_id="test-worker", now=_time())
+    store.persist_candidate_manifest(
+        failed.id, failed_lease.lease_token,
+        _validated_manifest(brief_id=failed.brief_id), now=_time(),
+    )
+    store.fail(failed.id, failed_lease.lease_token, error_code="exhausted", now=_time())
+
+    other_owner_store = _store(driver, owner="owner-2")
+    other = other_owner_store.enqueue(_brief(owner="owner-2", brief_id="other-owner"), now=_time(), max_attempts=1)
+    other_lease = other_owner_store.claim_specific(other.id, worker_id="test-worker", now=_time())
+    other_owner_store.fail(other.id, other_lease.lease_token, error_code="exhausted", now=_time())
+
+    before = repr(driver.jobs)
+    listed = store.list_inspection_jobs(limit=20, now=_time())
+
+    assert {job.id for job in listed} == {pending.id, missing.id, failed.id}
+    assert repr(driver.jobs) == before
+    assert all(job.owner_id == "owner-1" for job in listed)
+    assert next(job for job in listed if job.id == pending.id).candidate_payload_persisted
+    assert not next(job for job in listed if job.id == missing.id).candidate_payload_persisted
+    assert next(job for job in listed if job.id == failed.id).state is JobState.FAILED
+    assert future.id not in {job.id for job in listed}
+    assert "PRIVATE REPORT TEXT" not in repr(listed)
+    assert "PRIVATE QUOTE TEXT" not in repr(listed)
+
+
+def test_inspection_list_rejects_limits_outside_one_to_twenty():
+    store = _store()
+
+    with pytest.raises(JobStoreError):
+        store.list_inspection_jobs(limit=0, now=_time())
+    with pytest.raises(JobStoreError):
+        store.list_inspection_jobs(limit=21, now=_time())
+
+
+def test_inspection_list_caps_results_at_twenty():
+    store = _store()
+    for index in range(25):
+        store.enqueue(_brief(brief_id=f"brief-{index}"), now=_time())
+
+    assert len(store.list_inspection_jobs(now=_time())) == 20
