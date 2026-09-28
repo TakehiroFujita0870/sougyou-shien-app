@@ -157,6 +157,32 @@ function overviewResponse(overrides = {}) {
 }
 
 describe('Local dashboard client', () => {
+  it('loads owner-scoped processing counts and never substitutes zeros when storage is unavailable', async () => {
+    const counts = { pending: 2, leased: 1, succeeded: 4, failed: 1, superseded: 3 };
+    const readyFetch = vi.fn()
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(jsonResponse({ status: 'ready', counts, report_text: 'PRIVATE', job_ids: ['PRIVATE'] }));
+    const ready = await createLocalDashboardClient({ fetchImpl: readyFetch, location: localLocation }).getServiceSnapshot();
+
+    expect(ready.processing).toEqual({ status: 'ready', counts });
+    expect(JSON.stringify(ready.processing)).not.toContain('PRIVATE');
+    expect(readyFetch.mock.calls.map(([path]) => path)).toEqual(['/api/status', '/api/graph-processing']);
+    expect(readyFetch.mock.calls[1][1]).toEqual(expect.objectContaining({ method: 'GET', credentials: 'same-origin' }));
+
+    const stoppedFetch = vi.fn().mockResolvedValueOnce(statusResponse({
+      services: { database: 'stopped', api: 'running', tunnel: 'running' },
+    }));
+    const stopped = await createLocalDashboardClient({ fetchImpl: stoppedFetch, location: localLocation }).getServiceSnapshot();
+    expect(stopped.processing).toEqual({ status: 'unavailable' });
+    expect(stoppedFetch).toHaveBeenCalledOnce();
+
+    const failedFetch = vi.fn()
+      .mockResolvedValueOnce(statusResponse())
+      .mockResolvedValueOnce(jsonResponse({ status: 'ready', counts: { ...counts, failed: -1 } }));
+    const failed = await createLocalDashboardClient({ fetchImpl: failedFetch, location: localLocation }).getServiceSnapshot();
+    expect(failed.processing).toEqual({ status: 'unavailable' });
+  });
+
   it('does not promote missing or unrecognized research states from a saved brief', async () => {
     for (const research_status of [undefined, 'complete', { status: 'completed' }]) {
       const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({

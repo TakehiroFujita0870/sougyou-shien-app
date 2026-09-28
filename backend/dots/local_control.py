@@ -27,6 +27,7 @@ from dots.founder_graph_neo4j import Neo4jGatewayError, Neo4jUnavailableError
 from dots.local_record_lifecycle import LocalRecordLifecycleWriter, read_local_deleted_records
 from dots.local_graph_view import GraphViewStore, read_local_facet_region, read_local_graph
 from dots.local_graph_provenance import GraphProvenanceNotFound
+from dots.local_graph_processing import JOB_STATES, GraphProcessingStore
 from dots.local_self_intro import SelfIntroductionConflict, SelfIntroductionWriter
 
 
@@ -160,6 +161,7 @@ def create_local_control_app(
     *,
     bind_host: str = "127.0.0.1",
     overview_store: OverviewStore | None = None,
+    graph_processing_store: GraphProcessingStore | None = None,
     overview_owner_id: str | None = None,
     home_store: HomeStore | None = None,
     graph_view_store: GraphViewStore | None = None,
@@ -246,6 +248,35 @@ def create_local_control_app(
         return JSONResponse(
             status_code=503 if result.status == "failed" else 200,
             content=jsonable_encoder(result),
+        )
+
+    @app.get("/api/graph-processing")
+    async def get_graph_processing(
+        request: Request,
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        await authorize(request, authorization)
+        database = control.adapters.get("database")
+        if (
+            graph_processing_store is None
+            or not isinstance(overview_owner_id, str)
+            or not overview_owner_id.strip()
+            or database is None
+        ):
+            return JSONResponse(status_code=503, content={"status": "unavailable"})
+        try:
+            if database.status() != "running":
+                return JSONResponse(status_code=503, content={"status": "unavailable"})
+            counts = graph_processing_store.read_counts(overview_owner_id)
+            if not isinstance(counts, Mapping) or set(counts) != set(JOB_STATES):
+                raise ValueError("invalid graph processing counts")
+            if any(type(counts[state]) is not int or counts[state] < 0 for state in JOB_STATES):
+                raise ValueError("invalid graph processing counts")
+        except Exception:
+            return JSONResponse(status_code=503, content={"status": "failed"})
+        return JSONResponse(
+            status_code=200,
+            content={"status": "ready", "counts": {state: counts[state] for state in JOB_STATES}},
         )
 
     @app.get("/api/home")

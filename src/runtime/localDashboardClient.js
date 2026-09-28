@@ -11,6 +11,7 @@ const COUNT_MAP = {
   asset_records: 'Asset',
   report_version_records: 'ReportVersion',
 };
+const GRAPH_PROCESSING_STATES = ['pending', 'leased', 'succeeded', 'failed', 'superseded'];
 const KIND_MAP = {
   idea: 'Idea',
   person: 'Person',
@@ -69,6 +70,18 @@ function safeLatest(overview) {
     if (typeof title !== 'string' || !title.trim()) return [];
     return [{ id: item.id, kind, [titleField]: title.trim() }];
   });
+}
+
+function safeGraphProcessing(payload) {
+  if (payload.status === 'unavailable' || payload.status === 'failed') return { status: 'unavailable' };
+  if (payload.status !== 'ready') throw new LocalDashboardClientError('error');
+  const source = requiredObject(payload.counts);
+  const counts = {};
+  for (const state of GRAPH_PROCESSING_STATES) {
+    if (!Number.isSafeInteger(source[state]) || source[state] < 0) throw new LocalDashboardClientError('error');
+    counts[state] = source[state];
+  }
+  return { status: 'ready', counts };
 }
 
 function snapshotState(services, overviewStatus) {
@@ -173,7 +186,15 @@ export function createLocalDashboardClient({
     const stopped = stopIntent === 'stopped' && services.database === 'stopped' && services.tunnel === 'stopped'
       || values.every((value) => value === 'stopped');
     const state = stopped ? 'stopped' : values.every((value) => value === 'running') ? 'running' : 'degraded';
-    return { state, services, counts: { ...ZERO_COUNTS }, latest: [], countBasis: 'stored_active_records' };
+    let processing = { status: 'unavailable' };
+    if (services.database === 'running') {
+      try {
+        processing = safeGraphProcessing(await request('/api/graph-processing', { signal }));
+      } catch (error) {
+        if (signal?.aborted || error?.name === 'AbortError') throw error;
+      }
+    }
+    return { state, services, counts: { ...ZERO_COUNTS }, latest: [], countBasis: 'stored_active_records', processing };
   }
 
   async function getHome({ signal } = {}) {
