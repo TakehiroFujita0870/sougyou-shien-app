@@ -3,7 +3,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from dots.founder_graph_job_store import FounderGraphJobStore, JobConflictError, JobLeaseError, JobState, JobStoreError
+from dots.founder_graph_job_store import (
+    FounderGraphJobStore, JobConflictError, JobLeaseError, JobState, JobStoreError,
+    _job_from_row,
+)
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
@@ -177,6 +180,26 @@ def test_enqueue_is_idempotent_owner_scoped_and_does_not_copy_report_text():
     stored = str(driver.jobs[("owner-1", "brief-1")])
     assert "PRIVATE REPORT TEXT" not in stored
     assert "report_markdown" not in stored and "content" not in stored
+
+
+def test_job_decoder_accepts_neo4j_properties_omitting_null_fields():
+    driver = Driver()
+    store = _store(driver)
+    expected = store.enqueue(_brief(), now=_time())
+    stored = driver.jobs[(expected.owner_id, expected.brief_id)]
+    # Neo4j does not persist null-valued properties, so properties(job) omits these keys.
+    row = {key: value for key, value in stored.items() if value is not None}
+
+    restored = _job_from_row({"job": row})
+
+    assert restored is not None
+    assert restored.id == expected.id
+    assert restored.lease_owner is None
+    assert restored.lease_token is None
+    assert restored.lease_expires_at is None
+    assert restored.last_transition is None
+    assert restored.last_lease_token is None
+    assert restored.last_error_code is None
 
 
 def test_expired_lease_is_reclaimed_after_store_restart_and_fences_old_worker():

@@ -401,6 +401,12 @@ def _job_from_row(row: Any) -> GraphJob | None:
             raise ValueError
         props["candidate_ids"], props["candidate_payload_persisted"] = candidate_ids, payload is not None
         props["state"] = JobState(props["state"])
+        # Neo4j omits null-valued properties from properties(job).
+        for key in (
+            "lease_owner", "lease_token", "lease_expires_at", "last_transition",
+            "last_lease_token", "last_error_code",
+        ):
+            props.setdefault(key, None)
         for key in ("available_at", "created_at", "updated_at", "lease_expires_at"):
             if props.get(key) is not None: props[key] = _parsed_time(props[key])
         job = GraphJob(**props)
