@@ -76,6 +76,62 @@ it('separates strengths and barriers into editable columns', async () => {
   expect(columns[1].querySelectorAll('button[aria-label^="編集"], button[aria-label^="削除"]')).toHaveLength(2);
 });
 
+it('places a shared question-mark shortcut guide at the right of the home tabs', async () => {
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [], assets: [], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  const tabs = container.querySelector('.local-home__tabs');
+  const help = tabs.querySelector('button[aria-label="ショートカット一覧"]');
+  expect(help?.textContent).toBe('?');
+  expect(help).toBe(tabs.lastElementChild);
+  expect(container.querySelector('.local-home__asset-help')).toBeNull();
+  await act(async () => help.click());
+  expect(container.textContent).toContain('アイデア');
+  expect(container.textContent).toContain('弱み・迷いへ');
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'あなたのアセット').click());
+  expect(help.getAttribute('aria-expanded')).toBe('true');
+  await act(async () => document.querySelector('main.local-home').dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })));
+  expect(help.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('navigates idea cards and opens editing and delete confirmation without hijacking text input', async () => {
+  const ideas = [
+    { id: 'first', title: '最初の案', description: '内容A', revision: 0 },
+    { id: 'second', title: '次の案', description: '内容B', revision: 1 },
+  ];
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas, assets: [], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  const cards = [...container.querySelectorAll('.local-home__idea-select')];
+  cards[0].focus();
+  await act(async () => cards[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })));
+  expect(document.activeElement).toBe(cards[1]);
+  expect(container.querySelector('#selected-idea-heading').textContent).toBe('次の案');
+  await act(async () => cards[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true })));
+  expect(document.activeElement).toBe(cards[0]);
+  await act(async () => cards[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true })));
+  expect(document.activeElement).toBe(cards[1]);
+  await act(async () => cards[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true, cancelable: true })));
+  const field = container.querySelector('#idea-edit-title');
+  expect(field).not.toBeNull();
+  field.focus();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true })));
+  expect(container.querySelector('.local-home__shortcuts')).toBeNull();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })));
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  expect(container.querySelector('#idea-edit-title')).toBeNull();
+  expect(document.activeElement).toBe(cards[1]);
+  await act(async () => cards[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })));
+  expect(container.querySelector('[role="alertdialog"]')?.textContent).toContain('次の案');
+});
+
 it('navigates cards by keyboard and persists cross-column moves', async () => {
   const first = { id: 'first', name: '経験A', kind: 'asset', description: '内容A', revision: 1 };
   const second = { id: 'second', name: '経験B', kind: 'asset', description: '内容B', revision: 1 };

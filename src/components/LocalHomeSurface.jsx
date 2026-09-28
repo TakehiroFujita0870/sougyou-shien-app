@@ -46,8 +46,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const [assetMoving, setAssetMoving] = useState(false);
   const [dragAssetId, setDragAssetId] = useState(null);
   const [dropColumn, setDropColumn] = useState(null);
-  const [showAssetShortcuts, setShowAssetShortcuts] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [focusAssetId, setFocusAssetId] = useState(null);
+  const [focusIdeaId, setFocusIdeaId] = useState(null);
   const [ideaDraft, setIdeaDraft] = useState(null);
   const [ideaSaving, setIdeaSaving] = useState(false);
   const [ideaNotice, setIdeaNotice] = useState('');
@@ -116,6 +117,43 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   function editIdea(idea) {
     setIdeaDraft({ id: idea.id, title: idea.title, description: idea.description ?? '', revision: idea.revision });
     setIdeaNotice('');
+  }
+  useEffect(() => {
+    if (!focusIdeaId) return;
+    const card = [...document.querySelectorAll('.local-home__idea-select')].find((node) => node.dataset.ideaId === focusIdeaId);
+    card?.focus();
+    setFocusIdeaId(null);
+  }, [focusIdeaId, ideaDraft]);
+  useEffect(() => {
+    if (ideaDraft) document.getElementById('idea-edit-title')?.focus();
+  }, [ideaDraft?.id]);
+  function ideaKeyDown(event, idea) {
+    if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || event.altKey || ideaDraft || deleteConfirmation) return;
+    const index = home.ideas.findIndex((item) => item.id === idea.id);
+    const focusAt = (next) => {
+      event.preventDefault();
+      const buttons = [...event.currentTarget.closest('.local-home__cards').querySelectorAll('.local-home__idea-select')];
+      const button = buttons[Math.max(0, Math.min(next, buttons.length - 1))];
+      if (!button) return;
+      button.focus();
+      setSelectedId(button.dataset.ideaId);
+      setIdeaNotice('');
+    };
+    if (event.key === 'ArrowDown') focusAt(index + 1);
+    else if (event.key === 'ArrowUp') focusAt(index - 1);
+    else if (event.key === 'Home') focusAt(0);
+    else if (event.key === 'End') focusAt(home.ideas.length - 1);
+    else if (canArchiveRecord('idea', idea.revision) && ['e', 'E'].includes(event.key)) {
+      event.preventDefault();
+      setSelectedId(idea.id);
+      editIdea(idea);
+    } else if (canArchiveRecord('idea', idea.revision) && event.key === 'Delete') {
+      event.preventDefault();
+      setSelectedId(idea.id);
+      deleteTriggerRef.current = event.currentTarget;
+      setDeleteNotice('');
+      setDeleteConfirmation({ id: idea.id, kind: 'idea', title: idea.title, revision: idea.revision });
+    }
   }
   async function saveIdea(event) {
     event.preventDefault();
@@ -198,9 +236,6 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       event.preventDefault();
       deleteTriggerRef.current = event.currentTarget;
       setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision });
-    } else if (!event.altKey && event.key === '?') {
-      event.preventDefault();
-      setShowAssetShortcuts((value) => !value);
     }
   }
   async function saveAsset(event) {
@@ -282,11 +317,24 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       }
     }
   }
-  return <main className="local-home" aria-labelledby="local-home-heading">
+  return <main className="local-home" aria-labelledby="local-home-heading" onKeyDown={(event) => {
+    if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey || deleteConfirmation || event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    event.preventDefault();
+    setShowShortcuts((value) => !value);
+  }}>
     <h1 ref={homeHeadingRef} id="local-home-heading" className="sr-only" tabIndex={-1}>ホーム</h1>
-    <div role="tablist" aria-label="ホームの項目" className="local-home__tabs">
-      {TABS.map(({ id, label, icon }) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}><HomeTabIcon name={icon} /><span>{label}</span></button>)}
+    <div className="local-home__tabs">
+      <div role="tablist" aria-label="ホームの項目">
+        {TABS.map(({ id, label, icon }) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}><HomeTabIcon name={icon} /><span>{label}</span></button>)}
+      </div>
+      <button type="button" className="local-home__help-toggle" aria-label="ショートカット一覧" title="ショートカット一覧" aria-expanded={showShortcuts} aria-controls={showShortcuts ? 'local-home-shortcuts' : undefined} onClick={() => setShowShortcuts((value) => !value)}>?</button>
     </div>
+    {showShortcuts && <section id="local-home-shortcuts" className="local-home__shortcuts" aria-label="ショートカット一覧">
+      <p><strong>アイデア・アセット共通</strong>　カードを選択して ↑↓・Home・End：選択移動 ／ E：編集 ／ Delete：削除確認 ／ ?：この一覧</p>
+      <p><strong>アイデア</strong>　Enter：選択</p>
+      <p><strong>アセット</strong>　Enter：編集 ／ Alt＋←：強み・経験へ ／ Alt＋→：弱み・迷いへ</p>
+      <p><strong>編集中</strong>　Esc：キャンセル</p>
+    </section>}
     {home.status === 'loading' && <p role="status" className="local-home__notice">保存内容を読み込んでいます。</p>}
     {home.status === 'failed' && <div className="local-home__notice" role="alert">保存内容を読み込めませんでした。<button type="button" onClick={() => setAttempt((value) => value + 1)}>再試行</button></div>}
     {home.status === 'stopped' && <div className="local-home__notice" role="status">Dots.は停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></div>}
@@ -295,7 +343,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
         <h2 id="idea-list-heading" tabIndex={-1}>記録したアイデア <span>{home.ideas.length}件</span></h2>
         {home.ideas.length ? <div className="local-home__cards">{home.ideas.map((idea) => {
           return <article key={idea.id} className="local-home__idea-card" data-selected={selectedIdea?.id === idea.id ? 'true' : 'false'}>
-            <button type="button" className="local-home__idea-select" aria-pressed={selectedIdea?.id === idea.id} onClick={() => { setSelectedId(idea.id); setIdeaDraft(null); setIdeaNotice(''); }}>
+            <button type="button" className="local-home__idea-select" data-idea-id={idea.id} aria-pressed={selectedIdea?.id === idea.id} onClick={() => { setSelectedId(idea.id); setIdeaDraft(null); setIdeaNotice(''); }} onKeyDown={(event) => ideaKeyDown(event, idea)}>
               <span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong></span>
             </button>
           </article>;
@@ -310,7 +358,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           </div>}
         </div>
         {compactResearchStatusLabel(selectedIdea.research_status) && <div className="local-home__detail-status-row"><span className="local-home__status-badge" data-research-state={selectedIdea.research_status}>{compactResearchStatusLabel(selectedIdea.research_status)}</span></div>}
-        {ideaDraft?.id === selectedIdea.id ? <form onSubmit={saveIdea} className="local-home__edit-form local-home__idea-edit-form">
+        {ideaDraft?.id === selectedIdea.id ? <form onSubmit={saveIdea} className="local-home__edit-form local-home__idea-edit-form" onKeyDown={(event) => { if (event.key === 'Escape' && !ideaSaving) { event.stopPropagation(); setIdeaDraft(null); setIdeaNotice(''); setFocusIdeaId(selectedIdea.id); } }}>
           <p>題名だけの変更は調査結果を引き継ぎます。説明を変えると以前の調査は履歴に残り、この案の現行調査からは外れます。</p>
           <label htmlFor="idea-edit-title">題名</label>
           <textarea id="idea-edit-title" rows={1} maxLength={200} required value={ideaDraft.title} onChange={(event) => setIdeaDraft((current) => ({ ...current, title: event.target.value }))} />
@@ -339,7 +387,6 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">
-      <div className="local-home__asset-help"><button type="button" aria-expanded={showAssetShortcuts} onClick={() => setShowAssetShortcuts((value) => !value)}>キーボード操作 {showAssetShortcuts ? '−' : '＋'}</button>{showAssetShortcuts && <p>カードを選択して ↑↓・Home・End：選択移動 ／ Alt＋←：強み・経験へ ／ Alt＋→：弱み・迷いへ ／ Enter・E：編集 ／ Delete：削除確認 ／ 編集中のEsc：キャンセル ／ ?：この案内</p>}</div>
       {[{ id: 'strength', label: '強み・経験', items: home.assets.filter((asset) => asset.kind !== 'barrier') }, { id: 'barrier', label: '弱み・迷い', items: home.assets.filter((asset) => asset.kind === 'barrier') }].map((column) => <div key={column.id} className="local-home__asset-list" data-asset-column={column.id}
         data-drop-active={dropColumn === column.id}
         onDragOver={(event) => { if (dragAssetId && home.assets.some((asset) => asset.id === dragAssetId && (asset.kind === 'barrier' ? 'barrier' : 'strength') !== column.id)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropColumn(column.id); } }}
