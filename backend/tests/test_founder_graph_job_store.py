@@ -31,12 +31,30 @@ class Session:
             key = (params["owner_id"], params["brief_id"])
             jobs.setdefault(key, dict(params["properties"]))
             return self.row(jobs[key])
-        if kind in {"claim_lock", "expire_exhausted"}: return Result()
+        if kind == "claim_lock": return Result()
+        if kind == "expire_exhausted":
+            exhausted = [j for j in jobs.values() if j["owner_id"] == params["owner_id"]
+                         and (params["job_id"] is None or j["id"] == params["job_id"])
+                         and j["state"] == "leased" and j["lease_expires_at"] <= params["now"]
+                         and j["attempt_count"] >= j["max_attempts"]]
+            for j in exhausted:
+                j.update(state="failed", last_error_code="attempts_exhausted",
+                         updated_at=params["now"], **self.clear_lease())
+            return Result({"expired": len(exhausted)})
         if kind == "claim":
-            ready = [j for j in jobs.values() if j["owner_id"] == params["owner_id"] and (
-                j["state"] == "leased" and j["lease_owner"] == params["worker_id"] and j["lease_expires_at"] > params["now"] or
-                j["attempt_count"] < j["max_attempts"] and j["available_at"] <= params["now"] and
-                (j["state"] == "pending" or j["state"] == "leased" and j["lease_expires_at"] <= params["now"]))]
+            ready = []
+            for job in jobs.values():
+                if (job["owner_id"] != params["owner_id"]
+                        or params["job_id"] is not None and job["id"] != params["job_id"]):
+                    continue
+                same_lease = (job["state"] == "leased" and job["lease_owner"] == params["worker_id"]
+                              and job["lease_expires_at"] > params["now"])
+                available = (job["attempt_count"] < job["max_attempts"]
+                             and job["available_at"] <= params["now"]
+                             and (job["state"] == "pending" or
+                                  job["state"] == "leased" and job["lease_expires_at"] <= params["now"]))
+                if same_lease or available:
+                    ready.append(job)
             if not ready: return Result()
             job = min(ready, key=lambda j: (j["lease_owner"] != params["worker_id"] or j["lease_expires_at"] <= params["now"], j["available_at"], j["created_at"], j["id"]))
             same = job["state"] == "leased" and job["lease_owner"] == params["worker_id"] and job["lease_expires_at"] > params["now"]
@@ -68,6 +86,20 @@ class Session:
             stale = [j for j in jobs.values() if j["owner_id"] == params["owner_id"] and j["idea_lineage_root_id"] == params["idea_lineage_root_id"] and j["brief_id"] != params["current_brief_id"] and j["state"] in {"pending", "leased"}]
             for j in stale: j.update(state="superseded", updated_at=params["now"], **self.clear_lease())
             return Result({"count": len(stale)})
+        if kind == "supersede_stale":
+            active = self.live(job, params) and (
+                job["brief_id"] != params["current_brief_id"] or
+                job["based_on_idea_id"] != params["current_idea_id"]
+            )
+            replay = bool(job and job["state"] == "superseded" and
+                          job["last_transition"] == "supersede" and
+                          job["last_lease_token"] == params["lease_token"])
+            if not active and not replay: return Result()
+            if active:
+                job.update(state="superseded", last_transition="supersede",
+                           last_lease_token=params["lease_token"], last_error_code="stale_version",
+                           updated_at=params["now"], **self.clear_lease())
+            return self.row(job)
         raise AssertionError(kind)
 
     @staticmethod
@@ -105,6 +137,16 @@ def _validated_manifest(*, brief_id="brief-1", idea_id="idea-r1", candidates=Non
         idea_id=idea_id, brief_id=brief_id, brief_revision=revision,
         brief_markdown_sha256="a" * 64, candidates=tuple(candidates or (candidate,)),
     )
+
+
+def test_canonical_job_id_is_public_and_bound_to_owner_and_brief():
+    store = _store()
+    job = store.enqueue(_brief(), now=_time())
+
+    assert FounderGraphJobStore.job_id_for(job.owner_id, job.brief_id) == job.id
+    assert FounderGraphJobStore.job_id_for("another-owner", job.brief_id) != job.id
+    with pytest.raises(JobStoreError):
+        FounderGraphJobStore.job_id_for("owner-1", "")
 
 
 def test_enqueue_is_idempotent_owner_scoped_and_does_not_copy_report_text():
@@ -286,3 +328,61 @@ def test_candidate_payload_bounds_reject_oversized_quotes_and_manifests_before_w
                                          _validated_manifest(candidates=large_candidates), now=_time())
     stored = driver.jobs[("owner-1", "brief-1")]
     assert stored["candidate_manifest_json"] is None and stored["candidate_payloads_json"] is None
+
+
+def test_claim_specific_targets_saved_brief_without_stealing_older_work():
+    driver = Driver()
+    store = _store(driver)
+    older = store.enqueue(_brief(brief_id="brief-old"), now=_time())
+    target = store.enqueue(_brief(brief_id="brief-saved"), now=_time(1))
+    driver.jobs[(older.owner_id, older.brief_id)].update(
+        state="leased", lease_owner="abandoned-worker", lease_token="old-token",
+        lease_expires_at=_time().isoformat().replace("+00:00", "Z"),
+        attempt_count=5, max_attempts=5,
+    )
+
+    lease = store.claim_specific(target.id, worker_id="inline-worker", now=_time(1))
+
+    assert lease is not None and lease.id == target.id and lease.attempt_count == 1
+    untouched = store.get(older.id)
+    assert untouched.state is JobState.LEASED and untouched.lease_token == "old-token"
+    retry = store.claim_specific(target.id, worker_id="inline-worker", now=_time(1))
+    assert retry is not None and retry.lease_token == lease.lease_token and retry.attempt_count == 1
+    assert store.claim_specific(target.id, worker_id="other-worker", now=_time(1)) is None
+
+
+def test_stale_supersede_is_lease_fenced_and_replayable():
+    store = _store()
+    job = store.enqueue(_brief(), now=_time())
+    first_lease = store.claim_specific(job.id, worker_id="worker-a", lease_seconds=30, now=_time())
+    assert first_lease is not None
+
+    with pytest.raises(JobLeaseError):
+        store.supersede_stale(
+            job.id, first_lease.lease_token, current_brief_id=job.brief_id,
+            current_idea_id=job.based_on_idea_id, now=_time(),
+        )
+    with pytest.raises(JobLeaseError):
+        store.supersede_stale(
+            job.id, first_lease.lease_token, current_brief_id="brief-new",
+            current_idea_id="idea-r2", now=_time(1),
+        )
+
+    second_lease = store.claim_specific(job.id, worker_id="worker-b", lease_seconds=30, now=_time(1))
+    assert second_lease is not None and second_lease.lease_token != first_lease.lease_token
+    with pytest.raises(JobLeaseError):
+        store.supersede_stale(
+            job.id, first_lease.lease_token, current_brief_id="brief-new",
+            current_idea_id="idea-r2", now=_time(1),
+        )
+
+    stale = store.supersede_stale(
+        job.id, second_lease.lease_token, current_brief_id="brief-new",
+        current_idea_id="idea-r2", now=_time(1),
+    )
+    assert stale.state is JobState.SUPERSEDED and stale.last_error_code == "stale_version"
+    assert stale.lease_token is None and stale.last_transition == "supersede"
+    assert store.supersede_stale(
+        job.id, second_lease.lease_token, current_brief_id="brief-new",
+        current_idea_id="idea-r2", now=_time(2),
+    ) == stale

@@ -107,14 +107,16 @@ MERGE (lock:FounderGraphJobQueueLock {owner_id: $owner_id}) ON CREATE SET lock.v
 SET lock.version = lock.version + 1 RETURN lock.version AS version"""
 _EXPIRE_EXHAUSTED = """// graph_job:expire_exhausted
 MATCH (job:FounderGraphJob {owner_id: $owner_id})
-WHERE job.state = 'leased' AND job.lease_expires_at <= $now AND job.attempt_count >= job.max_attempts
+WHERE ($job_id IS NULL OR job.id = $job_id) AND job.state = 'leased'
+  AND job.lease_expires_at <= $now AND job.attempt_count >= job.max_attempts
 SET job.state = 'failed', job.last_error_code = 'attempts_exhausted', job.lease_owner = null,
     job.lease_token = null, job.lease_expires_at = null, job.updated_at = $now RETURN count(job) AS expired"""
 _CLAIM = """// graph_job:claim
 MATCH (job:FounderGraphJob {owner_id: $owner_id})
-WHERE (job.state = 'leased' AND job.lease_owner = $worker_id AND job.lease_expires_at > $now)
+WHERE ($job_id IS NULL OR job.id = $job_id) AND (
+      (job.state = 'leased' AND job.lease_owner = $worker_id AND job.lease_expires_at > $now)
   OR (job.available_at <= $now AND job.attempt_count < job.max_attempts AND
-      (job.state = 'pending' OR (job.state = 'leased' AND job.lease_expires_at <= $now)))
+      (job.state = 'pending' OR (job.state = 'leased' AND job.lease_expires_at <= $now))))
 WITH job, (job.state = 'leased' AND job.lease_owner = $worker_id AND job.lease_expires_at > $now) AS same_lease
 ORDER BY CASE WHEN same_lease THEN 0 ELSE 1 END, job.available_at, job.created_at, job.id LIMIT 1
 SET job.state = 'leased', job.attempt_count = job.attempt_count + CASE WHEN same_lease THEN 0 ELSE 1 END,
@@ -167,6 +169,19 @@ MATCH (job:FounderGraphJob {owner_id: $owner_id, idea_lineage_root_id: $idea_lin
 WHERE job.brief_id <> $current_brief_id AND job.state IN ['pending', 'leased']
 SET job.state = 'superseded', job.lease_owner = null, job.lease_token = null,
     job.lease_expires_at = null, job.updated_at = $now RETURN count(job) AS count"""
+_SUPERSEDE_STALE = """// graph_job:supersede_stale
+MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id})
+WHERE (job.state = 'leased' AND job.lease_token = $lease_token AND job.lease_expires_at > $now
+       AND (job.brief_id <> $current_brief_id OR job.based_on_idea_id <> $current_idea_id))
+   OR (job.state = 'superseded' AND job.last_transition = 'supersede' AND job.last_lease_token = $lease_token)
+WITH job, job.state = 'leased' AS active
+SET job.state = 'superseded',
+    job.last_transition = CASE WHEN active THEN 'supersede' ELSE job.last_transition END,
+    job.last_lease_token = CASE WHEN active THEN $lease_token ELSE job.last_lease_token END,
+    job.last_error_code = CASE WHEN active THEN 'stale_version' ELSE job.last_error_code END,
+    job.lease_owner = null, job.lease_token = null, job.lease_expires_at = null,
+    job.updated_at = CASE WHEN active THEN $now ELSE job.updated_at END
+RETURN properties(job) AS job"""
 
 
 def _identifier(value: str, name: str) -> str:
@@ -394,6 +409,11 @@ class FounderGraphJobStore:
         self.owner_id = _identifier(owner_id, "owner_id")
         self.database = _identifier(database, "database")
 
+    @staticmethod
+    def job_id_for(owner_id: str, brief_id: str) -> str:
+        """Return the canonical durable job ID for an owner and saved Brief."""
+        return _job_id(_identifier(owner_id, "owner_id"), _identifier(brief_id, "brief_id"))
+
     def enqueue(self, brief: IdeaBriefVersion, *, now: datetime | None = None,
                 max_attempts: int = 5) -> GraphJob:
         with self.driver.session(database=self.database) as session:
@@ -411,7 +431,7 @@ class FounderGraphJobStore:
         if type(max_attempts) is not int or not 1 <= max_attempts <= 100:
             raise JobStoreError("max_attempts must be between 1 and 100")
         instant = _time(now)
-        identity = _job_id(owner, brief.id)
+        identity = FounderGraphJobStore.job_id_for(owner, brief.id)
         at = _stored_time(instant)
         properties = {
             "id": identity, "owner_id": owner, "brief_id": brief.id,
@@ -432,6 +452,16 @@ class FounderGraphJobStore:
 
     def claim(self, *, worker_id: str, lease_seconds: int = 60,
               now: datetime | None = None) -> GraphJob | None:
+        return self._claim(None, worker_id=worker_id, lease_seconds=lease_seconds, now=now)
+
+    def claim_specific(self, job_id: str, *, worker_id: str, lease_seconds: int = 60,
+                       now: datetime | None = None) -> GraphJob | None:
+        """Claim only the requested owner-scoped job, without consuming another job."""
+        return self._claim(_identifier(job_id, "job_id"), worker_id=worker_id,
+                           lease_seconds=lease_seconds, now=now)
+
+    def _claim(self, job_id: str | None, *, worker_id: str, lease_seconds: int,
+               now: datetime | None) -> GraphJob | None:
         worker = _identifier(worker_id, "worker_id")
         if type(lease_seconds) is not int or not 1 <= lease_seconds <= 3600:
             raise JobStoreError("lease_seconds must be between 1 and 3600")
@@ -441,10 +471,11 @@ class FounderGraphJobStore:
 
         def claim_tx(tx: Any) -> GraphJob | None:
             tx.run(_CLAIM_LOCK, owner_id=self.owner_id).single()
-            tx.run(_EXPIRE_EXHAUSTED, owner_id=self.owner_id, now=_stored_time(instant))
+            tx.run(_EXPIRE_EXHAUSTED, owner_id=self.owner_id, job_id=job_id,
+                   now=_stored_time(instant))
             row = tx.run(
                 _CLAIM, owner_id=self.owner_id, worker_id=worker, lease_token=token,
-                lease_expires_at=expiry, now=_stored_time(instant),
+                lease_expires_at=expiry, job_id=job_id, now=_stored_time(instant),
             ).single()
             return _job_from_row(row)
 
@@ -518,6 +549,17 @@ class FounderGraphJobStore:
         return self._required_write(
             _FAIL, job_id=job_id, lease_token=lease_token, error_code=code,
             retry_at=_stored_time(instant + timedelta(seconds=retry_after_seconds)),
+            now=_stored_time(instant),
+        )
+
+    def supersede_stale(self, job_id: str, lease_token: str, *, current_brief_id: str,
+                        current_idea_id: str, now: datetime | None = None) -> GraphJob:
+        """Terminally supersede this live lease only after its Brief or Idea is stale."""
+        instant = _time(now)
+        return self._required_write(
+            _SUPERSEDE_STALE, job_id=job_id, lease_token=lease_token,
+            current_brief_id=_identifier(current_brief_id, "current_brief_id"),
+            current_idea_id=_identifier(current_idea_id, "current_idea_id"),
             now=_stored_time(instant),
         )
 
