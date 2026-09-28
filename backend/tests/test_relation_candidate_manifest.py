@@ -92,6 +92,25 @@ def test_hypothesis_is_proposed_unfounded_by_external_evidence_and_retry_stable(
     assert first.brief_markdown_sha256 == sha256(MD.encode()).hexdigest()
 
 
+def test_reuses_candidate_can_point_to_a_past_idea_without_becoming_derived_from():
+    b = brief()
+    refs = {
+        IDEA: CandidateEntityRef(IDEA, OWNER, NodeType.IDEA),
+        "idea-past": CandidateEntityRef("idea-past", OWNER, NodeType.IDEA),
+    }
+
+    reused = validate(
+        manifest(b, candidate(target_id="idea-past", predicate="REUSES")), b, refs=refs,
+    ).candidates[0].assertion
+    derived = validate(
+        manifest(b, candidate(target_id="idea-past", predicate="DERIVED_FROM")), b, refs=refs,
+    ).candidates[0].assertion
+
+    assert reused.predicate is RelationType.REUSES
+    assert derived.predicate is RelationType.DERIVED_FROM
+    assert (reused.source_kind, reused.target_kind) == (NodeType.IDEA, NodeType.IDEA)
+
+
 def test_external_basis_needs_section_registered_active_source_grounded_evidence():
     ev = evidence()
     b = brief(evidence_ids=(ev.id,), section_content="")
