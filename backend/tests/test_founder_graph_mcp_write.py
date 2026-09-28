@@ -7,6 +7,7 @@ import pytest
 from dots.founder_graph import (
     Asset,
     Claim,
+    DomainValidationError,
     EgressPolicy,
     Evidence,
     Idea,
@@ -34,13 +35,23 @@ from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from dots.founder_graph_mcp import McpReadError, McpReadSurface
 from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_neo4j_write import PersistedNodeReference
-from dots.founder_graph_write import InMemoryGraphWriteService, WriteReceipt
+from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService, WriteReceipt
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 def _surface() -> tuple[InMemoryGraphWriteService, McpWriteSurface]:
     writes = InMemoryGraphWriteService("owner-1")
     return writes, McpWriteSurface(writes)
+
+
+def _save_legacy_report(surface: McpWriteSurface, arguments: dict[str, object]) -> WriteReceipt:
+    """Exercise the retained internal adapter without publishing its retired MCP tool."""
+    try:
+        return surface._save_research_report(arguments)
+    except McpWriteError:
+        raise
+    except (DomainValidationError, GraphWriteError, ValueError, TypeError, KeyError) as error:
+        raise McpWriteError("invalid_input", str(error)) from error
 
 
 def test_capture_asset_is_metadata_only_create_only_and_owner_scoped() -> None:
@@ -253,7 +264,6 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "capture_evidence",
         "link_entities",
         "retract_relation_assertion",
-        "save_research_report",
         "record_decision",
         "record_correction",
         "confirm_person_merge",
@@ -262,6 +272,7 @@ def test_write_surface_exposes_confirmed_person_merge_tool() -> None:
         "revoke_research_campaign",
         "record_research_run",
         "save_idea_brief",
+        "append_research_finding",
         "save_researched_idea_brief",
         "capture_facet",
         "classify_entity",
@@ -926,22 +937,44 @@ def test_link_entities_rejects_invalid_expiry_timestamp_without_mutation() -> No
 def test_save_report_and_decision_are_owner_scoped() -> None:
     writes, surface = _surface()
     sections = [{"id": index, "content": f"section-{index}"} for index in range(8)]
-    report = surface.call(
-        "save_research_report",
-        {"sections": sections, "idempotency_key": "report"},
-        owner_id="owner-1",
+    report = ReportVersion(
+        owner_id="owner-1", id="legacy-report-for-decision",
+        sections=tuple(ReportSection(owner_id="owner-1", id=index, content=item["content"]) for index, item in enumerate(sections)),
     )
+    writes.put_node(report, idempotency_key="legacy-report-for-decision")
     decision = surface.call(
         "record_decision",
-        {"text": "Keep testing", "report_ids": [report.target_id], "idempotency_key": "decision"},
+        {"text": "Keep testing", "report_ids": [report.id], "idempotency_key": "decision"},
         owner_id="owner-1",
     )
 
-    assert writes.get_node(report.target_id).owner_id == "owner-1"
-    assert writes.get_node(decision.target_id).report_ids == (report.target_id,)
+    assert writes.get_node(report.id).owner_id == "owner-1"
+    assert writes.get_node(decision.target_id).report_ids == (report.id,)
     with pytest.raises(McpWriteError) as denied:
         surface.call("record_decision", {"text": "No", "idempotency_key": "denied"}, owner_id="owner-2")
     assert denied.value.code == "owner_mismatch"
+
+
+def test_legacy_report_tool_is_retired_and_existing_versions_remain_readable() -> None:
+    writes, surface = _surface()
+    report = ReportVersion(
+        owner_id="owner-1", id="legacy-report-readable", egress_policy=EgressPolicy.SHAREABLE,
+        sections=tuple(
+            ReportSection(owner_id="owner-1", id=index, content=f"legacy section {index}", egress_policy=EgressPolicy.SHAREABLE)
+            for index in range(8)
+        ),
+    )
+    writes.put_node(report, idempotency_key="legacy-report-readable-seed")
+
+    assert "save_research_report" not in {item["name"] for item in surface.tool_definitions()}
+    with pytest.raises(McpWriteError) as retired:
+        surface.call("save_research_report", {"sections": [], "idempotency_key": "retired-report-tool"}, owner_id="owner-1")
+    assert retired.value.code == "unknown_tool"
+
+    fetched = McpReadSurface(GraphReadService(writes)).call(
+        "fetch", {"id": report.id}, owner_id="owner-1",
+    )
+    assert fetched["fields"]["sections"][0]["content"] == "legacy section 0"
 
 
 def test_save_research_report_resolves_same_owner_references() -> None:
@@ -949,8 +982,8 @@ def test_save_research_report_resolves_same_owner_references() -> None:
     run = _seed_report_dependencies(writes)
     arguments = _report_arguments(run_ids=[run.id])
 
-    first = surface.call("save_research_report", arguments, owner_id="owner-1")
-    replay = surface.call("save_research_report", arguments, owner_id="owner-1")
+    first = _save_legacy_report(surface, arguments)
+    replay = _save_legacy_report(surface, arguments)
 
     assert first.target_type == NodeType.REPORT_VERSION.value
     assert replay.target_id == first.target_id
@@ -1001,7 +1034,7 @@ def test_save_research_report_accepts_two_runs_from_one_campaign() -> None:
     writes.put_node(evidence, idempotency_key="evidence-two-runs")
 
     arguments = _report_arguments(run_ids=run_ids, claim_id=claim.id, evidence_id=evidence.id)
-    receipt = surface.call("save_research_report", arguments, owner_id="owner-1")
+    receipt = _save_legacy_report(surface, arguments)
 
     assert writes.get_node(receipt.target_id).run_ids == tuple(run_ids)
     assert campaign.run_count == campaign.trial_budget == 2
@@ -1024,11 +1057,7 @@ def test_save_research_report_rejects_run_after_campaign_scope_change() -> None:
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call(
-            "save_research_report",
-            _report_arguments(run_ids=[run.id]),
-            owner_id="owner-1",
-        )
+        _save_legacy_report(surface, _report_arguments(run_ids=[run.id]))
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
@@ -1073,11 +1102,7 @@ def test_save_research_report_rejects_expired_campaign_authorization() -> None:
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call(
-            "save_research_report",
-            _report_arguments(run_ids=[run.id], claim_id=claim.id, evidence_id=evidence.id),
-            owner_id="owner-1",
-        )
+        _save_legacy_report(surface, _report_arguments(run_ids=[run.id], claim_id=claim.id, evidence_id=evidence.id))
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
@@ -1109,7 +1134,7 @@ def test_save_research_report_rejects_missing_or_cross_owner_references(field: s
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call("save_research_report", arguments, owner_id="owner-1")
+        _save_legacy_report(surface, arguments)
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
@@ -1119,21 +1144,11 @@ def test_save_research_report_rejects_missing_or_cross_owner_references(field: s
 def test_save_research_report_accepts_a_same_owner_report_parent() -> None:
     writes, surface = _surface()
     run = _seed_report_dependencies(writes)
-    parent = surface.call(
-        "save_research_report",
-        _report_arguments(run_ids=[run.id], idempotency_key="report-parent"),
-        owner_id="owner-1",
-    )
+    parent = _save_legacy_report(surface, _report_arguments(run_ids=[run.id], idempotency_key="report-parent"))
 
-    child = surface.call(
-        "save_research_report",
-        _report_arguments(
-            run_ids=[run.id],
-            parent_id=parent.target_id,
-            idempotency_key="report-child",
-        ),
-        owner_id="owner-1",
-    )
+    child = _save_legacy_report(surface, _report_arguments(
+        run_ids=[run.id], parent_id=parent.target_id, idempotency_key="report-child",
+    ))
 
     assert writes.get_node(child.target_id).parent_id == parent.target_id
 
@@ -1146,11 +1161,7 @@ def test_save_research_report_rejects_missing_or_wrong_type_parent(parent_id: st
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call(
-            "save_research_report",
-            _report_arguments(run_ids=[run.id], parent_id=parent_id),
-            owner_id="owner-1",
-        )
+        _save_legacy_report(surface, _report_arguments(run_ids=[run.id], parent_id=parent_id))
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
@@ -1170,11 +1181,7 @@ def test_save_research_report_rejects_cross_owner_report_parent() -> None:
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call(
-            "save_research_report",
-            _report_arguments(run_ids=[run.id], parent_id=foreign_parent.id),
-            owner_id="owner-1",
-        )
+        _save_legacy_report(surface, _report_arguments(run_ids=[run.id], parent_id=foreign_parent.id))
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
@@ -1196,7 +1203,7 @@ def test_save_research_report_rejects_mixed_campaign_runs() -> None:
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call("save_research_report", arguments, owner_id="owner-1")
+        _save_legacy_report(surface, arguments)
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
@@ -1230,7 +1237,7 @@ def test_save_research_report_rejects_section_evidence_for_another_claim() -> No
     before_audit = writes.audit_events()
 
     with pytest.raises(McpWriteError) as error:
-        surface.call("save_research_report", arguments, owner_id="owner-1")
+        _save_legacy_report(surface, arguments)
 
     assert error.value.code == "invalid_input"
     assert writes.nodes() == before_nodes
