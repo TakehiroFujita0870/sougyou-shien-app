@@ -2631,10 +2631,17 @@ class Neo4jGraphGateway:
         except (TypeError, ValueError):
             raise GraphWriteError("persisted relation assertion is invalid") from None
         expected_fields = {item.name for item in fields(RelationAssertion)}
-        if isinstance(payload, dict) and set(payload) == expected_fields - {"basis"}:
-            payload["basis"] = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
-        elif not isinstance(payload, dict) or set(payload) != expected_fields:
+        legacy_defaults = {
+            "basis": RelationAssertionBasis.EXTERNAL_EVIDENCE.value,
+            "based_on_brief_revision": None,
+            "based_on_brief_quote_start": None,
+            "based_on_brief_quote_end": None,
+        }
+        missing = expected_fields - set(payload) if isinstance(payload, dict) else expected_fields
+        if not isinstance(payload, dict) or not set(payload).issubset(expected_fields) or not missing.issubset(legacy_defaults):
             raise GraphWriteError("persisted relation assertion is invalid")
+        for name in missing:
+            payload[name] = legacy_defaults[name]
         if payload.get("id") != _record_value(record, "id") or payload.get("owner_id") != self.owner_id:
             raise GraphWriteError("persisted relation assertion is invalid")
         revision = _record_value(record, "revision")
@@ -2664,8 +2671,8 @@ class Neo4jGraphGateway:
         except (TypeError, ValueError, KeyError):
             raise GraphWriteError("persisted relation assertion is invalid") from None
         stored_payload = json.loads(raw)
-        if "basis" not in stored_payload:
-            stored_payload["basis"] = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
+        for name, default in legacy_defaults.items():
+            stored_payload.setdefault(name, default)
         if _json_value(decoded) != stored_payload:
             raise GraphWriteError("persisted relation assertion is invalid")
         return decoded
