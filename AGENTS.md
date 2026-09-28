@@ -80,7 +80,7 @@
 
 - 統合部は `MERGED` 時にnext_dependenciesが空でなければ、CEO室への報告と同時に次担当部へ `DEPENDENCY_READY` を送る。送信成功までmerge後handoffは完了ではない。
 - 次担当が明確なら統合部が直接起動する。未割当、優先順位競合、新scope、CEO境界だけはCEO室へ `DECISION_REQUIRED` を送る。
-- 統合・リリース管理部の実行プロファイルは `gpt-5.6-terra / low` とする。
+- 統合・リリース管理部の実行プロファイルは `gpt-6-luna / xhigh` とする。
 
 ### Issue・PRリソース管理
 
@@ -101,8 +101,7 @@
 
 ### 役割別モデルプロファイル
 
-- CEO室は `gpt-5.6-sol / low` を使う。統合・リリース管理部、会話体験・プロジェクト部、プロダクトUI・デザインシステム部、品質・プロダクト運用部、基盤・認証部、事業設計・調査部は `gpt-5.6-terra / low` を使う。Lunaの選択、fallback、`model_unavailable`扱いは使わない。
-- 例外: [`docs/plans/dots-implementation-master-plan.md`](docs/plans/dots-implementation-master-plan.md)をobjectiveとするactive goal中は、利用者の指定によりroot coordinatorと内部subagent worker/reviewerの全役割に`gpt-6-luna / xhigh`（GPT-6 Luna・Extra High）を使う。別モデルへ無断fallbackせず、指定モデルが利用不能なら対象scopeを停止する。新しい利用者向けタスクを作る許可を意味しない。
+- CEO室、統合・リリース管理部、各実装部、および内部subagent worker/reviewerは、`gpt-6-luna / xhigh`（GPT-6 Luna・Extra High）を使う。利用者が別モデルや思考量を明示指定した場合はその指定を優先する。指定モデルが利用不能なら別モデルへ無断fallbackせず、対象scopeを停止する。新しい利用者向けタスクを作る許可を意味しない。
 - 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 - `ASSIGNMENT` と `DEPENDENCY_READY` には `model` と `thinking` を必須とし、送信側は同じoverrideで受信部の新turnを起動する。
 
