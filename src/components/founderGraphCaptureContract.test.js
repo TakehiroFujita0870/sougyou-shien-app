@@ -35,6 +35,7 @@ it('requires evidence for a researched brief without fabricating evidence for ev
   expect(skill).toContain('外部根拠に依拠する章だけに実在IDを紐付け');
   expect(skill).toContain('全8章にEvidence IDを捏造しない');
   expectInOrder('Markdownの完成稿として先に書く', '全文を必ず`report_markdown`へ渡し', '`save_researched_idea_brief`の成功結果', '`fetch_idea_brief`', '`link_entities`');
+  expect(skill).toContain('正式概要の本文がChatGPTへの共有に適する場合は、保存操作で`egress_policy=shareable`を明示する');
   expect(skill).toContain('保存した関係・分類を読み戻して確認する');
   expect(skill).toContain('レポートは保存済み・グラフは未完了と分けて伝える');
 });
