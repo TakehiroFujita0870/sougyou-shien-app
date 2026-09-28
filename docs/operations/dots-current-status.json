@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-28T02:48:28Z",
-  "baseline_main": "b533bac86dc1",
+  "updated_at": "2026-09-28T03:24:32Z",
+  "baseline_main": "78ccd203b3be",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -39,10 +39,10 @@
       "evidence": [{"recorded_at": "2026-09-27T12:53:09Z", "scope": "live-researched-idea-to-independent-chat", "result": "passed", "reference": "当時の実ChatGPT別会話と独立した通常保存先の読取確認。詳細経緯はGit・会話履歴。"}]
     },
     {
-      "id": "markdown_idea_report", "title": "MCP経由のMarkdownレポート保存と詳細表示", "scope": "main-367-live-tool-schema-and-legacy-ui",
+      "id": "markdown_idea_report", "title": "MCP経由のMarkdownレポート保存と意味関係の登録", "scope": "main-369-plugin-1.0.9-live-tool-schema",
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
-      "note": "正本MCPの全文受取項目、保存・再取得の自動検査、1280×720の本番画面で旧記録の表示を確認。新しい全文を実ChatGPTから通常保存先へ書き、図表まで表示する通し操作は未確認。",
-      "evidence": [{"recorded_at": "2026-09-28T02:48:28Z", "scope": "main-367-live-tool-schema-and-legacy-ui", "result": "partial", "reference": "PR #367、Linux全件検査、稼働サービス・MCP定義・ホーム表示の今回の確認。"}]
+      "note": "調査済み保存では全文必須。保存後に最新版を読み戻して根拠付きの分類・関係を登録する指示を本人用Dotsへ配布し、稼働MCPの入力定義を確認。実ChatGPTで新しい全文保存からグラフ更新・別会話での再利用までの通し操作は未確認。",
+      "evidence": [{"recorded_at": "2026-09-28T02:48:28Z", "scope": "main-367-live-tool-schema-and-legacy-ui", "result": "partial", "reference": "PR #367、Linux全件検査、稼働サービス・MCP定義・ホーム表示の当時の確認。"}, {"recorded_at": "2026-09-28T03:24:32Z", "scope": "main-369-plugin-1.0.9-live-tool-schema", "result": "partial", "reference": "PR #369、Linux全件1249件成功、稼働MCPの全文必須定義、Dots個人用非公開プラグイン1.0.9の配布内容を確認。"}]
     }
   ]
 }
