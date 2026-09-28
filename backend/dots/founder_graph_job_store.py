@@ -11,7 +11,7 @@ import re
 from secrets import token_urlsafe
 from typing import Any
 
-from .founder_graph import RelationType
+from .founder_graph_types import RelationType
 from .idea_brief import IdeaBriefVersion
 
 
