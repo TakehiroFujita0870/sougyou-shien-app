@@ -147,7 +147,9 @@ WITH job, job.state = 'leased' AS active
 SET job.last_transition = CASE WHEN active THEN 'complete' ELSE job.last_transition END,
     job.last_lease_token = CASE WHEN active THEN $lease_token ELSE job.last_lease_token END,
     job.state = 'succeeded', job.lease_owner = null, job.lease_token = null,
-    job.lease_expires_at = null, job.updated_at = CASE WHEN active THEN $now ELSE job.updated_at END
+    job.lease_expires_at = null,
+    job.last_error_code = null,
+    job.updated_at = CASE WHEN active THEN $now ELSE job.updated_at END
 RETURN properties(job) AS job"""
 _FAIL = """// graph_job:fail
 MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id})
@@ -275,8 +277,8 @@ def _payload_from_mapping(value: Any) -> CandidatePayloadManifest:
     if type(revision) is not int or revision < 1 or not isinstance(digest, str) or not _SHA256.fullmatch(digest):
         raise JobStoreError("candidate payload Brief binding is invalid")
     raw_candidates = value["candidates"]
-    if not isinstance(raw_candidates, (list, tuple)) or not 1 <= len(raw_candidates) <= 64:
-        raise JobStoreError("candidate payload must contain between 1 and 64 candidates")
+    if not isinstance(raw_candidates, (list, tuple)) or len(raw_candidates) > 64:
+        raise JobStoreError("candidate payload must contain between 0 and 64 candidates")
     candidates: list[RelationCandidatePayload] = []
     for raw in raw_candidates:
         keys = {

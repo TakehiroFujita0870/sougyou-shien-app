@@ -196,7 +196,11 @@ def validate_relation_candidate_manifest(
     entity_refs: Mapping[str, CandidateEntityRef],
     source_grounded_evidence: Mapping[str, Evidence],
 ) -> ValidatedRelationCandidateManifest:
-    """Validate a resolved owner-scoped snapshot; writers recheck Brief and Evidence transactionally."""
+    """Validate owner-scoped sources; an explicit empty list means reviewed with no proposals.
+
+    Callers that omit a manifest have not completed review and must leave the job
+    pending. Writers still recheck Brief and Evidence transactionally.
+    """
     if not isinstance(latest_brief, IdeaBriefVersion):
         _fail("latest Brief is required")
     current_idea_id = _identifier(current_idea_id, "current Idea ID")
@@ -215,8 +219,8 @@ def validate_relation_candidate_manifest(
     if _identifier(raw_manifest["idea_id"], "manifest Idea ID") != current_idea_id:
         _fail("manifest Idea does not match the current Idea")
     raw_candidates = raw_manifest["candidates"]
-    if not isinstance(raw_candidates, (list, tuple)) or not 1 <= len(raw_candidates) <= MAX_CANDIDATES:
-        _fail("candidate count must be between 1 and 64")
+    if not isinstance(raw_candidates, (list, tuple)) or len(raw_candidates) > MAX_CANDIDATES:
+        _fail("candidate count must be between 0 and 64")
     if not isinstance(entity_refs, Mapping) or not isinstance(source_grounded_evidence, Mapping):
         _fail("resolved endpoint and Evidence maps are required")
 
