@@ -16,6 +16,7 @@ from dots.local_dashboard_app import create_local_dashboard_app
 from dots.local_dashboard_driver import managed_neo4j_driver
 from dots.local_graph_proxy import LocalGraphSearchProxy
 from dots.local_overview import Neo4jOverviewStore, OverviewStore, StoredOverviewNode
+from dots.local_graph_processing import GraphProcessingStore, Neo4jGraphProcessingStore
 from dots.local_home import Neo4jHomeStore, HomeStore, LocalAssetWriter, LocalIdeaWriter
 from dots.local_record_lifecycle import LocalRecordLifecycleWriter
 from dots.local_graph_view import GraphViewStore, Neo4jGraphViewStore
@@ -37,6 +38,12 @@ class OnDemandNeo4jOverviewStore(OverviewStore):
         with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             store = Neo4jOverviewStore(driver)
             return tuple(store.read_overview(owner_id))
+
+
+class OnDemandNeo4jGraphProcessingStore(GraphProcessingStore):
+    def read_counts(self, owner_id: str):
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
+            return Neo4jGraphProcessingStore(driver).read_counts(owner_id)
 
 
 class OnDemandNeo4jHomeStore(HomeStore):
@@ -125,6 +132,7 @@ def create_runtime_app(*, dist_dir: Path = DEFAULT_DIST_DIR):
         tunnel_adapter=FixedSystemdUserServiceAdapter(service_runner),
         intent_adapter=WindowsStopIntentAdapter(),
         overview_store=OnDemandNeo4jOverviewStore(),
+        graph_processing_store=OnDemandNeo4jGraphProcessingStore(),
         home_store=OnDemandNeo4jHomeStore(),
         graph_view_store=OnDemandNeo4jGraphViewStore(),
         self_intro_writer=OnDemandSelfIntroductionWriter(),

@@ -7,6 +7,13 @@ const COUNT_LABELS = { Idea: 'アイデアの記録', Person: '人の記録', As
 const KIND_LABELS = { Idea: 'アイデア', Person: '人', Asset: '資産', ReportVersion: '調査レポート' };
 const SERVICE_LABELS = { database: '保存先', api: '画面の読み取り', tunnel: 'ChatGPT接続' };
 const SERVICE_STATUS_LABELS = { running: '稼働中', stopped: '停止中', starting: '準備中', unavailable: '確認できません' };
+const GRAPH_PROCESSING_LABELS = {
+  pending: '整理待ち',
+  leased: '整理中',
+  succeeded: '整理完了',
+  failed: '失敗',
+  superseded: '新しい版に置換済み',
+};
 const STATUS_COPY = {
   loading: { label: '状態を確認中', detail: 'Dots.の稼働状態を読み込んでいます。' },
   running: { label: '稼働中', detail: '保存先と接続が利用できます。' },
@@ -22,6 +29,13 @@ function getSafeTitle(record) {
   if (record.kind === 'Asset' && typeof record.name === 'string') return record.name;
   if (record.kind === 'ReportVersion') return '調査レポート';
   return '';
+}
+
+function getGraphProcessingCounts(processing) {
+  if (processing?.status !== 'ready' || !processing.counts || typeof processing.counts !== 'object') return null;
+  const entries = Object.entries(GRAPH_PROCESSING_LABELS).map(([state, label]) => [state, label, processing.counts[state]]);
+  if (entries.some(([, , count]) => !Number.isSafeInteger(count) || count < 0)) return null;
+  return entries;
 }
 
 /**
@@ -103,6 +117,7 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
   const status = STATUS_COPY[state];
   const records = Array.isArray(snapshot?.latest) ? snapshot.latest : [];
   const latest = records.map((record) => ({ record, title: getSafeTitle(record) })).filter(({ title }) => title).slice(0, 5);
+  const graphProcessingCounts = getGraphProcessingCounts(snapshot?.processing);
   const action = state === 'running' ? 'stop' : 'start';
 
   return (
@@ -130,6 +145,19 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
 
       {serviceOnly && <section className="border-t border-[var(--color-border-subtle)] pt-4" aria-label="削除済みの記録を管理">
         <LocalDeletedRecords client={client} />
+      </section>}
+
+      {serviceOnly && <section className="grid gap-3 border-t border-[var(--color-border-subtle)] pt-4" aria-labelledby="graph-processing-heading">
+        <h2 id="graph-processing-heading" className="text-base font-semibold">グラフ整理</h2>
+        {graphProcessingCounts ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5" aria-label="整理状況別の件数">
+          {graphProcessingCounts.map(([stateName, label, count]) => <div key={stateName} className="rounded-xl border border-[var(--color-border-subtle)] px-3 py-3">
+            <dt className="text-sm text-[var(--color-text-muted)]">{label}</dt>
+            <dd className="mt-1 text-xl font-semibold tabular-nums">{count}</dd>
+          </div>)}
+        </dl> : <div className="flex flex-wrap items-center justify-between gap-3">
+          <p role="status" className="text-sm text-[var(--color-text-muted)]">保存先が止まっているか、整理状況を確認できません。</p>
+          <button type="button" disabled={state === 'loading' || pending} onClick={() => { void refresh(); }} className="min-h-10 rounded-xl border border-[var(--color-border-subtle)] px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:opacity-50">状態を再確認</button>
+        </div>}
       </section>}
 
       {(state === 'stopped' || state === 'degraded') && <p className="rounded-xl border border-dashed border-[var(--color-border-subtle)] p-4 text-sm text-[var(--color-text-muted)]">保存先と接続が稼働すると、件数と最近の記録を表示できます。</p>}

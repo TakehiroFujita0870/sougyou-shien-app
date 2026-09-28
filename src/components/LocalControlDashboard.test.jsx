@@ -146,4 +146,37 @@ describe('LocalControlDashboard', () => {
     expect(view.textContent).toContain('復元できる資料');
     expect(client.getDeletedRecords).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
   });
+
+  it('shows truthful graph-processing state counts in service-only mode', async () => {
+    const client = {
+      getServiceSnapshot: vi.fn(async () => ({
+        state: 'running', counts: { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 }, latest: [],
+        processing: { status: 'ready', counts: { pending: 2, leased: 1, succeeded: 4, failed: 1, superseded: 3 } },
+      })),
+      getDeletedRecords: vi.fn(async () => ({ status: 'ready', records: [] })),
+    };
+    const view = await renderDashboard({ client, serviceOnly: true });
+    const processing = view.querySelector('[aria-labelledby="graph-processing-heading"]');
+
+    expect(processing?.textContent).toContain('整理待ち');
+    expect(processing?.textContent).toContain('整理中');
+    expect(processing?.textContent).toContain('整理完了');
+    expect(processing?.textContent).toContain('失敗');
+    expect(processing?.textContent).toContain('新しい版に置換済み');
+    expect([...processing.querySelectorAll('dd')].map((item) => item.textContent)).toEqual(['2', '1', '4', '1', '3']);
+  });
+
+  it('shows confirmation unavailable without fabricated zero counts', async () => {
+    const client = {
+      getServiceSnapshot: vi.fn(async () => ({ state: 'degraded', counts: { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 }, latest: [], processing: { status: 'unavailable' } })),
+      getDeletedRecords: async () => ({ status: 'ready', records: [] }),
+    };
+    const view = await renderDashboard({ client, serviceOnly: true });
+    const processing = view.querySelector('[aria-labelledby="graph-processing-heading"]');
+
+    expect(processing?.textContent).toContain('確認できません');
+    expect(processing?.querySelectorAll('dd').length).toBe(0);
+    await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === '状態を再確認').click());
+    expect(client.getServiceSnapshot).toHaveBeenCalledTimes(2);
+  });
 });

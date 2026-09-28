@@ -45,6 +45,21 @@ class FakeOverviewStore:
         return self.nodes
 
 
+class FakeGraphProcessingStore:
+    def __init__(self, counts=None, *, fail: bool = False) -> None:
+        self.counts = counts if counts is not None else {
+            "pending": 1, "leased": 0, "succeeded": 2, "failed": 0, "superseded": 0,
+        }
+        self.fail = fail
+        self.owners: list[str] = []
+
+    def read_counts(self, owner_id: str):
+        self.owners.append(owner_id)
+        if self.fail:
+            raise RuntimeError("private graph processing diagnostic")
+        return self.counts
+
+
 def _overview_node(identity: str, kind: str, payload: dict[str, object]) -> StoredOverviewNode:
     return StoredOverviewNode(
         id=identity,
@@ -214,6 +229,93 @@ def test_stopped_overview_skips_store_and_stays_under_local_request_guards():
     assert store.owners == []
     assert client.get("/api/overview", headers={"Host": "attacker.invalid"}).status_code == 403
     assert client.get("/api/overview", headers={"Origin": "http://attacker.invalid"}).status_code == 403
+
+
+def test_graph_processing_status_is_owner_scoped_and_keeps_exact_job_states():
+    control = LocalControl(
+        {"database": FakeAdapter()},
+        expected_host="127.0.0.1:8765",
+        allowed_origin="http://127.0.0.1:8765",
+        start_order=("database",),
+        stop_order=("database",),
+    )
+    control.adapters["database"].state = "running"
+    store = FakeGraphProcessingStore()
+    client = TestClient(
+        create_local_control_app(
+            control,
+            overview_owner_id="owner-a",
+            graph_processing_store=store,
+        ),
+        base_url="http://127.0.0.1:8765",
+        client=("127.0.0.1", 50000),
+    )
+
+    response = client.get("/api/graph-processing")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {"status": "ready", "counts": store.counts}
+    assert store.owners == ["owner-a"]
+    assert client.get("/api/graph-processing", headers={"Host": "attacker.invalid"}).status_code == 403
+
+
+def test_graph_processing_status_does_not_show_zero_when_storage_stopped_or_read_fails():
+    control = LocalControl(
+        {"database": FakeAdapter()},
+        expected_host="127.0.0.1:8765",
+        allowed_origin="http://127.0.0.1:8765",
+        start_order=("database",),
+        stop_order=("database",),
+    )
+    store = FakeGraphProcessingStore(fail=True)
+    client = TestClient(
+        create_local_control_app(
+            control,
+            overview_owner_id="owner-a",
+            graph_processing_store=store,
+        ),
+        base_url="http://127.0.0.1:8765",
+        client=("127.0.0.1", 50000),
+    )
+
+    stopped = client.get("/api/graph-processing")
+    assert stopped.status_code == 503
+    assert stopped.json() == {"status": "unavailable"}
+    assert store.owners == []
+
+    control.adapters["database"].state = "running"
+    failed = client.get("/api/graph-processing")
+    assert failed.status_code == 503
+    assert failed.json() == {"status": "failed"}
+    assert store.owners == ["owner-a"]
+    assert "private graph processing diagnostic" not in failed.text
+
+
+def test_graph_processing_status_rejects_store_fields_outside_the_count_allowlist():
+    control = LocalControl(
+        {"database": FakeAdapter()},
+        expected_host="127.0.0.1:8765",
+        allowed_origin="http://127.0.0.1:8765",
+        start_order=("database",),
+        stop_order=("database",),
+    )
+    control.adapters["database"].state = "running"
+    store = FakeGraphProcessingStore({
+        "pending": 0, "leased": 0, "succeeded": 0, "failed": 0, "superseded": 0,
+        "report_text": "PRIVATE",
+    })
+    client = TestClient(
+        create_local_control_app(control, overview_owner_id="owner-a", graph_processing_store=store),
+        base_url="http://127.0.0.1:8765",
+        client=("127.0.0.1", 50000),
+    )
+
+    response = client.get("/api/graph-processing")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "failed"}
+    assert "PRIVATE" not in response.text
 
 
 def test_overview_read_failure_returns_sanitized_service_unavailable():

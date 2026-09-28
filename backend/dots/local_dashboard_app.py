@@ -12,6 +12,7 @@ from dots.local_overview import OverviewStore
 from dots.local_home import HomeStore, LocalAssetWriter, LocalIdeaWriter
 from dots.local_record_lifecycle import LocalRecordLifecycleWriter
 from dots.local_graph_view import GraphViewStore
+from dots.local_graph_processing import GraphProcessingStore
 from dots.local_self_intro import SelfIntroductionWriter
 
 
@@ -29,6 +30,7 @@ def create_local_dashboard_app(
     tunnel_adapter: ServiceAdapter,
     intent_adapter: ServiceAdapter,
     overview_store: OverviewStore,
+    graph_processing_store: GraphProcessingStore | None = None,
     home_store: HomeStore | None = None,
     graph_view_store: GraphViewStore | None = None,
     self_intro_writer: SelfIntroductionWriter | None = None,
@@ -60,6 +62,7 @@ def create_local_dashboard_app(
         control,
         bind_host=LOCAL_DASHBOARD_BIND,
         overview_store=overview_store,
+        graph_processing_store=graph_processing_store,
         home_store=home_store,
         graph_view_store=graph_view_store,
         self_intro_writer=self_intro_writer,

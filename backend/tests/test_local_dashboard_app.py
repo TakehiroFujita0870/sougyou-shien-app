@@ -44,6 +44,15 @@ class FakeOverviewStore:
         return self.nodes
 
 
+class FakeGraphProcessingStore:
+    def __init__(self):
+        self.owners = []
+
+    def read_counts(self, owner_id: str):
+        self.owners.append(owner_id)
+        return {"pending": 1, "leased": 0, "succeeded": 2, "failed": 0, "superseded": 0}
+
+
 def _node(identity: str, payload: dict[str, object]) -> StoredOverviewNode:
     return StoredOverviewNode(
         id=identity,
@@ -55,7 +64,7 @@ def _node(identity: str, payload: dict[str, object]) -> StoredOverviewNode:
     )
 
 
-def _make_app(tmp_path, *, database_state="stopped", overview_store=None, home_store=None, graph_view_store=None, self_intro_writer=None, graph_proxy=None):
+def _make_app(tmp_path, *, database_state="stopped", overview_store=None, graph_processing_store=None, home_store=None, graph_view_store=None, self_intro_writer=None, graph_proxy=None):
     dist = tmp_path / "dist"
     assets = dist / "assets"
     assets.mkdir(parents=True)
@@ -78,6 +87,7 @@ def _make_app(tmp_path, *, database_state="stopped", overview_store=None, home_s
         api_adapter=services["api"],
         tunnel_adapter=services["tunnel"],
         overview_store=store,
+        graph_processing_store=graph_processing_store,
         home_store=home_store,
         graph_view_store=graph_view_store,
         self_intro_writer=self_intro_writer,
@@ -91,6 +101,20 @@ def _make_app(tmp_path, *, database_state="stopped", overview_store=None, home_s
         client=("127.0.0.1", 50000),
     )
     return client, events, services, store
+
+
+def test_dashboard_factory_exposes_only_owner_scoped_graph_processing_summary(tmp_path):
+    store = FakeGraphProcessingStore()
+    client, _, _, _ = _make_app(tmp_path, database_state="running", graph_processing_store=store)
+
+    response = client.get("/api/graph-processing")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "counts": {"pending": 1, "leased": 0, "succeeded": 2, "failed": 0, "superseded": 0},
+    }
+    assert store.owners == ["owner-a"]
 
 
 def test_home_projection_is_local_only_and_uses_real_owner_scoped_records(tmp_path):
