@@ -115,7 +115,7 @@ Then: 現行案、関係の種類、根拠、元のURL、推測か確認済み�
 | T-3a | 純粋なMarkdown parser/projectionで正規8章の位置と安全な公開URL・リンクラベルを抽出する。fenced codeは無視し、部分下書きは許す。重複・順不同の正規見出しがあれば曖昧として章・リンクの対応を推測しない。URLのみは検証済みEvidenceと区別し、本文をprojection metadataへ複製しない。 | 検査: 部分・完成・曖昧な見出し、fenced code、公開URL・危険URL、URL-only状態、本文非複製を純粋関数試験で確認 | 類推可能 |
 | T-3b | T-3aのprojectionを既存read/searchへ接続する。新しい調査済み保存は完全で本文のある正規8章をMarkdownで検証し、`sections`には章別の根拠・注釈だけを保持して本文入力を省略できるようにする。読取本文はMarkdown位置から導出し、Markdownなしの旧版は保存済み本文を維持する。曖昧なMarkdownから章・リンク・関係を推測せず、URL-onlyと検証済みEvidenceを分ける。 | 検査: 本文導出・旧版互換・本文省略保存・曖昧見出しのfail-closed・URL-onlyと検証済みEvidenceの分離・Graph RAG検索回帰 | 類推可能 |
 | T-4 | 先行スパイク。下書きと過去調査取り込みから作る候補関係の根拠契約、古い関係の失効、保存時の永続的な処理待ちを設計する。 | 検査: 現行Neo4jの拒否条件、再起動・重複・版競合の失敗例を再現し、変更箇所を特定 | 未知・先行スパイク |
-| T-5 | T-4の契約に従い、IdeaBriefと書込receiptの保存と同じNeo4jトランザクションで版ごとの整理待ちを記録する。owner+Brief IDで冪等化し、新しい版の保存時に同じowner・Idea系譜の旧pending/leased jobをsupersedeする。`append_research_finding`と正式調査の保存は共通gatewayを通す。後続のDots処理器は外部事実の根拠と本人の仮説を区別する。 | 検査: 原子rollback、再送時のjob重複なし、owner・系譜分離、旧pending/leasedのsupersede、下書き・過去調査・正式調査経路の共通保存契約 | 類推可能 |
+| T-5 | T-4の契約に従い、IdeaBriefと書込receiptの保存と同じNeo4jトランザクションで版ごとの整理待ちを記録する。owner+Brief IDで冪等化し、新しい版の保存時に同じowner・Idea系譜の旧pending/leased jobをsupersedeする。`append_research_finding`と正式調査の保存は共通gatewayを通す。検証済み候補はBriefのID・revision・hashに結び付く上限付きの不変payloadとしてjobへ原子的に保存し、レポート本文・引用文を複製せずworkerが再読込できるようにする。後続のDots処理器は外部事実の根拠と本人の仮説を区別する。 | 検査: 原子rollback、再送時のjob重複なし、owner・系譜分離、旧pending/leasedのsupersede、候補payloadの同一再送・異なる内容拒否、再起動後の部分再試行、古いlease拒否、下書き・過去調査・正式調査経路の共通保存契約 | 類推可能 |
 | T-6 | 現行の非削除アイデアだけを限定的に再整理し、処理状態と結果をサービス管理で確認できるようにする。T-5に依存する。 | 検査: 対象IDの事前読取、実行前後の差、対象外記録の維持、PC 1280×720の表示 | 類推可能 |
 | T-7 | CodexのLuna定期タスクを、未処理・失敗分の1日1回・最大20件の補助点検として設定する。T-5の処理待ち契約に依存する。 | 検査: 対象が0件なら書込なし、対象がある場合だけ同じ処理器を再実行し、PC停止後も次回起動時に処理待ちが残る | 類推可能 |
 | T-8 | 出典URLを安全なグラフ投影へ加え、出典ノードの一クリックで新タブを開く。 | 検査: 公開URL・危険URL・URLなし・他種ノードの操作試験とPC実画面 | 既知 |
@@ -162,3 +162,4 @@ T-1は最優先とする。T-2とT-8はT-1の後に独立して進められる�
 | 2026-09-29 | T-2をMarkdown追記・完成稿・旧MCP書込tool退役へ限定し、受け入れ条件と除外範囲を具体化 | T-1後の実装単位をT-3以降から分離するため | T-2 |
 | 2026-09-29 | T-3を純粋なMarkdown projectionとread adapter接続に分割し、曖昧さ・URL-only・本文非複製の契約を明記 | parser契約をread adapter変更から独立して検証するため | T-3a・T-3b |
 | 2026-09-29 | 調査済み保存の章本文をMarkdown正本へ寄せ、read/searchの旧版互換と曖昧時のfail-closed条件を明記 | T-3a projectionの受け入れ後、二重本文入力を除くため | T-3b |
+| 2026-09-29 | 検証済み関係候補の再試行用payloadを本文・引用文なしでjobへ不変保存し、Brief版・lease・ownerに束縛する条件を追加 | worker再起動後も再質問なしで安全に部分適用を再開するため | T-5 |
