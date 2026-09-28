@@ -89,6 +89,7 @@ def _setup():
         id="brief-relation", owner_id=writes.owner_id, idea_lineage_root_id=idea.id,
         based_on_idea_id=idea.id, research_run_ids=(run.id,),
         sections=tuple(IdeaBriefSection(index=i, evidence_ids=(evidence.id,)) for i in range(8)),
+        egress_policy=EgressPolicy.SHAREABLE,
         report_markdown="\n\n".join(
             f"## {title}\n\nMarkdown section {index}"
             for index, title in enumerate(SECTION_TITLES)

@@ -723,6 +723,71 @@ def test_search_projects_current_formal_assertion_from_one_read_transaction() ->
     assert all(secret not in str(result) for secret in ("A researched section", "must never leave the adapter"))
 
 
+@pytest.mark.parametrize(
+    ("brief_policy", "stored_revision", "expect_relation"),
+    [("shareable", 1, True), ("shareable", 2, False), ("local_only", 1, False)],
+)
+def test_search_projects_quote_only_from_the_current_shareable_brief_revision(
+    brief_policy: str, stored_revision: int, expect_relation: bool,
+) -> None:
+    driver, reads = _gateway()
+    idea, claim, evidence, legacy, assertion, endpoint_rows, original_rows, _brief_row = _formal_fixture()
+    quote = "創業者が市場を検証する"
+    markdown = "\n\n".join(f"## {title}\n\nMarkdown section {index}" for index, title in enumerate(SECTION_TITLES))
+    markdown = markdown.replace("Markdown section 0", quote)
+    brief = replace(
+        legacy,
+        report_markdown=markdown,
+        egress_policy=brief_policy,
+        sections=(IdeaBriefSection(index=0, evidence_ids=(evidence.id,)),),
+    )
+    quote_start = markdown.index(quote)
+    located = replace(
+        assertion,
+        based_on_brief_revision=stored_revision,
+        based_on_brief_quote_start=quote_start,
+        based_on_brief_quote_end=quote_start + len(quote),
+    )
+    formal_rows = []
+    for row in original_rows:
+        replacement = _formal_edge_row(
+            located,
+            row["relation"],
+            endpoint_rows[row["target_id"]],
+        )
+        if "_lineage" in row:
+            replacement["_lineage"] = row["_lineage"]
+        formal_rows.append(replacement)
+    _seed_formal_search(
+        driver, idea, endpoint_rows, formal_rows, _serialize_persisted_idea_brief(brief),
+    )
+
+    page = reads.search("Foundry", owner_id="owner-1")
+    matching_steps = [
+        step for hit in page.hits for step in hit.relation_path
+        if step.relation_assertion_id == located.id
+    ]
+
+    if not expect_relation:
+        assert not matching_steps
+        return
+    assert len(matching_steps) == 1
+    step = matching_steps[0]
+    assert step.based_on_brief_revision == brief.revision
+    assert (step.based_on_brief_quote_start, step.based_on_brief_quote_end) == (
+        quote_start, quote_start + len(quote),
+    )
+    assert step.support_quote == quote
+    result = McpReadSurface(reads).call("search", {"query": "Foundry"}, owner_id="owner-1")
+    hit = next(item for item in result["results"] if item["id"] == claim.id)
+    semantic = hit["semantic_relation_path"][0]
+    assert semantic["based_on_brief_revision"] == brief.revision
+    assert semantic["based_on_brief_quote_start"] == quote_start
+    assert semantic["based_on_brief_quote_end"] == quote_start + len(quote)
+    assert semantic["support_quote"] == quote
+    assert "Markdown section 0" not in str(hit)
+
+
 def test_search_fails_closed_for_relations_when_markdown_heading_projection_is_ambiguous() -> None:
     driver, reads = _gateway()
     idea, _claim, evidence, legacy, _assertion, endpoint_rows, formal_rows, _brief_row = _formal_fixture()

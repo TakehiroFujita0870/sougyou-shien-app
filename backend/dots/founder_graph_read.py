@@ -41,7 +41,12 @@ from .founder_graph_lifecycle_resolver import (
 )
 from .founder_graph_write import GraphReadSnapshot, InMemoryGraphWriteService
 from .idea_brief import SECTION_TITLES
-from .idea_brief_read_projection import brief_section_has_readable_body, project_idea_brief_for_read
+from .idea_brief_read_projection import (
+    brief_support_locator_is_valid,
+    brief_section_has_readable_body,
+    project_brief_support_quote,
+    project_idea_brief_for_read,
+)
 from .source_citations import citation_metadata
 
 
@@ -92,6 +97,10 @@ class RelationPathStep:
     relation_assertion_id: str | None = None
     based_on_brief_id: str | None = None
     based_on_brief_section_index: int | None = None
+    based_on_brief_revision: int | None = None
+    based_on_brief_quote_start: int | None = None
+    based_on_brief_quote_end: int | None = None
+    support_quote: str | None = None
 
     @classmethod
     def from_relationship(
@@ -634,11 +643,29 @@ class GraphReadService:
                 continue
             if getattr(target, "node_type", None) is not assertion.target_kind:
                 continue
-            valid_brief_id, valid_section = self._assertion_brief_reference(
+            valid_brief_id, valid_section, support_brief = self._assertion_brief_reference(
                 assertion, source, target, latest_briefs, node_by_id, owner_id,
             )
             if valid_brief_id is False:
                 continue
+            support_quote = None
+            support_quote_start = None
+            support_quote_end = None
+            if assertion.based_on_brief_quote_start is not None and support_brief is not None:
+                if brief_support_locator_is_valid(
+                    support_brief.report_markdown,
+                    start=assertion.based_on_brief_quote_start,
+                    end=assertion.based_on_brief_quote_end,
+                    section_index=valid_section,
+                ):
+                    support_quote_start = assertion.based_on_brief_quote_start
+                    support_quote_end = assertion.based_on_brief_quote_end
+                    support_quote = project_brief_support_quote(
+                        support_brief.report_markdown,
+                        start=support_quote_start,
+                        end=support_quote_end,
+                        section_index=valid_section,
+                    )
             valid_evidence = True
             edge_counts: dict[tuple[str, str, str], int] = {}
             for edge in edges:
@@ -713,6 +740,10 @@ class GraphReadService:
                 relation_assertion_id=assertion.id,
                 based_on_brief_id=valid_brief_id,
                 based_on_brief_section_index=valid_section,
+                based_on_brief_revision=assertion.based_on_brief_revision,
+                based_on_brief_quote_start=support_quote_start,
+                based_on_brief_quote_end=support_quote_end,
+                support_quote=support_quote,
             )
             adjacency.setdefault(source.id, []).append((target.id, step))
             adjacency.setdefault(target.id, []).append((source.id, replace(step, from_id=target.id, to_id=source.id, traversal_direction="incoming")))
@@ -871,45 +902,54 @@ class GraphReadService:
         latest_briefs: Mapping[str, Any],
         node_by_id: Mapping[str, Any],
         owner_id: str,
-    ) -> tuple[str | None | bool, int | None]:
+    ) -> tuple[str | None | bool, int | None, Any | None]:
         idea_ends = [node for node in (source, target) if isinstance(node, Idea)]
         if not idea_ends:
-            return (None, None) if assertion.based_on_brief_id is None and assertion.based_on_brief_section_index is None else (False, None)
+            return (
+                (None, None, None)
+                if assertion.based_on_brief_id is None and assertion.based_on_brief_section_index is None
+                else (False, None, None)
+            )
         if assertion.based_on_brief_id is None:
-            return False, None
+            return False, None, None
         primary = source if isinstance(source, Idea) else target
         root = primary
         seen = {root.id}
         while root.supersedes_id is not None:
             parent = node_by_id.get(root.supersedes_id)
             if not isinstance(parent, Idea) or parent.owner_id != owner_id or parent.id in seen:
-                return False, None
+                return False, None, None
             root = parent
             seen.add(root.id)
         latest = latest_briefs.get(root.id)
         if (
             latest is None or latest.owner_id != owner_id or latest.idea_lineage_root_id != root.id
             or latest.id != assertion.based_on_brief_id
+            or latest.egress_policy != EgressPolicy.SHAREABLE.value
+            or (
+                assertion.based_on_brief_revision is not None
+                and latest.revision != assertion.based_on_brief_revision
+            )
             or resolve_restored_idea_reference(
                 latest.based_on_idea_id, GraphReadService._idea_chain(primary, node_by_id),
             ) is not primary
         ):
-            return False, None
+            return False, None, None
         section_index = assertion.based_on_brief_section_index
         if section_index is None:
             if (
                 assertion.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS
                 or not (latest.report_markdown or "").strip()
             ):
-                return False, None
-            return latest.id, None
+                return False, None, None
+            return latest.id, None, latest
         if type(section_index) is not int or not 0 <= section_index < len(latest.sections):
-            return False, None
+            return False, None, None
         section = latest.sections[section_index]
-        if not brief_section_has_readable_body(latest, section_index): return False, None
+        if not brief_section_has_readable_body(latest, section_index): return False, None, None
         if not set(assertion.evidence_ids).issubset(section.evidence_ids):
-            return False, None
-        return latest.id, section_index
+            return False, None, None
+        return latest.id, section_index, latest
 
     @staticmethod
     def _cursor(cursor: str | None) -> int:

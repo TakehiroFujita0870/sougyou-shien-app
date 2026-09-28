@@ -59,7 +59,12 @@ from .founder_graph_read import (
     SearchPage,
 )
 from .idea_brief import SECTION_TITLES
-from .idea_brief_read_projection import brief_section_has_readable_body, project_idea_brief_for_read
+from .idea_brief_read_projection import (
+    brief_support_locator_is_valid,
+    brief_section_has_readable_body,
+    project_brief_support_quote,
+    project_idea_brief_for_read,
+)
 from .source_citations import citation_metadata, parse_object
 
 
@@ -616,7 +621,14 @@ class Neo4jGraphReadService:
                     latest = briefs[-1]
                     section_index = assertion.based_on_brief_section_index
                     if (
-                        latest.id != assertion.based_on_brief_id
+                        latest.owner_id != owner_id
+                        or latest.idea_lineage_root_id != root_id
+                        or latest.id != assertion.based_on_brief_id
+                        or latest.egress_policy != EgressPolicy.SHAREABLE.value
+                        or (
+                            assertion.based_on_brief_revision is not None
+                            and latest.revision != assertion.based_on_brief_revision
+                        )
                         or resolve_restored_idea_reference(latest.based_on_idea_id, idea_chain) is not idea_chain[-1]
                     ):
                         continue
@@ -636,10 +648,36 @@ class Neo4jGraphReadService:
                         ):
                             continue
                     brief_id, brief_section = latest.id, section_index
-                elif assertion.based_on_brief_id is not None or assertion.based_on_brief_section_index is not None:
+                elif any(value is not None for value in (
+                    assertion.based_on_brief_id,
+                    assertion.based_on_brief_section_index,
+                    assertion.based_on_brief_revision,
+                    assertion.based_on_brief_quote_start,
+                    assertion.based_on_brief_quote_end,
+                )):
                     continue
                 else:
-                    brief_id, brief_section = None, None
+                    brief_id, brief_section, brief_revision = None, None, None
+                if idea_ends:
+                    brief_revision = assertion.based_on_brief_revision
+                support_quote = None
+                support_quote_start = None
+                support_quote_end = None
+                if idea_ends and assertion.based_on_brief_quote_start is not None:
+                    if brief_support_locator_is_valid(
+                        latest.report_markdown,
+                        start=assertion.based_on_brief_quote_start,
+                        end=assertion.based_on_brief_quote_end,
+                        section_index=brief_section,
+                    ):
+                        support_quote_start = assertion.based_on_brief_quote_start
+                        support_quote_end = assertion.based_on_brief_quote_end
+                        support_quote = project_brief_support_quote(
+                            latest.report_markdown,
+                            start=support_quote_start,
+                            end=support_quote_end,
+                            section_index=brief_section,
+                        )
                 evidence_views = [ref_views.get(item) for item in assertion.evidence_ids]
                 if any(
                     not isinstance(view, NodeView)
@@ -660,6 +698,10 @@ class Neo4jGraphReadService:
                     expires_at=assertion.expires_at.isoformat() if assertion.expires_at else None,
                     relation_assertion_id=assertion.id, based_on_brief_id=brief_id,
                     based_on_brief_section_index=brief_section,
+                    based_on_brief_revision=brief_revision,
+                    based_on_brief_quote_start=support_quote_start,
+                    based_on_brief_quote_end=support_quote_end,
+                    support_quote=support_quote,
                 )
                 adjacency.setdefault(source.id, []).append((target.id, step))
                 adjacency.setdefault(target.id, []).append((source.id, replace(

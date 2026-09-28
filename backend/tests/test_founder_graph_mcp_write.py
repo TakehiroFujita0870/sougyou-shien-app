@@ -757,7 +757,7 @@ def test_link_entities_saves_and_reads_a_draft_brief_hypothesis_without_evidence
     nodes = {node.id: node for node in snapshot.nodes}
     assert reads._assertion_brief_reference(
         assertion, idea, claim, dict(snapshot.latest_idea_briefs), nodes, "owner-1",
-    ) == (brief.id, None)
+    ) == (brief.id, None, brief)
     hit = next(item for item in reads.search("Synthetic draft", owner_id="owner-1").hits if item.node.id == claim.id)
     assert hit.relation_path and hit.relation_path[0].basis == RelationAssertionBasis.BRIEF_HYPOTHESIS.value
     result = McpReadSurface(reads).call(
