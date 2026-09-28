@@ -392,6 +392,128 @@ def test_regular_idea_brief_reuses_memory_writer_and_replays_same_key() -> None:
     assert save_brief["inputSchema"]["properties"]["report_markdown"]["maxLength"] == 60000
 
 
+@pytest.mark.parametrize("send_empty_content", (False, True), ids=("content-omitted", "content-empty"))
+def test_regular_idea_brief_accepts_markdown_only_h1_draft_with_candidate_manifest(send_empty_content: bool) -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-markdown-only-brief")
+    idea = Idea(
+        owner_id=writes.owner_id, id="idea-markdown-only-brief", title="Synthetic idea",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(idea, idempotency_key="markdown-only-brief-idea")
+    processor = _CandidateProcessorStub()
+    surface = McpWriteSurface(writes, candidate_processor=processor)
+    report_markdown = "\n\n".join(
+        f"# {title}\n\nSynthetic chapter {index}."
+        for index, title in enumerate(SECTION_TITLES)
+    )
+    sections = [
+        {"index": index, **({"content": ""} if send_empty_content else {})}
+        for index in range(8)
+    ]
+    arguments = {
+        "idea_id": idea.id,
+        "expected_revision": 0,
+        "sections": sections,
+        "report_markdown": report_markdown,
+        "egress_policy": EgressPolicy.SHAREABLE.value,
+        "relation_candidate_manifest": _candidate_manifest(idea.id, "claim-markdown-only", "Synthetic chapter 0."),
+        "idempotency_key": f"markdown-only-brief-{send_empty_content}",
+    }
+
+    receipt = surface.call("save_idea_brief", arguments, owner_id=writes.owner_id)
+
+    saved = writes.get_idea_brief(receipt.target_id)
+    assert saved is not None and saved.report_markdown == report_markdown
+    assert all(not section.content for section in saved.sections)
+    assert receipt.candidate_processing == {"state": "failed", "error_code": "candidate_rejected"}
+    assert processor.calls == [(
+        FounderGraphJobStore.job_id_for(writes.owner_id, receipt.target_id),
+        arguments["relation_candidate_manifest"],
+    )]
+    replay = surface.call("save_idea_brief", arguments, owner_id=writes.owner_id)
+    assert replay.target_id == receipt.target_id and replay.replayed
+    fetched = McpReadSurface(GraphReadService(writes)).call(
+        "fetch_idea_brief", {"idea_id": idea.id}, owner_id=writes.owner_id,
+    )
+    assert [section["content"] for section in fetched["sections"]] == [
+        f"Synthetic chapter {index}." for index in range(8)
+    ]
+    section_schema = next(
+        item for item in surface.tool_definitions() if item["name"] == "save_idea_brief"
+    )["inputSchema"]["properties"]["sections"]
+    assert "content" not in section_schema["items"]["required"]
+
+
+@pytest.mark.parametrize("section", ({"index": 0}, {"index": 0, "content": ""}), ids=("omitted", "empty"))
+def test_regular_idea_brief_still_requires_content_for_first_draft_without_markdown(section: dict[str, object]) -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-empty-brief-rejected")
+    idea = Idea(owner_id=writes.owner_id, id="idea-empty-brief-rejected", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="empty-brief-rejected-idea")
+
+    with pytest.raises(McpWriteError, match="at least one viewpoint needs content"):
+        McpWriteSurface(writes).call("save_idea_brief", {
+            "idea_id": idea.id,
+            "expected_revision": 0,
+            "sections": [section],
+            "idempotency_key": f"empty-first-draft-{bool(section.get('content'))}",
+        }, owner_id=writes.owner_id)
+
+    assert writes.get_latest_idea_brief(idea.id) is None
+
+
+def test_regular_idea_brief_allows_content_free_revision_when_previous_markdown_exists() -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-brief-metadata-only")
+    idea = Idea(
+        owner_id=writes.owner_id, id="idea-brief-metadata-only", title="Synthetic idea",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(idea, idempotency_key="brief-metadata-only-idea")
+    surface = McpWriteSurface(writes)
+    report_markdown = "\n\n".join(
+        f"# {title}\n\nSynthetic chapter {index}."
+        for index, title in enumerate(SECTION_TITLES)
+    )
+    original = surface.call("save_idea_brief", {
+        "idea_id": idea.id, "expected_revision": 0,
+        "sections": [{"index": 0, "content": "Old parallel body"}],
+        "report_markdown": report_markdown,
+        "egress_policy": EgressPolicy.SHAREABLE.value,
+        "idempotency_key": "brief-metadata-only-original",
+    }, owner_id=writes.owner_id)
+    with pytest.raises(McpWriteError, match="report_markdown"):
+        surface.call("save_idea_brief", {
+            "idea_id": idea.id,
+            "expected_revision": 1,
+            "sections": [{"index": 0}],
+            "report_markdown": "   ",
+            "idempotency_key": "brief-metadata-only-empty-markdown",
+        }, owner_id=writes.owner_id)
+    assert writes.get_latest_idea_brief(idea.id).id == original.target_id
+
+    update_args = {
+        "idea_id": idea.id,
+        "expected_revision": 1,
+        "sections": [{"index": 0, "facts": ["fact-metadata-only"]}],
+        "egress_policy": EgressPolicy.SHAREABLE.value,
+        "idempotency_key": "brief-metadata-only-update",
+    }
+    updated = surface.call("save_idea_brief", update_args, owner_id=writes.owner_id)
+    replay = surface.call("save_idea_brief", update_args, owner_id=writes.owner_id)
+
+    latest = writes.get_latest_idea_brief(idea.id)
+    assert latest is not None and latest.id == updated.target_id
+    assert latest.report_markdown == report_markdown
+    assert latest.sections[0].content == "" and latest.sections[0].facts == ("fact-metadata-only",)
+    assert writes.get_idea_brief(original.target_id).sections[0].content == "Old parallel body"
+    assert replay.target_id == updated.target_id and replay.replayed
+    fetched = McpReadSurface(GraphReadService(writes)).call(
+        "fetch_idea_brief", {"idea_id": idea.id}, owner_id=writes.owner_id,
+    )
+    assert [section["content"] for section in fetched["sections"]] == [
+        f"Synthetic chapter {index}." for index in range(8)
+    ]
+
+
 def test_regular_idea_brief_omission_preserves_markdown_and_string_replaces_it():
     writes = InMemoryGraphWriteService("owner-mcp-brief-preserve")
     idea = Idea(owner_id=writes.owner_id, id="idea-brief-preserve", title="Synthetic idea")
@@ -620,6 +742,9 @@ def test_markdown_brief_tools_document_heading_levels_and_text_edit_contract():
             assert "sections[].contentだけでは既存Markdownの章本文は編集されません" in text
         assert "sections[].contentだけでは既存Markdownの章本文は編集されません" in section_description
         assert "H3以上" in description
+        if tool_name == "save_idea_brief":
+            assert "Markdownなしの初回下書きでは少なくとも一観点の本文が必要" in description
+            assert "Markdownなしの初回下書きでは少なくとも一観点の本文が必要" in section_description
 
 
 @pytest.mark.parametrize("tool_name,base_args", [
