@@ -78,7 +78,11 @@ class Session:
             if not active and not replay: return Result()
             if kind == "complete":
                 if active: job.update(last_transition="complete", last_lease_token=params["lease_token"])
-                job.update(state="succeeded", updated_at=params["now"] if active else job["updated_at"], **self.clear_lease())
+                job.update(
+                    state="succeeded", last_error_code=None,
+                    updated_at=params["now"] if active else job["updated_at"],
+                    **self.clear_lease(),
+                )
             elif active:
                 job.update(state="failed" if job["attempt_count"] >= job["max_attempts"] else "pending", last_transition="fail", last_lease_token=params["lease_token"], available_at=params["retry_at"], last_error_code=params["error_code"], updated_at=params["now"], **self.clear_lease())
             return self.row(job)
@@ -135,7 +139,8 @@ def _validated_manifest(*, brief_id="brief-1", idea_id="idea-r1", candidates=Non
     )
     return SimpleNamespace(
         idea_id=idea_id, brief_id=brief_id, brief_revision=revision,
-        brief_markdown_sha256="a" * 64, candidates=tuple(candidates or (candidate,)),
+        brief_markdown_sha256="a" * 64,
+        candidates=tuple((candidate,) if candidates is None else candidates),
     )
 
 
@@ -197,6 +202,19 @@ def test_failure_retries_only_when_due_and_becomes_terminal_at_attempt_limit():
     assert store.fail(lease.id, lease.lease_token, error_code="temporary", retry_after_seconds=5, now=_time(1)).state is JobState.FAILED
 
 
+def test_successful_retry_clears_previous_safe_error_code():
+    store = _store(Driver())
+    job = store.enqueue(_brief(), now=_time())
+    first_lease = store.claim_specific(job.id, worker_id="worker-a", now=_time())
+    failed = store.fail(job.id, first_lease.lease_token, error_code="candidate_manifest_invalid", now=_time())
+    assert failed.last_error_code == "candidate_manifest_invalid"
+
+    retry = store.claim_specific(job.id, worker_id="worker-a", now=_time(1))
+    completed = store.complete(job.id, retry.lease_token, now=_time(1))
+
+    assert completed.state is JobState.SUCCEEDED and completed.last_error_code is None
+
+
 def test_candidate_manifest_is_immutable_and_new_brief_supersedes_old_job():
     driver = Driver(); store = _store(driver)
     old_job = store.enqueue(_brief(), now=_time())
@@ -256,6 +274,20 @@ def test_candidate_payload_is_canonical_immutable_and_omits_report_and_quote_tex
     assert driver.jobs[("owner-1", "brief-1")]["candidate_manifest_json"] == '["candidate-a","candidate-section"]'
     assert "PRIVATE REPORT TEXT" not in persisted and "PRIVATE QUOTE TEXT" not in persisted
     assert '"quote":"PRIVATE' not in persisted and "report_markdown" not in persisted
+
+
+def test_explicit_empty_candidate_manifest_is_durable_and_distinct_from_missing_payload():
+    store = _store()
+    job = store.enqueue(_brief(), now=_time())
+    lease = store.claim_specific(job.id, worker_id="inline-worker", now=_time())
+    empty = store.persist_candidate_manifest(
+        job.id, lease.lease_token, _validated_manifest(candidates=()), now=_time(),
+    )
+
+    payload = store.get_candidate_payloads(job.id, lease.lease_token, now=_time())
+
+    assert empty.candidate_payload_persisted and empty.candidate_ids == ()
+    assert payload is not None and payload.candidates == ()
 
 
 def test_candidate_payload_survives_retry_restart_and_rejects_old_lease():

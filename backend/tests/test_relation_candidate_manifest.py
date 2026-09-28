@@ -129,6 +129,15 @@ def test_manifest_binds_server_created_latest_brief_and_rejects_wrong_idea_or_st
     reject(manifest(changed, candidate()), changed, "unique visible quote")
 
 
+def test_empty_manifest_means_reviewed_with_no_relation_candidates():
+    b = brief()
+
+    validated = validate(manifest(b), b)
+
+    assert validated.brief_id == b.id
+    assert validated.candidates == ()
+
+
 def test_support_must_be_exact_visible_quote_or_resolvable_nonempty_section():
     b = brief()
     for quote in ("not in Brief", "", "x" * 1201):
