@@ -12,6 +12,8 @@ from dots.founder_graph_job_store import (
     JobState,
     RelationCandidatePayload,
 )
+from dots.founder_graph_mcp import McpReadSurface
+from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_write import InMemoryGraphWriteService
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_candidate_job_processor import RelationCandidateJobProcessor
@@ -106,11 +108,12 @@ class MemoryJobStore:
         return self.job
 
 
-def _brief(*, brief_id=BRIEF, revision=1, supersedes_id=None, markdown=MARKDOWN):
+def _brief(*, brief_id=BRIEF, revision=1, supersedes_id=None, markdown=MARKDOWN,
+           egress_policy=EgressPolicy.LOCAL_ONLY):
     return IdeaBriefVersion(
         owner_id=OWNER, idea_lineage_root_id=IDEA, based_on_idea_id=IDEA,
         id=brief_id, revision=revision, supersedes_id=supersedes_id,
-        report_markdown=markdown,
+        report_markdown=markdown, egress_policy=egress_policy,
     )
 
 
@@ -125,10 +128,13 @@ def _manifest(quote="小さな倉庫を活用する。"):
     }
 
 
-def _context(brief=None):
+def _context(brief=None, *, idea_policy=EgressPolicy.LOCAL_ONLY,
+             asset_policy=EgressPolicy.LOCAL_ONLY):
     writes = InMemoryGraphWriteService(OWNER)
-    idea = Idea(id=IDEA, owner_id=OWNER, title="倉庫案", status=Status.ACTIVE)
-    asset = Asset(id=ASSET, owner_id=OWNER, name="倉庫", description="保管場所")
+    idea = Idea(id=IDEA, owner_id=OWNER, title="倉庫案", status=Status.ACTIVE,
+                egress_policy=idea_policy)
+    asset = Asset(id=ASSET, owner_id=OWNER, name="倉庫", description="storage location",
+                  egress_policy=asset_policy)
     writes.put_node(idea, idempotency_key="idea", expected_revision=0)
     writes.put_node(asset, idempotency_key="asset", expected_revision=0)
     saved_brief = brief or _brief()
@@ -164,7 +170,7 @@ def test_process_specific_revalidates_and_applies_hypothesis_idempotently():
     assert len([node for node in writes.nodes() if isinstance(node, RelationAssertion)]) == 1
     changed = _manifest() | {"candidates": [{
         "source_id": IDEA, "target_id": ASSET, "predicate": "DEPENDS_ON",
-        "basis": "brief_hypothesis", "support": {"quote": "小さな倉庫を活用する。"},
+        "basis": "brief_hypothesis", "support": {"quote": MARKDOWN.strip().splitlines()[-1]},
         "evidence_ids": [],
     }]}
     before = jobs.job
@@ -176,6 +182,66 @@ def test_process_specific_revalidates_and_applies_hypothesis_idempotently():
         raise AssertionError("changed manifest replay must be rejected")
     assert jobs.job == before
     assert len([node for node in writes.nodes() if isinstance(node, RelationAssertion)]) == 1
+
+
+def test_shareable_candidate_is_visible_in_mcp_search_and_fetch():
+    brief = _brief(egress_policy=EgressPolicy.SHAREABLE)
+    writes, _ = _context(
+        brief, idea_policy=EgressPolicy.SHAREABLE, asset_policy=EgressPolicy.SHAREABLE,
+    )
+    jobs = MemoryJobStore(brief)
+    processor = RelationCandidateJobProcessor(
+        jobs=jobs, writes=writes, brief_store=writes, worker_id="inline-worker",
+    )
+
+    result = processor.process_specific(jobs.job.id, raw_manifest=_manifest())
+    assertion = next(node for node in writes.nodes() if isinstance(node, RelationAssertion))
+    reads = McpReadSurface(GraphReadService(writes))
+    search = reads.call("search", {"query": "storage"}, owner_id=OWNER)
+    idea_hit = next(item for item in search["results"] if item["id"] == IDEA)
+    fetched = reads.call("fetch", {"id": assertion.id}, owner_id=OWNER)
+
+    assert result.state is JobState.SUCCEEDED
+    assert assertion.egress_policy is EgressPolicy.SHAREABLE
+    assert "semantic_relation_path" in idea_hit
+    assert idea_hit["semantic_relation_path"][0]["relation_assertion_id"] == assertion.id
+    assert idea_hit["semantic_relation_path"][0]["target_id"] == ASSET
+    assert fetched["path"] == [IDEA, "REUSES", ASSET]
+
+
+def test_private_candidate_endpoint_keeps_relation_local_in_memory_processor():
+    brief = _brief(egress_policy=EgressPolicy.SHAREABLE)
+    writes, _ = _context(
+        brief, idea_policy=EgressPolicy.SHAREABLE, asset_policy=EgressPolicy.LOCAL_ONLY,
+    )
+    jobs = MemoryJobStore(brief)
+    processor = RelationCandidateJobProcessor(
+        jobs=jobs, writes=writes, brief_store=writes, worker_id="inline-worker",
+    )
+
+    processor.process_specific(jobs.job.id, raw_manifest=_manifest())
+    assertion = next(node for node in writes.nodes() if isinstance(node, RelationAssertion))
+
+    assert assertion.egress_policy is EgressPolicy.LOCAL_ONLY
+
+
+def test_resolve_refs_reads_egress_policy_from_persisted_neo4j_node_fields():
+    class Writes:
+        owner_id = OWNER
+
+        def get_node(self, node_id):
+            return PersistedNodeReference(
+                id=node_id, owner_id=OWNER, node_type=NodeType.IDEA, revision=1,
+                fields={"egress_policy": EgressPolicy.SHAREABLE.value},
+            )
+
+    processor = RelationCandidateJobProcessor(
+        jobs=object(), writes=Writes(), brief_store=None, worker_id="inline-worker",
+    )
+
+    refs, _evidence = processor._resolve_refs({IDEA})
+
+    assert refs[IDEA].egress_policy is EgressPolicy.SHAREABLE
 
 
 def test_explicit_empty_manifest_completes_review_without_creating_relations():
