@@ -16,7 +16,7 @@ from .idea_brief import IdeaBriefSection, IdeaBriefValidationError, IdeaBriefVer
 _NODE_TYPE = "idea_brief_version"
 _PAYLOAD_KEYS = frozenset({
     "owner_id", "idea_lineage_root_id", "based_on_idea_id", "sections",
-    "research_run_ids", "origin", "id", "revision", "supersedes_id", "change_reason",
+    "research_run_ids", "origin", "report_markdown", "id", "revision", "supersedes_id", "change_reason",
     "egress_policy", "created_at",
 })
 _RECORD_KEYS = frozenset({
@@ -51,6 +51,7 @@ def _serialize_persisted_idea_brief(brief: IdeaBriefVersion) -> dict[str, Any]:
         ],
         "research_run_ids": list(brief.research_run_ids),
         "origin": brief.origin,
+        "report_markdown": brief.report_markdown,
         "id": brief.id,
         "revision": brief.revision,
         "supersedes_id": brief.supersedes_id,
@@ -93,15 +94,21 @@ def _decode_persisted_idea_brief(
         payload = json.loads(raw_payload)
     except (TypeError, ValueError):
         raise IdeaBriefValidationError("persisted IdeaBrief payload is invalid") from None
-    legacy_payload_keys = {
-        frozenset(_PAYLOAD_KEYS - {"research_run_ids"}),
-        frozenset(_PAYLOAD_KEYS - {"origin"}),
-        frozenset(_PAYLOAD_KEYS - {"research_run_ids", "origin"}),
+    missing = frozenset(_PAYLOAD_KEYS - frozenset(payload)) if isinstance(payload, dict) else frozenset()
+    legacy_missing = {
+        frozenset({"research_run_ids"}), frozenset({"origin"}),
+        frozenset({"research_run_ids", "origin"}),
+        frozenset({"research_run_ids", "report_markdown"}),
+        frozenset({"origin", "report_markdown"}),
+        frozenset({"research_run_ids", "origin", "report_markdown"}),
     }
-    if isinstance(payload, dict) and legacy_label_checked and frozenset(payload) in legacy_payload_keys:
+    if isinstance(payload, dict) and not (frozenset(payload) - _PAYLOAD_KEYS) and (
+        missing == frozenset({"report_markdown"}) or legacy_label_checked and missing in legacy_missing
+    ):
         payload = dict(payload)
         payload.setdefault("research_run_ids", [])
         payload.setdefault("origin", None)
+        payload.setdefault("report_markdown", None)
     if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS:
         raise IdeaBriefValidationError("persisted IdeaBrief payload fields are invalid")
 
@@ -110,6 +117,8 @@ def _decode_persisted_idea_brief(
             raise IdeaBriefValidationError("persisted IdeaBrief payload value is invalid")
     if payload["origin"] not in (None, "prior_research_import"):
         raise IdeaBriefValidationError("persisted IdeaBrief origin is invalid")
+    if payload["report_markdown"] is not None and not isinstance(payload["report_markdown"], str):
+        raise IdeaBriefValidationError("persisted IdeaBrief Markdown is invalid")
     if payload["owner_id"] != owner_id or payload["id"] != record["id"]:
         raise IdeaBriefValidationError("persisted IdeaBrief identity is invalid")
     if type(payload["revision"]) is not int or payload["revision"] != record["revision"]:
@@ -163,6 +172,7 @@ def _decode_persisted_idea_brief(
             sections=tuple(sections),
             research_run_ids=tuple(raw_run_ids),
             origin=payload["origin"],
+            report_markdown=payload["report_markdown"],
             id=payload["id"],
             revision=payload["revision"],
             supersedes_id=payload["supersedes_id"],

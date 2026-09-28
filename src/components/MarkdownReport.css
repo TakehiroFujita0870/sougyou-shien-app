@@ -1,0 +1,22 @@
+.markdown-report { color: #e8f0fc; font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+.markdown-report > :first-child { margin-top: 0; }
+.markdown-report h1, .markdown-report h2, .markdown-report h3 { color: #f7faff; line-height: 1.4; }
+.markdown-report h1 { margin: 24px 0 12px; font-size: 24px; }
+.markdown-report h2 { margin: 28px 0 12px; padding-left: 10px; border-left: 4px solid #85c5ff; font-size: 19px; }
+.markdown-report h3 { margin: 22px 0 8px; font-size: 16px; }
+.markdown-report p, .markdown-report ul, .markdown-report ol { margin: 10px 0 14px; }
+.markdown-report a { color: #91d8ff; font-weight: 700; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.markdown-report a:hover { color: #e0f5ff; }
+.markdown-report a:focus-visible { outline: 2px solid #f0d594; outline-offset: 2px; }
+.markdown-report blockquote { margin: 16px 0; padding: 5px 15px; border-left: 3px solid #80b5df; color: #d8e9fa; background: #142b45; }
+.markdown-report code { color: #dff3ff; background: #11243a; border-radius: 3px; padding: 1px 4px; }
+.markdown-report pre { overflow: auto; padding: 14px; border-radius: 9px; background: #11243a; }
+.markdown-report pre code { padding: 0; }
+.markdown-report table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 18px 0; }
+.markdown-report th, .markdown-report td { min-width: 100px; padding: 8px 12px; border: 1px solid #617998; text-align: left; }
+.markdown-report th { background: #284363; color: #fff; }
+.markdown-report tr:nth-child(even) { background: #20354d; }
+.markdown-report__image, .markdown-report__diagram { display: block; margin: 20px 0; padding: 12px; border: 1px solid #526d8d; border-radius: 10px; background: #13243a; }
+.markdown-report__image img { display: block; max-width: 100%; max-height: 540px; margin: 0 auto; object-fit: contain; }
+.markdown-report__image-caption { display: block; margin-top: 8px; color: #bdcee5; font-size: 13px; }
+.markdown-report__diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }

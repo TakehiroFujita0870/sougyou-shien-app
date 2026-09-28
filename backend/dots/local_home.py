@@ -328,6 +328,8 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                 if brief is not None and idea_aliases.get(brief.based_on_idea_id, brief.based_on_idea_id) == identity:
                     display["brief_sections"] = [section.content for section in brief.sections]
                     display["brief_revision"] = brief.revision
+                    if brief.report_markdown is not None:
+                        display["report_markdown"] = brief.report_markdown
                     if brief.origin is not None:
                         display["brief_origin"] = brief.origin
                     evidence_ids = tuple(dict.fromkeys(

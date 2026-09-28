@@ -131,6 +131,15 @@ def test_home_overlays_latest_brief_by_idea_lineage_without_exposing_old_version
     assert "旧事業モデル" not in json.dumps(result, ensure_ascii=False)
 
 
+def test_home_projects_only_the_latest_markdown_report_with_its_brief():
+    rows = [node("idea-current", "idea", {"title": "新事業", "created_at": "2026-09-28T00:00:00Z"})]
+    first = IdeaBriefVersion(owner_id="owner-a", idea_lineage_root_id="idea-current", based_on_idea_id="idea-current", report_markdown="## 旧版")
+    second = first.revise(report_markdown="## 新版\n\n| 項目 | 内容 |\n| --- | --- |\n| 顧客 | 店舗 |")
+    result = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(first), brief_row(second)))), owner_id="owner-a")
+    assert result["ideas"][0]["report_markdown"] == second.report_markdown
+    assert "旧版" not in json.dumps(result, ensure_ascii=False)
+
+
 def test_home_keeps_a_draft_unresearched_even_when_it_has_a_brief():
     rows = [node(
         "idea-draft", "idea",

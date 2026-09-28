@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './LocalHomeSurface.css';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
+import { MarkdownReport } from './MarkdownReport.jsx';
 
 const TABS = [
   { id: 'ideas', label: 'アイデア', icon: 'idea' },
@@ -11,7 +12,6 @@ const IDEA_SECTIONS = [
   'エグゼクティブサマリー', 'ビジネスモデル', '顧客とマーケットサイズ', '収益モデル',
   '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
 ];
-const researchStatusLabel = (status) => status === 'prior_research_sources_missing' ? '過去調査・現在の出典を表示できません' : status === 'prior_research_import' ? '過去調査を取り込みました' : status === 'research_sources_missing' ? '調査済み・出典を表示できません' : status === 'researched' ? '調査済み' : status === 'unresearched' ? '未調査' : '調査状態未確認';
 const compactResearchStatusLabel = (status) => ['prior_research_sources_missing', 'prior_research_import', 'research_sources_missing', 'researched'].includes(status) ? '調査済み' : status === 'unresearched' ? '未調査' : null;
 
 function HomeTabIcon({ name }) {
@@ -229,14 +229,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       <div className="local-home__idea-list">
         <h2 id="idea-list-heading" tabIndex={-1}>記録したアイデア <span>{home.ideas.length}件</span></h2>
         {home.ideas.length ? <div className="local-home__cards">{home.ideas.map((idea) => {
-          const summary = idea.brief_sections?.[0]?.trim() || idea.summary;
-          const isPriorResearch = idea.research_status?.startsWith('prior_research');
-          const statusAnnouncement = `${researchStatusLabel(idea.research_status)}${isPriorResearch ? '（実行済み調査ではありません）' : ''}`;
           return <article key={idea.id} className="local-home__idea-card" data-selected={selectedIdea?.id === idea.id ? 'true' : 'false'}>
             <button type="button" className="local-home__idea-select" aria-pressed={selectedIdea?.id === idea.id} onClick={() => { setSelectedId(idea.id); setIdeaDraft(null); setIdeaNotice(''); }}>
               <span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong></span>
-              {compactResearchStatusLabel(idea.research_status) && <span className="local-home__status-badge" data-research-state={idea.research_status} aria-label={statusAnnouncement}>{compactResearchStatusLabel(idea.research_status)}</span>}
-              {summary && <span className="local-home__idea-summary">{summary}</span>}
             </button>
           </article>;
         })}</div> : <p className="local-home__notice">まだアイデアの記録はありません。ChatGPTで話したアイデアをDots.へ保存すると、ここに並びます。</p>}
@@ -249,6 +244,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
             <button type="button" className="local-home__icon-button" aria-label={`削除: ${selectedIdea.title}`} title={canArchiveRecord('idea', selectedIdea.revision) ? `「${selectedIdea.title}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('idea', selectedIdea.revision) || deletePending} onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: selectedIdea.id, kind: 'idea', title: selectedIdea.title, revision: selectedIdea.revision }); }}><TrashIcon /></button>
           </div>}
         </div>
+        {compactResearchStatusLabel(selectedIdea.research_status) && <div className="local-home__detail-status-row"><span className="local-home__status-badge" data-research-state={selectedIdea.research_status}>{compactResearchStatusLabel(selectedIdea.research_status)}</span></div>}
         {ideaDraft?.id === selectedIdea.id ? <form onSubmit={saveIdea} className="local-home__edit-form local-home__idea-edit-form">
           <p>題名だけの変更は調査結果を引き継ぎます。説明を変えると以前の調査は履歴に残り、この案の現行調査からは外れます。</p>
           <label htmlFor="idea-edit-title">題名</label>
@@ -258,11 +254,12 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           {ideaNotice && <p role="alert">{ideaNotice}</p>}
           <div><button type="submit" disabled={!ideaDraft.title.trim() || ideaSaving}>{ideaSaving ? '保存中…' : '保存する'}</button><button type="button" disabled={ideaSaving} onClick={() => { setIdeaDraft(null); setIdeaNotice(''); }}>キャンセル</button></div>
         </form> : <>
-          <p className="local-home__research-status">{researchStatusLabel(selectedIdea.research_status)}</p>
-          {selectedIdea.research_status !== 'researched' && selectedIdea.description && <p className="local-home__idea-description">{selectedIdea.description}</p>}
+          {!selectedIdea.report_markdown && selectedIdea.research_status !== 'researched' && selectedIdea.description && <p className="local-home__idea-description">{selectedIdea.description}</p>}
         </>}
         {ideaNotice && !ideaDraft && <p role="status">{ideaNotice}</p>}
-        <div className="local-home__section-list">{IDEA_SECTIONS.map((heading, index) => {
+        {selectedIdea.report_markdown ? <><MarkdownReport markdown={selectedIdea.report_markdown} />
+          {selectedIdea.brief_citations?.some((chapter) => chapter.length > 0) && <div className="local-home__citation"><strong>保存済みの出典</strong><ul>{[...new Map(selectedIdea.brief_citations.flat().filter((citation) => safePublicCitationUrl(citation.url)).map((citation) => [citation.url, citation])).values()].map((citation) => <li key={citation.url}><a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()} <span aria-hidden="true">↗</span></a></li>)}</ul></div>}
+        </> : <div className="local-home__section-list">{IDEA_SECTIONS.map((heading, index) => {
           const saved = selectedIdea.brief_sections?.[index]?.trim();
           const content = saved || (index === 0 ? selectedIdea.summary : '') || '未整理';
           const citations = Array.isArray(selectedIdea.brief_citations?.[index])
@@ -271,11 +268,9 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           return <section key={heading}>
             <h3>{heading}</h3>
             <p className={content === '未整理' ? 'local-home__unwritten' : ''}>{content}</p>
-            {citations.length > 0 && <p className="local-home__citation">出典: {citations.map((citation, citationIndex) => <span key={`${citation.source_id ?? citation.evidence_id ?? citation.url}-${citationIndex}`}>
-              {citationIndex > 0 ? '、' : ''}<a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()}</a>
-            </span>)}</p>}
+            {citations.length > 0 && <div className="local-home__citation"><strong>出典</strong><ul>{citations.map((citation, citationIndex) => <li key={`${citation.source_id ?? citation.evidence_id ?? citation.url}-${citationIndex}`}><a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()} <span aria-hidden="true">↗</span></a></li>)}</ul></div>}
           </section>;
-        })}</div>
+        })}</div>}
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">

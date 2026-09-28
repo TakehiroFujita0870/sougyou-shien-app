@@ -1,9 +1,4 @@
 .local-graph { color: #e9eef8; height: calc(100dvh - 55px); min-height: 470px; display: flex; flex-direction: column; }
-.local-graph__region-controls { min-height: 40px; display: flex; align-items: center; gap: 12px; padding: 4px 8px 8px; border-radius: 8px; background: #111722; color: #bdcde4; font-size: 13px; }
-.local-graph__region-controls label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.local-graph__region-controls select { max-width: 290px; padding: 6px 28px 6px 9px; border: 1px solid #8399b9; border-radius: 8px; color: #edf4ff; background: #18263a; }
-.local-graph__region-controls select:focus-visible { outline: 2px solid #d5b97f; outline-offset: 2px; }
-.local-graph__region-status { position: absolute; z-index: 2; top: 62px; left: 16px; max-width: 52%; margin: 0; padding: 8px 11px; border: 1px solid #465b78; border-radius: 9px; color: #d6e3f7; background: #142134e8; font-size: 12px; }
 .local-graph__limit { color: #afc1da; font-size: 13px; }
 .local-graph__frame { position: relative; flex: 1; min-height: 390px; overflow: hidden; border: 1px solid #384862; border-radius: 18px; background: radial-gradient(circle at 48% 40%, #1c304b 0%, #111c2d 55%, #0b1421 100%); }
 .local-graph__canvas { width: 100%; height: 100%; cursor: grab; }

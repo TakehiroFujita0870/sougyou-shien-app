@@ -112,6 +112,7 @@ def test_regular_idea_brief_reuses_memory_writer_and_replays_same_key() -> None:
     args = {
         "idea_id": "idea-brief", "expected_revision": 0,
         "sections": [{"index": 0, "content": "A bounded synthetic note"}],
+        "report_markdown": "## 概要\n\n| 対象 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |",
         "idempotency_key": "regular-brief",
     }
     first = surface.call("save_idea_brief", args, owner_id=writes.owner_id)
@@ -119,8 +120,13 @@ def test_regular_idea_brief_reuses_memory_writer_and_replays_same_key() -> None:
     assert first.target_type == "idea_brief_version"
     assert replay.target_id == first.target_id
     assert replay.replayed is True
+    assert writes.get_idea_brief(first.target_id).report_markdown == args["report_markdown"]
+    with pytest.raises(McpWriteError) as changed:
+        surface.call("save_idea_brief", {**args, "report_markdown": "## 別の本文"}, owner_id=writes.owner_id)
+    assert changed.value.code == "idempotency_conflict"
     save_brief = next(item for item in surface.tool_definitions() if item["name"] == "save_idea_brief")
     assert save_brief["inputSchema"]["properties"]["origin"]["enum"] == ["prior_research_import"]
+    assert save_brief["inputSchema"]["properties"]["report_markdown"]["maxLength"] == 60000
 
 
 def test_prior_research_brief_successor_requires_current_public_evidence_and_replays_origin():
