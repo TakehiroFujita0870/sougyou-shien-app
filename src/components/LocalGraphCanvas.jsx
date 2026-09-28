@@ -89,7 +89,7 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
       element = container.current;
       const graphNodes = nodes.map((node, index) => {
         const nodeDepth = Number.isInteger(node.graphDepth) ? node.graphDepth : graphDepthForKind(node.kind);
-        return { ...node, depth: nodeDepth, fz: -170 * nodeDepth, ...initialPosition(node.id, index) };
+        return { ...node, depth: nodeDepth, fz: -125 * nodeDepth, ...initialPosition(node.id, index) };
       });
       const byId = new Map(graphNodes.map((node) => [node.id, node]));
       const graphLinks = edges.map((edge) => ({ ...edge }));
@@ -140,8 +140,8 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
         .onNodeClick((node) => { setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); setSelected({ type: 'node', id: node.id, kind: node.kind, label: node.label }); })
         .onLinkClick((link) => { if (link.assertionId) selectSemanticEdge(link); else { setSelected(null); setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); } })
         .onBackgroundClick(() => { setSelected(null); setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); });
-      graph.d3Force('charge').strength(-35);
-      graph.d3Force('link').distance(95);
+      graph.d3Force('charge').strength(-22);
+      graph.d3Force('link').distance(65);
       graph.cameraPosition({ x: 0, y: 0, z: 430 }, { x: 0, y: 0, z: 0 });
       wheelHandler = (event) => {
         event.preventDefault();

@@ -83,8 +83,7 @@ def test_real_owner_scoped_semantic_projection_suppresses_successor_beyond_node_
             payload(current_assertion_id, "relation_assertion", status="inferred", **common_assertion),
         ),
     ]
-    # These lexically later rows force the old assertion's rejected successor
-    # outside both the Neo4j result limit and the local 200-node projection.
+    # Internal filler must not hide visible entities or consume the visual budget.
     records.extend(
         (f"m-filler-{index:03d}", "synthetic_filler", "active", payload(f"m-filler-{index:03d}", "synthetic_filler"))
         for index in range(MAX_NODES + 1 - len(records))
@@ -155,16 +154,16 @@ def test_real_owner_scoped_semantic_projection_suppresses_successor_beyond_node_
             session.execute_write(seed)
 
         raw_nodes = store.read_nodes(owner_id)
-        assert len(raw_nodes) == MAX_NODES + 1
+        assert len(raw_nodes) == MAX_NODES + 2
         assert all(row["owner_id"] == owner_id for row in raw_nodes)
         old_row = next(row for row in raw_nodes if row["id"] == old_assertion_id)
         assert old_row["has_successor"] is True
-        assert all(row["id"] != successor_id for row in raw_nodes)
+        assert any(row["id"] == successor_id for row in raw_nodes)
 
         result = read_local_graph(store, owner_id=owner_id)
 
         assert result["status"] == "ready"
-        assert result["truncated"] is True
+        assert result["truncated"] is False
         assert [edge["id"] for edge in result["semantic_edges"]] == [current_assertion_id]
         assert result["semantic_edges"][0] == {
             "id": current_assertion_id,

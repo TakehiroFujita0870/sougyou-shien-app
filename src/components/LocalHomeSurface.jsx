@@ -62,6 +62,25 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const deleteDialogRef = useRef(null);
   const deleteControllerRef = useRef(null);
   const hadDeleteDialog = useRef(false);
+  const helpTriggerRef = useRef(null);
+  const helpCloseRef = useRef(null);
+
+  useEffect(() => {
+    if (!showShortcuts) return undefined;
+    helpCloseRef.current?.focus();
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowShortcuts(false);
+        helpTriggerRef.current?.focus();
+      } else if (event.key === 'Tab') {
+        event.preventDefault();
+        helpCloseRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [showShortcuts]);
 
   useEffect(() => {
     deleteControllerRef.current?.abort();
@@ -327,14 +346,15 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       <div role="tablist" aria-label="ホームの項目">
         {TABS.map(({ id, label, icon }) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}><HomeTabIcon name={icon} /><span>{label}</span></button>)}
       </div>
-      <button type="button" className="local-home__help-toggle" aria-label="ショートカット一覧" title="ショートカット一覧" aria-expanded={showShortcuts} aria-controls={showShortcuts ? 'local-home-shortcuts' : undefined} onClick={() => setShowShortcuts((value) => !value)}>?</button>
+      <button ref={helpTriggerRef} type="button" className="local-home__help-toggle" aria-label="ショートカット一覧" title="ショートカット一覧" aria-expanded={showShortcuts} aria-controls={showShortcuts ? 'local-home-shortcuts' : undefined} onClick={() => setShowShortcuts((value) => !value)}>?</button>
     </div>
-    {showShortcuts && <section id="local-home-shortcuts" className="local-home__shortcuts" aria-label="ショートカット一覧">
+    {showShortcuts && <div className="local-home__shortcut-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setShowShortcuts(false); helpTriggerRef.current?.focus(); } }}><section id="local-home-shortcuts" className="local-home__shortcuts" role="dialog" aria-modal="true" aria-labelledby="local-home-shortcuts-heading">
+      <header><h2 id="local-home-shortcuts-heading">ショートカット一覧</h2><button ref={helpCloseRef} type="button" aria-label="閉じる" onClick={() => { setShowShortcuts(false); helpTriggerRef.current?.focus(); }}>×</button></header>
       <p><strong>アイデア・アセット共通</strong>　カードを選択して ↑↓・Home・End：選択移動 ／ E：編集 ／ Delete：削除確認 ／ ?：この一覧</p>
       <p><strong>アイデア</strong>　Enter：選択</p>
       <p><strong>アセット</strong>　Enter：編集 ／ Alt＋←：強み・経験へ ／ Alt＋→：弱み・迷いへ</p>
       <p><strong>編集中</strong>　Esc：キャンセル</p>
-    </section>}
+    </section></div>}
     {home.status === 'loading' && <p role="status" className="local-home__notice">保存内容を読み込んでいます。</p>}
     {home.status === 'failed' && <div className="local-home__notice" role="alert">保存内容を読み込めませんでした。<button type="button" onClick={() => setAttempt((value) => value + 1)}>再試行</button></div>}
     {home.status === 'stopped' && <div className="local-home__notice" role="status">Dots.は停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></div>}

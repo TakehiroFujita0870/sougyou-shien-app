@@ -89,12 +89,21 @@ it('places a shared question-mark shortcut guide at the right of the home tabs',
   expect(help).toBe(tabs.lastElementChild);
   expect(container.querySelector('.local-home__asset-help')).toBeNull();
   await act(async () => help.click());
+  expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+  expect(container.querySelector('.local-home__shortcut-backdrop')).not.toBeNull();
   expect(container.textContent).toContain('アイデア');
   expect(container.textContent).toContain('弱み・迷いへ');
   await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'あなたのアセット').click());
   expect(help.getAttribute('aria-expanded')).toBe('true');
   await act(async () => document.querySelector('main.local-home').dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })));
   expect(help.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => help.click());
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(help);
+  await act(async () => help.click());
+  await act(async () => container.querySelector('.local-home__shortcut-backdrop').dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
 it('navigates idea cards and opens editing and delete confirmation without hijacking text input', async () => {

@@ -4,7 +4,7 @@ from dataclasses import replace
 from dots.founder_graph import Asset, EgressPolicy, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
 from dots.founder_graph_neo4j_codec import node_properties
 from dots.founder_graph_facet_hierarchy import FacetPathNode, FacetRegionHit, RegionEntity
-from dots.local_graph_view import read_local_facet_region, read_local_graph
+from dots.local_graph_view import MAX_NODES, read_local_facet_region, read_local_graph
 
 
 def node(identity, owner="owner-mvp", kind="idea", title="良いアイデア"):
@@ -40,12 +40,25 @@ def test_graph_stopped_empty_and_foreign_owner_fail_closed():
     assert read_local_graph(Store([node("x", owner="other")]), owner_id="owner-mvp")["status"] == "failed"
 
 
-def test_graph_uses_japanese_kind_label_when_safe_title_is_missing():
+def test_graph_hides_internal_claims_without_exposing_their_content():
     claim = node("claim-1", kind="claim")
     claim["payload_json"] = json.dumps({"id": "claim-1", "owner_id": "owner-mvp", "text": "非公開の主張"})
     result = read_local_graph(Store([claim]), owner_id="owner-mvp")
-    assert result["nodes"] == [{"id": "claim-1", "kind": "claim", "label": "主張"}]
+    assert result["nodes"] == []
     assert "非公開の主張" not in str(result)
+
+
+def test_internal_records_do_not_consume_the_visible_node_budget():
+    internal = [node(f"claim-{index}", kind="claim") for index in range(700)]
+    result = read_local_graph(Store([*internal, node("idea-1"), node("idea-2")]), owner_id="owner-mvp")
+    assert [item["id"] for item in result["nodes"]] == ["idea-1", "idea-2"]
+    assert result["truncated"] is False
+
+
+def test_graph_caps_visible_nodes_at_five_hundred():
+    result = read_local_graph(Store([node(f"idea-{index}") for index in range(MAX_NODES + 1)]), owner_id="owner-mvp")
+    assert len(result["nodes"]) == MAX_NODES
+    assert result["truncated"] is True
 
 
 def test_facet_region_projection_exposes_status_and_opaque_evidence_only():
@@ -108,7 +121,7 @@ def test_graph_restores_idea_asset_semantic_endpoints_only_for_lifecycle_success
 
     result = read_local_graph(Store(rows), owner_id="owner-mvp")
 
-    assert {node["id"] for node in result["nodes"]} == {"idea-2", "asset-2", "relation"}
+    assert {node["id"] for node in result["nodes"]} == {"idea-2", "asset-2"}
     assert result["semantic_edges"] == [{
         "id": "relation", "source_id": "idea-2", "target_id": "asset-2",
         "predicate": "REUSES", "status": "proposed", "confidence": None,
