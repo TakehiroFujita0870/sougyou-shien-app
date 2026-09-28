@@ -1,21 +1,49 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from dots.founder_graph import Claim, EgressPolicy, Idea, MaterialKind, Source, SourceRevision
 from dots.founder_graph_mcp import McpReadSurface
+from dots.founder_graph_candidate_job_processor import CandidateManifestConflictError
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from dots.founder_graph_job_store import FounderGraphJobStore
 from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
 from dots.idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion
 
 
+class _CandidateProcessorStub:
+    def __init__(self, *, raises: bool = False, state: str = "failed", error_code: str | None = None) -> None:
+        self.raises = raises
+        self.state = state
+        self.error_code = error_code
+        self.calls: list[tuple[str, object]] = []
+
+    def process_specific(self, job_id: str, *, raw_manifest: object) -> object:
+        self.calls.append((job_id, raw_manifest))
+        if self.raises:
+            raise CandidateManifestConflictError() if self.error_code == "candidate_manifest_conflict" else RuntimeError("synthetic processor failure")
+        error_code = "candidate_rejected" if self.state == "failed" else None
+        return SimpleNamespace(state=self.state, last_error_code=error_code)
+
+
+def _candidate_manifest(idea_id: str, target_id: str, quote: str) -> dict[str, object]:
+    return {
+        "version": 1, "idea_id": idea_id, "candidates": [{
+            "source_id": idea_id, "target_id": target_id, "predicate": "RELATES_TO",
+            "basis": "brief_hypothesis", "support": {"quote": quote}, "evidence_ids": [],
+        }],
+    }
+
+
 def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval() -> None:
     writes = InMemoryGraphWriteService("owner-mcp-research")
     writes.put_node(Idea(owner_id=writes.owner_id, id="idea-mcp", title="Synthetic idea", egress_policy=EgressPolicy.SHAREABLE), idempotency_key="idea-seed")
-    surface = McpWriteSurface(writes)
+    processor = _CandidateProcessorStub()
+    surface = McpWriteSurface(writes, candidate_processor=processor)
     tools = {item["name"]: item for item in surface.tool_definitions()}
     assert {
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
@@ -93,8 +121,11 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
         "idea_id": "idea-mcp", "expected_revision": 0, "sections": sections,
         "research_run_ids": [run.target_id], "report_markdown": report_markdown,
         "egress_policy": "shareable",
+        "relation_candidate_manifest": _candidate_manifest("idea-mcp", claim.id, "Synthetic section 0."),
         "idempotency_key": "mcp-brief",
     }, owner_id=writes.owner_id)
+    assert brief.candidate_processing == {"state": "failed", "error_code": "candidate_rejected"}
+    assert processor.calls[0][0] == FounderGraphJobStore.job_id_for(writes.owner_id, brief.target_id)
     assert brief.target_type == "idea_brief_version"
     saved = writes.get_idea_brief(brief.target_id)
     assert saved is not None and saved.research_run_ids == (run.target_id,)
@@ -158,7 +189,8 @@ def test_append_research_finding_writes_only_markdown_and_replays_idempotently()
         egress_policy=EgressPolicy.SHAREABLE,
     )
     writes.put_node(idea, idempotency_key="idea-research-append-seed")
-    surface = McpWriteSurface(writes)
+    processor = _CandidateProcessorStub()
+    surface = McpWriteSurface(writes, candidate_processor=processor)
     tools = {item["name"]: item for item in surface.tool_definitions()}
 
     assert "append_research_finding" in tools
@@ -172,6 +204,7 @@ def test_append_research_finding_writes_only_markdown_and_replays_idempotently()
         "idea_id": idea.id, "expected_revision": 0,
         "finding": "The first synthetic finding.",
         "source_url": "https://example.test/first?tab=public",
+        "relation_candidate_manifest": _candidate_manifest(idea.id, "claim-append-stub", "The first synthetic finding."),
         "egress_policy": "shareable", "idempotency_key": "append-finding-first",
     }
     first = surface.call("append_research_finding", first_args, owner_id=writes.owner_id)
@@ -190,6 +223,7 @@ def test_append_research_finding_writes_only_markdown_and_replays_idempotently()
     replay = surface.call("append_research_finding", first_args, owner_id=writes.owner_id)
 
     assert first.target_type == "idea_brief_version"
+    assert first.candidate_processing == {"state": "failed", "error_code": "candidate_rejected"}
     assert first.revision == 1
     assert second.revision == 2
     assert third.revision == 3
@@ -334,16 +368,19 @@ def test_researched_brief_rejects_wrong_owner_without_writing() -> None:
 def test_regular_idea_brief_reuses_memory_writer_and_replays_same_key() -> None:
     writes = InMemoryGraphWriteService("owner-mcp-brief")
     writes.put_node(Idea(owner_id=writes.owner_id, id="idea-brief", title="Synthetic idea"), idempotency_key="idea-seed")
-    surface = McpWriteSurface(writes)
+    processor = _CandidateProcessorStub()
+    surface = McpWriteSurface(writes, candidate_processor=processor)
     args = {
         "idea_id": "idea-brief", "expected_revision": 0,
         "sections": [{"index": 0, "content": "A bounded synthetic note"}],
         "report_markdown": "## 概要\n\n| 対象 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |",
+        "relation_candidate_manifest": _candidate_manifest("idea-brief", "claim-brief-stub", "A bounded synthetic note"),
         "idempotency_key": "regular-brief",
     }
     first = surface.call("save_idea_brief", args, owner_id=writes.owner_id)
     replay = surface.call("save_idea_brief", args, owner_id=writes.owner_id)
     assert first.target_type == "idea_brief_version"
+    assert first.candidate_processing == {"state": "failed", "error_code": "candidate_rejected"}
     assert replay.target_id == first.target_id
     assert replay.replayed is True
     assert writes.get_idea_brief(first.target_id).report_markdown == args["report_markdown"]
@@ -535,3 +572,126 @@ def test_memory_store_rejects_unverified_prior_origin_even_without_mcp():
         writes.save_idea_brief(imported, expected_latest_revision=1, idempotency_key="prior-direct-import")
 
     assert writes.get_latest_idea_brief(idea.id) == original
+
+
+def test_all_brief_save_tools_expose_optional_bounded_candidate_manifest():
+    writes = InMemoryGraphWriteService("owner-mcp-candidate-schema")
+    surface = McpWriteSurface(writes)
+    tools = {tool["name"]: tool for tool in surface.tool_definitions()}
+    manifest_names = {"save_idea_brief", "append_research_finding", "save_researched_idea_brief"}
+
+    for tool_name in manifest_names:
+        schema = tools[tool_name]["inputSchema"]
+        manifest = schema["properties"]["relation_candidate_manifest"]
+        assert "candidate_processing" in tools[tool_name]["outputSchema"]["required"]
+        assert manifest["type"] == "object" and "relation_candidate_manifest" not in schema["required"]
+        assert manifest["additionalProperties"] is False
+        assert manifest["properties"]["version"]["const"] == 1
+        assert manifest["properties"]["idea_id"]["maxLength"] == 200
+        assert manifest["properties"]["candidates"]["minItems"] == 0
+        assert manifest["properties"]["candidates"]["maxItems"] == 64
+        description = tools[tool_name]["description"]
+        assert "同じ保存呼出し" in description and "本文保存後にDots" in description
+        assert "candidate_processing.state" in description
+        assert "candidates: []" in description
+        assert "link_entities" not in description and "classify_entity" not in description
+
+    support_schema = tools["save_idea_brief"]["inputSchema"]["properties"][
+        "relation_candidate_manifest"
+    ]["properties"]["candidates"]["items"]["properties"]["support"]
+    assert len(support_schema["oneOf"]) == 2
+    quote_schema = support_schema["oneOf"][0]["properties"]["quote"]
+    assert quote_schema["maxLength"] == 1200
+    assert support_schema["oneOf"][1]["properties"]["section_index"]["maximum"] == 7
+
+
+@pytest.mark.parametrize("tool_name,base_args", [
+    ("save_idea_brief", {
+        "expected_revision": 0, "sections": [{"index": 0, "content": "A short note"}],
+        "idempotency_key": "candidate-mismatch-brief",
+    }),
+    ("append_research_finding", {
+        "expected_revision": 0, "finding": "A short finding.",
+        "source_url": "https://example.test/source", "idempotency_key": "candidate-mismatch-append",
+    }),
+    ("save_researched_idea_brief", {
+        "expected_revision": 0, "sections": [{"index": index} for index in range(8)],
+        "research_run_ids": ["run-placeholder"], "report_markdown": "## A report\n\nA body.",
+        "idempotency_key": "candidate-mismatch-researched",
+    }),
+])
+def test_brief_save_tools_reject_wrong_idea_and_oversized_candidate_manifests(tool_name, base_args):
+    writes = InMemoryGraphWriteService(f"owner-mcp-candidate-{tool_name}")
+    idea = Idea(owner_id=writes.owner_id, id="idea-candidate-entry", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key=f"seed-{tool_name}")
+    surface = McpWriteSurface(writes)
+    arguments = {"idea_id": idea.id, **base_args}
+
+    for manifest, expected_message in (
+        ({"version": 1, "idea_id": "another-idea", "candidates": [{}]}, "idea_id"),
+        ({"version": 1, "idea_id": idea.id, "candidates": [{}], "extra": True}, "fields"),
+        ({"version": True, "idea_id": idea.id, "candidates": [{}]}, "version"),
+        ({"version": 1, "idea_id": idea.id, "candidates": [{"support": {"quote": "x" * 70_000}}]}, "64 KiB"),
+        ({"version": 1, "idea_id": idea.id, "candidates": [{} for _ in range(65)]}, "64"),
+    ):
+        with pytest.raises(McpWriteError, match=expected_message):
+            surface.call(
+                tool_name,
+                {**arguments, "relation_candidate_manifest": manifest},
+                owner_id=writes.owner_id,
+            )
+    assert writes.get_latest_idea_brief(idea.id) is None
+
+
+def test_candidate_review_distinguishes_omitted_empty_and_processor_failure():
+    writes = InMemoryGraphWriteService("owner-mcp-candidate-omitted")
+    idea = Idea(owner_id=writes.owner_id, id="idea-candidate-omitted", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="candidate-omitted-idea")
+    processor = _CandidateProcessorStub(state="pending")
+    surface = McpWriteSurface(writes, candidate_processor=processor)
+
+    def save(revision: int, key: str, note: str, manifest: dict[str, object] | None = None):
+        args = {
+            "idea_id": idea.id, "expected_revision": revision,
+            "sections": [{"index": 0, "content": note}],
+            "report_markdown": f"## 概要\n\n{note}", "idempotency_key": key,
+        }
+        if manifest is not None:
+            args["relation_candidate_manifest"] = manifest
+        return surface.call("save_idea_brief", args, owner_id=writes.owner_id)
+
+    result = save(0, "candidate-omitted-brief", "Not reviewed for relations.")
+
+    assert result.candidate_processing == {"state": "pending", "error_code": None}
+    assert writes.get_idea_brief(result.target_id) is not None
+    assert processor.calls[0] == (FounderGraphJobStore.job_id_for(writes.owner_id, result.target_id), None)
+
+    processor.state = "succeeded"
+    empty_manifest = {"version": 1, "idea_id": idea.id, "candidates": []}
+    reviewed = save(1, "candidate-empty-brief", "No relations proposed.", empty_manifest)
+    assert reviewed.candidate_processing == {"state": "succeeded", "error_code": None}
+    assert processor.calls[1][1] == empty_manifest
+
+    processor.state = "failed"
+    invalid_manifest = {"version": 1, "idea_id": idea.id, "candidates": [{
+        "source_id": "missing-source", "target_id": "missing-target",
+        "predicate": "REQUIRES_CAPABILITY", "basis": "brief_hypothesis",
+        "support": {"quote": "Not in the saved Brief"}, "evidence_ids": [],
+    }]}
+    failed = save(2, "candidate-processing-failed-brief", "Saved despite invalid candidates.", invalid_manifest)
+    assert failed.candidate_processing == {"state": "failed", "error_code": "candidate_rejected"}
+    assert writes.get_idea_brief(failed.target_id).report_markdown == "## 概要\n\nSaved despite invalid candidates."
+    assert processor.calls[2][1] == invalid_manifest
+
+    processor.raises = True
+    processor.error_code = None
+    failed_processor = save(3, "candidate-processing-error-brief", "Saved despite processor error.", empty_manifest)
+    assert failed_processor.candidate_processing == {"state": "unavailable", "error_code": "processing_unavailable"}
+    assert writes.get_idea_brief(failed_processor.target_id) is not None
+
+    processor.error_code = "candidate_manifest_conflict"
+    conflict = save(4, "candidate-processing-conflict-brief", "Saved despite candidate conflict.", empty_manifest)
+    assert conflict.candidate_processing == {
+        "state": "unavailable", "error_code": "candidate_manifest_conflict",
+    }
+    assert writes.get_idea_brief(conflict.target_id) is not None

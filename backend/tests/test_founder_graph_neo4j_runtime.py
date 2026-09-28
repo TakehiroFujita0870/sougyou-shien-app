@@ -819,19 +819,35 @@ def test_selected_neo4j_without_password_does_not_fall_back(monkeypatch) -> None
         raise AssertionError("Neo4j configuration errors must not fall back to memory")
 
 
-def test_neo4j_app_factory_wires_matching_ports_without_connecting() -> None:
+def test_neo4j_app_factory_wires_matching_ports_and_processor_without_connecting(monkeypatch) -> None:
     session = _Session({})
+    driver = _Driver(session)
+    captured = {}
+    original_surface = main_module.McpWriteSurface
 
-    app = create_neo4j_app(_Driver(session), "owner-1")
+    def capture_surface(*args, **kwargs):
+        surface = original_surface(*args, **kwargs)
+        captured["surface"] = surface
+        return surface
+
+    monkeypatch.setattr(main_module, "McpWriteSurface", capture_surface)
+
+    app = create_neo4j_app(driver, "owner-1")
 
     assert app.title == "Dots. API"
+    processor = captured["surface"].candidate_processor
+    assert processor.jobs.driver is driver and processor.jobs.owner_id == "owner-1"
+    assert processor.writes.owner_id == "owner-1"
+    assert processor.brief_store.gateway is processor.writes.gateway
+    assert processor.worker_id.startswith("mcp-")
     assert session.calls == []
 
 
 def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
     session = _Session({})
+    driver = _Driver(session)
 
-    server = create_neo4j_stdio_server(_Driver(session), "owner-1")
+    server = create_neo4j_stdio_server(driver, "owner-1")
     response = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
 
     tools = response["result"]["tools"]
@@ -857,6 +873,11 @@ def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
     assert campaign_tools["create_research_campaign"]["annotations"]["destructiveHint"] is False
     assert "record_research_run" in {tool["name"] for tool in tools}
     assert "save_researched_idea_brief" in {tool["name"] for tool in tools}
+    processor = server.writes.candidate_processor
+    assert processor.jobs.driver is driver and processor.jobs.owner_id == "owner-1"
+    assert processor.writes.owner_id == "owner-1"
+    assert processor.brief_store.gateway is processor.writes.gateway
+    assert processor.worker_id.startswith("mcp-")
     assert session.calls == []
 
 

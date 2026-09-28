@@ -18,7 +18,7 @@ from .founder_graph_mcp import McpReadError, McpReadSurface
 from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadService
 from .founder_graph_write import InMemoryGraphWriteService
-from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
+from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, create_relation_candidate_job_processor, resolve_graph_backend
 from .founder_graph_neo4j_write import Neo4jIdeaBriefStore
 
 
@@ -147,7 +147,10 @@ def create_stdio_server(owner_id: str | None = None) -> FounderGraphStdioServer:
     return FounderGraphStdioServer(McpReadSurface(reads), McpWriteSurface(writes), resolved_owner)
 
 
-def create_neo4j_stdio_server(driver: Any, owner_id: str, *, database: str = "neo4j") -> FounderGraphStdioServer:
+def create_neo4j_stdio_server(
+    driver: Any, owner_id: str, *, database: str = "neo4j",
+    candidate_processor: Any | None = None,
+) -> FounderGraphStdioServer:
     """Create a stdio server with explicitly injected persistent ports.
 
     This helper never discovers a driver, opens a network connection, or runs
@@ -155,9 +158,14 @@ def create_neo4j_stdio_server(driver: Any, owner_id: str, *, database: str = "ne
     """
 
     composition = create_neo4j_graph_composition(driver, owner_id, database=database)
+    brief_store = Neo4jIdeaBriefStore(composition.gateway)
+    processor = (
+        candidate_processor if candidate_processor is not None
+        else create_relation_candidate_job_processor(composition)
+    )
     return FounderGraphStdioServer(
         McpReadSurface(composition.reads),
-        McpWriteSurface(composition.writes, brief_store=Neo4jIdeaBriefStore(composition.gateway)),
+        McpWriteSurface(composition.writes, brief_store=brief_store, candidate_processor=processor),
         composition.gateway.owner_id,
     )
 

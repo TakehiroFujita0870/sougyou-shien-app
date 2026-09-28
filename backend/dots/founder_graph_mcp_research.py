@@ -6,15 +6,24 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import re
 from typing import Any, Mapping
 
 from .founder_graph import DomainValidationError, EgressPolicy, Idea, Provenance, ResearchCampaign, ResearchRun, Status, validate_campaign_idea_reference
+from .founder_graph_candidate_job_processor import CandidateManifestConflictError
 from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_research import revoke_research_campaign, validate_research_run_timing
 from .founder_graph_write import GraphWriteError, GraphWritePort, IdempotencyConflictError, RevisionConflictError, WriteReceipt
+from .founder_graph_job_store import FounderGraphJobStore
 from .idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion, _REPORT_MARKDOWN_OMITTED
 from .idea_brief_read_projection import project_idea_brief_for_read
 from .markdown_report_projection import project_markdown_report
+from .relation_candidate_manifest import (
+    MAX_CANDIDATES,
+    MAX_EVIDENCE_IDS,
+    MAX_MANIFEST_BYTES,
+    MAX_SUPPORT_QUOTE_CHARS,
+)
 from .source_citations import citation_metadata, evidence_lineage_is_current, researched_evidence_ids
 
 
@@ -54,6 +63,7 @@ class ResearchWriteReceipt(WriteReceipt):
     """Standard write receipt plus a deliberately safe, bounded proposal view."""
 
     campaign_proposal: Mapping[str, Any] | None = None
+    candidate_processing: Mapping[str, Any] | None = None
 
 
 def _json_value(value: Any) -> Any:
@@ -134,16 +144,141 @@ def _receipt_schema() -> dict[str, Any]:
     }
 
 
+def _brief_receipt_schema() -> dict[str, Any]:
+    schema = _receipt_schema()
+    schema["properties"]["candidate_processing"] = {
+        "type": "object",
+        "properties": {
+            "state": {"type": "string", "enum": ["pending", "leased", "succeeded", "failed", "superseded", "unavailable"]},
+            "error_code": {"type": ["string", "null"], "maxLength": 64},
+        },
+        "required": ["state", "error_code"],
+        "additionalProperties": False,
+    }
+    schema["required"].append("candidate_processing")
+    return schema
+
+
+def _relation_candidate_manifest_schema() -> dict[str, Any]:
+    identifier = {"type": "string", "minLength": 1, "maxLength": 200}
+    support = {
+        "oneOf": [
+            {
+                "type": "object", "required": ["quote"],
+                "properties": {"quote": {"type": "string", "minLength": 1, "maxLength": MAX_SUPPORT_QUOTE_CHARS}},
+                "additionalProperties": False,
+            },
+            {
+                "type": "object", "required": ["section_index"],
+                "properties": {"section_index": {"type": "integer", "minimum": 0, "maximum": 7}},
+                "additionalProperties": False,
+            },
+        ],
+    }
+    candidate = {
+        "type": "object",
+        "required": ["source_id", "target_id", "predicate", "basis", "support", "evidence_ids"],
+        "properties": {
+            "source_id": identifier,
+            "target_id": identifier,
+            "predicate": {"type": "string", "minLength": 1, "maxLength": 64},
+            "basis": {"type": "string", "enum": ["brief_hypothesis", "external_evidence"]},
+            "support": support,
+            "evidence_ids": {
+                "type": "array", "maxItems": MAX_EVIDENCE_IDS, "uniqueItems": True,
+                "items": identifier,
+            },
+        },
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "description": "保存するBrief本文から検証する任意の関係候補です。64 KiB以下、versionは1、idea_idは保存対象と一致する必要があります。Brief ID・revision・hashはサーバーが設定します。",
+        "required": ["version", "idea_id", "candidates"],
+        "properties": {
+            "version": {"type": "integer", "const": 1},
+            "idea_id": identifier,
+            "candidates": {"type": "array", "minItems": 0, "maxItems": MAX_CANDIDATES, "items": candidate},
+        },
+        "additionalProperties": False,
+    }
+
+
+def _validate_relation_candidate_manifest_input(value: object, *, idea_id: str) -> None:
+    """Validate the bounded public envelope before any save-side effects."""
+    if not isinstance(value, Mapping) or set(value) != {"version", "idea_id", "candidates"}:
+        raise ResearchCampaignInputError("relation_candidate_manifest fields do not match the contract")
+    if type(value["version"]) is not int or value["version"] != 1:
+        raise ResearchCampaignInputError("relation_candidate_manifest version must be integer 1")
+    manifest_idea_id = value["idea_id"]
+    if (
+        not isinstance(manifest_idea_id, str) or not manifest_idea_id.strip()
+        or len(manifest_idea_id) > 200 or manifest_idea_id != idea_id
+    ):
+        raise ResearchCampaignInputError("relation_candidate_manifest idea_id must match the saved Idea")
+    try:
+        encoded = json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        raise ResearchCampaignInputError("relation_candidate_manifest must contain JSON-compatible values") from None
+    if len(encoded) > MAX_MANIFEST_BYTES:
+        raise ResearchCampaignInputError("relation_candidate_manifest exceeds the 64 KiB limit")
+    candidates = value["candidates"]
+    if not isinstance(candidates, (tuple, list)) or len(candidates) > MAX_CANDIDATES:
+        raise ResearchCampaignInputError("relation_candidate_manifest candidates must be an array of at most 64 items")
+
+
 class McpResearchCampaignSurface:
     """Create pending campaigns and require an explicit, revision-bound approval."""
 
-    def __init__(self, writes: GraphWritePort, brief_store: Any | None = None) -> None:
+    def __init__(
+        self, writes: GraphWritePort, brief_store: Any | None = None,
+        candidate_processor: Any | None = None,
+    ) -> None:
         self.writes = writes
+        self.candidate_processor = candidate_processor
         if brief_store is None and all(callable(getattr(writes, name, None)) for name in (
             "save_idea_brief", "get_idea_brief", "get_latest_idea_brief",
         )):
             brief_store = _GraphWriteBriefStore(writes)
         self.brief_store = brief_store
+
+    def _candidate_processing_receipt(
+        self, receipt: WriteReceipt, args: Mapping[str, Any],
+    ) -> WriteReceipt:
+        manifest = args.get("relation_candidate_manifest")
+        job_id = FounderGraphJobStore.job_id_for(self.writes.owner_id, receipt.target_id)
+        if self.candidate_processor is None:
+            durable_enqueue = getattr(self.brief_store, "gateway", None) is not None
+            processing = {
+                "state": "pending" if durable_enqueue else "unavailable",
+                "error_code": "processor_unavailable" if durable_enqueue else "job_unavailable",
+            }
+        else:
+            try:
+                job = self.candidate_processor.process_specific(job_id, raw_manifest=manifest)
+            except CandidateManifestConflictError:
+                processing = {"state": "unavailable", "error_code": "candidate_manifest_conflict"}
+            except Exception as error:
+                processing = {"state": "unavailable", "error_code": "processing_unavailable"}
+            else:
+                state = getattr(getattr(job, "state", None), "value", getattr(job, "state", None))
+                allowed_states = {"pending", "leased", "succeeded", "failed", "superseded"}
+                if state not in allowed_states:
+                    processing = {"state": "unavailable", "error_code": "job_unavailable"}
+                else:
+                    error_code = getattr(job, "last_error_code", None)
+                    if state == "succeeded" or not isinstance(error_code, str) or not re.fullmatch(
+                        r"[a-z0-9][a-z0-9:_-]{0,63}", error_code,
+                    ):
+                        error_code = None
+                    processing = {"state": state, "error_code": error_code}
+        return ResearchWriteReceipt(
+            receipt.operation, receipt.target_id, receipt.target_type, receipt.revision,
+            receipt.idempotency_key, receipt.replayed, receipt.source_revision_id,
+            receipt.content_chunk_ids, getattr(receipt, "campaign_proposal", None), processing,
+        )
 
     def tool_definitions(self) -> tuple[Mapping[str, Any], ...]:
         text = {"type": "string", "minLength": 1}
@@ -244,9 +379,14 @@ class McpResearchCampaignSurface:
         )
         if self.brief_store is None:
             return definitions
+        candidate_note = (
+            "任意のrelation_candidate_manifestを同じ保存呼出しに含めると、本文保存後にDotsが候補を検証・処理します。"
+            "candidate_processing.stateとerror_codeで結果を確認してください。省略は未評価pending、candidates: []は候補なしを確認済みです。"
+            "処理状態は候補の反映件数を示しません。"
+        )
         regular_brief = {
             "name": "save_idea_brief",
-            "description": "既存のIdeaを8観点で育てます。旧版は残ります。未確認の内容を事実として記載せず、根拠IDがある場合だけ添えてください。未指定の観点は前版を維持します。初回はexpected_revision=0です。",
+            "description": "既存のIdeaを8観点で育てます。旧版は残ります。未確認の内容を事実として記載せず、根拠IDがある場合だけ添えてください。未指定の観点は前版を維持します。初回はexpected_revision=0です。" + candidate_note,
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -272,13 +412,15 @@ class McpResearchCampaignSurface:
                     "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "図表・公開画像・出典リンクを含むレポート全文。8観点と同じ版に保存します。省略時は前版の本文を維持し、文字列を指定すると全文を置き換えます。HTMLは画面で実行しません。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "origin": {"type": "string", "enum": ["prior_research_import"], "description": "既に実施済みの過去調査を示す場合だけ指定します。現在のCampaign/Runの許諾や実行履歴は作りません。"},
+                    "relation_candidate_manifest": _relation_candidate_manifest_schema(),
                     "idempotency_key": idempotency,
                 }, "additionalProperties": False,
             },
+            "outputSchema": _brief_receipt_schema(),
         }
         append_finding = {
             "name": "append_research_finding",
-            "description": "短い調査発見1件と公開出典URLをIdeaBriefのMarkdownへ追記します。8章、Campaign、Run、Claim、Evidenceは要求しません。再試行には同じidempotency_key、次の追記には返されたrevisionを使います。公開URLの保存は主張の検証を意味しません。",
+            "description": "短い調査発見1件と公開出典URLをIdeaBriefのMarkdownへ追記します。8章、Campaign、Run、Claim、Evidenceは要求しません。" + candidate_note + "再試行には同じidempotency_key、次の追記には返されたrevisionを使います。公開URLの保存は主張の検証を意味しません。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -291,15 +433,16 @@ class McpResearchCampaignSurface:
                     "finding": {**text, "minLength": 1, "maxLength": 4000, "description": "改行を含まない短い発見。未確認の主張を事実として書かないでください。"},
                     "source_url": {**text, "minLength": 1, "maxLength": 2048, "description": "認証情報を含まない公開HTTP(S)出典URL。本文取得は行いません。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value], "description": "初回は省略時local_only、既存Briefの追記では省略時に現行設定を維持します。ChatGPTへ読み戻すにはIdeaとBriefの両方がshareableである必要があります。"},
+                    "relation_candidate_manifest": _relation_candidate_manifest_schema(),
                     "idempotency_key": idempotency,
                 },
                 "additionalProperties": False,
             },
-            "outputSchema": _receipt_schema(),
+            "outputSchema": _brief_receipt_schema(),
         }
         return definitions + (regular_brief, append_finding, {
             "name": "save_researched_idea_brief",
-            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。本文の正本はMarkdownです。sectionsには各章のindexと必要なClaim/Evidence等の注釈だけを渡し、contentは省略できます（旧クライアント互換のcontentは受け付けますが保存しません）。完成稿には正規8見出しを順番どおり一度ずつ含め、各章に本文を含めてください。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。保存成功後にfetch_idea_briefで最新版を読み戻し、その内容と実在Evidenceを根拠にlink_entities・classify_entityで意味関係を登録してください。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
+            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。本文の正本はMarkdownです。sectionsには各章のindexと必要なClaim/Evidence等の注釈だけを渡し、contentは省略できます（旧クライアント互換のcontentは受け付けますが保存しません）。完成稿には正規8見出しを順番どおり一度ずつ含め、各章に本文を含めてください。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。" + candidate_note + "概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -325,10 +468,11 @@ class McpResearchCampaignSurface:
                     "change_reason": {"type": "string", "maxLength": 500},
                     "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成したMarkdown完成稿。正規8見出しを順番どおり一度ずつ含め、根拠を確認した出典URLを記します。必要に応じて表・公開画像・図を含めます。画像や数値を創作しません。8観点と出典IDの対応はsectionsにも保持します。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
+                    "relation_candidate_manifest": _relation_candidate_manifest_schema(),
                     "idempotency_key": idempotency,
                 }, "additionalProperties": False,
             },
-            "outputSchema": _receipt_schema(),
+            "outputSchema": _brief_receipt_schema(),
         },)
 
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> ResearchWriteReceipt:
@@ -359,9 +503,11 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("idea brief storage is unavailable on this connection")
         if _brief_store_owner(self.brief_store) != self.writes.owner_id:
             raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
-        _reject_unknown(args, {"idea_id", "idea_lineage_root_id", "expected_revision", "sections", "report_markdown", "change_reason", "egress_policy", "origin", "idempotency_key"})
+        _reject_unknown(args, {"idea_id", "idea_lineage_root_id", "expected_revision", "sections", "report_markdown", "change_reason", "egress_policy", "origin", "relation_candidate_manifest", "idempotency_key"})
         key = _text(args.get("idempotency_key"), "idempotency_key")
         idea_id = _text(args.get("idea_id"), "idea_id", maximum=200)
+        if "relation_candidate_manifest" in args:
+            _validate_relation_candidate_manifest_input(args["relation_candidate_manifest"], idea_id=idea_id)
         root_id = _text(args.get("idea_lineage_root_id", idea_id), "idea_lineage_root_id", maximum=200)
         expected = _revision(args.get("expected_revision"))
         raw_sections = args.get("sections")
@@ -417,7 +563,7 @@ class McpResearchCampaignSurface:
             ):
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
             receipt = prior_receipt or WriteReceipt("save_idea_brief", existing.id, "idea_brief_version", existing.revision, key)
-            return replace(receipt, replayed=True)
+            return self._candidate_processing_receipt(replace(receipt, replayed=True), args)
         if previous is None:
             if expected != 0:
                 raise RevisionConflictError("first brief expects revision 0")
@@ -453,9 +599,10 @@ class McpResearchCampaignSurface:
             ):
                 raise ResearchCampaignInputError("prior-research Briefs require current, shareable Evidence citations")
         try:
-            return self.brief_store.save(
+            receipt = self.brief_store.save(
                 brief, expected_latest_revision=expected_latest_revision, idempotency_key=key,
             )
+            return self._candidate_processing_receipt(receipt, args)
         except (RevisionConflictError, IdempotencyConflictError):
             raise
         except Exception as error:
@@ -468,10 +615,12 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
         _reject_unknown(args, {
             "idea_id", "idea_lineage_root_id", "expected_revision", "finding", "source_url",
-            "egress_policy", "idempotency_key",
+            "egress_policy", "relation_candidate_manifest", "idempotency_key",
         })
         key = _text(args.get("idempotency_key"), "idempotency_key")
         idea_id = _text(args.get("idea_id"), "idea_id", maximum=200)
+        if "relation_candidate_manifest" in args:
+            _validate_relation_candidate_manifest_input(args["relation_candidate_manifest"], idea_id=idea_id)
         root_id = _text(args.get("idea_lineage_root_id", idea_id), "idea_lineage_root_id", maximum=200)
         expected = _revision(args.get("expected_revision"))
         finding = _text(args.get("finding"), "finding", maximum=4000)
@@ -519,9 +668,9 @@ class McpResearchCampaignSurface:
             receipt = prior_receipt or WriteReceipt(
                 "save_idea_brief", existing.id, "idea_brief_version", existing.revision, write_key,
             )
-            return replace(
+            return self._candidate_processing_receipt(replace(
                 receipt, operation="append_research_finding", idempotency_key=key, replayed=True,
-            )
+            ), args)
 
         previous = _latest_brief(self.brief_store, root_id)
         if previous is None:
@@ -556,7 +705,9 @@ class McpResearchCampaignSurface:
             raise
         except Exception as error:
             raise ResearchCampaignUnavailableError("the research finding could not be safely saved") from error
-        return replace(receipt, operation="append_research_finding", idempotency_key=key)
+        return self._candidate_processing_receipt(
+            replace(receipt, operation="append_research_finding", idempotency_key=key), args,
+        )
 
     def _create(self, args: Mapping[str, Any]) -> ResearchWriteReceipt:
         allowed = {"purpose", "scope", "questions", "target_idea_id", "allowed_categories", "external_sources", "trial_budget", "expires_at", "idempotency_key", "expected_revision"}
@@ -725,11 +876,13 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
         allowed = {
             "idea_id", "idea_lineage_root_id", "expected_revision", "sections", "research_run_ids",
-            "change_reason", "egress_policy", "report_markdown", "idempotency_key",
+            "change_reason", "egress_policy", "report_markdown", "relation_candidate_manifest", "idempotency_key",
         }
         _reject_unknown(args, allowed)
         key = _text(args.get("idempotency_key"), "idempotency_key")
         idea_id = _text(args.get("idea_id"), "idea_id", maximum=200)
+        if "relation_candidate_manifest" in args:
+            _validate_relation_candidate_manifest_input(args["relation_candidate_manifest"], idea_id=idea_id)
         root_id = _text(args.get("idea_lineage_root_id", idea_id), "idea_lineage_root_id", maximum=200)
         expected = _revision(args.get("expected_revision"))
         run_ids = _strings(args.get("research_run_ids"), "research_run_ids", 20, 200)
@@ -776,7 +929,9 @@ class McpResearchCampaignSurface:
             ):
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
             receipt = prior_receipt or WriteReceipt("save_idea_brief", existing.id, "idea_brief_version", existing.revision, key)
-            return replace(receipt, operation="save_researched_idea_brief", replayed=True)
+            return self._candidate_processing_receipt(
+                replace(receipt, operation="save_researched_idea_brief", replayed=True), args,
+            )
         evidence_ids = researched_evidence_ids(sections)
         if not evidence_ids:
             raise ResearchCampaignInputError("researched IdeaBrief requires at least one current, shareable Evidence citation")
@@ -809,7 +964,9 @@ class McpResearchCampaignSurface:
             raise
         except Exception as error:
             raise ResearchCampaignUnavailableError("the researched idea brief could not be safely saved") from error
-        return replace(receipt, operation="save_researched_idea_brief")
+        return self._candidate_processing_receipt(
+            replace(receipt, operation="save_researched_idea_brief"), args,
+        )
 
     def _campaign(self, campaign_id: str) -> ResearchCampaign:
         node = self.writes.get_node(campaign_id)

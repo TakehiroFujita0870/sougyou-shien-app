@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from .founder_graph_mcp import McpReadError, McpReadSurface
 from .founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from .founder_graph_read import GraphReadPort, GraphReadService
-from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, resolve_graph_backend
+from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, create_relation_candidate_job_processor, resolve_graph_backend
 from .founder_graph_write import GraphWritePort, InMemoryGraphWriteService
 from .founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
 
@@ -20,6 +20,7 @@ def create_app(
     founder_graph_write_service: GraphWritePort | None = None,
     founder_graph_read_service: GraphReadPort | None = None,
     founder_graph_owner_id: str = "local-owner",
+    founder_graph_candidate_processor: Any | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Dots. API", version="0.1.0")
     graph_writes = founder_graph_write_service or InMemoryGraphWriteService(founder_graph_owner_id)
@@ -39,7 +40,10 @@ def create_app(
         raise ValueError("founder_graph_read_service owner must match founder_graph_owner_id")
     graph_read_mcp = McpReadSurface(graph_reads)
     brief_store = Neo4jIdeaBriefStore(graph_writes.gateway) if isinstance(graph_writes, Neo4jGraphWriteService) else None
-    graph_write_mcp = McpWriteSurface(graph_writes, brief_store=brief_store)
+    write_surface_options = {"brief_store": brief_store}
+    if founder_graph_candidate_processor is not None:
+        write_surface_options["candidate_processor"] = founder_graph_candidate_processor
+    graph_write_mcp = McpWriteSurface(graph_writes, **write_surface_options)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -104,6 +108,12 @@ def create_app(
                     "authorized", "status", "aggregate_revision",
                 }
                 response["campaign_proposal"] = {key: value for key, value in proposal.items() if key in proposal_fields}
+            candidate_processing = getattr(receipt, "candidate_processing", None)
+            if isinstance(candidate_processing, Mapping):
+                response["candidate_processing"] = {
+                    "state": candidate_processing.get("state"),
+                    "error_code": candidate_processing.get("error_code"),
+                }
             return response
         except McpWriteError as error:
             raise mcp_error(error) from error
@@ -111,7 +121,10 @@ def create_app(
     return app
 
 
-def create_neo4j_app(driver: Any, owner_id: str, *, database: str = "neo4j") -> FastAPI:
+def create_neo4j_app(
+    driver: Any, owner_id: str, *, database: str = "neo4j",
+    candidate_processor: Any | None = None,
+) -> FastAPI:
     """Build the API with one explicit, persistent Neo4j composition.
 
     Driver construction, authentication, migration, and lifecycle remain the
@@ -120,10 +133,15 @@ def create_neo4j_app(driver: Any, owner_id: str, *, database: str = "neo4j") -> 
     """
 
     composition = create_neo4j_graph_composition(driver, owner_id, database=database)
+    processor = (
+        candidate_processor if candidate_processor is not None
+        else create_relation_candidate_job_processor(composition)
+    )
     return create_app(
         founder_graph_write_service=composition.writes,
         founder_graph_read_service=composition.reads,
         founder_graph_owner_id=composition.gateway.owner_id,
+        founder_graph_candidate_processor=processor,
     )
 
 
