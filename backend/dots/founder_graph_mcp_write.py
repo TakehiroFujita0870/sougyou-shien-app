@@ -160,7 +160,7 @@ class McpWriteSurface:
             },
             "capture_asset": {
                 "type": "object",
-                "description": "資産の名称・種別・短い概要だけを保存します。本文、連絡先、個人メモ、出典本文、場所情報、来歴は受け付けません。",
+                "description": "強み・経験、または弱み・迷いの名称・種別・短い概要だけを保存します。弱み・迷いはkind=barrierです。本文、連絡先、個人メモ、出典本文、場所情報、来歴は受け付けません。",
                 "required": ["name", "kind", "idempotency_key"],
                 "properties": {
                     "name": {**text, "minLength": 1, "maxLength": 500},

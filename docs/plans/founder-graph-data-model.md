@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | OwnerProfile | 本人一人 | `owner_<uuid>` | owner_id |
 | Idea | 一つの事業着想または派生案 | `idea_<uuid>` | owner_id, status, current_revision_id |
-| Asset | 再利用可能な知識、経験、成果物、データ、設備、チャネル、能力 | `asset_<uuid>` | owner_id, asset_kind, status |
+| Asset | 本人の知識・経験等、または創業をためらわせる弱み・迷い一件 | `asset_<uuid>` | owner_id, asset_kind, status |
 | Person | 同一人物候補の確認後に確定した一人 | `person_<uuid>` | owner_id, status, dedupe fingerprint |
 | Organization | 一つの法人、団体、個人事業、非公式チーム | `org_<uuid>` | owner_id, status, normalized_name_hash |
 | Source | 一つの原本系列 | `source_<uuid>` | owner_id, source_kind, locator_hash, status |
@@ -38,6 +38,8 @@
 | Facet | 再利用する分類語彙 | `facet_<uuid>` | owner_id, namespace, normalized_value |
 
 `Capability`は初期schemaで独立Labelにしない。`Asset.asset_kind=capability`として保存し、Person、OwnerProfile、IdeaからRelationAssertionで参照する。MarketとProductも初期schemaではClaimまたはFacetとして保存し、独立ライフサイクルが必要になった時点でmigration ADRを作る。
+
+弱み・迷いは`Asset.asset_kind=barrier`で保存する。既存Assetのkindは強み・経験として扱い、過去データの一括変更はしない。barrierを再利用可能な強みとして`REUSES`関係へ結び付けない。ChatGPTへ返すのは明示的に共有可能とした短い記述だけで、機微な詳細の既定値は非共有とする。
 
 ### 不変ノード
 

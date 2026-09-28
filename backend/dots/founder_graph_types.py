@@ -45,6 +45,7 @@ class AssetKind(StrEnum):
     EQUIPMENT = "equipment"
     CHANNEL = "channel"
     ORGANIZATION = "organization"
+    BARRIER = "barrier"
 
 
 class MaterialKind(StrEnum):

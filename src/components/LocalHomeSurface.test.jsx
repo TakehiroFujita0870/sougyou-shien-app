@@ -55,6 +55,27 @@ it('shows ideas, eight named viewpoints, common asset cards, and a people placeh
   expect(container.textContent).not.toContain('名刺一覧');
 });
 
+it('separates strengths and barriers into editable columns', async () => {
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [], assets: [
+    { id: 'strength', name: '製造現場の経験', kind: 'experience', description: '改善経験', revision: 1 },
+    { id: 'barrier', name: '販売への迷い', kind: 'barrier', description: '顧客開拓が不安', revision: 1 },
+  ], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'あなたのアセット').click());
+  const columns = container.querySelectorAll('.local-home__asset-list');
+  expect(columns).toHaveLength(2);
+  expect(columns[0].querySelector('h2').textContent).toContain('強み・経験');
+  expect(columns[0].textContent).toContain('製造現場の経験');
+  expect(columns[0].textContent).not.toContain('販売への迷い');
+  expect(columns[1].querySelector('h2').textContent).toContain('弱み・迷い');
+  expect(columns[1].textContent).toContain('販売への迷い');
+  expect(columns[1].querySelectorAll('button[aria-label^="編集"], button[aria-label^="削除"]')).toHaveLength(2);
+});
+
 it('shows a saved latest idea brief in its matching viewpoint', async () => {
   const sections = Array(8).fill('');
   sections[0] = '改訂済みの概要';
@@ -492,6 +513,7 @@ it('edits title and content through the same form for any asset and supports can
   const assets = [
     { id: 'asset-1', name: '経験', kind: 'experience', description: '内容1', revision: 1 },
     { id: 'asset-2', name: '資料', kind: 'document', description: '内容2', revision: 1 },
+    { id: 'asset-3', name: '営業への迷い', kind: 'barrier', description: '最初の顧客への声かけが不安', revision: 1 },
   ];
   const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [], assets, profile: null })) };
   const container = document.createElement('div');
@@ -508,7 +530,7 @@ it('edits title and content through the same form for any asset and supports can
     expect(container.textContent).not.toContain(asset.kind);
     await act(async () => [...container.querySelectorAll('button')].find((node) => node.textContent === 'キャンセル').click());
   }
-  expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(2);
+  expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(3);
 });
 
 it('saves a changed asset title and content then refreshes to the successor record', async () => {
