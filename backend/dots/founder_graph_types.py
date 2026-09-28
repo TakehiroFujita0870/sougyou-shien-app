@@ -37,6 +37,7 @@ ClaimStatus = Status
 
 
 class AssetKind(StrEnum):
+    STRENGTH = "strength"
     KNOWLEDGE = "knowledge"
     PERSON = "person"
     EXPERIENCE = "experience"

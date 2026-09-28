@@ -78,6 +78,15 @@ it('updates one asset with CSRF, expected revision and stable idempotency key, r
   for (const request of requests) expect(JSON.parse(request.body)).not.toHaveProperty('egress_policy');
 });
 
+it('sends a classification only for a requested asset move', async () => {
+  const fetchImpl = vi.fn().mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-next', revision: 2 }));
+  const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => 'move-key' });
+  await client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, kind: 'barrier' });
+  expect(JSON.parse(fetchImpl.mock.calls[1][1].body).kind).toBe('barrier');
+  await expect(client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, kind: 'person' })).rejects.toBeInstanceOf(LocalDashboardClientError);
+});
+
 it('edits an idea through the local guarded endpoint with a stable retry key', async () => {
   let generated = 0;
   const fetchImpl = vi.fn()

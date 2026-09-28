@@ -19,6 +19,8 @@ from urllib.parse import urlsplit
 from .founder_graph import (
     CampaignAuthorizationRegistry,
     Asset,
+    AssetKind,
+    asset_revision_classification_valid,
     Claim,
     ContentChunk,
     EgressPolicy,
@@ -106,6 +108,7 @@ class GraphWritePort(Protocol):
         description: str,
         expected_revision: int,
         idempotency_key: str,
+        kind: AssetKind | None = None,
         actor: str = "local-owner",
     ) -> "WriteReceipt":
         """Append one immutable revision to the current Asset family tip."""
@@ -575,6 +578,7 @@ class InMemoryGraphWriteService:
         description: str,
         expected_revision: int,
         idempotency_key: str,
+        kind: AssetKind | None = None,
         actor: str = "local-owner",
     ) -> WriteReceipt:
         operation = self._validate_command("revise_asset", actor, idempotency_key)
@@ -586,8 +590,11 @@ class InMemoryGraphWriteService:
         if type(expected_revision) is not int or expected_revision < 1:
             raise GraphWriteError("expected asset revision must be positive")
         name = name.strip()
+        if kind is not None and kind not in (AssetKind.BARRIER, AssetKind.STRENGTH):
+            raise GraphWriteError("asset classification is invalid")
         fingerprint = payload_fingerprint(
             operation, asset_id, name, description, expected_revision, self.owner_id,
+            *([kind] if kind is not None else []),
         )
         successor_id = f"asset_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
         with self._lock:
@@ -602,11 +609,14 @@ class InMemoryGraphWriteService:
                 raise RevisionConflictError("asset changed; reload its current revision")
             if current.status is not Status.ACTIVE:
                 raise GraphWriteNotFoundError("asset does not exist for the local owner")
+            if kind is not None and isinstance(current, PersonAsset):
+                raise GraphWriteError("person assets cannot be reclassified")
             if successor_id in self._nodes or successor_id in self._idea_briefs:
                 raise NodeAlreadyExistsError("asset revision id is already registered")
             successor = current.revise(
                 name=name,
                 description=description,
+                kind=kind,
                 id=successor_id,
                 revision=current.revision + 1,
                 provenance=Provenance(
@@ -643,10 +653,10 @@ class InMemoryGraphWriteService:
             seen.add(root.id)
             parent = self._nodes.get(root.supersedes_id)
             if (
-                not isinstance(parent, Asset) or type(parent) is not type(root)
+                not isinstance(parent, Asset)
                 or parent.owner_id != self.owner_id
                 or root.revision != parent.revision + 1
-                or root.kind is not parent.kind
+                or not asset_revision_classification_valid(parent, root)
                 or root.egress_policy is not parent.egress_policy
                 or root.details != parent.details
             ):
@@ -672,8 +682,8 @@ class InMemoryGraphWriteService:
                 return current
             child = children[0]
             if (
-                type(child) is not type(current) or child.revision != current.revision + 1
-                or child.id in seen or child.kind is not current.kind
+                not asset_revision_classification_valid(current, child) or child.revision != current.revision + 1
+                or child.id in seen
                 or child.egress_policy is not current.egress_policy
                 or child.details != current.details
             ):

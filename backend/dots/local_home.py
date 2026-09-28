@@ -11,6 +11,7 @@ from .founder_graph_neo4j_read import Neo4jGraphReadService
 from .founder_graph_neo4j_idea import decode_persisted_idea
 from .founder_graph_lifecycle_resolver import resolve_restored_idea_reference
 from .founder_graph_write import GraphWritePort, WriteReceipt
+from .founder_graph import AssetKind
 
 
 _KINDS = ("idea", "asset", "owner_profile")
@@ -74,14 +75,18 @@ class LocalAssetWriter:
         description: str,
         expected_revision: int,
         idempotency_key: str,
+        kind: AssetKind | None = None,
     ) -> WriteReceipt:
-        return self._writes.revise_asset(
+        arguments = dict(
             asset_id=asset_id,
             name=name,
             description=description,
             expected_revision=expected_revision,
             idempotency_key=idempotency_key,
         )
+        if kind is not None:
+            arguments["kind"] = kind
+        return self._writes.revise_asset(**arguments)
 
 
 class LocalIdeaWriter:

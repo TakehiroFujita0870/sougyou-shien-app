@@ -76,6 +76,79 @@ it('separates strengths and barriers into editable columns', async () => {
   expect(columns[1].querySelectorAll('button[aria-label^="編集"], button[aria-label^="削除"]')).toHaveLength(2);
 });
 
+it('navigates cards by keyboard and persists cross-column moves', async () => {
+  const first = { id: 'first', name: '経験A', kind: 'asset', description: '内容A', revision: 1 };
+  const second = { id: 'second', name: '経験B', kind: 'asset', description: '内容B', revision: 1 };
+  const moved = { ...second, id: 'moved', kind: 'barrier', revision: 2 };
+  const client = {
+    getHome: vi.fn().mockResolvedValueOnce({ status: 'ready', ideas: [], assets: [first, second], profile: null })
+      .mockResolvedValueOnce({ status: 'ready', ideas: [], assets: [first, moved], profile: null }),
+    saveAsset: vi.fn().mockResolvedValue({ id: moved.id, revision: moved.revision }),
+  };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'あなたのアセット').click());
+  const card = container.querySelector('[data-asset-id="first"]');
+  card.focus();
+  await act(async () => card.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+  expect(document.activeElement.dataset.assetId).toBe('second');
+  await act(async () => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true })));
+  expect(client.saveAsset).toHaveBeenCalledWith('second', { name: '経験B', description: '内容B', expectedRevision: 1, kind: 'barrier' });
+  expect(container.querySelector('[data-asset-column="barrier"] [data-asset-id="moved"]')).not.toBeNull();
+  expect(document.activeElement.dataset.assetId).toBe('moved');
+});
+
+it('accepts a card drop into the other column and keeps the original on save failure', async () => {
+  const asset = { id: 'first', name: '現場経験', kind: 'asset', description: '改善', revision: 1 };
+  const client = { getHome: vi.fn().mockResolvedValue({ status: 'ready', ideas: [], assets: [asset], profile: null }),
+    saveAsset: vi.fn().mockRejectedValue({ kind: 'unavailable' }) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'あなたのアセット').click());
+  const transfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+  const drag = (node, type) => { const event = new Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(event, 'dataTransfer', { value: transfer }); node.dispatchEvent(event); };
+  await act(async () => drag(container.querySelector('[data-asset-id="first"]'), 'dragstart'));
+  const target = container.querySelector('[data-asset-column="barrier"]');
+  await act(async () => drag(target, 'dragover'));
+  expect(target.dataset.dropActive).toBe('true');
+  await act(async () => drag(target, 'drop'));
+  expect(client.saveAsset).toHaveBeenCalledWith('first', { name: '現場経験', description: '改善', expectedRevision: 1, kind: 'barrier' });
+  expect(container.querySelector('[data-asset-column="strength"] [data-asset-id="first"]')).not.toBeNull();
+  expect(container.textContent).toContain('元の欄に残しています');
+});
+
+it('keeps card shortcuts out of text input and offers editing and delete confirmation', async () => {
+  const asset = { id: 'one', name: '試験用の強み', kind: 'asset', description: '入力内容', revision: 1 };
+  const client = { getHome: vi.fn().mockResolvedValue({ status: 'ready', ideas: [], assets: [asset], profile: null }), saveAsset: vi.fn() };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  await act(async () => [...container.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === 'あなたのアセット').click());
+  const card = container.querySelector('[data-asset-id="one"]');
+  card.focus();
+  await act(async () => card.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })));
+  expect(container.textContent).toContain('Alt＋→');
+  await act(async () => card.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true })));
+  const field = container.querySelector('textarea[name="title"]');
+  expect(document.activeElement).toBe(field);
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })));
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(container.querySelector('textarea[name="title"]')).toBeNull();
+  expect(document.activeElement).toBe(card);
+  await act(async () => card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })));
+  expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(client.saveAsset).not.toHaveBeenCalled();
+});
+
 it('shows a saved latest idea brief in its matching viewpoint', async () => {
   const sections = Array(8).fill('');
   sections[0] = '改訂済みの概要';

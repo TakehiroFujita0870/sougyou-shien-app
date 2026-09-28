@@ -43,6 +43,11 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const [assetDraft, setAssetDraft] = useState(null);
   const [assetSaving, setAssetSaving] = useState(false);
   const [assetNotice, setAssetNotice] = useState('');
+  const [assetMoving, setAssetMoving] = useState(false);
+  const [dragAssetId, setDragAssetId] = useState(null);
+  const [dropColumn, setDropColumn] = useState(null);
+  const [showAssetShortcuts, setShowAssetShortcuts] = useState(false);
+  const [focusAssetId, setFocusAssetId] = useState(null);
   const [ideaDraft, setIdeaDraft] = useState(null);
   const [ideaSaving, setIdeaSaving] = useState(false);
   const [ideaNotice, setIdeaNotice] = useState('');
@@ -137,6 +142,66 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   function editAsset(asset) {
     setAssetDraft({ id: asset.id, name: asset.name, description: asset.description, revision: asset.revision });
     setAssetNotice('');
+  }
+  useEffect(() => {
+    if (!focusAssetId) return;
+    const card = [...document.querySelectorAll('.local-home__asset-card')].find((node) => node.dataset.assetId === focusAssetId);
+    card?.focus();
+    setFocusAssetId(null);
+  }, [focusAssetId, home]);
+  useEffect(() => {
+    if (!assetDraft) return;
+    document.getElementById(`asset-title-${assetDraft.id}`)?.focus();
+  }, [assetDraft?.id]);
+  async function moveAsset(asset, targetColumn) {
+    if (assetMoving || assetSaving || assetDraft || deleteConfirmation || !canArchiveRecord('asset', asset.revision)) return;
+    if ((asset.kind === 'barrier' ? 'barrier' : 'strength') === targetColumn) return;
+    setAssetMoving(true);
+    setAssetNotice('');
+    let saved = null;
+    try {
+      saved = await client.saveAsset(asset.id, {
+        name: asset.name, description: asset.description, expectedRevision: asset.revision,
+        kind: targetColumn,
+      });
+      const refreshed = await client.getHome();
+      setHome(refreshed);
+      setFocusAssetId(saved.id);
+      setAssetNotice(`「${asset.name}」を${targetColumn === 'barrier' ? '弱み・迷い' : '強み・経験'}へ移動しました。`);
+    } catch (error) {
+      setAssetNotice(saved ? '移動は保存されましたが、一覧を更新できませんでした。ページを再読み込みしてください。' : error?.kind === 'conflict' ? '別の更新がありました。最新の一覧を読み直してから移動してください。' : '移動を保存できませんでした。元の欄に残しています。');
+    } finally {
+      setAssetMoving(false);
+      setDragAssetId(null);
+      setDropColumn(null);
+    }
+  }
+  function assetKeyDown(event, asset, items) {
+    if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || assetMoving || deleteConfirmation) return;
+    const index = items.findIndex((item) => item.id === asset.id);
+    const focusAt = (next) => {
+      event.preventDefault();
+      const cards = [...event.currentTarget.parentElement.querySelectorAll('.local-home__asset-card')];
+      cards[Math.max(0, Math.min(next, cards.length - 1))]?.focus();
+    };
+    if (!event.altKey && event.key === 'ArrowDown') focusAt(index + 1);
+    else if (!event.altKey && event.key === 'ArrowUp') focusAt(index - 1);
+    else if (!event.altKey && event.key === 'Home') focusAt(0);
+    else if (!event.altKey && event.key === 'End') focusAt(items.length - 1);
+    else if (event.altKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault();
+      void moveAsset(asset, event.key === 'ArrowLeft' ? 'strength' : 'barrier');
+    } else if (!event.altKey && canArchiveRecord('asset', asset.revision) && ['Enter', 'e', 'E'].includes(event.key)) {
+      event.preventDefault();
+      editAsset(asset);
+    } else if (!event.altKey && canArchiveRecord('asset', asset.revision) && event.key === 'Delete') {
+      event.preventDefault();
+      deleteTriggerRef.current = event.currentTarget;
+      setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision });
+    } else if (!event.altKey && event.key === '?') {
+      event.preventDefault();
+      setShowAssetShortcuts((value) => !value);
+    }
   }
   async function saveAsset(event) {
     event.preventDefault();
@@ -274,10 +339,18 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">
-      {[{ id: 'strength', label: '強み・経験', items: home.assets.filter((asset) => asset.kind !== 'barrier') }, { id: 'barrier', label: '弱み・迷い', items: home.assets.filter((asset) => asset.kind === 'barrier') }].map((column) => <div key={column.id} className="local-home__asset-list" data-asset-column={column.id}>
+      <div className="local-home__asset-help"><button type="button" aria-expanded={showAssetShortcuts} onClick={() => setShowAssetShortcuts((value) => !value)}>キーボード操作 {showAssetShortcuts ? '−' : '＋'}</button>{showAssetShortcuts && <p>カードを選択して ↑↓・Home・End：選択移動 ／ Alt＋←：強み・経験へ ／ Alt＋→：弱み・迷いへ ／ Enter・E：編集 ／ Delete：削除確認 ／ 編集中のEsc：キャンセル ／ ?：この案内</p>}</div>
+      {[{ id: 'strength', label: '強み・経験', items: home.assets.filter((asset) => asset.kind !== 'barrier') }, { id: 'barrier', label: '弱み・迷い', items: home.assets.filter((asset) => asset.kind === 'barrier') }].map((column) => <div key={column.id} className="local-home__asset-list" data-asset-column={column.id}
+        data-drop-active={dropColumn === column.id}
+        onDragOver={(event) => { if (dragAssetId && home.assets.some((asset) => asset.id === dragAssetId && (asset.kind === 'barrier' ? 'barrier' : 'strength') !== column.id)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropColumn(column.id); } }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropColumn(null); }}
+        onDrop={(event) => { event.preventDefault(); const asset = home.assets.find((item) => item.id === dragAssetId); if (asset) void moveAsset(asset, column.id); setDropColumn(null); }}>
         <h2>{column.label} <span>{column.items.length}件</span></h2>
-        {column.items.length ? <div className="local-home__cards">{column.items.map((asset) => <article key={asset.id} className="local-home__asset-card">
-          {assetDraft?.id === asset.id ? <form onSubmit={saveAsset} className="local-home__edit-form">
+        {column.items.length ? <div className="local-home__cards">{column.items.map((asset) => <article key={asset.id} className="local-home__asset-card" data-asset-id={asset.id} tabIndex={assetDraft?.id === asset.id ? -1 : 0} draggable={!assetDraft && !assetMoving && !deleteConfirmation}
+          onDragStart={(event) => { setDragAssetId(asset.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', 'Dots.'); }}
+          onDragEnd={() => { setDragAssetId(null); setDropColumn(null); }}
+          onKeyDown={(event) => assetKeyDown(event, asset, column.items)}>
+          {assetDraft?.id === asset.id ? <form onSubmit={saveAsset} className="local-home__edit-form" onKeyDown={(event) => { if (event.key === 'Escape' && !assetSaving) { event.stopPropagation(); setAssetDraft(null); setAssetNotice(''); setFocusAssetId(asset.id); } }}>
             <label htmlFor={`asset-title-${asset.id}`}>題名</label>
             <textarea id={`asset-title-${asset.id}`} name="title" rows={1} maxLength={200} required value={assetDraft.name} onChange={(event) => setAssetDraft((current) => ({ ...current, name: event.target.value }))} />
             <label htmlFor={`asset-content-${asset.id}`}>内容</label>
@@ -288,8 +361,8 @@ export function LocalHomeSurface({ client, onOpenServices }) {
             <h3>{asset.name}</h3>
             {asset.description ? <p>{asset.description}</p> : <p className="local-home__unwritten">内容はありません</p>}
             <div className="local-home__card-actions">
-              <button type="button" className="local-home__icon-button" aria-label={`編集: ${asset.name}`} disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1} onClick={() => editAsset(asset)}><EditIcon /></button>
-              <button type="button" className="local-home__icon-button" aria-label={`削除: ${asset.name}`} title={canArchiveRecord('asset', asset.revision) ? `「${asset.name}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('asset', asset.revision) || deletePending} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision }); }}><TrashIcon /></button>
+              <button type="button" className="local-home__icon-button" aria-label={`編集: ${asset.name}`} disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1 || assetMoving} onClick={() => editAsset(asset)}><EditIcon /></button>
+              <button type="button" className="local-home__icon-button" aria-label={`削除: ${asset.name}`} title={canArchiveRecord('asset', asset.revision) ? `「${asset.name}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('asset', asset.revision) || deletePending || assetMoving} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision }); }}><TrashIcon /></button>
             </div>
           </>}
         </article>)}</div> : <p className="local-home__notice">記録はまだありません。</p>}

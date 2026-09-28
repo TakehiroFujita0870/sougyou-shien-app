@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.founder_graph import Asset, EgressPolicy
+from dots.founder_graph import Asset, AssetKind, EgressPolicy
 from dots.founder_graph_write import InMemoryGraphWriteService
 from dots.local_control import LocalControl, create_local_control_app
 from dots.local_home import LocalAssetWriter
@@ -47,3 +47,11 @@ def test_asset_edit_requires_local_csrf_and_forbids_sharing_changes(asset_client
     assert client.put(url, json={**payload, "egress_policy": "local_only"}, headers=headers).status_code == 422
     assert client.put(url, json={**payload, "expected_revision": True}, headers=headers).status_code == 422
     assert len(writes.nodes()) == 1
+
+
+def test_asset_edit_accepts_only_two_display_classifications(asset_client):
+    client, headers, payload, writes, original = asset_client
+    assert client.put(f"/api/assets/{original.id}", json={**payload, "kind": "person"}, headers=headers).status_code == 422
+    saved = client.put(f"/api/assets/{original.id}", json={**payload, "kind": "barrier"}, headers=headers)
+    assert saved.status_code == 200
+    assert writes.get_node(saved.json()["id"]).kind is AssetKind.BARRIER

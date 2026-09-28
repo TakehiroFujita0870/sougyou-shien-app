@@ -14,6 +14,7 @@ import json
 from typing import Any, Mapping
 
 from .founder_graph import (
+    AssetKind,
     Claim,
     EgressPolicy,
     EvidencePolarity,
@@ -159,10 +160,11 @@ class Neo4jGraphWriteService(GraphWritePort):
 
     def revise_asset(self, *, asset_id: str, name: str, description: str,
                      expected_revision: int, idempotency_key: str,
+                     kind: AssetKind | None = None,
                      actor: str = "local-owner") -> WriteReceipt:
         return self.gateway.revise_asset(
             asset_id=asset_id, name=name, description=description,
-            expected_revision=expected_revision, idempotency_key=idempotency_key, actor=actor,
+            expected_revision=expected_revision, idempotency_key=idempotency_key, kind=kind, actor=actor,
         )
 
     def archive_idea(self, idea_id: str, *, expected_revision: int, idempotency_key: str,
