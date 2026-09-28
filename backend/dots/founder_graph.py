@@ -567,13 +567,14 @@ class Asset:
         *,
         name: str | None = None,
         description: str | None = None,
+        kind: AssetKind | None = None,
         id: str | None = None,
         revision: int | None = None,
         provenance: Provenance | None = None,
     ) -> "Asset":
         """Return an immutable successor while retaining owner and sharing metadata."""
         new_id_value = _identifier(id, "id") if id is not None else new_id("asset")
-        return replace(
+        successor = replace(
             self,
             id=new_id_value,
             name=self.name if name is None else name,
@@ -588,6 +589,10 @@ class Asset:
                 provenance=provenance,
             ),
         )
+        if kind is not None and kind is not self.kind:
+            values = {field.name: getattr(successor, field.name) for field in fields(Asset) if field.init}
+            return Asset(**{**values, "kind": kind})
+        return successor
 
     @property
     def node_type(self) -> NodeType:
@@ -641,6 +646,20 @@ class PersonAsset(Asset):
 
 Knowledge = KnowledgeAsset
 Person = PersonAsset
+
+
+def asset_revision_classification_valid(previous: Asset, current: Asset) -> bool:
+    """Permit only local-owner revisions to change a non-person Asset's display class."""
+    if type(previous) is type(current) and previous.kind is current.kind:
+        return True
+    return (
+        not isinstance(previous, PersonAsset)
+        and type(current) is Asset
+        and current.kind in (AssetKind.BARRIER, AssetKind.STRENGTH)
+        and current.provenance.operation == "revise_asset"
+        and current.provenance.source_id == previous.id
+        and current.provenance.target_id == current.id
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -19,6 +19,7 @@ from uuid import uuid4
 from .founder_graph import (
     Asset,
     AssetKind,
+    asset_revision_classification_valid,
     CampaignAuthorizationRegistry,
     ContentChunk,
     DomainValidationError,
@@ -980,6 +981,7 @@ class Neo4jGraphGateway:
         description: str,
         expected_revision: int,
         idempotency_key: str,
+        kind: AssetKind | None = None,
         actor: str = "local-owner",
     ) -> WriteReceipt:
         """Append an owner-scoped immutable Asset revision with CAS and replay."""
@@ -995,14 +997,17 @@ class Neo4jGraphGateway:
             raise GraphWriteError("idempotency_key must be a non-empty string")
         if not isinstance(actor, str) or not actor.strip():
             raise GraphWriteError("actor must be a non-empty string")
+        if kind is not None and kind not in (AssetKind.BARRIER, AssetKind.STRENGTH):
+            raise GraphWriteError("asset classification is invalid")
         asset_id, name, idempotency_key, actor = asset_id.strip(), name.strip(), idempotency_key.strip(), actor.strip()
         fingerprint = payload_fingerprint(
             "revise_asset", asset_id, name, description, expected_revision, self.owner_id,
+            *([kind] if kind is not None else []),
         )
         successor_id = f"asset_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
         with self._session() as session:
             return self._execute_write(session, lambda tx: self._revise_asset_tx(
-                tx, asset_id, name, description, expected_revision, idempotency_key, actor,
+                tx, asset_id, name, description, expected_revision, idempotency_key, actor, kind,
                 fingerprint, successor_id,
             ))
 
@@ -1167,7 +1172,7 @@ class Neo4jGraphGateway:
 
     def _revise_asset_tx(
         self, tx: Any, asset_id: str, name: str, description: str, expected_revision: int,
-        key: str, actor: str, fingerprint: str, successor_id: str,
+        key: str, actor: str, kind: AssetKind | None, fingerprint: str, successor_id: str,
     ) -> WriteReceipt:
         replay = self._put_node_replay_tx(
             tx, operation="revise_asset", idempotency_key=key, fingerprint=fingerprint,
@@ -1206,8 +1211,10 @@ class Neo4jGraphGateway:
             raise GraphWriteNotFoundError("asset does not exist for the local owner")
         if current.revision != expected_revision:
             raise RevisionConflictError("asset changed; reload its current revision")
+        if kind is not None and isinstance(current, PersonAsset):
+            raise GraphWriteError("person assets cannot be reclassified")
         successor = current.revise(
-            name=name, description=description, id=successor_id, revision=current.revision + 1,
+            name=name, description=description, kind=kind, id=successor_id, revision=current.revision + 1,
             provenance=Provenance(
                 actor=actor, operation="revise_asset", target_id=successor_id, source_id=current.id,
                 idempotency_key=key,
@@ -1305,9 +1312,8 @@ class Neo4jGraphGateway:
                 raise GraphWriteError("Asset lineage contains a cycle")
             parent = self._decode_asset_record(self._asset_record_tx(tx, parent_id), expected_id=parent_id)
             if (
-                type(current) is not type(parent)
+                not asset_revision_classification_valid(parent, current)
                 or current.revision != parent.revision + 1
-                or current.kind is not parent.kind
                 or current.egress_policy is not parent.egress_policy
                 or current.details != parent.details
             ):
@@ -1329,9 +1335,8 @@ class Neo4jGraphGateway:
             child = children[0]
             parent = chain[-1]
             if (
-                child.id in seen or type(child) is not type(parent)
+                child.id in seen or not asset_revision_classification_valid(parent, child)
                 or child.revision != parent.revision + 1
-                or child.kind is not parent.kind
                 or child.egress_policy is not parent.egress_policy
                 or child.details != parent.details
             ):

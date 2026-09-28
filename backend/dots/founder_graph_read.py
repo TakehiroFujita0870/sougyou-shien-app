@@ -16,6 +16,7 @@ from .founder_graph import (
     EgressPolicy,
     Evidence,
     Asset,
+    asset_revision_classification_valid,
     Idea,
     NodeType,
     Source,
@@ -829,7 +830,7 @@ class GraphReadService:
         seen = {asset.id}
         while chain[-1].supersedes_id is not None:
             parent = node_by_id.get(chain[-1].supersedes_id)
-            if type(parent) is not type(asset) or parent.id in seen:
+            if not isinstance(parent, Asset) or not asset_revision_classification_valid(parent, chain[-1]) or parent.id in seen:
                 return ()
             chain.append(parent)
             seen.add(parent.id)
@@ -838,7 +839,7 @@ class GraphReadService:
         while True:
             children = [
                 candidate for candidate in node_by_id.values()
-                if type(candidate) is type(asset) and candidate.owner_id == asset.owner_id
+                if isinstance(candidate, Asset) and candidate.owner_id == asset.owner_id
                 and candidate.supersedes_id == current.id
             ]
             if len(children) > 1:
@@ -846,7 +847,7 @@ class GraphReadService:
             if not children:
                 break
             child = children[0]
-            if child.id in seen or child.revision != current.revision + 1:
+            if child.id in seen or child.revision != current.revision + 1 or not asset_revision_classification_valid(current, child):
                 return ()
             chain.append(child)
             seen.add(child.id)

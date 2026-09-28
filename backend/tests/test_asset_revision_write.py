@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from hashlib import sha256
 
-from dots.founder_graph import Asset, EgressPolicy, KnowledgeAsset
+from dots.founder_graph import Asset, AssetKind, EgressPolicy, KnowledgeAsset
 from dots.founder_graph_write import (
     GraphWriteNotFoundError,
     GraphWriteError,
@@ -13,6 +13,7 @@ from dots.founder_graph_write import (
     RevisionConflictError,
 )
 from dots.founder_graph_read import GraphReadNotFoundError, GraphReadService
+from dots.founder_graph_lifecycle_resolver import resolve_restored_asset_reference
 
 
 def test_revise_asset_appends_owner_scoped_shareable_revision_and_replays() -> None:
@@ -45,6 +46,31 @@ def test_revise_asset_appends_owner_scoped_shareable_revision_and_replays() -> N
     assert writes.get_node(original.id) == original
     assert replay.replayed and replay.target_id == successor.id
     assert len([node for node in writes.nodes() if isinstance(node, Asset) and node.supersedes_id == original.id]) == 1
+
+
+def test_reclassifying_asset_preserves_content_sharing_and_revision_history() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    original = KnowledgeAsset(owner_id="owner-1", id="strength-root", name="現場経験",
+                              description="改善の経験", egress_policy=EgressPolicy.SHAREABLE)
+    writes.put_node(original, idempotency_key="classification-create")
+    first = writes.revise_asset(asset_id=original.id, name=original.name,
+                                description=original.description, expected_revision=1,
+                                idempotency_key="move-to-barrier", kind=AssetKind.BARRIER)
+    barrier = writes.get_node(first.target_id)
+    assert barrier.kind is AssetKind.BARRIER
+    assert barrier.egress_policy is original.egress_policy
+    assert barrier.description == original.description
+    second = writes.revise_asset(asset_id=barrier.id, name=barrier.name,
+                                 description=barrier.description, expected_revision=2,
+                                 idempotency_key="move-to-strength", kind=AssetKind.STRENGTH)
+    assert writes.get_node(second.target_id).kind is AssetKind.STRENGTH
+    assert writes.get_node(original.id).kind is AssetKind.KNOWLEDGE
+    assert resolve_restored_asset_reference(second.target_id, (original, barrier, writes.get_node(second.target_id))) == writes.get_node(second.target_id)
+    assert resolve_restored_asset_reference(original.id, (original, barrier, writes.get_node(second.target_id))) is None
+    with pytest.raises(IdempotencyConflictError):
+        writes.revise_asset(asset_id=original.id, name=original.name,
+                            description=original.description, expected_revision=1,
+                            idempotency_key="move-to-barrier", kind=AssetKind.STRENGTH)
 
 
 def test_revise_asset_rejects_stale_or_noncurrent_assets_and_key_reuse() -> None:

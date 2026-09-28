@@ -6,7 +6,7 @@ from datetime import datetime
 from dataclasses import fields
 from typing import Any, Iterable, Mapping, Sequence
 
-from .founder_graph import Asset, AssetKind, EgressPolicy, Idea, PersonAsset, Provenance, ProvenanceOrigin, Status
+from .founder_graph import Asset, AssetKind, EgressPolicy, Idea, PersonAsset, Provenance, ProvenanceOrigin, Status, asset_revision_classification_valid
 
 
 _NON_CURRENT_IDEA_STATUSES = frozenset({
@@ -249,9 +249,8 @@ def resolve_restored_asset_reference(reference_id: str, chain: Sequence[Asset]) 
     if chain[0].revision < 1 or chain[-1].status is not Status.ACTIVE:
         return None
     if any(
-        type(current) is not type(chain[0])
+        not asset_revision_classification_valid(previous, current)
         or current.owner_id != chain[0].owner_id
-        or current.kind is not chain[0].kind
         or current.egress_policy is not chain[0].egress_policy
         or current.details != chain[0].details
         or current.revision != previous.revision + 1

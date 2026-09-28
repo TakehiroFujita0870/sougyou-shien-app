@@ -324,13 +324,14 @@ export function createLocalDashboardClient({
     return { status: result.status, facet_id: facetId, depth, hits };
   }
 
-  async function saveAsset(assetId, { name, description, expectedRevision } = {}, { signal } = {}) {
+  async function saveAsset(assetId, { name, description, expectedRevision, kind } = {}, { signal } = {}) {
     if (typeof assetId !== 'string' || !assetId || typeof name !== 'string' || !name.trim() || name.trim().length > 200
-      || typeof description !== 'string' || description.length > 4000 || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+      || typeof description !== 'string' || description.length > 4000 || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1
+      || (kind !== undefined && !['strength', 'barrier'].includes(kind))) {
       throw new LocalDashboardClientError('error');
     }
     const normalizedName = name.trim();
-    const intent = JSON.stringify([normalizedName, description, expectedRevision]);
+    const intent = JSON.stringify([normalizedName, description, expectedRevision, kind]);
     let write = assetWriteIntents.get(assetId);
     if (!write || write.intent !== intent) {
       const idempotencyKey = createIdempotencyKey();
@@ -347,6 +348,7 @@ export function createLocalDashboardClient({
         description,
         expected_revision: expectedRevision,
         idempotency_key: write.idempotencyKey,
+        ...(kind === undefined ? {} : { kind }),
       }),
     });
     if (typeof result.id !== 'string' || !result.id || !Number.isSafeInteger(result.revision) || result.revision !== expectedRevision + 1) {

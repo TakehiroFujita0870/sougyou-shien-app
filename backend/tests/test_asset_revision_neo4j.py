@@ -5,7 +5,7 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import Asset, EgressPolicy, NodeType
+from dots.founder_graph import Asset, AssetKind, EgressPolicy, NodeType
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_write import GraphWriteError, payload_fingerprint
 
@@ -127,6 +127,18 @@ def test_neo4j_asset_writer_appends_and_replays_canonical_revision() -> None:
     assert payload["supersedes_id"] == original.id and payload["revision"] == 2
     assert stored["supersedes_id"] == original.id
     assert payload["egress_policy"] == EgressPolicy.SHAREABLE.value
+
+
+def test_neo4j_asset_classification_is_persisted_in_successor() -> None:
+    original = Asset(owner_id="owner-1", id="classify-root", name="創業への迷い")
+    session = _AssetRevisionSession(original)
+    gateway = Neo4jGraphGateway(_Driver(session), "owner-1")
+    receipt = gateway.revise_asset(asset_id=original.id, name=original.name,
+                                   description=original.description, expected_revision=1,
+                                   idempotency_key="classify-as-barrier", kind=AssetKind.BARRIER)
+    payload = json.loads(session.created[receipt.target_id]["payload_json"])
+    assert payload["kind"] == "barrier"
+    assert payload["supersedes_id"] == original.id
 
 
 def test_neo4j_asset_writer_rechecks_same_key_receipt_after_acquiring_lock() -> None:
