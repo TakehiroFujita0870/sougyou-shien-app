@@ -227,3 +227,30 @@ def project_markdown_report(markdown: str) -> MarkdownReportProjection:
         ambiguity_reasons=tuple(dict.fromkeys(reasons)),
         links_truncated=links_truncated,
     )
+
+
+def find_unique_visible_quote(markdown: str, quote: str) -> tuple[int, int] | None:
+    """Locate one exact quote in visible Markdown without returning report text.
+
+    Fenced and inline code is masked using the same rules as the projection, so
+    code examples cannot act as semantic support. Repeated quotes are
+    intentionally unresolved because an offset would otherwise be ambiguous.
+    """
+    if not isinstance(markdown, str) or len(markdown) > _MAX_MARKDOWN_CHARS:
+        raise ValueError("markdown exceeds the IdeaBrief report limit")
+    if not isinstance(quote, str) or not quote.strip():
+        return None
+    visible = _visible_markdown(markdown)
+    start = visible.find(quote)
+    if start < 0 or visible.find(quote, start + 1) >= 0:
+        return None
+    return start, start + len(quote)
+
+
+def has_visible_markdown_content(markdown: str, start: int, end: int) -> bool:
+    """Return whether an offset range contains non-code, non-whitespace text."""
+    if not isinstance(markdown, str) or len(markdown) > _MAX_MARKDOWN_CHARS:
+        raise ValueError("markdown exceeds the IdeaBrief report limit")
+    if type(start) is not int or type(end) is not int or not 0 <= start <= end <= len(markdown):
+        return False
+    return bool(_visible_markdown(markdown)[start:end].strip())
