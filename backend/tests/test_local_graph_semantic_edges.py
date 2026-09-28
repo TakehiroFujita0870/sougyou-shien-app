@@ -102,7 +102,8 @@ def test_neo4j_node_query_checks_successors_globally_with_owner_scope():
     query = Neo4jGraphViewStore._NODES
 
     assert "EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(n) }" in query
-    assert "LIMIT 201" in query
+    assert "n.node_type IN $visible_kinds" in query
+    assert "LIMIT 2501" in query
 
 
 def test_foreign_owner_missing_or_noncurrent_endpoints_and_local_only_assertions_are_hidden():

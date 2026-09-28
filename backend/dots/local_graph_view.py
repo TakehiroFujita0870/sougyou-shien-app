@@ -10,8 +10,13 @@ from .founder_graph_lifecycle_resolver import decode_asset_lifecycle_record, lif
 from .founder_graph_neo4j_idea import decode_persisted_idea
 
 
-MAX_NODES = 200
-MAX_EDGES = 400
+MAX_NODES = 500
+MAX_EDGES = 1000
+MAX_GRAPH_ROWS = 2500
+_VISIBLE_KINDS = frozenset({
+    "idea", "asset", "person", "organization", "owner_profile", "source",
+    "research_material", "decision", "experiment", "instruction_artifact", "facet",
+})
 _EXCLUDED = frozenset({"deleted", "archived", "superseded", "retracted", "expired", "cancelled", "revoked"})
 _TITLES = {"idea": "title", "asset": "name", "person": "name", "organization": "name", "owner_profile": "display_name", "source": "title", "research_campaign": "title", "facet": "value"}
 _KIND_LABELS = {
@@ -43,13 +48,13 @@ class Neo4jGraphViewStore:
         "n.status AS status, n.payload_json AS payload_json, "
         "(EXISTS { MATCH (successor:RelationAssertion {owner_id: $owner_id})-[:SUPERSEDES]->(n) } "
         "OR (n.node_type IN ['idea', 'asset', 'person'] AND EXISTS { MATCH (successor {owner_id: $owner_id, supersedes_id: n.id}) })) "
-        "AS has_successor ORDER BY n.id LIMIT 201"
+        "AS has_successor ORDER BY CASE WHEN n.node_type IN $visible_kinds THEN 0 ELSE 1 END, n.id LIMIT 2501"
     )
     _EDGES = (
         "MATCH (a)-[r]->(b) WHERE a.owner_id = $owner_id AND b.owner_id = $owner_id "
         "AND a.id IN $ids AND b.id IN $ids "
         "RETURN a.id AS source, b.id AS target, type(r) AS relation, "
-        "r.owner_id AS relation_owner ORDER BY source, target, relation LIMIT 401"
+        "r.owner_id AS relation_owner ORDER BY source, target, relation LIMIT 1001"
     )
 
     def __init__(self, driver: Any, *, database: str = "neo4j") -> None:
@@ -58,7 +63,7 @@ class Neo4jGraphViewStore:
 
     def read_nodes(self, owner_id: str) -> Sequence[Mapping[str, Any]]:
         with self._driver.session(database=self._database) as session:
-            return tuple(dict(row) for row in session.run(self._NODES, owner_id=owner_id))
+            return tuple(dict(row) for row in session.run(self._NODES, owner_id=owner_id, visible_kinds=sorted(_VISIBLE_KINDS)))
 
     def read_edges(self, owner_id: str, ids: Sequence[str]) -> Sequence[Mapping[str, Any]]:
         with self._driver.session(database=self._database) as session:
@@ -81,7 +86,7 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
         return {**_EMPTY, "status": "failed"}
     try:
         raw_nodes = store.read_nodes(owner_id)
-        truncated = len(raw_nodes) > MAX_NODES
+        truncated = len(raw_nodes) > MAX_GRAPH_ROWS
         nodes = []
         seen = set()
         payloads: dict[str, Mapping[str, Any]] = {}
@@ -90,7 +95,7 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
         globally_superseded_ids = set()
         superseded_asset_ids = set()
         superseded_idea_ids = set()
-        for row in raw_nodes[:MAX_NODES]:
+        for row in raw_nodes[:MAX_GRAPH_ROWS]:
             identity, kind = row["id"], row["node_type"]
             if row["owner_id"] != owner_id or not isinstance(identity, str) or not identity or identity in seen or not isinstance(kind, str):
                 raise ValueError("unexpected node identity")
@@ -117,6 +122,11 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
             if str(row.get("status") or "").lower() in _EXCLUDED:
                 continue
             if identity in superseded_asset_ids or identity in superseded_idea_ids:
+                continue
+            if kind not in _VISIBLE_KINDS:
+                continue
+            if len(nodes) >= MAX_NODES:
+                truncated = True
                 continue
             field = _TITLES.get(kind)
             label = payload.get(field) if field else None

@@ -21,7 +21,7 @@ export function initialPosition(identity, index) {
   let hash = 2166136261;
   for (const character of identity) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
   const angle = ((hash >>> 0) / 4294967296) * Math.PI * 2;
-  const radius = 25 + (index % 4) * 15;
+  const radius = 18 + (index % 4) * 9;
   return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
 }
 
