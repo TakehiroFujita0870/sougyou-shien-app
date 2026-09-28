@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-28T10:53:20Z",
-  "baseline_main": "a622a5cb2e65",
+  "updated_at": "2026-09-28T12:00:00Z",
+  "baseline_main": "7c3f33328808",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -49,6 +49,12 @@
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
       "note": "PCの2列表示と保存・検索契約、既存の編集・削除、ChatGPTの手順更新を確認。新しい会話からの実際の弱み保存と別会話再検索は未確認。以前の記録は内容から自動再分類しない。",
       "evidence": [{"recorded_at": "2026-09-28T10:53:20Z", "scope": "main-375-plugin-1.0.12-live-two-column", "result": "partial", "reference": "PR #375のCI成功、Linux稼働版のビルドと対象試験、1280×720実画面の2列・画面遷移、Dotsプラグイン1.0.12の読戻し。"}]
+    },
+    {
+      "id": "asset_classification_movement", "title": "資産カードの列間移動とキーボード操作", "scope": "main-377-live-assets-ui",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "ドラッグ操作とキーボード操作で強み・経験と弱み・迷いを移動できる。移動は保存され、通常の本文編集と履歴も維持する。自動試験とPC実画面の2列表示・上下選択を確認。実データの分類変更は本人の選択に任せており、本番での移動保存は未実施。",
+      "evidence": [{"recorded_at": "2026-09-28T12:00:00Z", "scope": "main-377-live-assets-ui", "result": "partial", "reference": "PR #377、Linux全件1253件成功、フロント113件成功、1280×720実画面の2列表示・上下選択、保存先と画面・接続の稼働確認。"}]
     }
   ]
 }
