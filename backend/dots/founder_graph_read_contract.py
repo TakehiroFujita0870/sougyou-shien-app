@@ -32,7 +32,7 @@ FIELD_ALLOWLIST: dict[NodeType, tuple[str, ...]] = {
     ),
     NodeType.RELATION_ASSERTION: (
         "source_id", "target_id", "source_kind", "target_kind", "predicate",
-        "assertion_family_id", "revision", "status", "confidence", "evidence_ids",
+        "assertion_family_id", "revision", "status", "basis", "confidence", "evidence_ids",
         "valid_from", "expires_at", "supersedes_id", "provenance_id",
         "based_on_brief_id", "based_on_brief_section_index", "egress_policy",
     ),

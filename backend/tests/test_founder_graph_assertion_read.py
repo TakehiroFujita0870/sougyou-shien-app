@@ -11,6 +11,7 @@ from dots.founder_graph import (
     Idea,
     NodeType,
     RelationAssertionEdgeType,
+    RelationAssertionBasis,
     RelationType,
     RelationshipStatus,
     Status,
@@ -84,6 +85,7 @@ def test_mcp_fetch_returns_only_a_current_grounded_relation_projection():
         "id": assertion.id,
         "kind": "relation_assertion",
         "status": assertion.status.value,
+        "basis": assertion.basis.value,
         "confidence": assertion.confidence,
         "valid_from": assertion.valid_from.isoformat(),
         "expires_at": assertion.expires_at.isoformat() if assertion.expires_at else None,
@@ -235,6 +237,35 @@ def test_newer_brief_hides_old_formal_path_without_erasing_history():
 
     assert not any(step.relation_assertion_id == assertion.id for hit in page.hits for step in hit.relation_path)
     assert writes.get_node(assertion.id) is assertion
+
+
+def test_brief_hypothesis_path_is_hidden_when_its_draft_brief_is_stale():
+    writes, _idea, _claim, _evidence, brief, assertion = _setup()
+    draft = brief.revise(
+        sections=tuple(replace(section, content="", evidence_ids=()) for section in brief.sections),
+        report_markdown="## Draft\n\nA Brief-derived hypothesis before section projection.",
+        change_reason="synthetic draft", research_run_ids=(), origin=None,
+    )
+    writes.save_idea_brief(draft, expected_latest_revision=1, idempotency_key="save-hypothesis-draft")
+    hypothesis = replace(
+        assertion, status=RelationshipStatus.PROPOSED,
+        basis=RelationAssertionBasis.BRIEF_HYPOTHESIS, evidence_ids=(), based_on_brief_id=draft.id,
+        based_on_brief_section_index=None,
+    )
+    writes.save_relation_assertion(
+        hypothesis, expected_family_revision=None, idempotency_key="save-hypothesis-path",
+    )
+
+    current_hit = _assertion_hit(GraphReadService(writes), "Synthetic target")
+
+    assert current_hit.relation_path[0].basis == RelationAssertionBasis.BRIEF_HYPOTHESIS.value
+    assert current_hit.relation_path[0].evidence_ids == ()
+    assert current_hit.relation_path[0].based_on_brief_section_index is None
+    newer = draft.revise(change_reason="newer draft", research_run_ids=())
+    writes.save_idea_brief(newer, expected_latest_revision=2, idempotency_key="save-newer-hypothesis-draft")
+    stale_hit = _assertion_hit(GraphReadService(writes), "Synthetic target")
+    assert all(step.relation_assertion_id != hypothesis.id for step in stale_hit.relation_path)
+    assert writes.get_node(hypothesis.id) == hypothesis
 
 
 def test_empty_selected_brief_section_hides_formal_path():

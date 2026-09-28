@@ -32,6 +32,7 @@ from .founder_graph import (
     Provenance,
     ReportVersion,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     Relationship,
     RelationshipStatus,
@@ -1836,6 +1837,7 @@ class Neo4jGraphGateway:
     def _validate_latest_researched_brief_tx(
         self, tx: Any, *, primary_idea_id: str, owner_id: str, brief_id: str,
         section_index: int | None, evidence_ids: tuple[str, ...], locked_ideas: tuple[Any, ...],
+        basis: RelationAssertionBasis | None = None,
         brief_override: IdeaBriefVersion | None = None,
     ) -> AcceptedIdeaBriefProof:
         if owner_id != self.owner_id or not locked_ideas:
@@ -1861,7 +1863,10 @@ class Neo4jGraphGateway:
         if brief.id != brief_id or brief.based_on_idea_id != primary.id:
             raise GraphWriteError("researched IdeaBrief does not match the current Idea")
         selected_evidence = tuple(evidence_ids)
-        if section_index is not None:
+        if section_index is None and brief_override is None:
+            if basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS or not (brief.report_markdown or "").strip():
+                raise GraphWriteError("Brief hypothesis requires a non-empty latest Brief Markdown locator")
+        elif section_index is not None:
             if type(section_index) is not int or not 0 <= section_index < 8:
                 raise GraphWriteError("researched IdeaBrief section is invalid")
             section = brief.sections[section_index]
@@ -1869,8 +1874,6 @@ class Neo4jGraphGateway:
                 raise GraphWriteError("evidence is outside the selected researched section")
         if brief.research_run_ids:
             self._validate_brief_run_history_tx(tx, brief, primary)
-        elif section_index is not None:
-            raise GraphWriteError("relation requires a researched IdeaBrief")
         return AcceptedIdeaBriefProof(
             brief.id, brief.revision, section_index, tuple(sorted(set(root_ids))),
             tuple(sorted(idea.id for idea in leaves)), selected_evidence,
@@ -2617,7 +2620,9 @@ class Neo4jGraphGateway:
         except (TypeError, ValueError):
             raise GraphWriteError("persisted relation assertion is invalid") from None
         expected_fields = {item.name for item in fields(RelationAssertion)}
-        if not isinstance(payload, dict) or set(payload) != expected_fields:
+        if isinstance(payload, dict) and set(payload) == expected_fields - {"basis"}:
+            payload["basis"] = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
+        elif not isinstance(payload, dict) or set(payload) != expected_fields:
             raise GraphWriteError("persisted relation assertion is invalid")
         if payload.get("id") != _record_value(record, "id") or payload.get("owner_id") != self.owner_id:
             raise GraphWriteError("persisted relation assertion is invalid")
@@ -2647,7 +2652,10 @@ class Neo4jGraphGateway:
             decoded = RelationAssertion(**payload)
         except (TypeError, ValueError, KeyError):
             raise GraphWriteError("persisted relation assertion is invalid") from None
-        if _json_value(decoded) != json.loads(raw):
+        stored_payload = json.loads(raw)
+        if "basis" not in stored_payload:
+            stored_payload["basis"] = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
+        if _json_value(decoded) != stored_payload:
             raise GraphWriteError("persisted relation assertion is invalid")
         return decoded
 
@@ -2803,6 +2811,7 @@ class Neo4jGraphGateway:
                 section_index=assertion.based_on_brief_section_index,
                 evidence_ids=assertion.evidence_ids,
                 locked_ideas=tuple(resolved_ideas),
+                basis=assertion.basis,
             )
         elif assertion.based_on_brief_id is not None:
             raise GraphWriteError("non-Idea relation cannot claim an Idea Brief reference")

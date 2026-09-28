@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .founder_graph import EgressPolicy, NodeType, RelationAssertion, Status
+from .founder_graph import EgressPolicy, NodeType, RelationAssertion, RelationAssertionBasis, Status
 from .founder_graph_neo4j_codec import record_value as _record_value, single_record as _single
 from .founder_graph_write import GraphWriteError, GraphWriteNotFoundError
 
 
 def validate_relation_assertion_evidence_tx(gateway: Any, tx: Any, assertion: RelationAssertion) -> None:
     """Validate active, owner-scoped Evidence and its exact source lineage."""
-    if not assertion.evidence_ids:
+    if assertion.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS and not assertion.evidence_ids:
         raise GraphWriteError("formal relation assertion requires Evidence")
     for evidence_id in assertion.evidence_ids:
         evidence = _single(tx.run(

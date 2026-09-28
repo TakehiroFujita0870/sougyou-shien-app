@@ -327,6 +327,7 @@ def test_formal_relation_path_is_additive_and_projects_only_safe_metadata() -> N
         "target_id": target.id,
         "traversal_direction": "outgoing",
         "status": "confirmed",
+        "basis": "external_evidence",
         "confidence": 0.8,
         "valid_from": "2026-09-20T00:00:00+00:00",
         "expires_at": None,

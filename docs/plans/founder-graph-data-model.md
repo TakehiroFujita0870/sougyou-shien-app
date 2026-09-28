@@ -52,7 +52,7 @@
 | ContentChunk | SourceRevision内の引用可能な一範囲 | id, source_revision_id, ordinal, char_start, char_end, text_hash, textまたはcontent locator |
 | Claim | 一つの主語・述語・目的語または一つの数値仮説 | id, claim_type, text, confidence, status, created_at |
 | Evidence | 一つのClaimと一つの保存済みContentChunkの対応 | id, polarity, source_revision_id, content_chunk_id, char_start, char_end, content_hash, confidence, egress_policy |
-| RelationAssertion | sourceとtarget間の意味関係一件 | id, owner_id, assertion_family_id, revision, predicate, status, confidence, valid_from, expires_at, supersedes_id, provenance_id, egress_policy |
+| RelationAssertion | sourceとtarget間の意味関係一件 | id, owner_id, assertion_family_id, revision, predicate, basis, status, confidence, valid_from, expires_at, supersedes_id, provenance_id, egress_policy |
 | CampaignAuthorizationSnapshot | Campaignで本人が許諾した目的、範囲、送信field、試行予算の一版 | id, campaign_id, revision, purpose, scope_hash, field_categories, run_budget, expires_at, authorized_at |
 | ResearchRun | 一回の独立調査 | id, campaign_id, input_snapshot_hash, model_snapshot, status, started_at, completed_at |
 | ReportVersion | 一回確定した8章レポート | id, campaign_id, parent_report_id, status, created_at |
@@ -98,6 +98,10 @@ RelationAssertionは次の構造edgeを持つ。
 - `ASSERTS_TO` → target anchor、Claim、Facet。
 - `EVIDENCED_BY` → Evidenceを0件以上。inferred、confirmedは1件以上を必須にする。
 - `SUPERSEDES` → 直前のRelationAssertion。状態変更時に使用する。
+
+`basis=external_evidence`は保存時にsource-grounded Evidenceを必須とする。`basis=brief_hypothesis`はIdeaBrief由来の未確定な`proposed`関係であり、ownerが明示した事実・判断とは区別し、Ideaと正確な最新IdeaBriefを参照する。T-3の章投影ができるまでは、章番号なしで`report_markdown`全体を暫定的なBriefレベルlocatorにできるが、これは根拠箇所を示すものではなく、空のMarkdownは保存・読取を拒否する。最終US-4受入にはT-5/T-3の引用または章参照が必要。下書きと`prior_research_import`ではCampaign Runを要求・捏造しない。外部事実とBrief由来の仮説は別basisとして読み手にも示す。
+
+IdeaBriefが新しい版へ進んだ場合、旧版を参照するRelationAssertionは削除せず、検索・読取から隠す。新しい関係は現行Ideaと最新IdeaBriefだけを参照する。
 
 `assertion_family_id`は同じ主語、predicate、目的語の訂正系列を表す。訂正時は旧assertionを書き換えず、同familyでrevisionを一つ増やし、SUPERSEDESで直前版に接続する。
 

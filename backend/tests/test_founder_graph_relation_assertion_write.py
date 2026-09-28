@@ -14,6 +14,7 @@ from dots.founder_graph import (
     NodeType,
     Provenance,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     RelationType,
     Relationship,
@@ -153,6 +154,77 @@ def test_save_assertion_checks_researched_brief_and_replays_without_repair():
     assert writes.get_node(evidence.id) is evidence
 
 
+@pytest.mark.parametrize(("origin", "include_brief_evidence"), [
+    (None, False),
+    ("prior_research_import", True),
+])
+def test_brief_hypothesis_relation_accepts_latest_draft_or_imported_brief_without_run_or_edge_evidence(
+    origin: str | None, include_brief_evidence: bool,
+) -> None:
+    writes, idea, claim, evidence, brief, assertion = _setup()
+    if origin == "prior_research_import":
+        for source_id in ("source-relation", "source-revision-relation"):
+            source = writes.get_node(source_id)
+            writes._nodes[source_id] = replace(source, egress_policy=EgressPolicy.SHAREABLE)
+    sections = tuple(
+        replace(section, content="", evidence_ids=(evidence.id,) if include_brief_evidence else ())
+        for section in brief.sections
+    )
+    candidate_brief = brief.revise(
+        sections=sections,
+        report_markdown="## Draft hypothesis\n\nSynthetic whole-draft Brief locator.",
+        change_reason="synthetic unresearched brief",
+        research_run_ids=(),
+        origin=origin,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.save_idea_brief(
+        candidate_brief, expected_latest_revision=1, idempotency_key=f"save-{origin or 'draft'}-brief",
+    )
+    hypothesis = replace(
+        assertion,
+        status=RelationshipStatus.PROPOSED,
+        basis=RelationAssertionBasis.BRIEF_HYPOTHESIS,
+        evidence_ids=(),
+        based_on_brief_id=candidate_brief.id,
+        based_on_brief_section_index=None,
+    )
+
+    receipt = writes.save_relation_assertion(
+        hypothesis, expected_family_revision=None, idempotency_key=f"hypothesis-{origin or 'draft'}",
+    )
+
+    assert receipt.target_id == hypothesis.id
+    assert writes.get_node(hypothesis.id) == hypothesis
+    assert not any(edge[0] == hypothesis.id and edge[1] == RelationAssertionEdgeType.EVIDENCED_BY.value
+                   for edge in writes.structural_edges())
+
+
+def test_external_evidence_relation_cannot_be_saved_without_evidence():
+    writes, _, _, _, _, assertion = _setup()
+    candidate = replace(assertion, status=RelationshipStatus.PROPOSED,
+                        basis=RelationAssertionBasis.EXTERNAL_EVIDENCE, evidence_ids=())
+
+    with pytest.raises(GraphWriteError, match="formal relation assertion requires Evidence"):
+        writes.save_relation_assertion(candidate, expected_family_revision=None, idempotency_key="missing-evidence")
+
+
+def test_whole_draft_hypothesis_requires_non_empty_markdown():
+    writes, _, _, _, brief, assertion = _setup()
+    draft = brief.revise(
+        sections=tuple(replace(section, content="", evidence_ids=()) for section in brief.sections),
+        change_reason="empty markdown draft", research_run_ids=(), report_markdown=None,
+    )
+    writes.save_idea_brief(draft, expected_latest_revision=1, idempotency_key="save-empty-markdown")
+    hypothesis = replace(
+        assertion, status=RelationshipStatus.PROPOSED, basis=RelationAssertionBasis.BRIEF_HYPOTHESIS,
+        evidence_ids=(), based_on_brief_id=draft.id, based_on_brief_section_index=None,
+    )
+
+    with pytest.raises(GraphWriteError, match="non-empty latest Brief Markdown locator"):
+        writes.save_relation_assertion(hypothesis, expected_family_revision=None, idempotency_key="empty-anchor")
+
+
 def test_relation_assertion_requires_source_grounded_evidence_and_structural_lineage():
     writes, _, _, evidence, _, assertion = _setup()
     legacy = replace(evidence, material_id="legacy-material", source_revision_id=None, content_chunk_id=None,
@@ -225,9 +297,11 @@ def test_local_only_assertion_may_cite_local_only_endpoints_and_evidence():
 
 @pytest.mark.parametrize(
     "case",
-    ["wrong_kind", "foreign_endpoint", "archived_endpoint", "superseded_endpoint", "private_endpoint",
-     "inactive_evidence", "foreign_evidence", "private_evidence", "missing_brief",
-     "wrong_section_evidence", "empty_runs", "latest_brief", "missing_run_receipt"],
+    [
+        "wrong_kind", "foreign_endpoint", "archived_endpoint", "superseded_endpoint", "private_endpoint",
+        "inactive_evidence", "foreign_evidence", "private_evidence", "missing_brief",
+        "wrong_section_evidence", "latest_brief", "missing_run_receipt",
+    ],
 )
 def test_invalid_assertion_provenance_fails_without_mutation(case: str):
     writes, idea, claim, evidence, brief, assertion = _setup()
@@ -253,9 +327,6 @@ def test_invalid_assertion_provenance_fails_without_mutation(case: str):
         section = replace(brief.sections[1], evidence_ids=())
         bad_brief = replace(brief, sections=(brief.sections[0], section, *brief.sections[2:]))
         writes._idea_briefs[brief.id] = bad_brief
-    elif case == "empty_runs":
-        empty_brief = replace(brief, research_run_ids=())
-        writes._idea_briefs[brief.id] = empty_brief
     elif case == "latest_brief":
         newer_brief = brief.revise(change_reason="synthetic newer brief")
         writes.save_idea_brief(newer_brief, expected_latest_revision=1, idempotency_key="save-newer-brief")

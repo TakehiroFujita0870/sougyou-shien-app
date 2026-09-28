@@ -9,7 +9,13 @@ import re
 from typing import Any, Mapping
 from urllib.parse import quote
 
-from .founder_graph import NodeType, RelationType, RelationshipStatus, SHAREABLE_PROJECTION_ALLOWLIST
+from .founder_graph import (
+    NodeType,
+    RelationAssertionBasis,
+    RelationType,
+    RelationshipStatus,
+    SHAREABLE_PROJECTION_ALLOWLIST,
+)
 from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_mcp_facets import facet_read_tool_definitions
 from .founder_graph_read import (
@@ -340,6 +346,7 @@ class McpReadSurface:
                 "id": step.relation_assertion_id,
                 "kind": NodeType.RELATION_ASSERTION.value,
                 "status": step.status,
+                "basis": step.basis,
                 "confidence": step.confidence,
                 "valid_from": step.valid_from,
                 "expires_at": step.expires_at,
@@ -406,6 +413,8 @@ class McpReadSurface:
                 return []
             if not isinstance(step.relation_assertion_id, str) or not step.relation_assertion_id.strip():
                 return []
+            if step.basis not in {"external_evidence", "brief_hypothesis"}:
+                return []
             if not isinstance(step.status, str) or step.status not in {
                 RelationshipStatus.PROPOSED.value,
                 RelationshipStatus.INFERRED.value,
@@ -428,13 +437,25 @@ class McpReadSurface:
             ):
                 return []
             if (
-                (step.based_on_brief_id is None) != (step.based_on_brief_section_index is None)
-                or (step.based_on_brief_id is not None and (
+                step.based_on_brief_id is None
+                and step.based_on_brief_section_index is not None
+            ) or (
+                step.based_on_brief_id is not None
+                and (
                     not isinstance(step.based_on_brief_id, str)
                     or not step.based_on_brief_id.strip()
-                    or type(step.based_on_brief_section_index) is not int
-                    or not 0 <= step.based_on_brief_section_index <= 7
-                ))
+                    or (
+                        step.based_on_brief_section_index is None
+                        and step.basis != RelationAssertionBasis.BRIEF_HYPOTHESIS.value
+                    )
+                    or (
+                        step.based_on_brief_section_index is not None
+                        and (
+                            type(step.based_on_brief_section_index) is not int
+                            or not 0 <= step.based_on_brief_section_index <= 7
+                        )
+                    )
+                )
             ):
                 return []
             if (
@@ -474,6 +495,7 @@ class McpReadSurface:
                 "target_id": step.target_id,
                 "traversal_direction": step.traversal_direction,
                 "status": step.status,
+                "basis": step.basis,
                 "confidence": step.confidence,
                 "valid_from": step.valid_from,
                 "expires_at": step.expires_at,

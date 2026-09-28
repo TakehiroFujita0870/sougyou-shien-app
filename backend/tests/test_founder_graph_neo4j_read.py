@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, Provenance, RelationAssertion, Source, SourceRevision
+from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, Provenance, RelationAssertion, RelationAssertionBasis, Source, SourceRevision
 from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
@@ -1053,3 +1053,38 @@ def test_malformed_payload_is_a_recoverable_read_error() -> None:
 
     with pytest.raises(GraphReadError, match="valid JSON"):
         reads.fetch("broken", owner_id="owner-1")
+
+
+def test_search_exposes_brief_hypothesis_from_prior_import_without_runs_or_edge_evidence():
+    driver, reads = _gateway()
+    idea, claim, _evidence, brief, assertion, endpoint_rows, _rows, _brief_row = _formal_fixture(
+        brief_origin="prior_research_import",
+    )
+    hypothesis = replace(
+        assertion, status="proposed", basis=RelationAssertionBasis.BRIEF_HYPOTHESIS, evidence_ids=(),
+        based_on_brief_section_index=None,
+    )
+    brief = replace(
+        brief,
+        sections=tuple(replace(section, content="") for section in brief.sections),
+        report_markdown="## Imported Brief\n\nSynthetic whole-draft anchor.",
+    )
+    formal_rows = [
+        _formal_edge_row(hypothesis, relation, endpoint_rows[target_id])
+        for _source_id, relation, target_id in relation_assertion_structural_edges(hypothesis)
+    ]
+    _seed_formal_search(driver, idea, endpoint_rows, formal_rows, _serialize_persisted_idea_brief(brief))
+
+    page = reads.search("Foundry", owner_id="owner-1")
+    hit = next(item for item in page.hits if item.node.id == claim.id)
+    assert hit.relation_path[0].basis == RelationAssertionBasis.BRIEF_HYPOTHESIS.value
+    assert hit.relation_path[0].evidence_ids == ()
+    assert hit.relation_path[0].based_on_brief_section_index is None
+
+    newer = brief.revise(change_reason="newer imported Brief", research_run_ids=(), origin="prior_research_import")
+    driver.session_value.brief_rows.append(_serialize_persisted_idea_brief(newer))
+    stale_page = reads.search("Foundry", owner_id="owner-1")
+    assert all(
+        step.relation_assertion_id != hypothesis.id
+        for hit in stale_page.hits for step in hit.relation_path
+    )

@@ -34,6 +34,7 @@ from .founder_graph_types import (
     NodeType,
     ProvenanceKind,
     ProvenanceOrigin,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     RelationStatus,
     RelationType,
@@ -2040,7 +2041,7 @@ class Facet:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RelationAssertion:
-    """An immutable, evidence-aware semantic relation between two anchors."""
+    """An immutable, provenance-aware semantic relation between two anchors."""
 
     source_id: str
     target_id: str
@@ -2052,6 +2053,7 @@ class RelationAssertion:
     id: str = field(default_factory=lambda: new_id("relation-assertion"))
     revision: int = 1
     status: RelationshipStatus = RelationshipStatus.PROPOSED
+    basis: RelationAssertionBasis = RelationAssertionBasis.EXTERNAL_EVIDENCE
     confidence: float | None = None
     evidence_ids: tuple[str, ...] = ()
     valid_from: datetime = field(default_factory=utc_now)
@@ -2082,10 +2084,22 @@ class RelationAssertion:
             raise DomainValidationError("relation assertion revision must be a positive integer")
         status = _enum(self.status, RelationshipStatus, "status")
         object.__setattr__(self, "status", status)
+        basis = _enum(self.basis, RelationAssertionBasis, "basis")
+        object.__setattr__(self, "basis", basis)
         object.__setattr__(self, "confidence", _confidence(self.confidence))
         object.__setattr__(self, "evidence_ids", _strings(self.evidence_ids, "evidence_ids"))
         if status in {RelationshipStatus.INFERRED, RelationshipStatus.CONFIRMED} and not self.evidence_ids:
             raise DomainValidationError("inferred and confirmed relation assertions require evidence")
+        if basis is RelationAssertionBasis.BRIEF_HYPOTHESIS:
+            if status not in {
+                RelationshipStatus.PROPOSED, RelationshipStatus.REJECTED,
+                RelationshipStatus.RETRACTED, RelationshipStatus.EXPIRED, RelationshipStatus.SUPERSEDED,
+            }:
+                raise DomainValidationError("Brief hypotheses must remain proposed")
+            if self.evidence_ids:
+                raise DomainValidationError("Brief hypotheses cannot claim external Evidence")
+            if NodeType.IDEA not in {source_kind, target_kind} or self.based_on_brief_id is None:
+                raise DomainValidationError("Brief hypotheses require an Idea Brief reference")
         if predicate in {RelationType.CAN_CONTRIBUTE_TO, RelationType.INTRODUCED_BY}:
             if status not in {
                 RelationshipStatus.PROPOSED,
@@ -2109,10 +2123,14 @@ class RelationAssertion:
             if supersedes_id == self.id:
                 raise DomainValidationError("relation assertion cannot supersede itself")
             object.__setattr__(self, "supersedes_id", supersedes_id)
-        if (self.based_on_brief_id is None) != (self.based_on_brief_section_index is None):
+        if (
+            basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS
+            and (self.based_on_brief_id is None) != (self.based_on_brief_section_index is None)
+        ):
             raise DomainValidationError("based_on_brief_id and section index must be provided together")
         if self.based_on_brief_id is not None:
             object.__setattr__(self, "based_on_brief_id", _identifier(self.based_on_brief_id, "based_on_brief_id"))
+        if self.based_on_brief_section_index is not None:
             if type(self.based_on_brief_section_index) is not int or not 0 <= self.based_on_brief_section_index <= 7:
                 raise DomainValidationError("brief section index must be an integer from 0 to 7")
         object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
@@ -2662,6 +2680,7 @@ SHAREABLE_PROJECTION_ALLOWLIST = MappingProxyType({
         "assertion_family_id",
         "revision",
         "status",
+        "basis",
         "confidence",
         "evidence_ids",
         "valid_from",
@@ -2799,6 +2818,7 @@ def _safe_projection(value: Any) -> tuple[dict[str, object], dict[str, str]] | N
             "assertion_family_id": value.assertion_family_id,
             "revision": value.revision,
             "status": value.status.value,
+            "basis": value.basis.value,
             "confidence": value.confidence,
             "evidence_ids": value.evidence_ids,
             "valid_from": value.valid_from,
@@ -2923,6 +2943,7 @@ __all__ = [
     "ProvenanceKind",
     "ProvenanceOrigin",
     "RelationStatus",
+    "RelationAssertionBasis",
     "RelationAssertion",
     "RelationType",
     "Relationship",

@@ -109,6 +109,11 @@ class RelationshipStatus(StrEnum):
     SUPERSEDED = "superseded"
 
 
+class RelationAssertionBasis(StrEnum):
+    EXTERNAL_EVIDENCE = "external_evidence"
+    BRIEF_HYPOTHESIS = "brief_hypothesis"
+
+
 RelationStatus = RelationshipStatus
 
 

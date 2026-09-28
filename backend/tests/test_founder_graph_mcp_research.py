@@ -215,6 +215,43 @@ def test_append_research_finding_writes_only_markdown_and_replays_idempotently()
     assert stale_revision.value.code == "revision_conflict"
 
 
+def test_markdown_only_research_draft_accepts_brief_hypothesis_without_evidence_or_section() -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-markdown-hypothesis")
+    idea = Idea(
+        owner_id=writes.owner_id, id="idea-markdown-hypothesis", title="Synthetic idea",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    claim = Claim(
+        owner_id=writes.owner_id, id="claim-markdown-hypothesis", text="Synthetic proposition",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    for node in (idea, claim):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    surface = McpWriteSurface(writes)
+    saved = surface.call("append_research_finding", {
+        "idea_id": idea.id, "expected_revision": 0,
+        "finding": "A synthetic external observation for the draft.",
+        "source_url": "https://example.test/finding",
+        "egress_policy": "shareable", "idempotency_key": "append-markdown-hypothesis",
+    }, owner_id=writes.owner_id)
+    brief = writes.get_idea_brief(saved.target_id)
+    assert brief is not None and brief.sections and all(not section.content for section in brief.sections)
+    assert brief.report_markdown and "A synthetic external observation" in brief.report_markdown
+
+    relation = surface.call("link_entities", {
+        "source_id": idea.id, "target_id": claim.id, "relation": "ADDRESSES",
+        "basis": "brief_hypothesis", "status": "proposed", "egress_policy": "shareable",
+        "based_on_brief_id": brief.id, "idempotency_key": "link-markdown-hypothesis",
+    }, owner_id=writes.owner_id)
+
+    assertion = writes.get_node(relation.target_id)
+    assert assertion.status.value == "proposed"
+    assert assertion.basis.value == "brief_hypothesis"
+    assert assertion.based_on_brief_id == brief.id
+    assert assertion.based_on_brief_section_index is None
+    assert assertion.evidence_ids == ()
+
+
 @pytest.mark.parametrize("source_url", [
     "javascript:alert(1)",
     "https://user:password@example.test/source",
