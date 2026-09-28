@@ -288,7 +288,10 @@ _ALLOWED_RELATION_ENDPOINTS: dict[RelationType, frozenset[tuple[NodeType, NodeTy
     }),
     RelationType.GOVERNED_BY: frozenset({(NodeType.OWNER_PROFILE, NodeType.INSTRUCTION_ARTIFACT)}),
     RelationType.USES_SKILL: frozenset({(NodeType.OWNER_PROFILE, NodeType.INSTRUCTION_ARTIFACT)}),
-    RelationType.REUSES: frozenset({(NodeType.IDEA, NodeType.ASSET)}),
+    RelationType.REUSES: frozenset({
+        (NodeType.IDEA, NodeType.ASSET),
+        (NodeType.IDEA, NodeType.IDEA),
+    }),
     RelationType.ADDRESSES: frozenset({(NodeType.IDEA, NodeType.CLAIM)}),
     RelationType.DERIVED_FROM: frozenset({
         (NodeType.IDEA, NodeType.IDEA),

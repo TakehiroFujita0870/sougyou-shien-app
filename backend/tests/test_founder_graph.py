@@ -25,6 +25,8 @@ from dots.founder_graph import (
     PersonAsset,
     Provenance,
     ProvenanceOrigin,
+    RelationAssertion,
+    RelationAssertionBasis,
     RelationType,
     Relationship,
     RelationshipStatus,
@@ -435,6 +437,35 @@ def test_relationship_matrix_and_owner_boundary_are_enforced() -> None:
             confidence=0.8,
             evidence_ids=("evidence-1",),
             expires_at=datetime(2026, 10, 1, tzinfo=UTC),
+        )
+
+
+def test_relation_assertion_allows_reusing_an_idea_but_keeps_directional_endpoints() -> None:
+    relation = RelationAssertion(
+        owner_id="owner-1",
+        source_id="idea-current",
+        target_id="idea-past",
+        source_kind=NodeType.IDEA,
+        target_kind=NodeType.IDEA,
+        predicate=RelationType.REUSES,
+        assertion_family_id="reuse-family",
+        basis=RelationAssertionBasis.BRIEF_HYPOTHESIS,
+        based_on_brief_id="brief-current",
+    )
+
+    assert relation.predicate is RelationType.REUSES
+
+    with pytest.raises(ValueError, match="endpoint kinds are not allowed"):
+        RelationAssertion(
+            owner_id="owner-1",
+            source_id="asset-1",
+            target_id="idea-current",
+            source_kind=NodeType.ASSET,
+            target_kind=NodeType.IDEA,
+            predicate=RelationType.REUSES,
+            assertion_family_id="invalid-reuse-family",
+            basis=RelationAssertionBasis.BRIEF_HYPOTHESIS,
+            based_on_brief_id="brief-current",
         )
 
 

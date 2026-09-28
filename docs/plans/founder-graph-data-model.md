@@ -109,6 +109,8 @@ RelationAssertionは次の構造edgeを持つ。
 
 `basis=external_evidence`はsource-grounded Evidenceを必須とする。`basis=brief_hypothesis`はIdeaBrief由来の未確定な`proposed`関係であり、ownerが明示した事実・判断とは区別し、Ideaと正確な最新IdeaBriefを参照する。内部candidate-manifest validatorは、最新BriefのID・revision・Markdown fingerprintに結び付くbounded候補だけを受け入れ、T-3a投影による一意な可視引用または曖昧でない正規章を根拠位置として解決する。`brief_hypothesis`候補はEvidenceを持たず、`external_evidence`候補は選択章へ登録済みのactiveかつsource-groundedなEvidenceだけを参照できる。候補IDは同じBrief版・根拠位置・関係内容から決定的に生成し、再送時に変わらない。T-5 MCP入口は3つのBrief保存ツールで任意の`relation_candidate_manifest`を受け付ける。raw inputは`{version: 1, idea_id, candidates}`で、呼出し側はサーバー生成Brief ID、revision、Markdown hashを指定しない。入口は保存対象Ideaとの一致と64 KiB上限を確認し、validatorは保存後の正確なBrief ID・revision・Markdown fingerprintへ候補を結び付ける。
 
+`REUSES`はIdeaからAsset、または別のIdeaへ向けられる。Idea→Ideaの`REUSES`は過去の案を新しい案の中で再利用することを表し、再利用する要素が別Assetノードとして登録されていない場合にも使える。`DERIVED_FROM`は案の由来・派生元を表し、既存案を材料として再利用することとは区別する。その他のendpoint組み合わせは各predicateのdomain allowlistに従う。
+
 同じ保存呼出しのPhase 1ではBrief、write receipt、pending GraphJobを原子的に保存し、レポート本文を候補エラーで失わない。commit後のPhase 2は対象jobだけをclaimし、最新Idea/Brief/Evidenceを検証した候補payloadを`persist_candidate_manifest`で永続化してからRelationAssertion適用へ進む。payloadは候補ID、node ID/kind、predicate、basis、Evidence ID、Brief binding、根拠offset/章indexだけを保存し、quoteやレポート本文を複製しない。`relation_candidate_manifest`省略時はjobを未評価の`pending`として残し、`candidates: []`は候補なしを明示レビューした結果として完了させる。receiptはGraphJobの`pending`/`leased`/`succeeded`/`failed`/`superseded`状態（または状態を取得できない場合の`unavailable`）を示し、候補適用済み件数を推測して表示しない。候補検証・適用が失敗してもBriefとreceiptは残し、GraphJobの状態とsafe error codeを真実どおり返す。
 
 Given: 3つのBrief保存ツールにboundedな候補manifestが同じIdea IDで渡される。When: Markdown付きBriefを保存する。Then: Briefとpending GraphJobはPhase 1で保存され、対象jobのPhase 2で検証済みかつquoteを含まないpayloadが保存され、receiptは適用完了を主張しない。
