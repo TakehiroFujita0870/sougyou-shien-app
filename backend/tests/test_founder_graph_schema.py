@@ -41,15 +41,21 @@ def test_schema_plan_is_idempotent_and_versioned() -> None:
     assert migration_plan(1, 1) == ()
     assert migration_plan(1, 2)
     assert all("IF NOT EXISTS" in query or query.startswith("MATCH (node)") for query in migration_queries())
-    assert schema_manifest()["version"] == 7
-    assert schema_manifest()["rollback_query_count"] == 20
+    assert schema_manifest()["version"] == 8
+    assert schema_manifest()["rollback_query_count"] == 25
+
+
+def test_schema_v8_adds_owner_brief_job_uniqueness_without_search_index() -> None:
+    upgrade, rollback = migration_queries(7, 8), rollback_queries(8, 7)
+    assert len(upgrade) == 4 and all(term in " ".join(upgrade) for term in ("FounderGraphJob", "node.id IS UNIQUE", "(node.owner_id, node.brief_id) IS UNIQUE", "FounderGraphJobQueueLock"))
+    assert all("search_text" not in q for q in upgrade) and all(q.startswith("DROP ") and "IF EXISTS" in q for q in rollback)
 
 
 def test_schema_v4_adds_only_internal_assertion_family_lock_uniqueness() -> None:
     v4_queries = migration_queries(3, 4)
     rollback = rollback_queries(4, 3)
 
-    assert schema_manifest()["version"] == 7
+    assert schema_manifest()["version"] == 8
     assert len(v4_queries) == 1
     assert "FounderGraphAssertionFamilyLock" in v4_queries[0]
     assert "(node.owner_id, node.family_key) IS UNIQUE" in v4_queries[0]
