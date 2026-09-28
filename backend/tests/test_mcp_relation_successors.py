@@ -144,7 +144,8 @@ def test_retract_relation_assertion_is_evidence_based_and_idempotent() -> None:
 def test_retract_relation_assertion_schema_is_closed() -> None:
     definition = next(tool for tool in McpWriteSurface(InMemoryGraphWriteService("owner-1")).tool_definitions() if tool["name"] == "retract_relation_assertion")
     assert definition["inputSchema"]["additionalProperties"] is False
-    assert definition["inputSchema"]["required"] == ["supersedes_id", "expected_family_revision", "evidence_ids", "idempotency_key"]
+    assert definition["inputSchema"]["required"] == ["supersedes_id", "expected_family_revision", "idempotency_key"]
+    assert "evidence_ids" in definition["inputSchema"]["properties"]
 
 
 def _confirmed_work_relation_fixture():

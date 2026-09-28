@@ -34,6 +34,7 @@ from .founder_graph import (
     PersonAsset,
     Provenance,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     RelationType,
     RelationshipStatus,
@@ -1337,7 +1338,7 @@ class InMemoryGraphWriteService:
                 if isinstance(node, Idea) and self._current_idea_revision_locked(node) is not node:
                     raise GraphWriteError("relation assertion must reference the current Idea revision")
 
-            if not assertion.evidence_ids:
+            if assertion.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS and not assertion.evidence_ids:
                 raise GraphWriteError("formal relation assertion requires Evidence")
             for evidence_id in assertion.evidence_ids:
                 evidence = self._nodes.get(evidence_id)
@@ -1410,12 +1411,18 @@ class InMemoryGraphWriteService:
                     or latest_brief is None
                     or assertion.based_on_brief_id != latest_brief.id
                     or latest_brief.based_on_idea_id != based_on_idea.id
-                    or not latest_brief.research_run_ids
                 ):
-                    raise GraphWriteError("Idea relation requires the exact latest researched Brief")
-                section = latest_brief.sections[assertion.based_on_brief_section_index]
-                if not set(assertion.evidence_ids).issubset(section.evidence_ids):
-                    raise GraphWriteError("relation Evidence must be cited by the selected Brief section")
+                    raise GraphWriteError("Idea relation requires the exact latest Brief")
+                if assertion.based_on_brief_section_index is None:
+                    if (
+                        assertion.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS
+                        or not (latest_brief.report_markdown or "").strip()
+                    ):
+                        raise GraphWriteError("Brief hypothesis requires a non-empty latest Brief Markdown locator")
+                else:
+                    section = latest_brief.sections[assertion.based_on_brief_section_index]
+                    if not section.content.strip() or not set(assertion.evidence_ids).issubset(section.evidence_ids):
+                        raise GraphWriteError("relation Evidence must be cited by the selected Brief section")
                 self._validate_brief_research_locked(latest_brief, based_on_idea)
             elif assertion.based_on_brief_id is not None:
                 raise GraphWriteError("non-Idea relation cannot claim an Idea Brief reference")

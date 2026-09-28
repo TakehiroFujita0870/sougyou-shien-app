@@ -23,6 +23,7 @@ from .founder_graph import (
     PersonAsset,
     Provenance,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationshipStatus,
     ReportSection,
     ReportStatus,
@@ -202,16 +203,17 @@ class McpWriteSurface:
             },
             "link_entities": {
                 "type": "object",
-                "description": "保存済みの記録同士を、根拠付きの未確定な関係として結びます。Ideaを含む場合は、調査済みBriefの章とEvidenceが必要です。",
-                "required": ["source_id", "target_id", "relation", "evidence_ids", "idempotency_key"],
+                "description": "外部事実にはsource-grounded Evidenceが必要です。brief_hypothesisはIdea Briefの内容から作る未確定な提案で、ownerが述べた事実とは区別し、EvidenceやResearchRunを作りません。",
+                "required": ["source_id", "target_id", "relation", "idempotency_key"],
                 "properties": {
                     "source_id": {**text, "minLength": 1},
                     "target_id": {**text, "minLength": 1},
                     "relation": {"type": "string", "enum": [relation.value for relation in RelationType]},
+                    "basis": {"type": "string", "enum": [basis.value for basis in RelationAssertionBasis]},
                     "status": {"type": "string", "enum": [RelationshipStatus.PROPOSED.value, RelationshipStatus.INFERRED.value]},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "expires_at": {"type": "string", "description": "関係の期限を指定する場合のISO-8601日時。"},
-                    "evidence_ids": {**ids, "minItems": 1},
+                    "evidence_ids": ids,
                     "egress_policy": {
                         "type": "string",
                         "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value],
@@ -226,12 +228,12 @@ class McpWriteSurface:
             },
             "retract_relation_assertion": {
                 "type": "object",
-                "description": "保存済みの未確定な関係を根拠付きで撤回します。元記録を削除せず、同じfamilyにRETRACTED後継を追加します。",
-                "required": ["supersedes_id", "expected_family_revision", "evidence_ids", "idempotency_key"],
+                "description": "保存済みの未確定な関係を撤回します。外部事実の関係にはEvidenceが必要ですが、brief_hypothesisの撤回にはEvidenceを作りません。",
+                "required": ["supersedes_id", "expected_family_revision", "idempotency_key"],
                 "properties": {
                     "supersedes_id": {**text, "minLength": 1},
                     "expected_family_revision": {"type": "integer", "minimum": 1},
-                    "evidence_ids": {**ids, "minItems": 1},
+                    "evidence_ids": ids,
                     "egress_policy": {"type": "string", "enum": [policy.value for policy in EgressPolicy]},
                     "based_on_brief_id": {**text, "minLength": 1},
                     "based_on_brief_section_index": {"type": "integer", "minimum": 0, "maximum": 7},
@@ -292,7 +294,7 @@ class McpWriteSurface:
                     if name == "capture_organization"
                     else "資産の安全なメタデータのみを保存します。関係や添付本文は作成しません。"
                     if name == "capture_asset"
-                    else "保存済みの記録同士を、根拠付きの未確定な関係として結びます。Ideaを含む場合は、調査済みBriefの章とEvidenceが必要です。"
+                    else "外部事実にはsource-grounded Evidenceが必要です。brief_hypothesisはIdea Briefに基づく未確定な提案で、ownerの明示的な主張とは区別します。"
                     if name == "link_entities"
                     else f"Purpose-limited Founder Graph write command: {name}. Provide the fields in the input schema and reuse idempotency_key on retries."
                 ),
@@ -554,7 +556,7 @@ class McpWriteSurface:
 
     def _link_entities(self, arguments: Mapping[str, Any]) -> WriteReceipt:
         self._reject_unknown(arguments, {
-            "source_id", "target_id", "relation", "status", "confidence", "expires_at", "evidence_ids",
+            "source_id", "target_id", "relation", "status", "basis", "confidence", "expires_at", "evidence_ids",
             "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "supersedes_id",
             "expected_family_revision", "idempotency_key",
         })
@@ -574,9 +576,10 @@ class McpWriteSurface:
             target_kind = NodeType(target.node_type)
             predicate = RelationType(arguments.get("relation"))
             status = RelationshipStatus(arguments.get("status", RelationshipStatus.PROPOSED.value))
+            basis = RelationAssertionBasis(arguments.get("basis", RelationAssertionBasis.EXTERNAL_EVIDENCE.value))
             egress_policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY.value))
         except (AttributeError, TypeError, ValueError) as error:
-            raise McpWriteError("invalid_input", "Relation type, status, or egress policy is invalid.") from error
+            raise McpWriteError("invalid_input", "Relation type, basis, status, or egress policy is invalid.") from error
         if status not in {RelationshipStatus.PROPOSED, RelationshipStatus.INFERRED}:
             raise McpWriteError("invalid_input", "Model-generated relations may only be proposed or inferred.")
         if egress_policy not in {EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE}:
@@ -585,8 +588,11 @@ class McpWriteSurface:
         section_index = arguments.get("based_on_brief_section_index")
         has_idea_endpoint = source_kind is NodeType.IDEA or target_kind is NodeType.IDEA
         if has_idea_endpoint:
-            if (brief_id is None) != (section_index is None):
+            whole_draft_hypothesis = basis is RelationAssertionBasis.BRIEF_HYPOTHESIS
+            if not whole_draft_hypothesis and (brief_id is None) != (section_index is None):
                 raise McpWriteError("invalid_input", "Idea relations require both Brief reference fields.")
+            if whole_draft_hypothesis and brief_id is None:
+                raise McpWriteError("invalid_input", "Brief hypotheses require a latest Brief reference.")
             if brief_id is not None:
                 brief_id = self._text(brief_id, "based_on_brief_id")
             if section_index is not None and (type(section_index) is not int or not 0 <= section_index <= 7):
@@ -620,6 +626,8 @@ class McpWriteSurface:
                 raise McpWriteError("invalid_input", "confirmed relation assertions cannot be corrected by this tool")
             if predecessor.revision != expected_family_revision:
                 raise RevisionConflictError("expected relation family revision is stale")
+            if "basis" not in arguments:
+                basis = predecessor.basis
             if (predecessor.source_id, predecessor.target_id, predecessor.predicate) != (source_id, target_id, predicate):
                 raise McpWriteError("invalid_input", "a relation correction must retain its endpoints and predicate")
             family_id = predecessor.assertion_family_id
@@ -639,7 +647,9 @@ class McpWriteSurface:
                 expires_at = predecessor.expires_at
         if supersedes_id is None:
             if has_idea_endpoint and brief_id is None:
-                raise McpWriteError("invalid_input", "New Idea relations require a Brief reference and section index.")
+                raise McpWriteError("invalid_input", "New Idea relations require a Brief reference; external-evidence relations also require its section index.")
+            if has_idea_endpoint and basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS and section_index is None:
+                raise McpWriteError("invalid_input", "External-evidence Idea relations require a Brief section index.")
             confidence = arguments.get("confidence")
         assertion = RelationAssertion(
             owner_id=self.writes.owner_id,
@@ -652,6 +662,7 @@ class McpWriteSurface:
             assertion_family_id=family_id,
             revision=revision,
             status=status,
+            basis=basis,
             confidence=confidence,
             expires_at=expires_at,
             supersedes_id=supersedes_id,
@@ -700,8 +711,10 @@ class McpWriteSurface:
             raise McpWriteError("invalid_input", "a positive expected_family_revision is required")
         if predecessor.revision != expected:
             raise RevisionConflictError("expected relation family revision is stale")
-        evidence_ids = self._ids(arguments.get("evidence_ids"), "evidence_ids")
-        if not evidence_ids:
+        evidence_ids = self._ids(arguments.get("evidence_ids", ()), "evidence_ids")
+        if predecessor.basis is RelationAssertionBasis.BRIEF_HYPOTHESIS and evidence_ids:
+            raise McpWriteError("invalid_input", "Brief hypothesis retraction cannot claim external Evidence")
+        if predecessor.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS and not evidence_ids:
             raise McpWriteError("invalid_input", "retraction requires at least one evidence id")
         try:
             policy = EgressPolicy(arguments.get("egress_policy", predecessor.egress_policy.value))

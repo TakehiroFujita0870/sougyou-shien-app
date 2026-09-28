@@ -22,6 +22,7 @@ from .founder_graph import (
     Source,
     SourceRevision,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     Relationship,
     RelationshipStatus,
@@ -82,6 +83,7 @@ class RelationPathStep:
     target_id: str
     traversal_direction: str
     evidence_ids: tuple[str, ...] = ()
+    basis: str = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
     status: str | None = None
     confidence: float | None = None
     valid_from: str | None = None
@@ -698,6 +700,7 @@ class GraphReadService:
                 target_id=target.id,
                 traversal_direction="outgoing",
                 evidence_ids=tuple(assertion.evidence_ids),
+                basis=assertion.basis.value,
                 status=assertion.status.value,
                 confidence=assertion.confidence,
                 valid_from=assertion.valid_from.isoformat(),
@@ -867,7 +870,7 @@ class GraphReadService:
         idea_ends = [node for node in (source, target) if isinstance(node, Idea)]
         if not idea_ends:
             return (None, None) if assertion.based_on_brief_id is None and assertion.based_on_brief_section_index is None else (False, None)
-        if assertion.based_on_brief_id is None or assertion.based_on_brief_section_index is None:
+        if assertion.based_on_brief_id is None:
             return False, None
         primary = source if isinstance(source, Idea) else target
         root = primary
@@ -885,10 +888,16 @@ class GraphReadService:
             or resolve_restored_idea_reference(
                 latest.based_on_idea_id, GraphReadService._idea_chain(primary, node_by_id),
             ) is not primary
-            or not latest.research_run_ids
         ):
             return False, None
         section_index = assertion.based_on_brief_section_index
+        if section_index is None:
+            if (
+                assertion.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS
+                or not (latest.report_markdown or "").strip()
+            ):
+                return False, None
+            return latest.id, None
         if type(section_index) is not int or not 0 <= section_index < len(latest.sections):
             return False, None
         section = latest.sections[section_index]

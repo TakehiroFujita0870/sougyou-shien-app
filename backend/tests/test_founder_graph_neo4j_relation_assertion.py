@@ -17,6 +17,7 @@ from dots.founder_graph import (
     Organization,
     PersonAsset,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     RelationType,
     RelationshipStatus,
@@ -319,6 +320,41 @@ def test_persistent_idea_assertion_calls_authoritative_brief_and_research_gate()
     assert receipt.target_id == assertion.id
     assert history_calls == [(brief.id, idea.id)]
     assert tuple(state.edges[-3:]) == relation_assertion_structural_edges(assertion)
+
+
+@pytest.mark.parametrize("origin", [None, "prior_research_import"])
+def test_persistent_brief_hypothesis_needs_latest_brief_but_not_evidence_or_run_history(origin):
+    owner = "owner-idea-hypothesis"
+    idea = Idea(owner_id=owner, id="idea-hypothesis", title="synthetic", egress_policy=EgressPolicy.SHAREABLE)
+    claim = Claim(owner_id=owner, id="claim-hypothesis", text="unconfirmed", egress_policy=EgressPolicy.SHAREABLE)
+    evidence = Evidence(owner_id=owner, id="evidence-hypothesis", material_id="material-hypothesis", claim_id=claim.id,
+                        egress_policy=EgressPolicy.SHAREABLE)
+    brief = IdeaBriefVersion(
+        owner_id=owner, id="brief-hypothesis", idea_lineage_root_id=idea.id, based_on_idea_id=idea.id,
+        research_run_ids=(), origin=origin, egress_policy=EgressPolicy.SHAREABLE,
+        report_markdown="## Imported or draft Brief\n\nSynthetic Markdown-only anchor.",
+        sections=tuple(IdeaBriefSection(index=i, content="",
+                                        evidence_ids=(evidence.id,) if origin else ()) for i in range(8)),
+    )
+    assertion = RelationAssertion(
+        owner_id=owner, id="assertion-hypothesis", source_id=idea.id, source_kind=NodeType.IDEA,
+        target_id=claim.id, target_kind=NodeType.CLAIM, predicate=RelationType.ADDRESSES,
+        assertion_family_id="family-hypothesis", status=RelationshipStatus.PROPOSED,
+        basis=RelationAssertionBasis.BRIEF_HYPOTHESIS, based_on_brief_id=brief.id,
+        based_on_brief_section_index=None, egress_policy=EgressPolicy.SHAREABLE,
+    )
+    state = RelationTx(owner, (idea, claim, evidence), (brief,))
+    gateway = Neo4jGraphGateway(RelationDriver(state), owner)
+    history_calls = []
+    gateway._validate_brief_run_history_tx = lambda *_args: history_calls.append(_args)
+
+    receipt = gateway.save_relation_assertion(
+        assertion, expected_family_revision=None, idempotency_key=f"hypothesis-{origin or 'draft'}",
+    )
+
+    assert receipt.target_id == assertion.id
+    assert history_calls == []
+    assert tuple(state.edges[-2:]) == relation_assertion_structural_edges(assertion)
 
 
 @pytest.mark.parametrize("person_policy", [EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE])

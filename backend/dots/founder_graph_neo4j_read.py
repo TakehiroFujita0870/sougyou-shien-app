@@ -24,6 +24,7 @@ from .founder_graph import (
     NodeType,
     Provenance,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     RelationType,
     RelationshipStatus,
@@ -356,7 +357,9 @@ def _aware_time(value: Any) -> datetime:
 def _decode_assertion(row: Any, *, owner_id: str) -> RelationAssertion:
     payload = _parse_payload(row, prefix="assertion_")
     names = {item.name for item in fields(RelationAssertion)}
-    if set(payload) != names:
+    if set(payload) == names - {"basis"}:
+        payload["basis"] = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
+    elif set(payload) != names:
         raise ValueError("assertion payload fields are incomplete")
     if _row_value(row, "assertion_id") != payload.get("id"):
         raise ValueError("assertion id does not match its payload")
@@ -591,7 +594,7 @@ class Neo4jGraphReadService:
                 ):
                     continue
                 if idea_ends:
-                    if assertion.based_on_brief_id is None or assertion.based_on_brief_section_index is None:
+                    if assertion.based_on_brief_id is None:
                         continue
                     primary = source if source.node_type == NodeType.IDEA.value else target
                     original_primary_id = assertion.source_id if source.node_type == NodeType.IDEA.value else assertion.target_id
@@ -607,17 +610,23 @@ class Neo4jGraphReadService:
                     if (
                         latest.id != assertion.based_on_brief_id
                         or resolve_restored_idea_reference(latest.based_on_idea_id, idea_chain) is not idea_chain[-1]
-                        or not latest.research_run_ids
-                        or type(section_index) is not int
-                        or not 0 <= section_index < len(latest.sections)
                     ):
                         continue
-                    section = latest.sections[section_index]
-                    if (
-                        not section.content.strip()
-                        or not set(assertion.evidence_ids).issubset(section.evidence_ids)
-                    ):
-                        continue
+                    if section_index is None:
+                        if (
+                            assertion.basis is not RelationAssertionBasis.BRIEF_HYPOTHESIS
+                            or not (latest.report_markdown or "").strip()
+                        ):
+                            continue
+                    else:
+                        if type(section_index) is not int or not 0 <= section_index < len(latest.sections):
+                            continue
+                        section = latest.sections[section_index]
+                        if (
+                            not section.content.strip()
+                            or not set(assertion.evidence_ids).issubset(section.evidence_ids)
+                        ):
+                            continue
                     brief_id, brief_section = latest.id, section_index
                 elif assertion.based_on_brief_id is not None or assertion.based_on_brief_section_index is not None:
                     continue
@@ -637,6 +646,7 @@ class Neo4jGraphReadService:
                     from_id=source.id, to_id=target.id, source_id=source.id,
                     predicate=assertion.predicate.value, target_id=target.id,
                     traversal_direction="outgoing", evidence_ids=tuple(assertion.evidence_ids),
+                    basis=assertion.basis.value,
                     status=assertion.status.value, confidence=assertion.confidence,
                     valid_from=assertion.valid_from.isoformat(),
                     expires_at=assertion.expires_at.isoformat() if assertion.expires_at else None,

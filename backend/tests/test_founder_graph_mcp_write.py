@@ -19,6 +19,7 @@ from dots.founder_graph import (
     ReportSection,
     ReportVersion,
     RelationAssertion,
+    RelationAssertionBasis,
     RelationAssertionEdgeType,
     RelationType,
     Relationship,
@@ -704,11 +705,11 @@ def test_link_entities_schema_is_closed_and_requires_idea_brief_pair() -> None:
     assert schema["additionalProperties"] is False
     assert set(schema["properties"]) == {
         "source_id", "target_id", "relation", "status", "confidence", "expires_at",
-        "evidence_ids", "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
+        "basis", "evidence_ids", "egress_policy", "based_on_brief_id", "based_on_brief_section_index", "idempotency_key",
         "supersedes_id", "expected_family_revision",
     }
-    assert "evidence_ids" in schema["required"]
-    assert schema["properties"]["evidence_ids"]["minItems"] == 1
+    assert "evidence_ids" not in schema["required"]
+    assert schema["properties"]["basis"]["enum"] == ["external_evidence", "brief_hypothesis"]
     assert schema["properties"]["status"]["enum"] == ["proposed", "inferred"]
     assert definition["annotations"]["destructiveHint"] is False
 
@@ -723,6 +724,58 @@ def test_link_entities_schema_is_closed_and_requires_idea_brief_pair() -> None:
             "evidence_ids": ["not-used"], "idempotency_key": "idea-link-without-brief",
         }, owner_id="owner-1")
     assert writes.nodes() == before
+
+
+def test_link_entities_saves_and_reads_a_draft_brief_hypothesis_without_evidence():
+    writes, surface = _surface()
+    idea = Idea(owner_id="owner-1", id="idea-draft-hypothesis", title="Synthetic draft", egress_policy=EgressPolicy.SHAREABLE)
+    claim = Claim(owner_id="owner-1", id="claim-draft-hypothesis", text="Hypothesis target", egress_policy=EgressPolicy.SHAREABLE)
+    for node in (idea, claim):
+        writes.put_node(node, idempotency_key=f"seed-{node.id}")
+    brief = IdeaBriefVersion(
+        owner_id="owner-1", id="brief-draft-hypothesis", idea_lineage_root_id=idea.id,
+        based_on_idea_id=idea.id, egress_policy=EgressPolicy.SHAREABLE,
+        report_markdown="## Draft\n\nUnconfirmed Brief-derived hypothesis in the saved draft.",
+    )
+    writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key="save-draft-hypothesis-brief")
+
+    receipt = surface.call("link_entities", {
+        "source_id": idea.id, "target_id": claim.id, "relation": RelationType.ADDRESSES.value,
+        "basis": RelationAssertionBasis.BRIEF_HYPOTHESIS.value,
+        "egress_policy": EgressPolicy.SHAREABLE.value,
+        "based_on_brief_id": brief.id,
+        "idempotency_key": "draft-brief-hypothesis",
+    }, owner_id="owner-1")
+    assertion = writes.get_node(receipt.target_id)
+    assert isinstance(assertion, RelationAssertion)
+    assert assertion.status is RelationshipStatus.PROPOSED
+    assert assertion.basis is RelationAssertionBasis.BRIEF_HYPOTHESIS
+    assert assertion.evidence_ids == ()
+
+    reads = GraphReadService(writes)
+    snapshot = writes.read_snapshot()
+    nodes = {node.id: node for node in snapshot.nodes}
+    assert reads._assertion_brief_reference(
+        assertion, idea, claim, dict(snapshot.latest_idea_briefs), nodes, "owner-1",
+    ) == (brief.id, None)
+    hit = next(item for item in reads.search("Synthetic draft", owner_id="owner-1").hits if item.node.id == claim.id)
+    assert hit.relation_path and hit.relation_path[0].basis == RelationAssertionBasis.BRIEF_HYPOTHESIS.value
+    result = McpReadSurface(reads).call(
+        "search", {"query": "Synthetic draft"}, owner_id="owner-1",
+    )
+    projected = next(item for item in result["results"] if item["id"] == claim.id)
+    edge = projected["semantic_relation_path"][0]
+    assert edge["basis"] == RelationAssertionBasis.BRIEF_HYPOTHESIS.value
+    assert edge["evidence_ids"] == []
+
+    retraction = surface.call("retract_relation_assertion", {
+        "supersedes_id": assertion.id, "expected_family_revision": 1,
+        "idempotency_key": "retract-draft-brief-hypothesis",
+    }, owner_id="owner-1")
+    retracted = writes.get_node(retraction.target_id)
+    assert retracted.status is RelationshipStatus.RETRACTED
+    assert retracted.basis is RelationAssertionBasis.BRIEF_HYPOTHESIS
+    assert retracted.evidence_ids == ()
 
 
 def test_link_entities_passes_exact_idea_brief_evidence_to_formal_adapter() -> None:
