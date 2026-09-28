@@ -107,7 +107,7 @@ RelationAssertionは次の構造edgeを持つ。
 - `EVIDENCED_BY` → Evidenceを0件以上。inferred、confirmedは1件以上を必須にする。
 - `SUPERSEDES` → 直前のRelationAssertion。状態変更時に使用する。
 
-`basis=external_evidence`は保存時にsource-grounded Evidenceを必須とする。`basis=brief_hypothesis`はIdeaBrief由来の未確定な`proposed`関係であり、ownerが明示した事実・判断とは区別し、Ideaと正確な最新IdeaBriefを参照する。T-3の章投影ができるまでは、章番号なしで`report_markdown`全体を暫定的なBriefレベルlocatorにできるが、これは根拠箇所を示すものではなく、空のMarkdownは保存・読取を拒否する。最終US-4受入にはT-5/T-3の引用または章参照が必要。下書きと`prior_research_import`ではCampaign Runを要求・捏造しない。外部事実とBrief由来の仮説は別basisとして読み手にも示す。
+`basis=external_evidence`はsource-grounded Evidenceを必須とする。`basis=brief_hypothesis`はIdeaBrief由来の未確定な`proposed`関係であり、ownerが明示した事実・判断とは区別し、Ideaと正確な最新IdeaBriefを参照する。内部candidate-manifest validatorは、最新BriefのID・revision・Markdown fingerprintに結び付くbounded候補だけを受け入れ、T-3a投影による一意な可視引用または曖昧でない正規章を根拠位置として解決する。`brief_hypothesis`候補はEvidenceを持たず、`external_evidence`候補は選択章へ登録済みのactiveかつsource-groundedなEvidenceだけを参照できる。候補IDは同じBrief版・根拠位置・関係内容から決定的に生成し、再送時に変わらない。返す型は検証済み候補に限るが、T-5 writerは保存transaction内で最新BriefとEvidence lineageを再検査する。このvalidatorは純粋な内部interfaceであり、現時点で公開MCP toolや処理待ちqueueを追加しない。下書きと`prior_research_import`ではCampaign Runを要求・捏造せず、外部事実とBrief由来の仮説は別basisとして読み手にも示す。
 
 IdeaBriefが新しい版へ進んだ場合、旧版を参照するRelationAssertionは削除せず、検索・読取から隠す。新しい関係は現行Ideaと最新IdeaBriefだけを参照する。
 
