@@ -5,13 +5,15 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from dots.founder_graph import Claim, EgressPolicy, Idea, MaterialKind, Source, SourceRevision
+from dots.founder_graph_mcp import McpReadSurface
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
 
 
 def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval() -> None:
     writes = InMemoryGraphWriteService("owner-mcp-research")
-    writes.put_node(Idea(owner_id=writes.owner_id, id="idea-mcp", title="Synthetic idea"), idempotency_key="idea-seed")
+    writes.put_node(Idea(owner_id=writes.owner_id, id="idea-mcp", title="Synthetic idea", egress_policy=EgressPolicy.SHAREABLE), idempotency_key="idea-seed")
     surface = McpWriteSurface(writes)
     tools = {item["name"]: item for item in surface.tool_definitions()}
     assert {
@@ -72,6 +74,7 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     sections[0]["evidence_ids"] = [evidence.target_id]
     researched_tool = tools["save_researched_idea_brief"]
     assert "report_markdown" in researched_tool["inputSchema"]["required"]
+    assert "egress_policy=shareable" in researched_tool["description"]
     report_markdown = "## エグゼクティブサマリー\n\n| 対象 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |\n\n出典: https://example.test/source?id=1#section"
     for missing_report in ({}, {"report_markdown": "  "}):
         with pytest.raises(McpWriteError, match="report_markdown"):
@@ -84,6 +87,7 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     brief = surface.call("save_researched_idea_brief", {
         "idea_id": "idea-mcp", "expected_revision": 0, "sections": sections,
         "research_run_ids": [run.target_id], "report_markdown": report_markdown,
+        "egress_policy": "shareable",
         "idempotency_key": "mcp-brief",
     }, owner_id=writes.owner_id)
     assert brief.target_type == "idea_brief_version"
@@ -91,6 +95,22 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     assert saved is not None and saved.research_run_ids == (run.target_id,)
     assert saved.origin is None
     assert saved.report_markdown == report_markdown
+    fetched = McpReadSurface(GraphReadService(writes)).call(
+        "fetch_idea_brief", {"idea_id": "idea-mcp"}, owner_id=writes.owner_id,
+    )
+    assert fetched["brief_id"] == brief.target_id
+    assert fetched["report_markdown"] == report_markdown
+    assert fetched["sections"][0]["evidence_ids"] == [evidence.target_id]
+    link = surface.call("link_entities", {
+        "source_id": "idea-mcp", "target_id": claim.id, "relation": "ADDRESSES",
+        "evidence_ids": [evidence.target_id], "based_on_brief_id": fetched["brief_id"],
+        "based_on_brief_section_index": 0, "egress_policy": "shareable",
+        "idempotency_key": "mcp-report-graph-link",
+    }, owner_id=writes.owner_id)
+    linked = McpReadSurface(GraphReadService(writes)).call(
+        "fetch", {"id": link.target_id}, owner_id=writes.owner_id,
+    )
+    assert linked["id"] == link.target_id
 
     with pytest.raises(McpWriteError, match="current, shareable Evidence citation"):
         surface.call("save_researched_idea_brief", {

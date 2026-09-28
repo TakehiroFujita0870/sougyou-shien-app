@@ -12,7 +12,7 @@
     "defaultPrompt": null
   },
   "name": "dots",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "個人用の創業知識グラフDots。アイデア・人脈・資料を保存、検索、関連づけます。",
   "author": {"name": "Takehiro Fujita"},
   "keywords": [],
