@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 
@@ -30,6 +30,13 @@ SECTION_TITLES: tuple[str, ...] = (
     "リスク・撤退ライン",
     "リスクミニマムなロードマップ",
 )
+
+
+class _ReportMarkdownOmitted:
+    __slots__ = ()
+
+
+_REPORT_MARKDOWN_OMITTED = _ReportMarkdownOmitted()
 
 
 def _identifier(value: str, name: str) -> str:
@@ -123,14 +130,14 @@ class IdeaBriefVersion:
         self,
         *,
         sections: tuple[IdeaBriefSection, ...] = (),
-        report_markdown: str | None = None,
+        report_markdown: str | None | _ReportMarkdownOmitted = _REPORT_MARKDOWN_OMITTED,
         change_reason: str = "revision",
         based_on_idea_id: str | None = None,
         research_run_ids: tuple[str, ...] | list[str] | None = None,
         origin: IdeaBriefOrigin | None = None,
         egress_policy: EgressPolicy | None = None,
     ) -> IdeaBriefVersion:
-        """Create a new version; omitted sections keep their prior content."""
+        """Create a new version; omitted sections and Markdown keep prior content."""
         if not isinstance(sections, (tuple, list)) or not all(isinstance(section, IdeaBriefSection) for section in sections):
             raise IdeaBriefValidationError("sections must be IdeaBriefSection values")
         if len({section.index for section in sections}) != len(sections):
@@ -139,6 +146,11 @@ class IdeaBriefVersion:
         merged.update({section.index: section for section in sections})
         run_ids = self.research_run_ids if research_run_ids is None else research_run_ids
         next_origin = origin if origin is not None else (self.origin if not run_ids else None)
+        next_report_markdown = (
+            self.report_markdown
+            if report_markdown is _REPORT_MARKDOWN_OMITTED
+            else cast(str | None, report_markdown)
+        )
         return replace(
             self,
             id=f"idea-brief_{uuid4().hex}",
@@ -148,7 +160,7 @@ class IdeaBriefVersion:
             research_run_ids=run_ids,
             origin=next_origin,
             sections=tuple(merged.values()),
-            report_markdown=report_markdown,
+            report_markdown=next_report_markdown,
             change_reason=change_reason,
             egress_policy=self.egress_policy if egress_policy is None else egress_policy,
             created_at=datetime.now(timezone.utc),

@@ -20,13 +20,14 @@ def test_partial_brief_has_eight_ordered_sections_without_inventing_content():
     assert brief.sections[3].unconfirmed == ("価格受容性",)
 
 
-def test_markdown_report_is_bounded_and_does_not_leak_into_a_new_section_revision():
+def test_markdown_report_is_bounded_and_revision_preserves_it_until_explicitly_changed():
     first = IdeaBriefVersion(
         owner_id="owner-test", idea_lineage_root_id="idea-root", based_on_idea_id="idea-current",
         report_markdown="## 概要\n\n| 顧客 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |",
     )
     assert first.report_markdown.startswith("## 概要")
-    assert first.revise().report_markdown is None
+    assert first.revise().report_markdown == first.report_markdown
+    assert first.revise(report_markdown=None).report_markdown is None
     assert first.revise(report_markdown="## 更新版").report_markdown == "## 更新版"
     for invalid in ("", " ", "a" * 60_001):
         with pytest.raises(IdeaBriefValidationError):
