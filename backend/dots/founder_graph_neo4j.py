@@ -76,6 +76,7 @@ from .founder_graph_neo4j_codec import (
 from .founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
 from .founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
 from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief, _serialize_persisted_idea_brief
+from .founder_graph_job_store import FounderGraphJobStore
 from .founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
 from .founder_graph_neo4j_lifecycle import transition_asset_status_tx, transition_idea_status_tx
 from .founder_graph_neo4j_relation_assertion import validate_relation_assertion_evidence_tx
@@ -1767,6 +1768,12 @@ class Neo4jGraphGateway:
             audit_id=audit_id, owner_id=self.owner_id, actor=actor, operation=receipt.operation,
             target_id=receipt.target_id, target_type=receipt.target_type, revision=receipt.revision,
             key=key, fingerprint=fingerprint,
+        )
+        # Keep the durable follow-up and older active jobs in the Brief+receipt transaction.
+        FounderGraphJobStore.enqueue_tx(tx, brief, owner_id=self.owner_id, now=brief.created_at)
+        FounderGraphJobStore.mark_superseded_tx(
+            tx, owner_id=self.owner_id, idea_lineage_root_id=brief.idea_lineage_root_id,
+            current_brief_id=brief.id, now=brief.created_at,
         )
         return receipt
 
