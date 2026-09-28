@@ -351,7 +351,7 @@ class McpReadSurface:
                 step = fetch_assertion(identifier, owner_id=owner_id)
             except GraphReadNotFoundError as error:
                 raise McpReadError("not_found", "The requested graph result was not found.") from error
-            return {
+            result = {
                 "id": step.relation_assertion_id,
                 "kind": NodeType.RELATION_ASSERTION.value,
                 "status": step.status,
@@ -362,6 +362,10 @@ class McpReadSurface:
                 "path": [step.source_id, step.predicate, step.target_id],
                 "evidence_ids": list(self._shareable_evidence_ids(step.evidence_ids, owner_id=owner_id)),
             }
+            support = self._relation_support_projection(step)
+            if support is not None:
+                result.update(support)
+            return result
         result = self._project_view(view)
         if result is None:
             raise McpReadError("not_found", "The requested graph result was not found.")
@@ -372,6 +376,47 @@ class McpReadSurface:
         unknown = set(arguments).difference(allowed)
         if unknown:
             raise McpReadError("invalid_input", "Unknown tool arguments are not accepted.")
+
+    @staticmethod
+    def _relation_support_projection(step: RelationPathStep) -> dict[str, Any] | None:
+        revision = step.based_on_brief_revision
+        start = step.based_on_brief_quote_start
+        end = step.based_on_brief_quote_end
+        quote = step.support_quote
+        if revision is None and start is None and end is None and quote is None:
+            return {}
+        if (
+            type(revision) is not int or revision < 1
+            or not isinstance(step.based_on_brief_id, str) or not step.based_on_brief_id.strip()
+        ):
+            return None
+        if step.based_on_brief_section_index is not None and (
+            type(step.based_on_brief_section_index) is not int
+            or not 0 <= step.based_on_brief_section_index <= 7
+        ):
+            return None
+        offsets_present = start is not None or end is not None
+        if offsets_present and (
+            type(start) is not int or type(end) is not int
+            or start < 0 or end <= start or end - start > 1200
+        ):
+            return None
+        if quote is not None and (
+            not isinstance(quote, str) or not quote.strip() or len(quote) > 1200
+            or not offsets_present or len(quote) != end - start
+        ):
+            return None
+        result: dict[str, Any] = {
+            "based_on_brief_id": step.based_on_brief_id,
+            "based_on_brief_section_index": step.based_on_brief_section_index,
+            "based_on_brief_revision": revision,
+        }
+        if offsets_present:
+            result["based_on_brief_quote_start"] = start
+            result["based_on_brief_quote_end"] = end
+        if quote is not None:
+            result["support_quote"] = quote
+        return result
 
     def _project_hit(self, hit, *, owner_id: str) -> dict[str, Any] | None:
         result = self._project_view(hit.node)
@@ -467,6 +512,32 @@ class McpReadSurface:
                 )
             ):
                 return []
+            if step.based_on_brief_revision is not None and (
+                type(step.based_on_brief_revision) is not int
+                or step.based_on_brief_revision < 1
+                or step.based_on_brief_id is None
+            ):
+                return []
+            quote_offsets_present = (
+                step.based_on_brief_quote_start is not None
+                or step.based_on_brief_quote_end is not None
+            )
+            if quote_offsets_present and (
+                type(step.based_on_brief_quote_start) is not int
+                or type(step.based_on_brief_quote_end) is not int
+                or step.based_on_brief_quote_start < 0
+                or step.based_on_brief_quote_end <= step.based_on_brief_quote_start
+                or step.based_on_brief_revision is None
+            ):
+                return []
+            if step.support_quote is not None and (
+                not isinstance(step.support_quote, str)
+                or not step.support_quote.strip()
+                or len(step.support_quote) > 1200
+                or not quote_offsets_present
+                or len(step.support_quote) != step.based_on_brief_quote_end - step.based_on_brief_quote_start
+            ):
+                return []
             if (
                 step.traversal_direction == "outgoing"
                 and (step.from_id != step.source_id or step.to_id != step.target_id)
@@ -495,7 +566,7 @@ class McpReadSurface:
                         evidence_ids.append(evidence_id)
             except (GraphReadError, TypeError, ValueError):
                 return []
-            projected.append({
+            projected_step = {
                 "relation_assertion_id": step.relation_assertion_id,
                 "from_id": step.from_id,
                 "to_id": step.to_id,
@@ -511,7 +582,15 @@ class McpReadSurface:
                 "based_on_brief_id": step.based_on_brief_id,
                 "based_on_brief_section_index": step.based_on_brief_section_index,
                 "evidence_ids": list(dict.fromkeys(evidence_ids)),
-            })
+            }
+            if step.based_on_brief_revision is not None:
+                projected_step["based_on_brief_revision"] = step.based_on_brief_revision
+            if quote_offsets_present:
+                projected_step["based_on_brief_quote_start"] = step.based_on_brief_quote_start
+                projected_step["based_on_brief_quote_end"] = step.based_on_brief_quote_end
+            if step.support_quote is not None:
+                projected_step["support_quote"] = step.support_quote
+            projected.append(projected_step)
         return projected
 
     def _shareable_relation_path(self, hit, *, owner_id: str) -> bool:

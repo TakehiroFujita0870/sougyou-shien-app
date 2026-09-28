@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from dots.idea_brief import IdeaBriefSection, SECTION_TITLES
-from dots.idea_brief_read_projection import project_idea_brief_for_read
+from dots.idea_brief_read_projection import project_brief_support_quote, project_idea_brief_for_read
 
 
 def _legacy_sections() -> tuple[IdeaBriefSection, ...]:
@@ -68,3 +70,52 @@ def test_ambiguous_markdown_fails_closed_for_content_and_link_association() -> N
     assert projection.metadata is not None
     assert projection.metadata["heading_status"] == "ambiguous"
     assert projection.metadata["links"][0]["section_index"] is None
+
+
+def test_support_quote_uses_unique_unicode_character_offsets_in_partial_markdown() -> None:
+    markdown = f"## {SECTION_TITLES[2]}\n\n起業家が市場を検証する"
+    quote = "起業家が市場"
+    start = markdown.index(quote)
+
+    assert start != len(markdown[:start].encode("utf-8"))
+    assert project_brief_support_quote(markdown, start=start, end=start + len(quote), section_index=2) == quote
+
+
+@pytest.mark.parametrize(
+    ("markdown", "start", "end", "section_index"),
+    [
+        ("## heading\n\ntext", -1, 2, None),
+        ("## heading\n\ntext", 100, 105, None),
+        ("## heading\n\n   ", 15, 18, None),
+        ("## heading\n\nrepeat\n\nrepeat", 12, 18, None),
+        ("## heading\n\n`hidden`", 13, 19, None),
+        ("## heading\n\n```\nhidden\n```", 13, 19, None),
+        (
+            f"## {SECTION_TITLES[0]}\n\nfirst\n## {SECTION_TITLES[0]}\n\nambiguous",
+            49,
+            58,
+            None,
+        ),
+    ],
+)
+def test_support_quote_fails_closed_for_invalid_or_ambiguous_offsets(
+    markdown: str, start: int, end: int, section_index: int | None,
+) -> None:
+    assert project_brief_support_quote(markdown, start=start, end=end, section_index=section_index) is None
+
+
+def test_support_quote_fails_closed_when_section_locator_disagrees() -> None:
+    markdown = f"## {SECTION_TITLES[0]}\n\nwrong chapter"
+    quote = "wrong chapter"
+    start = markdown.index(quote)
+
+    assert project_brief_support_quote(
+        markdown, start=start, end=start + len(quote), section_index=1,
+    ) is None
+
+
+def test_support_quote_is_bounded() -> None:
+    markdown = "## Draft\n\n" + "x" * 1201
+    start = markdown.index("x")
+
+    assert project_brief_support_quote(markdown, start=start, end=len(markdown), section_index=None) is None

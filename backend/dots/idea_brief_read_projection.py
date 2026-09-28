@@ -6,7 +6,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from .idea_brief import SECTION_TITLES
-from .markdown_report_projection import MarkdownReportProjection, project_markdown_report
+from .markdown_report_projection import (
+    MarkdownReportProjection,
+    find_unique_visible_quote,
+    has_visible_markdown_content,
+    project_markdown_report,
+)
+
+
+_MAX_SUPPORT_QUOTE_CHARS = 1200
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +95,56 @@ def project_idea_brief_for_read(
         ),
         markdown_projection=projection,
     )
+
+
+def brief_support_locator_is_valid(
+    report_markdown: str | None,
+    *,
+    start: int,
+    end: int,
+    section_index: int | None,
+) -> bool:
+    """Validate a bounded visible location without copying its report text."""
+    if (
+        not isinstance(report_markdown, str)
+        or type(start) is not int
+        or type(end) is not int
+        or not 0 <= start < end <= len(report_markdown)
+        or end - start > _MAX_SUPPORT_QUOTE_CHARS
+    ):
+        return False
+    if section_index is not None and (type(section_index) is not int or not 0 <= section_index < len(SECTION_TITLES)):
+        return False
+    try:
+        projection = project_markdown_report(report_markdown)
+    except (TypeError, ValueError):
+        return False
+    if projection.heading_status == "ambiguous":
+        return False
+    if section_index is not None:
+        heading = next((item for item in projection.headings if item.section_index == section_index), None)
+        if heading is None or not heading.body_offset <= start < end <= heading.end_offset:
+            return False
+    return has_visible_markdown_content(report_markdown, start, end)
+
+
+def project_brief_support_quote(
+    report_markdown: str | None,
+    *,
+    start: int,
+    end: int,
+    section_index: int | None,
+) -> str | None:
+    """Resolve one unique visible quote from an unambiguous Brief location."""
+    if not brief_support_locator_is_valid(
+        report_markdown, start=start, end=end, section_index=section_index,
+    ):
+        return None
+    assert isinstance(report_markdown, str)
+    quote = report_markdown[start:end]
+    if find_unique_visible_quote(report_markdown, quote) != (start, end):
+        return None
+    return quote
 
 
 def brief_section_has_readable_body(brief: Any, section_index: int) -> bool:
