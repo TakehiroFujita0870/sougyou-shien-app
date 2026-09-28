@@ -7,7 +7,9 @@ from dots.founder_graph_job_store import (
     FounderGraphJobStore, JobConflictError, JobLeaseError, JobState, JobStoreError,
     _job_from_row,
 )
+from dots.founder_graph import NodeType, RelationType
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from dots.relation_candidate_manifest import CandidateEntityRef, validate_relation_candidate_manifest
 
 
 class Result:
@@ -148,7 +150,7 @@ def _validated_manifest(*, brief_id="brief-1", idea_id="idea-r1", candidates=Non
         candidate_id="candidate-a",
         assertion=SimpleNamespace(
             source_id=idea_id, target_id="claim-1", source_kind="idea", target_kind="claim",
-            predicate="addresses", basis="owner_hypothesis", evidence_ids=("evidence-1",),
+            predicate=RelationType.ADDRESSES, basis="owner_hypothesis", evidence_ids=("evidence-1",),
         ),
         support=SimpleNamespace(kind="quote", char_start=0, char_end=len(quote), section_index=0, quote=quote),
     )
@@ -343,6 +345,68 @@ def test_candidate_payload_survives_retry_restart_and_rejects_old_lease():
         restarted_store.persist_candidate_manifest(first_lease.id, first_lease.lease_token, _validated_manifest(), now=_time(1))
 
 
+def test_validated_uppercase_relation_predicates_persist_and_survive_retry():
+    markdown = "## エグゼクティブサマリー\n\n以前の企画を再利用する。\n"
+    brief = IdeaBriefVersion(
+        id="brief-1", owner_id="owner-1", idea_lineage_root_id="idea-root",
+        based_on_idea_id="idea-r1", revision=3, supersedes_id="brief-v2",
+        report_markdown=markdown, origin="prior_research_import",
+        sections=tuple(IdeaBriefSection(
+            index=index,
+            content="以前の企画を再利用する。" if index == 0 else "",
+        ) for index in range(8)),
+    )
+    refs = {
+        "idea-r1": CandidateEntityRef("idea-r1", "owner-1", NodeType.IDEA),
+        "idea-past": CandidateEntityRef("idea-past", "owner-1", NodeType.IDEA),
+    }
+    raw_manifest = {
+        "version": 1,
+        "idea_id": "idea-r1",
+        "candidates": [
+            {
+                "source_id": "idea-r1", "target_id": "idea-past",
+                "predicate": RelationType.REUSES.value, "basis": "brief_hypothesis",
+                "support": {"quote": "以前の企画を再利用する。"}, "evidence_ids": [],
+            },
+            {
+                "source_id": "idea-r1", "target_id": "idea-past",
+                "predicate": RelationType.DERIVED_FROM.value, "basis": "brief_hypothesis",
+                "support": {"quote": "以前の企画を再利用する。"}, "evidence_ids": [],
+            },
+        ],
+    }
+    validated = validate_relation_candidate_manifest(
+        raw_manifest, latest_brief=brief, current_idea_id="idea-r1",
+        entity_refs=refs, source_grounded_evidence={},
+    )
+    driver = Driver()
+    store = _store(driver)
+    store.enqueue(brief, now=_time())
+    first_lease = store.claim(worker_id="worker-a", lease_seconds=30, now=_time())
+    assert first_lease is not None
+
+    persisted = store.persist_candidate_manifest(
+        first_lease.id, first_lease.lease_token, validated, now=_time(),
+    )
+    assert persisted.candidate_ids == tuple(candidate.candidate_id for candidate in validated.candidates)
+    store.fail(first_lease.id, first_lease.lease_token, error_code="partial_apply", now=_time())
+
+    restarted_store = _store(driver)
+    second_lease = restarted_store.claim(worker_id="worker-b", lease_seconds=30, now=_time(1))
+    assert second_lease is not None and second_lease.attempt_count == 2
+    payload = restarted_store.get_candidate_payloads(
+        second_lease.id, second_lease.lease_token, now=_time(1),
+    )
+
+    assert payload is not None
+    assert {candidate.predicate for candidate in payload.candidates} == {
+        RelationType.REUSES.value, RelationType.DERIVED_FROM.value,
+    }
+    assert all(candidate.source_kind == "idea" and candidate.target_kind == "idea"
+               and candidate.basis == "brief_hypothesis" for candidate in payload.candidates)
+
+
 def test_candidate_payload_is_owner_and_brief_bound_and_superseded_lease_cannot_read():
     driver = Driver(); store = _store(driver)
     store.enqueue(_brief(), now=_time())
@@ -369,6 +433,20 @@ def test_candidate_payload_bounds_reject_oversized_quotes_and_manifests_before_w
     lease = store.claim(worker_id="worker-a", lease_seconds=30, now=_time())
     assert lease is not None
     base = _validated_manifest().candidates[0]
+    invalid_predicate = SimpleNamespace(
+        candidate_id="candidate-invalid-predicate",
+        assertion=SimpleNamespace(
+            source_id="idea-r1", target_id="claim-1", source_kind="idea", target_kind="claim",
+            predicate="NOT_A_RELATION", basis="brief_hypothesis", evidence_ids=(),
+        ),
+        support=SimpleNamespace(kind="section", section_index=0),
+    )
+    with pytest.raises(JobStoreError, match="predicate"):
+        store.persist_candidate_manifest(
+            lease.id, lease.lease_token,
+            _validated_manifest(candidates=(invalid_predicate,)), now=_time(),
+        )
+
     long_quote = SimpleNamespace(kind="quote", char_start=0, char_end=1201, section_index=0, quote="x" * 1201)
     with pytest.raises(JobStoreError):
         store.persist_candidate_manifest(lease.id, lease.lease_token, _validated_manifest(candidates=(
@@ -386,7 +464,7 @@ def test_candidate_payload_bounds_reject_oversized_quotes_and_manifests_before_w
     large_candidates = tuple(SimpleNamespace(
         candidate_id=f"candidate-{index}",
         assertion=SimpleNamespace(source_id="idea-r1", target_id="claim-1", source_kind="idea",
-                                  target_kind="claim", predicate="addresses", basis="external_evidence",
+                                  target_kind="claim", predicate=RelationType.ADDRESSES, basis="external_evidence",
                                   evidence_ids=evidence_ids),
         support=SimpleNamespace(kind="section", section_index=0),
     ) for index in range(64))
