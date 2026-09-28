@@ -70,20 +70,34 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     )
     sections = [{"index": index, "content": f"Synthetic section {index}"} for index in range(8)]
     sections[0]["evidence_ids"] = [evidence.target_id]
+    researched_tool = tools["save_researched_idea_brief"]
+    assert "report_markdown" in researched_tool["inputSchema"]["required"]
+    report_markdown = "## エグゼクティブサマリー\n\n| 対象 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |\n\n出典: https://example.test/source?id=1#section"
+    for missing_report in ({}, {"report_markdown": "  "}):
+        with pytest.raises(McpWriteError, match="report_markdown"):
+            surface.call("save_researched_idea_brief", {
+                "idea_id": "idea-mcp", "expected_revision": 0, "sections": sections,
+                "research_run_ids": [run.target_id], "idempotency_key": "mcp-brief-invalid",
+                **missing_report,
+            }, owner_id=writes.owner_id)
+    assert writes.get_latest_idea_brief("idea-mcp") is None
     brief = surface.call("save_researched_idea_brief", {
         "idea_id": "idea-mcp", "expected_revision": 0, "sections": sections,
-        "research_run_ids": [run.target_id], "idempotency_key": "mcp-brief",
+        "research_run_ids": [run.target_id], "report_markdown": report_markdown,
+        "idempotency_key": "mcp-brief",
     }, owner_id=writes.owner_id)
     assert brief.target_type == "idea_brief_version"
     saved = writes.get_idea_brief(brief.target_id)
     assert saved is not None and saved.research_run_ids == (run.target_id,)
     assert saved.origin is None
+    assert saved.report_markdown == report_markdown
 
     with pytest.raises(McpWriteError, match="current, shareable Evidence citation"):
         surface.call("save_researched_idea_brief", {
             "idea_id": "idea-mcp", "expected_revision": 1,
             "sections": [{"index": index, "content": f"Synthetic section {index}"} for index in range(8)],
-            "research_run_ids": ["run-with-no-evidence"], "idempotency_key": "mcp-empty-brief",
+            "research_run_ids": ["run-with-no-evidence"], "report_markdown": report_markdown,
+            "idempotency_key": "mcp-empty-brief",
         }, owner_id=writes.owner_id)
     assert writes.get_latest_idea_brief("idea-mcp").id == brief.target_id
 
