@@ -28,9 +28,9 @@ def test_initialize_and_tools_list_expose_confirmed_person_merge_tool() -> None:
     assert {tool["name"] for tool in tools} == {
         "search", "fetch", "fetch_idea_brief", "capture_idea", "capture_source", "capture_person", "capture_organization", "capture_asset", "append_claim",
         "capture_evidence",
-        "link_entities", "retract_relation_assertion", "save_research_report", "record_decision", "record_correction", "confirm_person_merge",
+        "link_entities", "retract_relation_assertion", "record_decision", "record_correction", "confirm_person_merge",
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
-        "record_research_run", "save_idea_brief", "save_researched_idea_brief",
+        "record_research_run", "save_idea_brief", "append_research_finding", "save_researched_idea_brief",
         "capture_facet", "classify_entity", "relate_facets", "search_facets", "facet_region",
     }
     assert len(tools) == len({tool["name"] for tool in tools})
@@ -44,7 +44,9 @@ def test_write_tools_publish_actionable_input_contracts() -> None:
     assert tools["capture_idea"]["inputSchema"]["required"] == ["title", "idempotency_key"]
     assert "egress_policy" in tools["capture_idea"]["inputSchema"]["properties"]
     assert tools["link_entities"]["inputSchema"]["properties"]["relation"]["enum"]
-    assert tools["save_research_report"]["inputSchema"]["properties"]["sections"]["items"]["properties"]["content"]
+    assert tools["append_research_finding"]["inputSchema"]["required"] == [
+        "idea_id", "expected_revision", "finding", "source_url", "idempotency_key",
+    ]
     assert tools["record_correction"]["inputSchema"]["required"] == ["previous_id", "idempotency_key"]
     assert tools["confirm_person_merge"]["inputSchema"]["required"] == ["winner_person_id", "loser_person_id", "confirmation", "evidence_ids", "idempotency_key"]
     assert tools["capture_evidence"]["inputSchema"]["required"] == ["claim_id", "content_chunk_id", "idempotency_key"]

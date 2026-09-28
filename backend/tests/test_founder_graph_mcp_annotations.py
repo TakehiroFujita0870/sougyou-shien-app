@@ -13,6 +13,7 @@ EXPECTED_DESTRUCTIVE_HINTS = {
     "approve_research_campaign": True,
     "revoke_research_campaign": True,
     "record_research_run": True,
+    "append_research_finding": True,
     "save_idea_brief": True,
     "save_researched_idea_brief": True,
 }
@@ -27,7 +28,6 @@ EXPECTED_WRITE_TOOLS = {
     "capture_evidence",
     "link_entities",
     "retract_relation_assertion",
-    "save_research_report",
     "record_decision",
     "record_correction",
     "confirm_person_merge",
@@ -36,6 +36,7 @@ EXPECTED_WRITE_TOOLS = {
     "revoke_research_campaign",
     "record_research_run",
     "save_idea_brief",
+    "append_research_finding",
     "save_researched_idea_brief",
     "capture_facet",
     "classify_entity",

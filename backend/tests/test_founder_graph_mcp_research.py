@@ -9,6 +9,7 @@ from dots.founder_graph_mcp import McpReadSurface
 from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
 from dots.founder_graph_read import GraphReadService
 from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
+from dots.idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion
 
 
 def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval() -> None:
@@ -75,7 +76,10 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     researched_tool = tools["save_researched_idea_brief"]
     assert "report_markdown" in researched_tool["inputSchema"]["required"]
     assert "egress_policy=shareable" in researched_tool["description"]
-    report_markdown = "## エグゼクティブサマリー\n\n| 対象 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |\n\n出典: https://example.test/source?id=1#section"
+    report_markdown = "\n\n".join(
+        f"## {title}\n\nSynthetic section {index}."
+        for index, title in enumerate(SECTION_TITLES)
+    ) + "\n\n| 対象 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |\n\n出典: https://example.test/source?id=1#section"
     for missing_report in ({}, {"report_markdown": "  "}):
         with pytest.raises(McpWriteError, match="report_markdown"):
             surface.call("save_researched_idea_brief", {
@@ -112,6 +116,19 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
     )
     assert linked["id"] == link.target_id
 
+    invalid_reports = (
+        "## 概要\n\nIncomplete report",
+        "\n\n".join(f"## {title}" for title in reversed(SECTION_TITLES)),
+    )
+    for index, invalid_report in enumerate(invalid_reports):
+        with pytest.raises(McpWriteError, match="canonical eight headings"):
+            surface.call("save_researched_idea_brief", {
+                "idea_id": "idea-mcp", "expected_revision": 1, "sections": sections,
+                "research_run_ids": [run.target_id], "report_markdown": invalid_report,
+                "idempotency_key": f"mcp-brief-incomplete-report-{index}",
+            }, owner_id=writes.owner_id)
+    assert writes.get_latest_idea_brief("idea-mcp").id == brief.target_id
+
     with pytest.raises(McpWriteError, match="current, shareable Evidence citation"):
         surface.call("save_researched_idea_brief", {
             "idea_id": "idea-mcp", "expected_revision": 1,
@@ -120,6 +137,132 @@ def test_research_and_brief_tools_use_existing_memory_store_and_enforce_approval
             "idempotency_key": "mcp-empty-brief",
         }, owner_id=writes.owner_id)
     assert writes.get_latest_idea_brief("idea-mcp").id == brief.target_id
+
+
+def test_append_research_finding_writes_only_markdown_and_replays_idempotently() -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-research-append")
+    idea = Idea(
+        owner_id=writes.owner_id, id="idea-research-append", title="Synthetic idea",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(idea, idempotency_key="idea-research-append-seed")
+    surface = McpWriteSurface(writes)
+    tools = {item["name"]: item for item in surface.tool_definitions()}
+
+    assert "append_research_finding" in tools
+    append_tool = tools["append_research_finding"]
+    assert set(append_tool["inputSchema"]["required"]) == {
+        "idea_id", "expected_revision", "finding", "source_url", "idempotency_key",
+    }
+    assert "sections" not in append_tool["inputSchema"]["required"]
+
+    first_args = {
+        "idea_id": idea.id, "expected_revision": 0,
+        "finding": "The first synthetic finding.",
+        "source_url": "https://example.test/first?tab=public",
+        "egress_policy": "shareable", "idempotency_key": "append-finding-first",
+    }
+    first = surface.call("append_research_finding", first_args, owner_id=writes.owner_id)
+    second = surface.call("append_research_finding", {
+        "idea_id": idea.id, "expected_revision": first.revision,
+        "finding": "The second synthetic finding.",
+        "source_url": "https://example.test/second",
+        "egress_policy": "shareable", "idempotency_key": "append-finding-second",
+    }, owner_id=writes.owner_id)
+    third = surface.call("append_research_finding", {
+        "idea_id": idea.id, "expected_revision": second.revision,
+        "finding": "The third synthetic finding.",
+        "source_url": "https://example.test/third",
+        "egress_policy": "shareable", "idempotency_key": "append-finding-third",
+    }, owner_id=writes.owner_id)
+    replay = surface.call("append_research_finding", first_args, owner_id=writes.owner_id)
+
+    assert first.target_type == "idea_brief_version"
+    assert first.revision == 1
+    assert second.revision == 2
+    assert third.revision == 3
+    assert replay.target_id == first.target_id
+    assert replay.revision == first.revision
+    assert replay.replayed is True
+    saved = writes.get_latest_idea_brief(idea.id)
+    assert saved is not None
+    assert saved.sections and all(not section.content for section in saved.sections)
+    assert saved.research_run_ids == ()
+    assert saved.report_markdown is not None
+    assert saved.report_markdown.index("The first synthetic finding.") < saved.report_markdown.index("The second synthetic finding.")
+    assert saved.report_markdown.index("The second synthetic finding.") < saved.report_markdown.index("The third synthetic finding.")
+    assert "<https://example.test/first?tab=public>" in saved.report_markdown
+    assert "<https://example.test/second>" in saved.report_markdown
+    assert "<https://example.test/third>" in saved.report_markdown
+
+    fetched = McpReadSurface(GraphReadService(writes)).call(
+        "fetch_idea_brief", {"idea_id": idea.id}, owner_id=writes.owner_id,
+    )
+    assert fetched["report_markdown"] == saved.report_markdown
+
+    with pytest.raises(McpWriteError) as changed_retry:
+        surface.call("append_research_finding", {
+            **first_args, "finding": "A different synthetic finding.",
+        }, owner_id=writes.owner_id)
+    assert changed_retry.value.code == "idempotency_conflict"
+
+    with pytest.raises(McpWriteError) as stale_revision:
+        surface.call("append_research_finding", {
+            "idea_id": idea.id, "expected_revision": 1,
+            "finding": "A stale synthetic finding.", "source_url": "https://example.test/stale",
+            "idempotency_key": "append-finding-stale",
+        }, owner_id=writes.owner_id)
+    assert stale_revision.value.code == "revision_conflict"
+
+
+@pytest.mark.parametrize("source_url", [
+    "javascript:alert(1)",
+    "https://user:password@example.test/source",
+    "https://example.test/source?access_token=private",
+    "https://example.test/source with spaces",
+])
+def test_append_research_finding_rejects_non_public_markdown_urls(source_url: str) -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-invalid-source-url")
+    idea = Idea(owner_id=writes.owner_id, id="idea-invalid-source-url", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="idea-invalid-source-url-seed")
+    surface = McpWriteSurface(writes)
+
+    with pytest.raises(McpWriteError, match=r"public HTTP\(S\) URL"):
+        surface.call("append_research_finding", {
+            "idea_id": idea.id, "expected_revision": 0,
+            "finding": "A synthetic finding.", "source_url": source_url,
+            "idempotency_key": "append-invalid-source-url",
+        }, owner_id=writes.owner_id)
+
+    assert writes.get_latest_idea_brief(idea.id) is None
+
+
+def test_markdown_append_remains_a_draft_after_a_structured_brief() -> None:
+    writes = InMemoryGraphWriteService("owner-mcp-research-append-draft")
+    idea = Idea(owner_id=writes.owner_id, id="idea-append-draft", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="idea-append-draft-seed")
+    original = IdeaBriefVersion(
+        owner_id=writes.owner_id,
+        idea_lineage_root_id=idea.id,
+        based_on_idea_id=idea.id,
+        sections=tuple(IdeaBriefSection(index=index, content=f"prior section {index}") for index in range(8)),
+        report_markdown="## Prior draft",
+        change_reason="prior structured brief",
+    )
+    writes.save_idea_brief(original, expected_latest_revision=None, idempotency_key="prior-structured-brief")
+
+    surface = McpWriteSurface(writes)
+    appended = surface.call("append_research_finding", {
+        "idea_id": idea.id, "expected_revision": 1,
+        "finding": "A new unverified finding.", "source_url": "https://example.test/new-finding",
+        "idempotency_key": "append-after-structured-brief",
+    }, owner_id=writes.owner_id)
+
+    latest = writes.get_latest_idea_brief(idea.id)
+    assert latest is not None and latest.id == appended.target_id
+    assert latest.research_run_ids == ()
+    assert all(not section.content and not section.evidence_ids for section in latest.sections)
+    assert writes.get_idea_brief(original.id).sections[0].content == "prior section 0"
 
 
 def test_researched_brief_rejects_wrong_owner_without_writing() -> None:
@@ -262,6 +405,20 @@ def test_prior_research_brief_successor_requires_current_public_evidence_and_rep
     assert saved.created_at >= save_started
     assert replay.target_id == receipt.target_id and replay.replayed
     assert writes.get_idea_brief(original.target_id).origin is None
+
+    append_arguments = {
+        "idea_id": idea.id, "expected_revision": 2,
+        "finding": "A new unverified finding.", "source_url": "https://example.test/new-finding",
+        "idempotency_key": "prior-brief-append",
+    }
+    appended = surface.call("append_research_finding", append_arguments, owner_id=writes.owner_id)
+    append_replay = surface.call("append_research_finding", append_arguments, owner_id=writes.owner_id)
+    draft = writes.get_idea_brief(appended.target_id)
+
+    assert draft is not None and draft.origin is None and draft.research_run_ids == ()
+    assert all(not section.content and not section.evidence_ids for section in draft.sections)
+    assert append_replay.target_id == appended.target_id and append_replay.replayed
+    assert writes.get_idea_brief(receipt.target_id) == saved
 
 
 def test_prior_research_brief_rejects_missing_or_nonpublic_evidence_without_revision():

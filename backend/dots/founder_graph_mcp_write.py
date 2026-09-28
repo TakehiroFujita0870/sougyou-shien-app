@@ -77,7 +77,6 @@ class McpWriteSurface:
         "capture_evidence",
         "link_entities",
         "retract_relation_assertion",
-        "save_research_report",
         "record_decision",
         "record_correction",
         "confirm_person_merge",
@@ -92,7 +91,6 @@ class McpWriteSurface:
         "capture_evidence": False,
         "link_entities": False,
         "retract_relation_assertion": False,
-        "save_research_report": False,
         "record_decision": False,
         "record_correction": True,
         "confirm_person_merge": True,
@@ -241,39 +239,6 @@ class McpWriteSurface:
                 },
                 "additionalProperties": False,
             },
-            "save_research_report": {
-                "type": "object",
-                "required": ["sections", "idempotency_key"],
-                "properties": {
-                    "sections": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "required": ["content"],
-                            "properties": {
-                                "id": text,
-                                "content": {**text, "minLength": 1},
-                                "facts": ids,
-                                "ai_inferences": ids,
-                                "unconfirmed": ids,
-                                "owner_decisions": ids,
-                                "claim_ids": ids,
-                                "evidence_ids": ids,
-                            },
-                            "additionalProperties": False,
-                        },
-                    },
-                    "run_ids": ids,
-                    "evidence_ids": ids,
-                    "financial_formulas": {"type": "object", "additionalProperties": True},
-                    "decision_criteria": {"type": "object", "additionalProperties": True},
-                    "status": {"type": "string", "enum": [status.value for status in ReportStatus]},
-                    "parent_id": text,
-                    "change_reason": text,
-                    "idempotency_key": idempotency,
-                },
-                "additionalProperties": False,
-            },
             "record_decision": {
                 "type": "object",
                 "required": ["text", "idempotency_key"],
@@ -344,7 +309,7 @@ class McpWriteSurface:
     def call(self, tool_name: str, arguments: Mapping[str, Any], *, owner_id: str) -> WriteReceipt:
         research_tools = {
             "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
-            "record_research_run", "save_idea_brief", "save_researched_idea_brief",
+            "record_research_run", "save_idea_brief", "append_research_finding", "save_researched_idea_brief",
         }
         if tool_name not in self._TOOL_NAMES and tool_name not in research_tools and tool_name not in FACET_WRITE_TOOL_NAMES:
             raise McpWriteError("unknown_tool", "Only the purpose-limited write tools are available.")

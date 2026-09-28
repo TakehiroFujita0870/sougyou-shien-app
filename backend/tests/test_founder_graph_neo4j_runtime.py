@@ -837,10 +837,10 @@ def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
     tools = response["result"]["tools"]
     assert {tool["name"] for tool in tools} == {
         "search", "fetch", "fetch_idea_brief", "capture_idea", "capture_source", "capture_asset", "capture_person",
-        "capture_organization", "append_claim", "capture_evidence", "link_entities", "retract_relation_assertion", "save_research_report",
+        "capture_organization", "append_claim", "capture_evidence", "link_entities", "retract_relation_assertion",
         "record_decision", "record_correction", "confirm_person_merge", "save_idea_brief",
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
-        "record_research_run", "save_researched_idea_brief",
+        "record_research_run", "save_researched_idea_brief", "append_research_finding",
         "capture_facet", "classify_entity", "relate_facets", "search_facets", "facet_region",
     }
     assert len(tools) == 27

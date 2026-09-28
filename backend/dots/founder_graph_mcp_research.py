@@ -12,8 +12,8 @@ from .founder_graph import DomainValidationError, EgressPolicy, Idea, Provenance
 from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_research import revoke_research_campaign, validate_research_run_timing
 from .founder_graph_write import GraphWriteError, GraphWritePort, IdempotencyConflictError, RevisionConflictError, WriteReceipt
-from .idea_brief import IdeaBriefSection, IdeaBriefVersion, _REPORT_MARKDOWN_OMITTED
-from .source_citations import evidence_lineage_is_current, researched_evidence_ids
+from .idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion, _REPORT_MARKDOWN_OMITTED
+from .source_citations import citation_metadata, evidence_lineage_is_current, researched_evidence_ids
 
 
 class ResearchCampaignInputError(DomainValidationError):
@@ -274,9 +274,30 @@ class McpResearchCampaignSurface:
                 }, "additionalProperties": False,
             },
         }
-        return definitions + (regular_brief, {
+        append_finding = {
+            "name": "append_research_finding",
+            "description": "短い調査発見1件と公開出典URLをIdeaBriefのMarkdownへ追記します。8章、Campaign、Run、Claim、Evidenceは要求しません。再試行には同じidempotency_key、次の追記には返されたrevisionを使います。公開URLの保存は主張の検証を意味しません。",
+            "readOnly": False,
+            "annotations": mcp_tool_annotations(read_only=False, destructive=True),
+            "inputSchema": {
+                "type": "object",
+                "required": ["idea_id", "expected_revision", "finding", "source_url", "idempotency_key"],
+                "properties": {
+                    "idea_id": {**text, "minLength": 1, "maxLength": 200},
+                    "idea_lineage_root_id": {**text, "minLength": 1, "maxLength": 200},
+                    "expected_revision": expected,
+                    "finding": {**text, "minLength": 1, "maxLength": 4000, "description": "改行を含まない短い発見。未確認の主張を事実として書かないでください。"},
+                    "source_url": {**text, "minLength": 1, "maxLength": 2048, "description": "認証情報を含まない公開HTTP(S)出典URL。本文取得は行いません。"},
+                    "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value], "description": "初回は省略時local_only、既存Briefの追記では省略時に現行設定を維持します。ChatGPTへ読み戻すにはIdeaとBriefの両方がshareableである必要があります。"},
+                    "idempotency_key": idempotency,
+                },
+                "additionalProperties": False,
+            },
+            "outputSchema": _receipt_schema(),
+        }
+        return definitions + (regular_brief, append_finding, {
             "name": "save_researched_idea_brief",
-            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。全文は必須です。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。保存成功後にfetch_idea_briefで最新版を読み戻し、その内容と実在Evidenceを根拠にlink_entities・classify_entityで意味関係を登録してください。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
+            "description": "許諾済み調査を終えた後、Markdownレポート全文とIdeaの8観点・出典を同じ版に正式保存します。完成稿には正規8見出しを順番どおり一度ずつ含めてください。対象IdeaとレポートがChatGPTへの共有に適する場合だけ、Ideaとこの保存操作でegress_policy=shareableを明示してください。省略時のlocal_only版はfetch_idea_briefで読み戻せません。保存成功後にfetch_idea_briefで最新版を読み戻し、その内容と実在Evidenceを根拠にlink_entities・classify_entityで意味関係を登録してください。概要全体で少なくとも1件の有効な公開出典Evidenceが必須です。指定したEvidenceは同じ所有者・現行・共有可の出典系譜であることを検証します。出典のない章へ架空IDを付けないでください。このツールは調査や事実の正しさを保証しません。出典不足や部分下書きはsave_idea_briefを使います。",
             "readOnly": False,
             "annotations": mcp_tool_annotations(read_only=False, destructive=True),
             "inputSchema": {
@@ -300,7 +321,7 @@ class McpResearchCampaignSurface:
                     },
                     "research_run_ids": {"type": "array", "minItems": 1, "maxItems": 20, "items": {**text, "maxLength": 200}},
                     "change_reason": {"type": "string", "maxLength": 500},
-                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成した8章のMarkdownレポート全文。根拠を確認した出典URLを記し、必要に応じて表・公開画像・図を含めます。画像や数値を創作しません。8観点と出典IDの対応はsectionsにも保持します。"},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "ChatGPTが作成したMarkdown完成稿。正規8見出しを順番どおり一度ずつ含め、根拠を確認した出典URLを記します。必要に応じて表・公開画像・図を含めます。画像や数値を創作しません。8観点と出典IDの対応はsectionsにも保持します。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "idempotency_key": idempotency,
                 }, "additionalProperties": False,
@@ -323,6 +344,8 @@ class McpResearchCampaignSurface:
             return self._record_research_run(arguments)
         if tool_name == "save_idea_brief":
             return self._save_idea_brief(arguments)
+        if tool_name == "append_research_finding":
+            return self._append_research_finding(arguments)
         if tool_name == "save_researched_idea_brief":
             if self.brief_store is None:
                 raise ResearchCampaignInputError("idea brief storage is unavailable on this connection")
@@ -435,6 +458,103 @@ class McpResearchCampaignSurface:
             raise
         except Exception as error:
             raise ResearchCampaignUnavailableError("the idea brief could not be safely saved") from error
+
+    def _append_research_finding(self, args: Mapping[str, Any]) -> WriteReceipt:
+        if self.brief_store is None:
+            raise ResearchCampaignInputError("idea brief storage is unavailable on this connection")
+        if _brief_store_owner(self.brief_store) != self.writes.owner_id:
+            raise ResearchCampaignInputError("idea brief store owner does not match the local owner")
+        _reject_unknown(args, {
+            "idea_id", "idea_lineage_root_id", "expected_revision", "finding", "source_url",
+            "egress_policy", "idempotency_key",
+        })
+        key = _text(args.get("idempotency_key"), "idempotency_key")
+        idea_id = _text(args.get("idea_id"), "idea_id", maximum=200)
+        root_id = _text(args.get("idea_lineage_root_id", idea_id), "idea_lineage_root_id", maximum=200)
+        expected = _revision(args.get("expected_revision"))
+        finding = _text(args.get("finding"), "finding", maximum=4000)
+        if any(
+            char in "\r\n\u0085\u2028\u2029" or ord(char) < 0x20 or 0x7F <= ord(char) < 0xA0
+            for char in finding
+        ):
+            raise ResearchCampaignInputError("finding must be a single line without control characters")
+        source_url = _text(args.get("source_url"), "source_url", maximum=2048)
+        if (
+            citation_metadata({"locator": source_url, "title": "public source"}) is None
+            or any(char.isspace() or ord(char) < 0x20 or char in "<>" for char in source_url)
+        ):
+            raise ResearchCampaignInputError("source_url must be a public HTTP(S) URL without credentials or secret parameters")
+        explicit_egress = "egress_policy" in args
+        requested_egress = args.get("egress_policy")
+        if explicit_egress and requested_egress not in {EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value}:
+            raise ResearchCampaignInputError("egress_policy must be local_only or shareable")
+
+        write_key = f"append_finding_{sha256(key.encode('utf-8')).hexdigest()}"
+        brief_id = _command_id("idea-brief-append", key)
+        prior_receipt = _lookup_receipt(self.writes, write_key, "save_idea_brief")
+        existing = self.brief_store.get(brief_id)
+        if prior_receipt is not None or existing is not None:
+            if existing is None or (prior_receipt is not None and prior_receipt.target_id != brief_id):
+                raise IdempotencyConflictError("idempotency key was already used for a different finding")
+            previous = self.brief_store.get(existing.supersedes_id) if existing.supersedes_id else None
+            previous_revision = previous.revision if previous is not None else 0
+            previous_markdown = previous.report_markdown if previous is not None else None
+            expected_markdown = _append_markdown_finding(previous_markdown, finding, source_url)
+            blank_sections = tuple(IdeaBriefSection(index=index) for index in range(len(SECTION_TITLES)))
+            if (
+                existing.revision != expected + 1
+                or previous_revision != expected
+                or existing.idea_lineage_root_id != root_id
+                or existing.based_on_idea_id != idea_id
+                or existing.report_markdown != expected_markdown
+                or existing.research_run_ids
+                or existing.origin is not None
+                or existing.sections != blank_sections
+                or existing.change_reason != "research finding appended"
+                or (explicit_egress and existing.egress_policy != requested_egress)
+            ):
+                raise IdempotencyConflictError("idempotency key was already used for a different finding")
+            receipt = prior_receipt or WriteReceipt(
+                "save_idea_brief", existing.id, "idea_brief_version", existing.revision, write_key,
+            )
+            return replace(
+                receipt, operation="append_research_finding", idempotency_key=key, replayed=True,
+            )
+
+        previous = _latest_brief(self.brief_store, root_id)
+        if previous is None:
+            if expected != 0:
+                raise RevisionConflictError("first brief expects revision 0")
+            report_markdown = _append_markdown_finding(None, finding, source_url)
+            egress_policy = requested_egress if explicit_egress else EgressPolicy.LOCAL_ONLY.value
+            brief = IdeaBriefVersion(
+                owner_id=self.writes.owner_id, idea_lineage_root_id=root_id,
+                based_on_idea_id=idea_id, id=brief_id,
+                report_markdown=report_markdown,
+                change_reason="research finding appended", egress_policy=egress_policy,
+            )
+            expected_latest_revision = None
+        else:
+            if previous.revision != expected:
+                raise RevisionConflictError("brief changed; reload its current revision")
+            report_markdown = _append_markdown_finding(previous.report_markdown, finding, source_url)
+            egress_policy = requested_egress if explicit_egress else previous.egress_policy
+            brief = replace(previous.revise(
+                sections=tuple(IdeaBriefSection(index=index) for index in range(len(SECTION_TITLES))),
+                report_markdown=report_markdown, based_on_idea_id=idea_id,
+                research_run_ids=(), change_reason="research finding appended",
+                egress_policy=egress_policy,
+            ), id=brief_id, origin=None)
+            expected_latest_revision = expected
+        try:
+            receipt = self.brief_store.save(
+                brief, expected_latest_revision=expected_latest_revision, idempotency_key=write_key,
+            )
+        except (RevisionConflictError, IdempotencyConflictError):
+            raise
+        except Exception as error:
+            raise ResearchCampaignUnavailableError("the research finding could not be safely saved") from error
+        return replace(receipt, operation="append_research_finding", idempotency_key=key)
 
     def _create(self, args: Mapping[str, Any]) -> ResearchWriteReceipt:
         allowed = {"purpose", "scope", "questions", "target_idea_id", "allowed_categories", "external_sources", "trial_budget", "expires_at", "idempotency_key", "expected_revision"}
@@ -623,6 +743,8 @@ class McpResearchCampaignSurface:
         report_markdown = args.get("report_markdown")
         if not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000:
             raise ResearchCampaignInputError("report_markdown must contain 1 through 60000 characters")
+        if _markdown_h2_headings(report_markdown) != SECTION_TITLES:
+            raise ResearchCampaignInputError("report_markdown must contain the canonical eight headings in order")
         if {section.index for section in sections} != set(range(8)):
             raise ResearchCampaignInputError("researched IdeaBrief must provide each viewpoint exactly once")
         change_reason = args.get("change_reason", "researched brief")
@@ -706,6 +828,35 @@ def _receipt(receipt: WriteReceipt, proposal: Mapping[str, Any] | None = None) -
         receipt.idempotency_key, receipt.replayed, receipt.source_revision_id,
         receipt.content_chunk_ids, proposal,
     )
+
+
+def _append_markdown_finding(current: str | None, finding: str, source_url: str) -> str:
+    entry = f"- {finding}\n  - 出典: <{source_url}>"
+    return f"{current.rstrip()}\n\n{entry}" if current and current.strip() else entry
+
+
+def _markdown_h2_headings(markdown: str) -> tuple[str, ...]:
+    headings: list[str] = []
+    fence_marker: str | None = None
+    fence_length = 0
+    for line in markdown.splitlines():
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line[indent:]
+        if indent <= 3 and stripped[:1] in {"`", "~"}:
+            marker = stripped[0]
+            length = len(stripped) - len(stripped.lstrip(marker))
+            if length >= 3:
+                remainder = stripped[length:]
+                if fence_marker is None:
+                    fence_marker, fence_length = marker, length
+                elif marker == fence_marker and length >= fence_length and not remainder.strip():
+                    fence_marker, fence_length = None, 0
+                continue
+        if fence_marker is not None:
+            continue
+        if indent <= 3 and stripped.startswith("## ") and not stripped.startswith("### "):
+            headings.append(stripped[3:].strip())
+    return tuple(headings)
 
 
 def _lookup_receipt(writes: Any, key: str, operation: str) -> WriteReceipt | None:
