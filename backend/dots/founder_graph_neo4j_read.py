@@ -358,10 +358,17 @@ def _aware_time(value: Any) -> datetime:
 def _decode_assertion(row: Any, *, owner_id: str) -> RelationAssertion:
     payload = _parse_payload(row, prefix="assertion_")
     names = {item.name for item in fields(RelationAssertion)}
-    if set(payload) == names - {"basis"}:
-        payload["basis"] = RelationAssertionBasis.EXTERNAL_EVIDENCE.value
-    elif set(payload) != names:
+    legacy_defaults = {
+        "basis": RelationAssertionBasis.EXTERNAL_EVIDENCE.value,
+        "based_on_brief_revision": None,
+        "based_on_brief_quote_start": None,
+        "based_on_brief_quote_end": None,
+    }
+    missing = names - set(payload)
+    if not set(payload).issubset(names) or not missing.issubset(legacy_defaults):
         raise ValueError("assertion payload fields are incomplete")
+    for name in missing:
+        payload[name] = legacy_defaults[name]
     if _row_value(row, "assertion_id") != payload.get("id"):
         raise ValueError("assertion id does not match its payload")
     if _row_value(row, "assertion_owner_id") != owner_id or payload.get("owner_id") != owner_id:

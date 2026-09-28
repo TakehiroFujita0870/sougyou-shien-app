@@ -2064,6 +2064,9 @@ class RelationAssertion:
     provenance: Provenance = field(default_factory=Provenance)
     based_on_brief_id: str | None = None
     based_on_brief_section_index: int | None = None
+    based_on_brief_revision: int | None = None
+    based_on_brief_quote_start: int | None = None
+    based_on_brief_quote_end: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
@@ -2133,6 +2136,24 @@ class RelationAssertion:
         if self.based_on_brief_section_index is not None:
             if type(self.based_on_brief_section_index) is not int or not 0 <= self.based_on_brief_section_index <= 7:
                 raise DomainValidationError("brief section index must be an integer from 0 to 7")
+        if self.based_on_brief_revision is not None and (
+            type(self.based_on_brief_revision) is not int or self.based_on_brief_revision < 1
+        ):
+            raise DomainValidationError("brief revision must be a positive integer")
+        if (self.based_on_brief_quote_start is None) != (self.based_on_brief_quote_end is None):
+            raise DomainValidationError("Brief quote offsets must be provided together")
+        if self.based_on_brief_quote_start is not None:
+            if (
+                type(self.based_on_brief_quote_start) is not int
+                or type(self.based_on_brief_quote_end) is not int
+                or self.based_on_brief_quote_start < 0
+                or self.based_on_brief_quote_end <= self.based_on_brief_quote_start
+            ):
+                raise DomainValidationError("Brief quote offsets must be a non-empty character range")
+            if self.based_on_brief_id is None or self.based_on_brief_revision is None:
+                raise DomainValidationError("Brief quote offsets require a Brief id and revision")
+        if self.based_on_brief_revision is not None and self.based_on_brief_id is None:
+            raise DomainValidationError("Brief revision requires a Brief id")
         object.__setattr__(self, "egress_policy", _enum(self.egress_policy, EgressPolicy, "egress_policy"))
         if not isinstance(self.provenance, Provenance):
             raise DomainValidationError("provenance must be a Provenance")
