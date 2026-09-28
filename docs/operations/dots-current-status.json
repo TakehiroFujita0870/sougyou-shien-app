@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-28T12:00:00Z",
-  "baseline_main": "7c3f33328808",
+  "updated_at": "2026-09-28T20:04:49Z",
+  "baseline_main": "f50d0ceab679",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -39,10 +39,10 @@
       "evidence": [{"recorded_at": "2026-09-27T12:53:09Z", "scope": "live-researched-idea-to-independent-chat", "result": "passed", "reference": "当時の実ChatGPT別会話と独立した通常保存先の読取確認。詳細経緯はGit・会話履歴。"}]
     },
     {
-      "id": "markdown_idea_report", "title": "MCP経由のMarkdownレポート保存と意味関係の登録", "scope": "main-371-plugin-1.0.10-live-tool-schema",
-      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
-      "note": "調査済み保存では全文必須。共有可能な本文は明示設定して保存・読み戻した後、根拠付き関係を登録する手順を本人用Dotsへ配布。合成データで保存・読取・関係登録と再取得を確認。実ChatGPTで新しい全文保存からグラフ更新・別会話での再利用までの通し操作は未確認。",
-      "evidence": [{"recorded_at": "2026-09-28T03:33:25Z", "scope": "main-371-plugin-1.0.10-live-tool-schema", "result": "partial", "reference": "PR #369・#371、Linux全件1249件成功、合成データの全文保存・読取・根拠付き関係登録と再取得、稼働MCP定義、Dots個人用非公開プラグイン1.0.10の配布内容を確認。"}]
+      "id": "markdown_idea_report", "title": "Markdownレポートの部分追記と意味関係の再利用", "scope": "main-410-live-chatgpt-synthetic-restart",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "通常のDotsへ合成データで短い発見とURLを追記し、別のアイデアでは8章Markdownを保持して意味関係を保存。サービス再起動後、別のChatGPT会話から関係ID・状態・根拠文・Brief版を取得した。URLだけの記録は検証済みEvidenceではない。実データへの新しい書き込み試験は含まない。",
+      "evidence": [{"recorded_at": "2026-09-28T20:04:49Z", "scope": "main-410-live-chatgpt-synthetic-restart", "result": "passed", "reference": "PR #405–#410と通常Dotsの再起動後のChatGPT保存会話 https://chatgpt.com/c/6ababd0b-590c-83e8-b285-615727d239a6 、別会話検索 https://chatgpt.com/c/6abac1c2-e77c-83ee-9159-15750d16f817 。"}]
     },
     {
       "id": "founder_barriers", "title": "強み・経験と弱み・迷いの記録", "scope": "main-375-plugin-1.0.12-live-two-column",
