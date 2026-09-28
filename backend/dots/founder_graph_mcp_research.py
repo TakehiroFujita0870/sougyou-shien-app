@@ -12,7 +12,7 @@ from .founder_graph import DomainValidationError, EgressPolicy, Idea, Provenance
 from .founder_graph_mcp_annotations import mcp_tool_annotations
 from .founder_graph_research import revoke_research_campaign, validate_research_run_timing
 from .founder_graph_write import GraphWriteError, GraphWritePort, IdempotencyConflictError, RevisionConflictError, WriteReceipt
-from .idea_brief import IdeaBriefSection, IdeaBriefVersion
+from .idea_brief import IdeaBriefSection, IdeaBriefVersion, _REPORT_MARKDOWN_OMITTED
 from .source_citations import evidence_lineage_is_current, researched_evidence_ids
 
 
@@ -267,7 +267,7 @@ class McpResearchCampaignSurface:
                         },
                     },
                     "change_reason": {"type": "string", "maxLength": 500},
-                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "図表・公開画像・出典リンクを含むレポート全文。8観点と同じ版に保存します。HTMLは画面で実行しません。"},
+                    "report_markdown": {"type": "string", "minLength": 1, "maxLength": 60000, "description": "図表・公開画像・出典リンクを含むレポート全文。8観点と同じ版に保存します。省略時は前版の本文を維持し、文字列を指定すると全文を置き換えます。HTMLは画面で実行しません。"},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "origin": {"type": "string", "enum": ["prior_research_import"], "description": "既に実施済みの過去調査を示す場合だけ指定します。現在のCampaign/Runの許諾や実行履歴は作りません。"},
                     "idempotency_key": idempotency,
@@ -348,8 +348,10 @@ class McpResearchCampaignSurface:
             raise ResearchCampaignInputError("section content is invalid") from error
         if not any(section.content.strip() for section in sections):
             raise ResearchCampaignInputError("at least one viewpoint needs content")
-        report_markdown = args.get("report_markdown")
-        if report_markdown is not None and (not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000):
+        report_markdown = args.get("report_markdown", _REPORT_MARKDOWN_OMITTED)
+        if report_markdown is not _REPORT_MARKDOWN_OMITTED and (
+            not isinstance(report_markdown, str) or not report_markdown.strip() or len(report_markdown) > 60_000
+        ):
             raise ResearchCampaignInputError("report_markdown must contain 1 through 60000 characters")
         change_reason = args.get("change_reason", "initial")
         if not isinstance(change_reason, str) or not change_reason.strip() or len(change_reason) > 500:
@@ -366,10 +368,26 @@ class McpResearchCampaignSurface:
         prior_receipt = _lookup_receipt(self.writes, key, "save_idea_brief")
         existing = self.brief_store.get(brief_id)
         if prior_receipt is not None or existing is not None:
-            if (prior_receipt is not None and prior_receipt.target_id != brief_id) or existing is None or existing.revision != expected + 1 or not _brief_matches(
-                existing, root_id=root_id, idea_id=idea_id, sections=sections,
-                run_ids=(), change_reason=change_reason, egress_policy=egress_policy,
-                report_markdown=report_markdown,
+            if (
+                (prior_receipt is not None and prior_receipt.target_id != brief_id)
+                or existing is None
+                or existing.revision != expected + 1
+            ):
+                raise IdempotencyConflictError("idempotency key was already used for a different brief")
+            replay_report_markdown = (
+                existing.report_markdown
+                if report_markdown is _REPORT_MARKDOWN_OMITTED
+                else report_markdown
+            )
+            if not _brief_matches(
+                existing,
+                root_id=root_id,
+                idea_id=idea_id,
+                sections=sections,
+                run_ids=(),
+                change_reason=change_reason,
+                egress_policy=egress_policy,
+                report_markdown=replay_report_markdown,
                 origin=(requested_origin if requested_origin is not None else existing.origin),
             ):
                 raise IdempotencyConflictError("idempotency key was already used for a different brief")
@@ -383,7 +401,9 @@ class McpResearchCampaignSurface:
             brief = IdeaBriefVersion(
                 owner_id=self.writes.owner_id, idea_lineage_root_id=root_id,
                 based_on_idea_id=idea_id, sections=sections, id=brief_id,
-                report_markdown=report_markdown,
+                report_markdown=(
+                    None if report_markdown is _REPORT_MARKDOWN_OMITTED else report_markdown
+                ),
                 change_reason=change_reason, egress_policy=egress_policy, origin=effective_origin,
             )
             expected_latest_revision = None

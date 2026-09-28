@@ -82,17 +82,15 @@ next_action: REVIEW_APPROVED or REVIEW_CHANGES_REQUESTED
 
 | 役割 | model / thinking |
 | --- | --- |
-| CEO室 | `gpt-5.6-sol / low` |
-| 統合・リリース管理部 | `gpt-5.6-terra / low` |
-| 会話体験・プロジェクト部 | `gpt-5.6-terra / low` |
-| プロダクトUI・デザインシステム部 | `gpt-5.6-terra / low` |
-| 品質・プロダクト運用部 | `gpt-5.6-terra / low` |
-| 基盤・認証部 | `gpt-5.6-terra / low` |
-| 事業設計・調査部 | `gpt-5.6-terra / low` |
+| CEO室 | `gpt-6-luna / xhigh` |
+| 統合・リリース管理部 | `gpt-6-luna / xhigh` |
+| 会話体験・プロジェクト部 | `gpt-6-luna / xhigh` |
+| プロダクトUI・デザインシステム部 | `gpt-6-luna / xhigh` |
+| 品質・プロダクト運用部 | `gpt-6-luna / xhigh` |
+| 基盤・認証部 | `gpt-6-luna / xhigh` |
+| 事業設計・調査部 | `gpt-6-luna / xhigh` |
 
-CEO室は `gpt-5.6-sol / low`、統合部と全実装部は `gpt-5.6-terra / low` を表のとおり使う。Lunaの選択、fallback、`model_unavailable`扱いは廃止する。
-
-ただし、[`dots-implementation-master-plan.md`](../plans/dots-implementation-master-plan.md)をobjectiveとするactive goalは利用者が明示承認した例外とし、全役割を`gpt-6-luna / xhigh`に固定する。別modelへfallbackせず、利用不能は`model_unavailable`として該当scopeを停止する。
+全役割は表の`gpt-6-luna / xhigh`を既定とする。利用者による別モデルや思考量の明示指定を優先する。指定モデルが利用不能な場合は無断で別モデルへfallbackせず、該当scopeを停止する。
 
 部長は必要に応じてboundedかつnon-overlappingなsubagentを使ってよい。ただし部長がplanning、review、handoff closureの責任を保持する。
 
@@ -342,6 +340,5 @@ merge後handoffは次の順序をすべて満たすまで未完了とする。
 
 ## 統合・リリース管理部の実行プロファイル
 
-- 標準プロファイルは `gpt-5.6-terra / low` とする。
-- 全担当に同じprofileを適用し、Lunaの選択、fallback、`model_unavailable`扱いを使わない。
-- Dots実装全体計画のactive goal中だけは、同計画の`gpt-6-luna / xhigh`例外を優先する。
+- 標準プロファイルは `gpt-6-luna / xhigh` とする。
+- 利用者の明示指定がない限り全担当に同じprofileを適用し、別モデルへ無断fallbackしない。

@@ -163,6 +163,57 @@ def test_regular_idea_brief_reuses_memory_writer_and_replays_same_key() -> None:
     assert save_brief["inputSchema"]["properties"]["report_markdown"]["maxLength"] == 60000
 
 
+def test_regular_idea_brief_omission_preserves_markdown_and_string_replaces_it():
+    writes = InMemoryGraphWriteService("owner-mcp-brief-preserve")
+    idea = Idea(owner_id=writes.owner_id, id="idea-brief-preserve", title="Synthetic idea")
+    writes.put_node(idea, idempotency_key="idea-brief-preserve-seed")
+    surface = McpWriteSurface(writes)
+    original_markdown = "## Synthetic report\n\nOriginal body."
+    first = surface.call("save_idea_brief", {
+        "idea_id": idea.id, "expected_revision": 0,
+        "sections": [{"index": 0, "content": "Original section"}],
+        "report_markdown": original_markdown,
+        "idempotency_key": "brief-preserve-first",
+    }, owner_id=writes.owner_id)
+    with pytest.raises(McpWriteError):
+        surface.call("save_idea_brief", {
+            "idea_id": idea.id, "expected_revision": 1,
+            "sections": [{"index": 0, "content": "Null section"}],
+            "report_markdown": None,
+            "idempotency_key": "brief-preserve-null-markdown",
+        }, owner_id=writes.owner_id)
+    assert writes.get_latest_idea_brief(idea.id).report_markdown == original_markdown
+
+    omission_arguments = {
+        "idea_id": idea.id, "expected_revision": 1,
+        "sections": [{"index": 0, "content": "Updated section"}],
+        "idempotency_key": "brief-preserve-omitted-markdown",
+    }
+    omitted = surface.call("save_idea_brief", omission_arguments, owner_id=writes.owner_id)
+    latest_after_omission = writes.get_latest_idea_brief(idea.id)
+    assert latest_after_omission is not None
+    assert latest_after_omission.report_markdown == original_markdown
+    assert writes.get_idea_brief(first.target_id).report_markdown == original_markdown
+    replay = surface.call("save_idea_brief", omission_arguments, owner_id=writes.owner_id)
+    assert replay.replayed is True
+    assert writes.get_latest_idea_brief(idea.id).report_markdown == original_markdown
+
+    replacement_markdown = "## Synthetic replacement\n\nReplacement body."
+    replaced = surface.call("save_idea_brief", {
+        "idea_id": idea.id, "expected_revision": omitted.revision,
+        "sections": [{"index": 0, "content": "Replaced section"}],
+        "report_markdown": replacement_markdown,
+        "idempotency_key": "brief-preserve-replacement",
+    }, owner_id=writes.owner_id)
+    assert writes.get_latest_idea_brief(idea.id).report_markdown == replacement_markdown
+    assert writes.get_idea_brief(first.target_id).report_markdown == original_markdown
+    assert writes.get_idea_brief(omitted.target_id).report_markdown == original_markdown
+    save_brief = next(item for item in surface.tool_definitions() if item["name"] == "save_idea_brief")
+    schema = save_brief["inputSchema"]
+    assert "report_markdown" not in schema["required"]
+    assert "省略時" in schema["properties"]["report_markdown"]["description"]
+
+
 def test_prior_research_brief_successor_requires_current_public_evidence_and_replays_origin():
     writes = InMemoryGraphWriteService("owner-prior-brief")
     idea = Idea(owner_id=writes.owner_id, id="idea-prior", title="Synthetic idea", egress_policy=EgressPolicy.SHAREABLE)
