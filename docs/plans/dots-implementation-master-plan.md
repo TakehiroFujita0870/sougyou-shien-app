@@ -2,7 +2,7 @@
 
 ## 正本と範囲
 
-Dots. は本人一人が使う創業専用の知識グラフである。製品の目的と利用体験は[製品方針](founder-graph-pivot.md)、保存単位と関係の契約は[データモデル](founder-graph-data-model.md)を正本とする。実装・稼働・検証の現在地は[現況](../operations/dots-current-status.json)と現行コードを照合する。進行中の画面・内部整理は[専用計画](dots-ui-refactor-plan.md)で扱う。完了した個別作業の経緯はGitとPR履歴で確認する。
+Dots. は本人一人が使う創業専用の知識グラフである。製品の目的と利用体験は[製品方針](founder-graph-pivot.md)、保存単位と関係の契約は[データモデル](founder-graph-data-model.md)を正本とする。実装・稼働・検証の現在地は[現況](../operations/dots-current-status.json)と現行コードを照合する。完了した画面改善・内部整理の経緯はGitとPR履歴で確認する。
 
 この文書は新しい作業台帳ではない。以下の完成条件を満たしたかを現況と実機で確認し、未達の条件だけを実装する。すでに通った検査を、変更や再発なしに繰り返さない。
 

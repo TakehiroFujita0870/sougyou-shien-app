@@ -1,10 +1,6 @@
 {
-  "updated_at": "2026-09-27T23:50:06Z",
-  "baseline_main": "03e035d712bc",
-  "current_work": {
-    "reference": "docs/plans/dots-ui-refactor-plan.md",
-    "status": "UI変更は正式版と稼働環境へ反映済み。現行の作業は保守性向上と旧資産整理。完了した個別作業の詳細はGit・PR履歴を参照。"
-  },
+  "updated_at": "2026-09-28T00:22:39Z",
+  "baseline_main": "c9b79f397495",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
