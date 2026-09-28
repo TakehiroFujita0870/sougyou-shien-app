@@ -1,6 +1,6 @@
 # Founder Graph データモデル正本
 
-本書は保存単位、意味関係、改訂、根拠、削除、検索投影の契約を定める。製品体験は[製品方針](founder-graph-pivot.md)、現在の実装・検証状態は[現況](../operations/dots-current-status.json)と現行コードを参照する。旧schemaへの移行経緯や完了した試験はGit・PR履歴に残し、過去の未完了欄を現在の残件とみなさない。
+本書は現行の保存単位、意味関係、改訂、根拠、削除、検索投影の契約を定める。製品体験は[製品方針](founder-graph-pivot.md)、現在の実装・検証状態は[現況](../operations/dots-current-status.json)と現行コードを参照する。Markdownレポートの一本化と、下書き・過去調査からの意味関係作成は[全体計画](dots-implementation-master-plan.md)で決定済みの変更目標であり、実装時に本書のReportVersion・IdeaBrief・RelationAssertion契約を更新する。旧schemaへの移行経緯や完了した試験はGit・PR履歴に残し、過去の未完了欄を現在の残件とみなさない。
 
 安定した対象IDと不変の改訂を分ける。事業上の関係は根拠・状態・確信度を持つRelationAssertionを正本とし、保存や版管理の構造edgeとは区別する。MCPへ返すのは共有可能な投影だけで、ローカル原文や連絡先をそのまま返さない。
 
