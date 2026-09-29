@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-29T11:13:31Z",
-  "baseline_main": "63755102a024",
+  "updated_at": "2026-09-29T11:21:24Z",
+  "baseline_main": "126077de0279",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -47,8 +47,8 @@
     {
       "id": "asset_home_categories", "title": "資産の3分類と追加順の3列表示", "scope": "main-412-413-plugin-1.0.14-live",
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
-      "note": "強み・経験、弱み・迷い、判断基準を同一一覧の追加順で3列表示。PC画面の編集・分類選択とキーボード移動、通常保存先への架空の判断基準の保存、再起動後の検索・表示、Dots接続からの検索を確認。ChatGPTの新しい会話から判断基準を自然文で保存する操作は未確認。既存資産は内容から自動再分類しない。",
-      "evidence": [{"recorded_at": "2026-09-29T11:13:31Z", "scope": "main-412-413-plugin-1.0.14-live", "result": "partial", "reference": "PR #412・#413のCI成功、Linux全件検査、1280×720実画面の3列と編集画面、Dotsプラグイン1.0.14の読戻し、通常保存先の架空記録 asset_60feb2126da3c1b7fea66555ae66eb45 の再起動後API・Dots接続検索。"}]
+      "note": "強み・経験、弱み・迷い、判断基準を同一一覧の追加順で3列表示。PC画面の編集・分類選択とキーボード移動、通常保存先への架空の判断基準の保存、再起動後の検索・表示、Dots接続からの検索を確認。既存のChatGPT接続に残った古いツール定義では画面分類が送信されず強み扱いになったため、接続のツール更新を実施。誤分類した架空記録は判断基準に修正済み。新しいChatGPT会話からの分類付き保存は未確認。既存資産は内容から自動再分類しない。",
+      "evidence": [{"recorded_at": "2026-09-29T11:21:24Z", "scope": "main-412-413-plugin-1.0.14-live", "result": "partial", "reference": "PR #412・#413のCI成功、Linux全件検査、1280×720実画面の3列と編集画面、Dotsプラグイン1.0.14の読戻し、架空記録 asset_60feb2126da3c1b7fea66555ae66eb45 の再起動後API・Dots接続検索。旧接続定義経由の asset_90bc05be0153dacd50c42c4bc0a8ca1c は強みに誤分類され、現行資産版を判断基準へ修正。ChatGPT設定のツール更新を実施。"}]
     }
   ]
 }
