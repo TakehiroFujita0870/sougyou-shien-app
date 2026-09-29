@@ -12,7 +12,21 @@ const IDEA_SECTIONS = [
   'エグゼクティブサマリー', 'ビジネスモデル', '顧客とマーケットサイズ', '収益モデル',
   '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
 ];
+const ASSET_CATEGORIES = [
+  { id: 'strength', label: '強み・経験' },
+  { id: 'barrier', label: '弱み・迷い' },
+  { id: 'criterion', label: '判断基準' },
+];
 const compactResearchStatusLabel = (status) => ['prior_research_sources_missing', 'prior_research_import', 'research_sources_missing', 'researched'].includes(status) ? '調査済み' : status === 'unresearched' ? '未調査' : null;
+
+function assetCategory(asset) {
+  if (ASSET_CATEGORIES.some(({ id }) => id === asset.category)) return asset.category;
+  return asset.kind === 'barrier' ? 'barrier' : 'strength';
+}
+
+function assetCategoryLabel(category) {
+  return ASSET_CATEGORIES.find((item) => item.id === category)?.label ?? '強み・経験';
+}
 
 function HomeTabIcon({ name }) {
   const paths = {
@@ -43,9 +57,6 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const [assetDraft, setAssetDraft] = useState(null);
   const [assetSaving, setAssetSaving] = useState(false);
   const [assetNotice, setAssetNotice] = useState('');
-  const [assetMoving, setAssetMoving] = useState(false);
-  const [dragAssetId, setDragAssetId] = useState(null);
-  const [dropColumn, setDropColumn] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [focusAssetId, setFocusAssetId] = useState(null);
   const [focusIdeaId, setFocusIdeaId] = useState(null);
@@ -197,7 +208,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
     }
   }
   function editAsset(asset) {
-    setAssetDraft({ id: asset.id, name: asset.name, description: asset.description, revision: asset.revision });
+    setAssetDraft({ id: asset.id, name: asset.name, description: asset.description, revision: asset.revision, category: assetCategory(asset) });
     setAssetNotice('');
   }
   useEffect(() => {
@@ -210,48 +221,25 @@ export function LocalHomeSurface({ client, onOpenServices }) {
     if (!assetDraft) return;
     document.getElementById(`asset-title-${assetDraft.id}`)?.focus();
   }, [assetDraft?.id]);
-  async function moveAsset(asset, targetColumn) {
-    if (assetMoving || assetSaving || assetDraft || deleteConfirmation || !canArchiveRecord('asset', asset.revision)) return;
-    if ((asset.kind === 'barrier' ? 'barrier' : 'strength') === targetColumn) return;
-    setAssetMoving(true);
-    setAssetNotice('');
-    let saved = null;
-    try {
-      saved = await client.saveAsset(asset.id, {
-        name: asset.name, description: asset.description, expectedRevision: asset.revision,
-        kind: targetColumn,
-      });
-      const refreshed = await client.getHome();
-      setHome(refreshed);
-      setFocusAssetId(saved.id);
-      setAssetNotice(`「${asset.name}」を${targetColumn === 'barrier' ? '弱み・迷い' : '強み・経験'}へ移動しました。`);
-    } catch (error) {
-      setAssetNotice(saved ? '移動は保存されましたが、一覧を更新できませんでした。ページを再読み込みしてください。' : error?.kind === 'conflict' ? '別の更新がありました。最新の一覧を読み直してから移動してください。' : '移動を保存できませんでした。元の欄に残しています。');
-    } finally {
-      setAssetMoving(false);
-      setDragAssetId(null);
-      setDropColumn(null);
-    }
-  }
-  function assetKeyDown(event, asset, items) {
-    if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || assetMoving || deleteConfirmation) return;
-    const index = items.findIndex((item) => item.id === asset.id);
+  function assetKeyDown(event, asset) {
+    if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || event.altKey || deleteConfirmation) return;
+    const index = home.assets.findIndex((item) => item.id === asset.id);
     const focusAt = (next) => {
       event.preventDefault();
-      const cards = [...event.currentTarget.parentElement.querySelectorAll('.local-home__asset-card')];
+      const grid = event.currentTarget.closest('.local-home__asset-grid');
+      const cards = [...(grid?.querySelectorAll('.local-home__asset-card') ?? [])];
       cards[Math.max(0, Math.min(next, cards.length - 1))]?.focus();
     };
-    if (!event.altKey && event.key === 'ArrowDown') focusAt(index + 1);
-    else if (!event.altKey && event.key === 'ArrowUp') focusAt(index - 1);
-    else if (!event.altKey && event.key === 'Home') focusAt(0);
-    else if (!event.altKey && event.key === 'End') focusAt(items.length - 1);
-    else if (event.altKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
-      event.preventDefault();
-      void moveAsset(asset, event.key === 'ArrowLeft' ? 'strength' : 'barrier');
-    } else if (!event.altKey && canArchiveRecord('asset', asset.revision) && ['Enter', 'e', 'E'].includes(event.key)) {
+    if (event.key === 'ArrowLeft') focusAt(index - 1);
+    else if (event.key === 'ArrowRight') focusAt(index + 1);
+    else if (event.key === 'ArrowUp') focusAt(index - 3);
+    else if (event.key === 'ArrowDown') focusAt(index + 3);
+    else if (event.key === 'Home') focusAt(0);
+    else if (event.key === 'End') focusAt(home.assets.length - 1);
+    else if (canArchiveRecord('asset', asset.revision) && ['Enter', 'e', 'E'].includes(event.key)) {
       event.preventDefault();
       editAsset(asset);
-    } else if (!event.altKey && canArchiveRecord('asset', asset.revision) && event.key === 'Delete') {
+    } else if (canArchiveRecord('asset', asset.revision) && event.key === 'Delete') {
       event.preventDefault();
       deleteTriggerRef.current = event.currentTarget;
       setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision });
@@ -263,14 +251,16 @@ export function LocalHomeSurface({ client, onOpenServices }) {
     setAssetSaving(true);
     setAssetNotice('');
     try {
-      await client.saveAsset(assetDraft.id, {
+      const saved = await client.saveAsset(assetDraft.id, {
         name: assetDraft.name,
         description: assetDraft.description,
         expectedRevision: assetDraft.revision,
+        category: assetDraft.category,
       });
       const refreshed = await client.getHome();
       setHome(refreshed);
       setAssetDraft(null);
+      if (saved?.id) setFocusAssetId(saved.id);
       setAssetNotice('変更を保存しました。');
     } catch (error) {
       setAssetNotice(error?.kind === 'conflict' ? '別の更新がありました。最新内容を読み直してから編集してください。' : '保存できませんでした。入力内容は残っています。');
@@ -352,7 +342,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       <header><h2 id="local-home-shortcuts-heading">ショートカット一覧</h2><button ref={helpCloseRef} type="button" aria-label="閉じる" onClick={() => { setShowShortcuts(false); helpTriggerRef.current?.focus(); }}>×</button></header>
       <p><strong>アイデア・アセット共通</strong>　カードを選択して ↑↓・Home・End：選択移動 ／ E：編集 ／ Delete：削除確認 ／ ?：この一覧</p>
       <p><strong>アイデア</strong>　Enter：選択</p>
-      <p><strong>アセット</strong>　Enter：編集 ／ Alt＋←：強み・経験へ ／ Alt＋→：弱み・迷いへ</p>
+      <p><strong>アセット</strong>　←→：左右へ移動 ／ ↑↓：3件ずつ移動 ／ 分類は編集で変更</p>
       <p><strong>編集中</strong>　Esc：キャンセル</p>
     </section></div>}
     {home.status === 'loading' && <p role="status" className="local-home__notice">保存内容を読み込んでいます。</p>}
@@ -407,35 +397,63 @@ export function LocalHomeSurface({ client, onOpenServices }) {
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">
-      {[{ id: 'strength', label: '強み・経験', items: home.assets.filter((asset) => asset.kind !== 'barrier') }, { id: 'barrier', label: '弱み・迷い', items: home.assets.filter((asset) => asset.kind === 'barrier') }].map((column) => <div key={column.id} className="local-home__asset-list" data-asset-column={column.id}
-        data-drop-active={dropColumn === column.id}
-        onDragOver={(event) => { if (dragAssetId && home.assets.some((asset) => asset.id === dragAssetId && (asset.kind === 'barrier' ? 'barrier' : 'strength') !== column.id)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropColumn(column.id); } }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropColumn(null); }}
-        onDrop={(event) => { event.preventDefault(); const asset = home.assets.find((item) => item.id === dragAssetId); if (asset) void moveAsset(asset, column.id); setDropColumn(null); }}>
-        <h2>{column.label} <span>{column.items.length}件</span></h2>
-        {column.items.length ? <div className="local-home__cards">{column.items.map((asset) => <article key={asset.id} className="local-home__asset-card" data-asset-id={asset.id} tabIndex={assetDraft?.id === asset.id ? -1 : 0} draggable={!assetDraft && !assetMoving && !deleteConfirmation}
-          onDragStart={(event) => { setDragAssetId(asset.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', 'Dots.'); }}
-          onDragEnd={() => { setDragAssetId(null); setDropColumn(null); }}
-          onKeyDown={(event) => assetKeyDown(event, asset, column.items)}>
-          {assetDraft?.id === asset.id ? <form onSubmit={saveAsset} className="local-home__edit-form" onKeyDown={(event) => { if (event.key === 'Escape' && !assetSaving) { event.stopPropagation(); setAssetDraft(null); setAssetNotice(''); setFocusAssetId(asset.id); } }}>
-            <label htmlFor={`asset-title-${asset.id}`}>題名</label>
-            <textarea id={`asset-title-${asset.id}`} name="title" rows={1} maxLength={200} required value={assetDraft.name} onChange={(event) => setAssetDraft((current) => ({ ...current, name: event.target.value }))} />
-            <label htmlFor={`asset-content-${asset.id}`}>内容</label>
-            <textarea id={`asset-content-${asset.id}`} name="content" rows={8} maxLength={4000} value={assetDraft.description} onChange={(event) => setAssetDraft((current) => ({ ...current, description: event.target.value }))} />
-            {assetNotice && <p role="alert">{assetNotice}</p>}
-            <div><button type="submit" disabled={!assetDraft.name.trim() || assetSaving}>{assetSaving ? '保存中…' : '保存する'}</button><button type="button" aria-label="キャンセル" disabled={assetSaving} onClick={() => { setAssetDraft(null); setAssetNotice(''); }}>キャンセル</button></div>
-          </form> : <>
+      <h2 className="local-home__asset-list-heading">アセット <span>{home.assets.length}件</span></h2>
+      {home.assets.length ? <div className="local-home__asset-grid" role="list" aria-label="追加順のアセット一覧">
+        {home.assets.map((asset) => {
+          const category = assetCategory(asset);
+          return <article key={asset.id} role="listitem" className="local-home__asset-card" data-asset-id={asset.id} data-category={category} tabIndex={assetDraft?.id === asset.id ? -1 : 0}
+            onKeyDown={(event) => assetKeyDown(event, asset)}>
+            <div className="local-home__asset-card-header">
+              <span className="local-home__asset-badge" data-category={category}>{assetCategoryLabel(category)}</span>
+              <div className="local-home__card-actions">
+                <button type="button" className="local-home__icon-button" aria-label={`編集: ${asset.name}`} title="編集" disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1} onClick={() => editAsset(asset)}><EditIcon /></button>
+                <button type="button" className="local-home__icon-button" aria-label={`削除: ${asset.name}`} title={canArchiveRecord('asset', asset.revision) ? `「${asset.name}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('asset', asset.revision) || deletePending} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision }); }}><TrashIcon /></button>
+              </div>
+            </div>
             <h3>{asset.name}</h3>
             {asset.description ? <p>{asset.description}</p> : <p className="local-home__unwritten">内容はありません</p>}
-            <div className="local-home__card-actions">
-              <button type="button" className="local-home__icon-button" aria-label={`編集: ${asset.name}`} disabled={!Number.isSafeInteger(asset.revision) || asset.revision < 1 || assetMoving} onClick={() => editAsset(asset)}><EditIcon /></button>
-              <button type="button" className="local-home__icon-button" aria-label={`削除: ${asset.name}`} title={canArchiveRecord('asset', asset.revision) ? `「${asset.name}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('asset', asset.revision) || deletePending || assetMoving} onClick={(event) => { event.stopPropagation(); deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: asset.id, kind: 'asset', title: asset.name, revision: asset.revision }); }}><TrashIcon /></button>
-            </div>
-          </>}
-        </article>)}</div> : <p className="local-home__notice">記録はまだありません。</p>}
-      </div>)}
+          </article>;
+        })}
+      </div> : <p className="local-home__notice local-home__asset-empty">アセットの記録はまだありません。</p>}
       {assetNotice && !assetDraft && <p role="status" className="local-home__asset-notice">{assetNotice}</p>}
     </section>}
+    {assetDraft && <div className="local-home__asset-edit-backdrop">
+      <section className="local-home__asset-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="asset-edit-heading"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !assetSaving) {
+            event.preventDefault();
+            setAssetDraft(null);
+            setAssetNotice('');
+            setFocusAssetId(assetDraft.id);
+          } else if (event.key === 'Tab') {
+            const controls = [...event.currentTarget.querySelectorAll('select, textarea, button:not(:disabled)')];
+            if (!controls.length) {
+              event.preventDefault();
+              event.currentTarget.focus();
+            } else if (event.shiftKey && document.activeElement === controls[0]) {
+              event.preventDefault();
+              controls.at(-1).focus();
+            } else if (!event.shiftKey && document.activeElement === controls.at(-1)) {
+              event.preventDefault();
+              controls[0].focus();
+            }
+          }
+        }}>
+        <h2 id="asset-edit-heading">アセットを編集</h2>
+        <form onSubmit={saveAsset} className="local-home__edit-form">
+          <label htmlFor={`asset-category-${assetDraft.id}`}>分類</label>
+          <select id={`asset-category-${assetDraft.id}`} name="category" value={assetDraft.category} onChange={(event) => setAssetDraft((current) => ({ ...current, category: event.target.value }))}>
+            {ASSET_CATEGORIES.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+          </select>
+          <label htmlFor={`asset-title-${assetDraft.id}`}>題名</label>
+          <textarea id={`asset-title-${assetDraft.id}`} name="title" rows={1} maxLength={200} required value={assetDraft.name} onChange={(event) => setAssetDraft((current) => ({ ...current, name: event.target.value }))} />
+          <label htmlFor={`asset-content-${assetDraft.id}`}>内容</label>
+          <textarea id={`asset-content-${assetDraft.id}`} name="content" rows={8} maxLength={4000} value={assetDraft.description} onChange={(event) => setAssetDraft((current) => ({ ...current, description: event.target.value }))} />
+          {assetNotice && <p role="alert">{assetNotice}</p>}
+          <div><button type="submit" disabled={!assetDraft.name.trim() || assetSaving}>{assetSaving ? '保存中…' : '保存する'}</button><button type="button" disabled={assetSaving} onClick={() => { setAssetDraft(null); setAssetNotice(''); setFocusAssetId(assetDraft.id); }}>キャンセル</button></div>
+        </form>
+      </section>
+    </div>}
     {deleteNotice && <p role="status" aria-live="polite" className="local-home__delete-notice">{deleteNotice}{homeReloadNeeded && <button type="button" onClick={() => { setDeleteNotice(''); setHomeReloadNeeded(false); setAttempt((value) => value + 1); }}>ホームを再読み込み</button>}</p>}
     {deleteConfirmation && <div className="local-home__delete-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !deletePending) setDeleteConfirmation(null); }}>
       <section ref={deleteDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="local-delete-heading" aria-describedby="local-delete-description" tabIndex={-1} className="local-home__delete-dialog">

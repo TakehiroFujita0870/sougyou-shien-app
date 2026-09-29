@@ -1,6 +1,8 @@
 import { safePublicCitationUrl } from './publicCitationUrl.js';
 import { LocalDashboardClientError } from './localDashboardClientError.js';
 
+const HOME_ASSET_CATEGORIES = ['strength', 'barrier', 'criterion'];
+
 /** Allowlisted home presentation data, independent of the HTTP transport. */
 export function projectLocalHome(result) {
   if (!['ready', 'empty', 'stopped'].includes(result.status) || !Array.isArray(result.ideas) || !Array.isArray(result.assets)) {
@@ -57,7 +59,9 @@ export function projectLocalHome(result) {
       || !Number.isSafeInteger(item.revision) || item.revision < 1 || !['local_only', 'shareable'].includes(item.egress_policy)) {
       throw new LocalDashboardClientError('error');
     }
-    return { id: item.id, name: item.name, description: item.description, revision: item.revision, egress_policy: item.egress_policy, kind: item.kind === 'barrier' ? 'barrier' : 'asset' };
+    const category = item.category ?? (item.kind === 'barrier' ? 'barrier' : 'strength');
+    if (!HOME_ASSET_CATEGORIES.includes(category)) throw new LocalDashboardClientError('error');
+    return { id: item.id, name: item.name, description: item.description, revision: item.revision, egress_policy: item.egress_policy, kind: item.kind === 'barrier' ? 'barrier' : 'asset', category };
   });
   const profile = result.profile && typeof result.profile.display_name === 'string' ? { displayName: result.profile.display_name } : null;
   return { status: result.status, ideas, assets, profile };

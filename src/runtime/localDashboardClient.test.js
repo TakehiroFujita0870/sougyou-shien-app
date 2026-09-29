@@ -30,10 +30,16 @@ it('passes bounded public citations and distinguishes missing sources through th
 it('maps common asset revisions and sharing policy without exposing other server fields', async () => {
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
     status: 'ready', ideas: [], profile: { display_name: 'private' },
-    assets: [{ id: 'asset-1', name: '経験', kind: 'experience', description: '内容', revision: 3, egress_policy: 'shareable', details: 'PRIVATE' }],
+    assets: [
+      { id: 'asset-1', name: '経験', kind: 'experience', description: '内容', revision: 3, egress_policy: 'shareable', details: 'PRIVATE' },
+      { id: 'asset-2', name: '基準', kind: 'knowledge', category: 'criterion', description: '内容', revision: 2, egress_policy: 'local_only', details: 'PRIVATE' },
+    ],
   }));
   const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
-  expect(home.assets).toEqual([{ id: 'asset-1', name: '経験', description: '内容', revision: 3, egress_policy: 'shareable', kind: 'asset' }]);
+  expect(home.assets).toEqual([
+    { id: 'asset-1', name: '経験', description: '内容', revision: 3, egress_policy: 'shareable', kind: 'asset', category: 'strength' },
+    { id: 'asset-2', name: '基準', description: '内容', revision: 2, egress_policy: 'local_only', kind: 'asset', category: 'criterion' },
+  ]);
   expect(JSON.stringify(home)).not.toContain('PRIVATE');
 });
 
@@ -78,13 +84,20 @@ it('updates one asset with CSRF, expected revision and stable idempotency key, r
   for (const request of requests) expect(JSON.parse(request.body)).not.toHaveProperty('egress_policy');
 });
 
-it('sends a classification only for a requested asset move', async () => {
-  const fetchImpl = vi.fn().mockResolvedValueOnce(statusResponse())
-    .mockResolvedValueOnce(jsonResponse({ id: 'asset-next', revision: 2 }));
-  const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => 'move-key' });
-  await client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, kind: 'barrier' });
-  expect(JSON.parse(fetchImpl.mock.calls[1][1].body).kind).toBe('barrier');
-  await expect(client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, kind: 'person' })).rejects.toBeInstanceOf(LocalDashboardClientError);
+it('sends a category only when an asset edit requests one', async () => {
+  let generated = 0;
+  const fetchImpl = vi.fn()
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-next', revision: 2 }))
+    .mockResolvedValueOnce(statusResponse())
+    .mockResolvedValueOnce(jsonResponse({ id: 'asset-next-2', revision: 2 }));
+  const client = createLocalDashboardClient({ fetchImpl, location: localLocation, createIdempotencyKey: () => `category-${++generated}` });
+  await client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, category: 'criterion' });
+  expect(JSON.parse(fetchImpl.mock.calls[1][1].body).category).toBe('criterion');
+  await client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, category: 'barrier' });
+  expect(JSON.parse(fetchImpl.mock.calls[3][1].body).category).toBe('barrier');
+  expect(JSON.parse(fetchImpl.mock.calls[1][1].body).idempotency_key).not.toBe(JSON.parse(fetchImpl.mock.calls[3][1].body).idempotency_key);
+  await expect(client.saveAsset('asset-current', { name: '経験', description: '内容', expectedRevision: 1, category: 'person' })).rejects.toBeInstanceOf(LocalDashboardClientError);
 });
 
 it('edits an idea through the local guarded endpoint with a stable retry key', async () => {
