@@ -11,7 +11,7 @@ NON_CURRENT_STATUSES = frozenset({"retracted", "superseded", "expired", "cancell
 FIELD_ALLOWLIST: dict[NodeType, tuple[str, ...]] = {
     NodeType.OWNER_PROFILE: ("display_name", "status", "egress_policy"),
     NodeType.IDEA: ("title", "summary", "description", "source_text", "tags", "status", "egress_policy", "revision", "supersedes_id"),
-    NodeType.ASSET: ("name", "kind", "description", "status", "egress_policy"),
+    NodeType.ASSET: ("name", "kind", "home_category", "description", "status", "egress_policy"),
     NodeType.PERSON: ("name", "description", "contact", "private_notes", "status", "egress_policy"),
     NodeType.ORGANIZATION: ("name", "description", "status", "egress_policy"),
     NodeType.SOURCE: ("title", "kind", "locator", "current_revision_id", "revision", "status", "egress_policy"),

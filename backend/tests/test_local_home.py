@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, replace
+from datetime import datetime, timedelta, timezone
 
-from dots.founder_graph import Idea, Provenance, Status
+from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, Idea, Provenance, Status
 from dots.founder_graph_neo4j import _node_properties
+from dots.founder_graph_mcp_write import McpWriteSurface
+from dots.founder_graph_write import InMemoryGraphWriteService
 from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
-from dots.local_home import Neo4jHomeStore, read_local_home
+from dots.local_home import LocalAssetWriter, Neo4jHomeStore, read_local_home
 
 
 class Session:
@@ -74,10 +77,10 @@ def test_home_lists_every_current_idea_and_safe_assets_without_raw_fields():
     assert result["status"] == "ready"
     assert result["ideas"] == [{"id": "idea-new", "title": "New", "summary": "Summary", "description": "Detail", "revision": 0, "research_status": "unknown"}]
     assert result["assets"] == [{
-        "id": "asset-2", "name": "営業への迷い", "kind": "barrier", "description": "初回顧客獲得に不安",
+        "id": "asset-1", "name": "製造業経験", "kind": "experience", "category": "strength", "description": "現場の経験",
         "revision": 1, "egress_policy": "local_only",
     }, {
-        "id": "asset-1", "name": "製造業経験", "kind": "experience", "description": "現場の経験",
+        "id": "asset-2", "name": "営業への迷い", "kind": "barrier", "category": "barrier", "description": "初回顧客獲得に不安",
         "revision": 1, "egress_policy": "local_only",
     }]
     assert result["profile"] == {"display_name": "Takehiro"}
@@ -88,6 +91,112 @@ def test_home_lists_every_current_idea_and_safe_assets_without_raw_fields():
     query, parameters = driver.value.calls[0]
     assert "n.owner_id = $owner_id" in query
     assert set(parameters["node_types"]) == {"idea", "asset", "owner_profile"}
+
+
+def test_home_category_is_projected_without_exposing_storage_metadata():
+    row = node("criterion", "asset", {
+        "name": "判断基準", "kind": "knowledge", "home_category": "criterion",
+        "description": "関係密度を優先", "details": {"private": "hidden"},
+        "created_at": "2026-09-01T00:00:00Z",
+    })
+
+    result = read_local_home(Neo4jHomeStore(Driver([row])), owner_id="owner-a")
+
+    assert result["assets"] == [{
+        "id": "criterion", "name": "判断基準", "kind": "knowledge", "category": "criterion",
+        "description": "関係密度を優先", "revision": 1, "egress_policy": "local_only",
+    }]
+    assert "hidden" not in json.dumps(result, ensure_ascii=False)
+
+
+def test_asset_edits_do_not_change_original_addition_order():
+    rows = [
+        node("asset-first", "asset", {
+            "name": "先に追加", "kind": "knowledge", "created_at": "2026-09-01T00:00:00Z",
+        }),
+        node("asset-second", "asset", {
+            "name": "後に追加", "kind": "knowledge", "created_at": "2026-09-02T00:00:00Z",
+        }),
+        node("asset-first-edit", "asset", {
+            "name": "先に追加（編集済み）", "kind": "knowledge", "revision": 2,
+            "supersedes_id": "asset-first", "created_at": "2026-09-03T00:00:00Z",
+        }),
+    ]
+
+    result = read_local_home(Neo4jHomeStore(Driver(rows)), owner_id="owner-a")
+
+    assert [asset["id"] for asset in result["assets"]] == ["asset-first-edit", "asset-second"]
+
+
+def test_asset_restore_keeps_original_addition_order():
+    rows = [
+        node("asset-first", "asset", {
+            "name": "先に追加", "kind": "knowledge", "created_at": "2026-09-01T00:00:00Z",
+        }),
+        node("asset-first-edit", "asset", {
+            "name": "先に追加", "kind": "knowledge", "revision": 2,
+            "supersedes_id": "asset-first", "created_at": "2026-09-03T00:00:00Z",
+        }, status="superseded"),
+        node("asset-first-archived", "asset", {
+            "name": "先に追加", "kind": "knowledge", "revision": 3,
+            "supersedes_id": "asset-first-edit", "created_at": "2026-09-04T00:00:00Z",
+        }, status="archived"),
+        node("asset-first-restored", "asset", {
+            "name": "先に追加", "kind": "knowledge", "revision": 4,
+            "supersedes_id": "asset-first-archived", "created_at": "2026-09-05T00:00:00Z",
+        }),
+        node("asset-second", "asset", {
+            "name": "後から追加", "kind": "knowledge", "created_at": "2026-09-02T00:00:00Z",
+        }),
+    ]
+
+    result = read_local_home(Neo4jHomeStore(Driver(rows)), owner_id="owner-a")
+
+    assert [asset["id"] for asset in result["assets"]] == ["asset-first-restored", "asset-second"]
+
+
+def test_mcp_criterion_capture_edit_and_reload_preserve_category_and_original_order(monkeypatch):
+    owner_id = "owner-a"
+    writes = InMemoryGraphWriteService(owner_id)
+    receipt = McpWriteSurface(writes).call("capture_asset", {
+        "name": "判断基準", "kind": "knowledge", "home_category": "criterion",
+        "summary": "関係密度を優先", "egress_policy": "shareable", "idempotency_key": "criterion-mcp",
+    }, owner_id=owner_id)
+    criterion = writes.get_node(receipt.target_id)
+    later = Asset(
+        owner_id=owner_id, id="asset-later", name="後から追加した強み",
+        kind=AssetKind.EXPERIENCE, created_at=criterion.created_at + timedelta(seconds=1),
+    )
+    writes.put_node(later, idempotency_key="asset-later-create", operation="capture_asset")
+    monkeypatch.setattr(
+        "dots.founder_graph.utc_now",
+        lambda: datetime(2027, 1, 1, tzinfo=timezone.utc),
+    )
+    edited = LocalAssetWriter(writes).save(
+        criterion.id, name=criterion.name, description=criterion.description,
+        expected_revision=1, idempotency_key="criterion-edit",
+        home_category=criterion.home_category,
+    )
+
+    class PersistedHome:
+        def read_home(self, requested_owner):
+            assert requested_owner == owner_id
+            rows = []
+            for asset in writes.nodes():
+                if isinstance(asset, Asset):
+                    properties = _node_properties(asset)
+                    rows.append({
+                        key: properties[key]
+                        for key in ("id", "owner_id", "node_type", "status", "payload_json")
+                    })
+            return rows
+
+    reloaded = read_local_home(PersistedHome(), owner_id=owner_id)
+
+    assert reloaded["status"] == "ready"
+    assert [asset["id"] for asset in reloaded["assets"]] == [edited.target_id, later.id]
+    assert reloaded["assets"][0]["category"] == "criterion"
+    assert reloaded["assets"][0]["kind"] == "knowledge"
 
 
 def test_home_distinguishes_empty_stopped_and_sanitized_failure():
@@ -111,12 +220,17 @@ def test_home_fails_closed_on_identity_mismatch_or_invalid_payload():
 def test_home_displays_only_latest_self_introduction_without_losing_history():
     rows = [
         node("asset-old", "asset", {"name": "自己紹介", "kind": "knowledge", "description": "元の自己紹介", "created_at": "2026-09-24T00:00:00Z"}),
-        node("asset-new", "asset", {"name": "自己紹介", "kind": "knowledge", "description": "改訂版", "details": {"supersedes_id": "asset-old"}, "created_at": "2026-09-25T00:00:00Z"}),
+        node("asset-new", "asset", {
+            "name": "自己紹介", "kind": "knowledge", "description": "改訂版",
+            "details": {"supersedes_id": "asset-old"},
+            "provenance": {"operation": "edit_self_intro"},
+            "created_at": "2026-09-25T00:00:00Z",
+        }),
     ]
     result = read_local_home(Neo4jHomeStore(Driver(rows)), owner_id="owner-a")
     assert result["assets"] == [{
         "id": "asset-new", "name": "自己紹介", "kind": "knowledge", "description": "改訂版",
-        "revision": 1, "egress_policy": "local_only",
+        "category": "strength", "revision": 1, "egress_policy": "local_only",
     }]
 
 

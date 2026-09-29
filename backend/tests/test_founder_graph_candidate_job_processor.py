@@ -2,8 +2,8 @@ from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 
 from dots.founder_graph import (
-    Asset, Claim, EgressPolicy, Evidence, Idea, MaterialKind, NodeType, RelationAssertion,
-    Source, SourceRevision, Status,
+    Asset, AssetKind, Claim, Decision, EgressPolicy, Evidence, Idea, MaterialKind, NodeType,
+    RelationAssertion, Source, SourceRevision, Status,
 )
 from dots.founder_graph_job_store import (
     CandidatePayloadManifest,
@@ -207,6 +207,67 @@ def test_shareable_candidate_is_visible_in_mcp_search_and_fetch():
     assert idea_hit["semantic_relation_path"][0]["relation_assertion_id"] == assertion.id
     assert idea_hit["semantic_relation_path"][0]["target_id"] == ASSET
     assert fetched["path"] == [IDEA, "REUSES", ASSET]
+
+
+def test_reuses_criterion_asset_without_reclassifying_as_strength_or_decision():
+    quote = "この案にも「規模より関係密度を優先する」判断基準を適用する。"
+    markdown = f"## エグゼクティブサマリー\n\n{quote}\n"
+    brief = _brief(markdown=markdown, egress_policy=EgressPolicy.SHAREABLE)
+    writes = InMemoryGraphWriteService(OWNER)
+    idea = Idea(
+        id=IDEA, owner_id=OWNER, title="倉庫案", status=Status.ACTIVE,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    criterion = Asset(
+        id=ASSET, owner_id=OWNER, name="判断基準: 関係密度を優先",
+        kind=AssetKind.KNOWLEDGE, home_category="criterion",
+        description="規模より関係密度を優先する。", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    existing_strength = Asset(
+        id="asset-strength", owner_id=OWNER, name="既存の強み",
+        kind=AssetKind.STRENGTH, home_category="strength",
+        description="既存の強みの記録。", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(idea, idempotency_key="idea-criterion", expected_revision=0)
+    writes.put_node(criterion, idempotency_key="criterion-asset", expected_revision=0)
+    writes.put_node(existing_strength, idempotency_key="strength-asset", expected_revision=0)
+    writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key="criterion-brief")
+    jobs = MemoryJobStore(brief)
+    processor = RelationCandidateJobProcessor(
+        jobs=jobs, writes=writes, brief_store=writes, worker_id="inline-worker",
+    )
+
+    result = processor.process_specific(jobs.job.id, raw_manifest=_manifest(quote=quote))
+    assertions = [node for node in writes.nodes() if isinstance(node, RelationAssertion)]
+    decisions = [node for node in writes.nodes() if isinstance(node, Decision)]
+    reads = McpReadSurface(GraphReadService(writes))
+    searched = reads.call("search", {"query": "関係密度を優先"}, owner_id=OWNER)
+    category_search = reads.call("search", {"query": "criterion"}, owner_id=OWNER)
+    criterion_hit = next(item for item in searched["results"] if item["id"] == criterion.id)
+    category_hit = next(item for item in category_search["results"] if item["id"] == criterion.id)
+    idea_hit = next(item for item in searched["results"] if item["id"] == idea.id)
+    relation_path = idea_hit["semantic_relation_path"][0]
+    fetched = reads.call("fetch", {"id": criterion.id}, owner_id=OWNER)
+
+    assert result.state is JobState.SUCCEEDED
+    assert len(assertions) == 1
+    assert assertions[0].predicate.value == "REUSES"
+    assert assertions[0].target_id == criterion.id
+    assert assertions[0].basis.value == "brief_hypothesis"
+    assert assertions[0].status.value == "proposed"
+    assert decisions == []
+    assert criterion_hit["fields"]["home_category"] == "criterion"
+    assert category_hit["fields"]["home_category"] == "criterion"
+    assert criterion_hit["fields"]["kind"] == AssetKind.KNOWLEDGE.value
+    assert fetched["fields"]["home_category"] == "criterion"
+    assert fetched["fields"]["kind"] == AssetKind.KNOWLEDGE.value
+    assert relation_path["predicate"] == "REUSES"
+    assert relation_path["target_id"] == criterion.id
+    assert relation_path["basis"] == "brief_hypothesis"
+    assert relation_path["status"] == "proposed"
+    assert relation_path["support_quote"] == quote
+    assert writes.get_node(existing_strength.id).home_category == "strength"
+    assert writes.get_node(existing_strength.id).kind is AssetKind.STRENGTH
 
 
 def test_private_candidate_endpoint_keeps_relation_local_in_memory_processor():

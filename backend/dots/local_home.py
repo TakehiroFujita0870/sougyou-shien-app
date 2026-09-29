@@ -11,7 +11,7 @@ from .founder_graph_neo4j_read import Neo4jGraphReadService
 from .founder_graph_neo4j_idea import decode_persisted_idea
 from .founder_graph_lifecycle_resolver import resolve_restored_idea_reference
 from .founder_graph_write import GraphWritePort, WriteReceipt
-from .founder_graph import AssetKind
+from .founder_graph import AssetHomeCategory
 from .idea_brief_read_projection import project_idea_brief_for_read
 
 
@@ -76,7 +76,7 @@ class LocalAssetWriter:
         description: str,
         expected_revision: int,
         idempotency_key: str,
-        kind: AssetKind | None = None,
+        home_category: AssetHomeCategory | None = None,
     ) -> WriteReceipt:
         arguments = dict(
             asset_id=asset_id,
@@ -85,8 +85,8 @@ class LocalAssetWriter:
             expected_revision=expected_revision,
             idempotency_key=idempotency_key,
         )
-        if kind is not None:
-            arguments["kind"] = kind
+        if home_category is not None:
+            arguments["home_category"] = home_category
         return self._writes.revise_asset(**arguments)
 
 
@@ -123,8 +123,67 @@ def _timestamp(payload: Mapping[str, Any]) -> datetime:
     raw = payload.get("updated_at") or payload.get("created_at")
     if not isinstance(raw, str):
         raise ValueError("timestamp is missing")
+    return _parse_timestamp(raw)
+
+
+def _creation_timestamp(payload: Mapping[str, Any]) -> datetime:
+    raw = payload.get("created_at")
+    if not isinstance(raw, str):
+        raise ValueError("creation timestamp is missing")
+    return _parse_timestamp(raw)
+
+
+def _parse_timestamp(raw: str) -> datetime:
     value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _asset_parent(payload: Mapping[str, Any]) -> str | None:
+    parent = payload.get("supersedes_id")
+    provenance = payload.get("provenance")
+    if (
+        parent is None
+        and isinstance(provenance, Mapping)
+        and provenance.get("operation") == "edit_self_intro"
+        and isinstance(payload.get("details"), dict)
+    ):
+        parent = payload["details"].get("supersedes_id")
+    if parent is not None and not isinstance(parent, str):
+        raise ValueError("asset predecessor is invalid")
+    return parent
+
+
+def _asset_addition_order(payloads: Mapping[str, Mapping[str, Any]]) -> dict[str, tuple[datetime, str]]:
+    order: dict[str, tuple[datetime, str]] = {}
+    for identity, payload in payloads.items():
+        current_id = identity
+        current = payload
+        seen = {identity}
+        while True:
+            parent_id = _asset_parent(current)
+            if parent_id is None:
+                break
+            if parent_id in seen:
+                raise ValueError("asset lineage cycle")
+            parent = payloads.get(parent_id)
+            if parent is None:
+                # Keep the card visible if a legacy/incomplete home projection
+                # omits its predecessor; validated writes always retain it.
+                break
+            seen.add(parent_id)
+            current_id, current = parent_id, parent
+        order[identity] = (_creation_timestamp(current), current_id)
+    return order
+
+
+def _asset_category(payload: Mapping[str, Any]) -> AssetHomeCategory:
+    raw = payload.get("home_category")
+    if raw is None:
+        return AssetHomeCategory.BARRIER if payload.get("kind") == AssetHomeCategory.BARRIER.value else AssetHomeCategory.STRENGTH
+    try:
+        return AssetHomeCategory(raw)
+    except (TypeError, ValueError):
+        raise ValueError("asset home category is invalid") from None
 
 
 def _research_status(payload: Mapping[str, Any], row_status: Any) -> str:
@@ -247,6 +306,7 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
         records = []
         ids = set()
         idea_payloads: dict[str, Mapping[str, Any]] = {}
+        asset_payloads: dict[str, Mapping[str, Any]] = {}
         idea_nodes: dict[str, Any] = {}
         idea_statuses: dict[str, Any] = {}
         superseded = set()
@@ -263,20 +323,21 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
             if kind == "idea":
                 idea_payloads[identity] = payload
                 idea_statuses[identity] = row.get("status")
+            if kind == "asset":
+                asset_payloads[identity] = payload
             if kind == "idea" and isinstance(payload.get("supersedes_id"), str):
                 superseded.add(payload["supersedes_id"])
-            if kind == "asset" and isinstance(payload.get("supersedes_id"), str):
-                superseded_assets.add(payload["supersedes_id"])
-            if kind == "asset" and payload.get("name") == "自己紹介" and isinstance(payload.get("details"), dict):
-                prior = payload["details"].get("supersedes_id")
-                if isinstance(prior, str):
-                    superseded_assets.add(prior)
+            if kind == "asset":
+                parent = _asset_parent(payload)
+                if parent is not None:
+                    superseded_assets.add(parent)
             if str(row.get("status") or "").lower() in _EXCLUDED:
                 continue
             records.append((identity, kind, payload, _timestamp(payload)))
 
         idea_nodes = _decode_lifecycle_idea_families(idea_payloads, owner_id=owner_id)
         idea_aliases = _idea_lifecycle_aliases(idea_nodes)
+        asset_order = _asset_addition_order(asset_payloads)
 
         briefs_by_root = {}
         read_briefs = getattr(store, "read_briefs", None)
@@ -373,6 +434,7 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                     "id": identity,
                     "name": _text(payload.get("name"), required=True),
                     "kind": _text(payload.get("kind")),
+                    "category": _asset_category(payload).value,
                     "description": _text(payload.get("description")),
                     "revision": payload.get("revision", 1),
                     "egress_policy": _text(payload.get("egress_policy")) or "local_only",
@@ -383,7 +445,12 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
         return {
             "status": "ready" if ideas or assets or profile else "empty",
             "ideas": [item for _, item in ideas],
-            "assets": [item for _, item in assets],
+            "assets": [
+                item for _, item in sorted(
+                    assets,
+                    key=lambda entry: asset_order.get(entry[1]["id"], (entry[0], entry[1]["id"])),
+                )
+            ],
             "profile": profile,
         }
     except Exception:

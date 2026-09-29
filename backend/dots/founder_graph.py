@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence, TypeVar
 from uuid import uuid4
 
 from .founder_graph_types import (
+    AssetHomeCategory,
     AssetKind,
     AssetStatus,
     CampaignStatus,
@@ -535,12 +536,15 @@ class Asset:
     supersedes_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     provenance: Provenance = field(default_factory=Provenance)
+    home_category: AssetHomeCategory | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "owner_id", _identifier(self.owner_id, "owner_id"))
         object.__setattr__(self, "id", _identifier(self.id, "id"))
         object.__setattr__(self, "name", _text(self.name, "name"))
         object.__setattr__(self, "kind", _enum(self.kind, AssetKind, "kind"))
+        if self.home_category is not None:
+            object.__setattr__(self, "home_category", _enum(self.home_category, AssetHomeCategory, "home_category"))
         object.__setattr__(self, "description", _text(self.description, "description", allow_empty=True))
         object.__setattr__(self, "details", _freeze(self.details))
         object.__setattr__(self, "status", _enum(self.status, Status, "status"))
@@ -572,6 +576,7 @@ class Asset:
         name: str | None = None,
         description: str | None = None,
         kind: AssetKind | None = None,
+        home_category: AssetHomeCategory | None = None,
         id: str | None = None,
         revision: int | None = None,
         provenance: Provenance | None = None,
@@ -583,6 +588,7 @@ class Asset:
             id=new_id_value,
             name=self.name if name is None else name,
             description=self.description if description is None else description,
+            home_category=self.home_category if home_category is None else home_category,
             revision=self.revision + 1 if revision is None else revision,
             supersedes_id=self.id,
             created_at=utc_now(),
@@ -601,6 +607,13 @@ class Asset:
     @property
     def node_type(self) -> NodeType:
         return NodeType.ASSET
+
+    @property
+    def category(self) -> AssetHomeCategory:
+        """Return the screen category, deriving a legacy-compatible value when absent."""
+        if self.home_category is not None:
+            return self.home_category
+        return AssetHomeCategory.BARRIER if self.kind is AssetKind.BARRIER else AssetHomeCategory.STRENGTH
 
     def egress_projection(
         self,
@@ -2632,7 +2645,7 @@ _READ_MCP_NODE_TYPES = frozenset(
 SHAREABLE_PROJECTION_ALLOWLIST = MappingProxyType({
     NodeType.OWNER_PROFILE: ("id", "display_name", "status"),
     NodeType.IDEA: ("id", "title", "summary", "description", "tags", "status"),
-    NodeType.ASSET: ("id", "name", "kind", "description", "status"),
+    NodeType.ASSET: ("id", "name", "kind", "home_category", "description", "status"),
     NodeType.PERSON: ("id", "name", "kind", "status"),
     NodeType.ORGANIZATION: ("id", "name", "description", "status"),
     NodeType.SOURCE: ("id", "title", "kind", "locator", "current_revision_id", "revision", "status"),
@@ -2750,7 +2763,7 @@ def _safe_projection(value: Any) -> tuple[dict[str, object], dict[str, str]] | N
         category_prefix = "person"
     elif isinstance(value, Asset):
         node_type = NodeType.ASSET
-        result = {"id": value.id, "name": value.name, "kind": value.kind.value, "description": value.description, "status": value.status.value}
+        result = {"id": value.id, "name": value.name, "kind": value.kind.value, "home_category": value.category, "description": value.description, "status": value.status.value}
         category_prefix = "asset"
     elif isinstance(value, Idea):
         node_type = NodeType.IDEA
@@ -2931,6 +2944,7 @@ to_egress_projection = project_shareable
 
 __all__ = [
     "Asset",
+    "AssetHomeCategory",
     "AssetKind",
     "AssetStatus",
     "CONTENT_CHUNK_MAX_LENGTH",

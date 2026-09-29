@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
 from dots.local_overview import COUNT_BASIS, OverviewResult, OverviewStore, read_local_overview
 from dots.local_home import HomeStore, LocalAssetWriter, LocalIdeaWriter, read_local_home
-from dots.founder_graph import AssetKind
+from dots.founder_graph import AssetHomeCategory
 from dots.founder_graph_write import GraphWriteNotFoundError, IdempotencyConflictError, RevisionConflictError
 from dots.founder_graph_neo4j import Neo4jGatewayError, Neo4jUnavailableError
 from dots.local_record_lifecycle import LocalRecordLifecycleWriter, read_local_deleted_records
@@ -56,6 +56,7 @@ class AssetEdit(BaseModel):
     description: str = Field(max_length=4000)
     expected_revision: StrictInt = Field(gt=0)
     idempotency_key: str = Field(min_length=1, max_length=128)
+    category: Literal["strength", "barrier", "criterion"] | None = None
     kind: Literal["barrier", "strength"] | None = None
 
 
@@ -421,8 +422,11 @@ def create_local_control_app(
             arguments = dict(name=payload.name, description=payload.description,
                              expected_revision=payload.expected_revision,
                              idempotency_key=payload.idempotency_key)
-            if payload.kind:
-                arguments["kind"] = AssetKind(payload.kind)
+            if payload.category is not None and payload.kind is not None and payload.category != payload.kind:
+                raise ValueError("category conflicts with legacy kind")
+            category = payload.category or payload.kind
+            if category is not None:
+                arguments["home_category"] = AssetHomeCategory(category)
             receipt = asset_writer.save(asset_id, **arguments)
         except GraphWriteNotFoundError:
             raise HTTPException(status_code=404, detail="Asset was not found") from None

@@ -17,6 +17,8 @@ from typing import Any, Mapping
 
 from .founder_graph import (
     Asset,
+    AssetHomeCategory,
+    AssetKind,
     DomainValidationError,
     EgressPolicy,
     Evidence,
@@ -264,6 +266,20 @@ def node_view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: boo
     if node_type is NodeType.EVIDENCE and payload.get("content_chunk_id") is not None:
         field_names = ("polarity", "confidence", "content_hash", "status", "egress_policy")
     values = {field_name: payload[field_name] for field_name in field_names if field_name in payload}
+    if node_type is NodeType.ASSET:
+        raw_category = values.get("home_category")
+        if raw_category is None:
+            raw_kind = values.get("kind")
+            raw_kind = raw_kind.value if hasattr(raw_kind, "value") else raw_kind
+            raw_category = (
+                AssetHomeCategory.BARRIER.value
+                if raw_kind == AssetKind.BARRIER.value
+                else AssetHomeCategory.STRENGTH.value
+            )
+        try:
+            values["home_category"] = AssetHomeCategory(raw_category).value
+        except (TypeError, ValueError):
+            raise GraphReadError("persisted Asset home category is invalid") from None
     status = values.get("status", _row_value(row, f"{prefix}status"))
     status_value = status.value if hasattr(status, "value") else status
     if status_value in NON_CURRENT_STATUSES:
@@ -321,6 +337,8 @@ def _revisioned_node_view(node: Idea | Asset) -> NodeView:
         for name in FIELD_ALLOWLIST[node_type]
         if hasattr(node, name)
     }
+    if node_type is NodeType.ASSET:
+        values["home_category"] = node.category.value
     title = next((str(values[key]) for key in ("name", "title") if values.get(key)), node.id)
     snippet = next((str(values[key]) for key in ("description", "name", "title") if values.get(key)), title)
     return NodeView(

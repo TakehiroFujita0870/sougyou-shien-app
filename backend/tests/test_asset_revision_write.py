@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from hashlib import sha256
 
-from dots.founder_graph import Asset, AssetKind, EgressPolicy, KnowledgeAsset
+from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, KnowledgeAsset
 from dots.founder_graph_write import (
     GraphWriteNotFoundError,
     GraphWriteError,
@@ -71,6 +71,56 @@ def test_reclassifying_asset_preserves_content_sharing_and_revision_history() ->
         writes.revise_asset(asset_id=original.id, name=original.name,
                             description=original.description, expected_revision=1,
                             idempotency_key="move-to-barrier", kind=AssetKind.STRENGTH)
+
+
+def test_home_category_revision_preserves_domain_kind_and_history() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    original = KnowledgeAsset(
+        owner_id="owner-1", id="criteria-root", name="重視する条件",
+        description="関係密度を優先する", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(original, idempotency_key="criteria-create")
+
+    first = writes.revise_asset(
+        asset_id=original.id, name=original.name, description=original.description,
+        expected_revision=1, idempotency_key="criteria-classify",
+        home_category=AssetHomeCategory.CRITERION,
+    )
+    successor = writes.get_node(first.target_id)
+    replay = writes.revise_asset(
+        asset_id=original.id, name=original.name, description=original.description,
+        expected_revision=1, idempotency_key="criteria-classify",
+        home_category=AssetHomeCategory.CRITERION,
+    )
+
+    assert successor.kind is AssetKind.KNOWLEDGE
+    assert successor.home_category is AssetHomeCategory.CRITERION
+    assert successor.supersedes_id == original.id and successor.revision == 2
+    assert writes.get_node(original.id).kind is AssetKind.KNOWLEDGE
+    assert writes.get_node(original.id).home_category is None
+    assert replay.replayed and replay.target_id == successor.id
+
+
+def test_explicit_category_overrides_legacy_kind_fallback_without_rewriting_history() -> None:
+    writes = InMemoryGraphWriteService("owner-1")
+    original = Asset(
+        owner_id="owner-1", id="legacy-barrier", name="A legacy barrier",
+        kind=AssetKind.BARRIER,
+    )
+    writes.put_node(original, idempotency_key="legacy-barrier-create")
+
+    receipt = writes.revise_asset(
+        asset_id=original.id, name=original.name, description=original.description,
+        expected_revision=1, idempotency_key="legacy-barrier-to-criterion",
+        home_category=AssetHomeCategory.CRITERION,
+    )
+    successor = writes.get_node(receipt.target_id)
+
+    assert successor.kind is AssetKind.BARRIER
+    assert successor.home_category is AssetHomeCategory.CRITERION
+    assert successor.category is AssetHomeCategory.CRITERION
+    assert writes.get_node(original.id).kind is AssetKind.BARRIER
+    assert writes.get_node(original.id).category is AssetHomeCategory.BARRIER
 
 
 def test_revise_asset_rejects_stale_or_noncurrent_assets_and_key_reuse() -> None:

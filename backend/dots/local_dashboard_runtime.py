@@ -81,12 +81,12 @@ class OnDemandNeo4jGraphViewStore(GraphViewStore):
 
 class OnDemandAssetWriter:
     def save(self, asset_id: str, *, name: str, description: str,
-             expected_revision: int, idempotency_key: str, kind=None):
+             expected_revision: int, idempotency_key: str, home_category=None):
         with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             arguments = dict(name=name, description=description,
                              expected_revision=expected_revision, idempotency_key=idempotency_key)
-            if kind is not None:
-                arguments["kind"] = kind
+            if home_category is not None:
+                arguments["home_category"] = home_category
             return LocalAssetWriter(Neo4jGraphGateway(driver, LIVE_OWNER_ID)).save(asset_id, **arguments)
 
 

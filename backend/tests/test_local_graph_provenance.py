@@ -346,6 +346,7 @@ def test_lifecycle_reference_resolves_legacy_initial_asset_row(scalar_revision):
     payload = json.loads(legacy_root["payload_json"])
     payload.pop("revision")
     payload.pop("supersedes_id")
+    payload.pop("home_category")
     legacy_root["payload_json"] = json.dumps(payload, ensure_ascii=False)
     legacy_root["revision"] = scalar_revision
     legacy_root["supersedes_id"] = None

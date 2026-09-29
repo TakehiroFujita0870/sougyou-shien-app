@@ -49,6 +49,14 @@ class AssetKind(StrEnum):
     BARRIER = "barrier"
 
 
+class AssetHomeCategory(StrEnum):
+    """Screen grouping for an Asset, kept separate from its domain kind."""
+
+    STRENGTH = "strength"
+    BARRIER = "barrier"
+    CRITERION = "criterion"
+
+
 class MaterialKind(StrEnum):
     CONVERSATION = "conversation"
     DOCUMENT = "document"
@@ -185,7 +193,7 @@ class NodeType(StrEnum):
 
 
 __all__ = [
-    "AssetKind", "AssetStatus", "CampaignStatus", "ClaimKind", "ClaimStatus", "ClaimType",
+    "AssetHomeCategory", "AssetKind", "AssetStatus", "CampaignStatus", "ClaimKind", "ClaimStatus", "ClaimType",
     "DataPolicy", "EgressPolicy", "EntityStatus", "EvidenceEdgeType", "EvidencePolarity",
     "IdeaStatus", "MaterialKind", "NodeType", "ProvenanceKind", "ProvenanceOrigin",
     "RelationAssertionEdgeType", "RelationStatus", "RelationType", "RelationshipStatus",

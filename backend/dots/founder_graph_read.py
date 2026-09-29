@@ -208,6 +208,10 @@ def _node_view(node: Any) -> NodeView:
         for field_name in fields_to_copy
         if hasattr(node, field_name)
     }
+    if node_type is NodeType.ASSET and isinstance(node, Asset):
+        # Older payloads predate the explicit field but have a stable fallback
+        # exposed by Asset.category. Keep local and MCP reads consistent.
+        values["home_category"] = _json_value(node.category)
     status = values.get("status")
     status_value = status if isinstance(status, str) else None
     title = next(

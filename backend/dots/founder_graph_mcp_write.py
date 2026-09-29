@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from .founder_graph import (
     Asset,
+    AssetHomeCategory,
     AssetKind,
     Claim,
     Decision,
@@ -160,11 +161,16 @@ class McpWriteSurface:
             },
             "capture_asset": {
                 "type": "object",
-                "description": "強み・経験、または弱み・迷いの名称・種別・短い概要だけを保存します。弱み・迷いはkind=barrierです。本文、連絡先、個人メモ、出典本文、場所情報、来歴は受け付けません。",
+                "description": "資産の名称・詳細種別・画面分類・短い概要を保存します。kindは知識・経験・資料などの詳細種別、home_categoryは強み・弱み・判断基準の画面分類です。判断基準はhome_category=criterionで登録します。本文、連絡先、個人メモ、出典本文、場所情報、来歴は受け付けません。",
                 "required": ["name", "kind", "idempotency_key"],
                 "properties": {
                     "name": {**text, "minLength": 1, "maxLength": 500},
                     "kind": {"type": "string", "enum": [kind.value for kind in AssetKind]},
+                    "home_category": {
+                        "type": "string",
+                        "enum": [category.value for category in AssetHomeCategory],
+                        "description": "画面上の分類です。未指定時は既存のkindから強み・弱みを判定します。",
+                    },
                     "summary": {**text, "maxLength": 4000},
                     "egress_policy": {"type": "string", "enum": [EgressPolicy.LOCAL_ONLY.value, EgressPolicy.SHAREABLE.value]},
                     "idempotency_key": idempotency,
@@ -492,13 +498,15 @@ class McpWriteSurface:
         )
 
     def _capture_asset(self, arguments: Mapping[str, Any]) -> WriteReceipt:
-        self._reject_unknown(arguments, {"name", "kind", "summary", "egress_policy", "idempotency_key"})
+        self._reject_unknown(arguments, {"name", "kind", "home_category", "summary", "egress_policy", "idempotency_key"})
         idempotency_key = self._idempotency(arguments)
         try:
             policy = EgressPolicy(arguments.get("egress_policy", EgressPolicy.LOCAL_ONLY))
             kind = AssetKind(arguments.get("kind"))
+            raw_home_category = arguments.get("home_category")
+            home_category = AssetHomeCategory(raw_home_category) if raw_home_category is not None else None
         except (TypeError, ValueError) as error:
-            raise McpWriteError("invalid_input", "kind must be supported and egress_policy must be local_only or shareable.") from error
+            raise McpWriteError("invalid_input", "kind, home_category, and egress_policy must use supported values.") from error
         if policy not in {EgressPolicy.LOCAL_ONLY, EgressPolicy.SHAREABLE}:
             raise McpWriteError("invalid_input", "capture_asset allows only local_only or shareable.")
         summary = arguments.get("summary", "")
@@ -510,6 +518,7 @@ class McpWriteSurface:
             id=asset_id,
             name=self._text(arguments.get("name"), "name", max_length=500),
             kind=kind,
+            home_category=home_category,
             description=summary.strip(),
             details={},
             egress_policy=policy,

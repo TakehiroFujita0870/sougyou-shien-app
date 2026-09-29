@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from .founder_graph import (
     Asset,
+    AssetHomeCategory,
     AssetKind,
     asset_revision_classification_valid,
     CampaignAuthorizationRegistry,
@@ -985,6 +986,7 @@ class Neo4jGraphGateway:
         expected_revision: int,
         idempotency_key: str,
         kind: AssetKind | None = None,
+        home_category: AssetHomeCategory | None = None,
         actor: str = "local-owner",
     ) -> WriteReceipt:
         """Append an owner-scoped immutable Asset revision with CAS and replay."""
@@ -1002,15 +1004,21 @@ class Neo4jGraphGateway:
             raise GraphWriteError("actor must be a non-empty string")
         if kind is not None and kind not in (AssetKind.BARRIER, AssetKind.STRENGTH):
             raise GraphWriteError("asset classification is invalid")
+        if home_category is not None:
+            try:
+                home_category = AssetHomeCategory(home_category)
+            except (TypeError, ValueError):
+                raise GraphWriteError("asset home category is invalid") from None
         asset_id, name, idempotency_key, actor = asset_id.strip(), name.strip(), idempotency_key.strip(), actor.strip()
         fingerprint = payload_fingerprint(
             "revise_asset", asset_id, name, description, expected_revision, self.owner_id,
             *([kind] if kind is not None else []),
+            *([home_category] if home_category is not None else []),
         )
         successor_id = f"asset_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
         with self._session() as session:
             return self._execute_write(session, lambda tx: self._revise_asset_tx(
-                tx, asset_id, name, description, expected_revision, idempotency_key, actor, kind,
+                tx, asset_id, name, description, expected_revision, idempotency_key, actor, kind, home_category,
                 fingerprint, successor_id,
             ))
 
@@ -1175,7 +1183,8 @@ class Neo4jGraphGateway:
 
     def _revise_asset_tx(
         self, tx: Any, asset_id: str, name: str, description: str, expected_revision: int,
-        key: str, actor: str, kind: AssetKind | None, fingerprint: str, successor_id: str,
+        key: str, actor: str, kind: AssetKind | None, home_category: AssetHomeCategory | None,
+        fingerprint: str, successor_id: str,
     ) -> WriteReceipt:
         replay = self._put_node_replay_tx(
             tx, operation="revise_asset", idempotency_key=key, fingerprint=fingerprint,
@@ -1217,7 +1226,8 @@ class Neo4jGraphGateway:
         if kind is not None and isinstance(current, PersonAsset):
             raise GraphWriteError("person assets cannot be reclassified")
         successor = current.revise(
-            name=name, description=description, kind=kind, id=successor_id, revision=current.revision + 1,
+            name=name, description=description, kind=kind, home_category=home_category,
+            id=successor_id, revision=current.revision + 1,
             provenance=Provenance(
                 actor=actor, operation="revise_asset", target_id=successor_id, source_id=current.id,
                 idempotency_key=key,
@@ -1283,6 +1293,7 @@ class Neo4jGraphGateway:
             common = dict(
                 owner_id=self.owner_id, id=identity, name=payload["name"],
                 description=payload.get("description", ""), details=payload.get("details", {}),
+                home_category=payload.get("home_category"),
                 status=payload.get("status", "active"), egress_policy=payload.get("egress_policy", "local_only"),
                 revision=revision_value, supersedes_id=payload_parent,
                 created_at=datetime.fromisoformat(payload["created_at"].replace("Z", "+00:00")),

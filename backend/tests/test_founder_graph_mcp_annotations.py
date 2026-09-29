@@ -115,6 +115,7 @@ def test_capture_asset_schema_is_metadata_only_and_matches_between_surfaces() ->
     api_asset = _api_catalog()["capture_asset"]
     assert stdio_asset["inputSchema"] == api_asset["inputSchema"]
     assert stdio_asset["inputSchema"]["required"] == ["name", "kind", "idempotency_key"]
-    assert set(stdio_asset["inputSchema"]["properties"]) == {"name", "kind", "summary", "egress_policy", "idempotency_key"}
+    assert set(stdio_asset["inputSchema"]["properties"]) == {"name", "kind", "home_category", "summary", "egress_policy", "idempotency_key"}
+    assert stdio_asset["inputSchema"]["properties"]["home_category"]["enum"] == ["strength", "barrier", "criterion"]
     assert stdio_asset["inputSchema"]["additionalProperties"] is False
     assert stdio_asset["annotations"] == {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}

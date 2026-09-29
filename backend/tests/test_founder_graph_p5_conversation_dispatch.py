@@ -294,7 +294,7 @@ def test_five_synthetic_conversation_dispatches_cross_stdio_and_reopen_persisten
                 assert "error" in source_fetch
                 asset_id = str(asset_trace["target_id"])
                 asset_fetch = _structured(_exchange_reopened(port, owner_id, [{"jsonrpc": "2.0", "id": 27, "method": "tools/call", "params": {"name": "fetch", "arguments": {"id": asset_id}}}])[0])
-                assert set(asset_fetch["fields"]) == {"name", "kind", "description", "status"}
+                assert set(asset_fetch["fields"]) == {"name", "kind", "home_category", "description", "status"}
                 case_trace["fetch_ids"] = [asset_fetch["id"]]
                 case_trace["provenance"] = {"source_id": source_id, "revision_id": revision_id, "asset_id": asset_id}
             elif case_id == "P5-01-C":

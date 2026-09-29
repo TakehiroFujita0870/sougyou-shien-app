@@ -5,7 +5,7 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import Asset, AssetKind, EgressPolicy, NodeType
+from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, NodeType
 from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
 from dots.founder_graph_write import GraphWriteError, payload_fingerprint
 
@@ -141,6 +141,22 @@ def test_neo4j_asset_classification_is_persisted_in_successor() -> None:
     assert payload["supersedes_id"] == original.id
 
 
+def test_neo4j_asset_home_category_is_persisted_without_changing_kind() -> None:
+    original = Asset(owner_id="owner-1", id="criteria-root", name="判断基準", kind=AssetKind.KNOWLEDGE)
+    session = _AssetRevisionSession(original)
+    gateway = Neo4jGraphGateway(_Driver(session), "owner-1")
+    receipt = gateway.revise_asset(
+        asset_id=original.id, name=original.name, description=original.description,
+        expected_revision=1, idempotency_key="classify-as-criterion",
+        home_category=AssetHomeCategory.CRITERION,
+    )
+
+    payload = json.loads(session.created[receipt.target_id]["payload_json"])
+    assert payload["kind"] == "knowledge"
+    assert payload["home_category"] == "criterion"
+    assert payload["supersedes_id"] == original.id
+
+
 def test_neo4j_asset_writer_rechecks_same_key_receipt_after_acquiring_lock() -> None:
     original = Asset(owner_id="owner-1", id="persisted-asset", name="Original")
     arguments = {
@@ -212,6 +228,7 @@ def test_neo4j_asset_decoder_accepts_legacy_root_with_both_parent_fields_missing
     payload = json.loads(properties["payload_json"])
     payload.pop("revision", None)
     payload.pop("supersedes_id", None)
+    payload.pop("home_category", None)
     row = {
         "id": "legacy-root", "owner_id": "owner-1", "node_type": "asset",
         "revision": 0, "supersedes_id": None, "payload_json": json.dumps(payload),
@@ -222,3 +239,4 @@ def test_neo4j_asset_decoder_accepts_legacy_root_with_both_parent_fields_missing
     assert decoded.id == "legacy-root"
     assert decoded.revision == 1
     assert decoded.supersedes_id is None
+    assert decoded.home_category is None

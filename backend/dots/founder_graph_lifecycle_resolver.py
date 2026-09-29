@@ -102,6 +102,7 @@ def _lifecycle_only_edge(previous: Idea | Asset, current: Idea | Asset) -> bool:
             and current.description == previous.description
             and current.details == previous.details
             and current.kind is previous.kind
+            and current.category is previous.category
             and current.egress_policy is previous.egress_policy
             and provenance.source_id == previous.id
             and provenance.target_id == current.id
@@ -122,6 +123,10 @@ def decode_asset_lifecycle_record(
 
     if not isinstance(payload, Mapping):
         raise ValueError("persisted Asset payload is invalid")
+    if "home_category" not in payload:
+        # The category is optional on legacy rows, including the oldest
+        # initial-row shape that also omits revision and predecessor fields.
+        payload = {**payload, "home_category": None}
     normalized_legacy_row = False
     if allow_legacy_initial_row:
         record_type = PersonAsset if payload.get("kind") == AssetKind.PERSON.value else Asset
@@ -268,6 +273,7 @@ def resolve_restored_asset_reference(reference_id: str, chain: Sequence[Asset]) 
             or current.description != previous.description
             or current.details != previous.details
             or current.kind is not previous.kind
+            or current.category is not previous.category
             or current.egress_policy is not previous.egress_policy
             or provenance.source_id != previous.id
             or provenance.target_id != current.id
