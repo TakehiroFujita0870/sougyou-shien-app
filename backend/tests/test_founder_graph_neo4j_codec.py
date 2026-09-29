@@ -9,6 +9,7 @@ import pytest
 
 from dots.founder_graph import (
     Asset,
+    AssetKind,
     Claim,
     ContentChunk,
     EgressPolicy,
@@ -102,6 +103,19 @@ def test_codec_preserves_node_serialization_and_search_property_contract() -> No
     assert "private chunk payload" in chunk_properties["payload_json"]
     assert "private chunk payload" not in chunk_properties["search_text"]
     assert chunk_properties["source_revision_id"] == "revision-1"
+
+
+def test_asset_home_category_is_in_the_persistent_search_projection() -> None:
+    criterion = Asset(
+        owner_id="owner-1", id="asset-criterion", name="関係密度を優先",
+        kind=AssetKind.KNOWLEDGE, home_category="criterion",
+        description="規模より関係密度を優先する。", egress_policy=EgressPolicy.SHAREABLE,
+    )
+
+    properties = _node_properties(criterion)
+
+    assert properties["search_text"].split().count("criterion") == 1
+    assert json.loads(properties["payload_json"])["home_category"] == "criterion"
 
 
 def test_codec_preserves_typed_references_for_persisted_record_kinds() -> None:

@@ -7,6 +7,7 @@ import pytest
 
 from dots.founder_graph import (
     Asset,
+    AssetHomeCategory,
     AssetKind,
     CampaignAuthorizationSnapshot,
     CampaignAuthorizationRegistry,
@@ -409,6 +410,21 @@ def test_idea_egress_projection_keeps_source_text_local_only() -> None:
     projection = project_shareable(shareable)
     assert projection["title"] == "Public idea"
     assert "source_text" not in projection
+
+
+def test_asset_egress_projection_includes_resolved_home_category():
+    criterion = Asset(
+        owner_id="owner-1", name="Public criterion", kind=AssetKind.KNOWLEDGE,
+        home_category=AssetHomeCategory.CRITERION, description="Safe short criterion",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    legacy_barrier = Asset(
+        owner_id="owner-1", name="Legacy barrier", kind=AssetKind.BARRIER,
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+
+    assert project_shareable(criterion)["home_category"] == "criterion"
+    assert project_shareable(legacy_barrier)["home_category"] == "barrier"
 
 
 def test_relationship_matrix_and_owner_boundary_are_enforced() -> None:

@@ -1,8 +1,11 @@
 from dataclasses import replace
+import json
 
-from dots.founder_graph import Asset, EgressPolicy, Idea, Provenance, Status
+from dots.founder_graph import Asset, AssetHomeCategory, EgressPolicy, Idea, Provenance, Status
+from dots.founder_graph_neo4j import _node_properties
 from dots.founder_graph_lifecycle_resolver import (
     lifecycle_reference_aliases,
+    decode_asset_lifecycle_record,
     resolve_restored_asset_reference,
     resolve_restored_idea_reference,
 )
@@ -101,6 +104,64 @@ def test_asset_reference_resolves_only_across_archive_restore_not_revision() -> 
 
     assert resolve_restored_asset_reference(root.id, (root, archived, restored)) is restored
     assert resolve_restored_asset_reference(root.id, (root, archived, restored, revised)) is None
+
+
+def test_asset_reference_does_not_alias_across_category_change_mislabeled_as_lifecycle() -> None:
+    root = Asset(
+        id="asset-category-root", owner_id="owner", name="Original",
+        home_category=AssetHomeCategory.BARRIER, status=Status.ACTIVE,
+    )
+    archived = replace(
+        root, id="asset-category-archived", revision=2, supersedes_id=root.id,
+        home_category=AssetHomeCategory.CRITERION, status=Status.ARCHIVED,
+        provenance=Provenance(
+            actor="local-owner", operation="archive_asset", target_id="asset-category-archived",
+            source_id=root.id,
+        ),
+    )
+    restored = replace(
+        archived, id="asset-category-restored", revision=3, supersedes_id=archived.id,
+        status=Status.ACTIVE,
+        provenance=Provenance(
+            actor="local-owner", operation="restore_asset", target_id="asset-category-restored",
+            source_id=archived.id,
+        ),
+    )
+
+    assert resolve_restored_asset_reference(root.id, (root, archived, restored)) is None
+    aliases = lifecycle_reference_aliases((root, archived, restored))
+    assert root.id not in aliases
+
+
+def test_asset_lifecycle_decoder_defaults_missing_home_category_for_legacy_history() -> None:
+    root = Asset(id="asset-legacy", owner_id="owner", name="Legacy asset")
+    payload = json.loads(_node_properties(root)["payload_json"])
+    payload.pop("home_category")
+
+    decoded = decode_asset_lifecycle_record(
+        payload, owner_id="owner", expected_id=root.id,
+        expected_revision=1, expected_supersedes_id=None,
+    )
+
+    assert decoded.home_category is None
+
+
+def test_asset_lifecycle_decoder_defaults_category_before_legacy_initial_row_normalization() -> None:
+    root = Asset(id="asset-legacy-initial", owner_id="owner", name="Legacy asset")
+    payload = json.loads(_node_properties(root)["payload_json"])
+    payload.pop("home_category")
+    payload.pop("revision")
+    payload.pop("supersedes_id")
+
+    decoded = decode_asset_lifecycle_record(
+        payload, owner_id="owner", expected_id=root.id,
+        expected_revision=0, expected_supersedes_id=None,
+        allow_legacy_initial_row=True,
+    )
+
+    assert decoded.revision == 1
+    assert decoded.supersedes_id is None
+    assert decoded.home_category is None
 
 
 def test_lifecycle_alias_map_resolves_idea_and_asset_restore_chains_once() -> None:

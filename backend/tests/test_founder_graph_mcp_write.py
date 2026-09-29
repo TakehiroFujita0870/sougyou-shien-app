@@ -6,6 +6,7 @@ import pytest
 
 from dots.founder_graph import (
     Asset,
+    AssetHomeCategory,
     Claim,
     DomainValidationError,
     EgressPolicy,
@@ -57,7 +58,7 @@ def _save_legacy_report(surface: McpWriteSurface, arguments: dict[str, object]) 
 
 def test_capture_asset_is_metadata_only_create_only_and_owner_scoped() -> None:
     writes, surface = _surface()
-    arguments = {"name": "Synthetic kit", "kind": "artifact", "summary": "Safe short summary", "egress_policy": "shareable", "idempotency_key": "asset-key"}
+    arguments = {"name": "Synthetic kit", "kind": "knowledge", "home_category": "criterion", "summary": "Safe short summary", "egress_policy": "shareable", "idempotency_key": "asset-key"}
     first = surface.call("capture_asset", arguments, owner_id="owner-1")
     replay = surface.call("capture_asset", arguments, owner_id="owner-1")
 
@@ -66,12 +67,14 @@ def test_capture_asset_is_metadata_only_create_only_and_owner_scoped() -> None:
     assert isinstance(asset, Asset)
     assert asset.details == {} and asset.description == "Safe short summary"
     assert asset.egress_policy is EgressPolicy.SHAREABLE
+    assert asset.kind.value == "knowledge"
+    assert asset.home_category is AssetHomeCategory.CRITERION
     local_receipt = surface.call("capture_asset", {"name": "Local kit", "kind": "equipment", "idempotency_key": "asset-local"}, owner_id="owner-1")
     reader = McpReadSurface(GraphReadService(writes))
     with pytest.raises(McpReadError):
         reader.call("fetch", {"id": local_receipt.target_id}, owner_id="owner-1")
     projected = reader.call("fetch", {"id": first.target_id}, owner_id="owner-1")
-    assert set(projected["fields"]) == {"name", "kind", "description", "status"}
+    assert set(projected["fields"]) == {"name", "kind", "home_category", "description", "status"}
     assert projected["id"] == first.target_id
     assert projected["fields"]["description"] == "Safe short summary"
     assert "details" not in str(projected)
@@ -84,6 +87,18 @@ def test_capture_asset_is_metadata_only_create_only_and_owner_scoped() -> None:
     with pytest.raises(McpWriteError, match="owner"):
         surface.call("capture_asset", arguments, owner_id="owner-2")
     assert len(writes.audit_events()) == 2
+
+
+def test_capture_asset_rejects_unknown_home_category_without_writing() -> None:
+    writes, surface = _surface()
+
+    with pytest.raises(McpWriteError, match="home_category"):
+        surface.call("capture_asset", {
+            "name": "Invalid category", "kind": "knowledge", "home_category": "decision",
+            "idempotency_key": "invalid-home-category",
+        }, owner_id="owner-1")
+
+    assert writes.nodes() == ()
 
 
 def test_capture_barrier_is_searchable_but_not_shared_by_default() -> None:

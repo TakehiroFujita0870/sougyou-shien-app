@@ -16,6 +16,7 @@ def test_shared_read_contract_keeps_projection_allowlist_and_helper_semantics() 
         "title", "summary", "description", "source_text", "tags", "status",
         "egress_policy", "revision", "supersedes_id",
     )
+    assert "home_category" in FIELD_ALLOWLIST[NodeType.ASSET]
     assert {"archived", "revoked", "superseded"}.issubset(NON_CURRENT_STATUSES)
     result = [{"id": "one"}, {"id": "two"}]
 

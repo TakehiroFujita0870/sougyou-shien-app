@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from .founder_graph import (
     CampaignAuthorizationRegistry,
     Asset,
+    AssetHomeCategory,
     AssetKind,
     asset_revision_classification_valid,
     Claim,
@@ -111,6 +112,7 @@ class GraphWritePort(Protocol):
         expected_revision: int,
         idempotency_key: str,
         kind: AssetKind | None = None,
+        home_category: AssetHomeCategory | None = None,
         actor: str = "local-owner",
     ) -> "WriteReceipt":
         """Append one immutable revision to the current Asset family tip."""
@@ -581,6 +583,7 @@ class InMemoryGraphWriteService:
         expected_revision: int,
         idempotency_key: str,
         kind: AssetKind | None = None,
+        home_category: AssetHomeCategory | None = None,
         actor: str = "local-owner",
     ) -> WriteReceipt:
         operation = self._validate_command("revise_asset", actor, idempotency_key)
@@ -594,9 +597,15 @@ class InMemoryGraphWriteService:
         name = name.strip()
         if kind is not None and kind not in (AssetKind.BARRIER, AssetKind.STRENGTH):
             raise GraphWriteError("asset classification is invalid")
+        if home_category is not None:
+            try:
+                home_category = AssetHomeCategory(home_category)
+            except (TypeError, ValueError):
+                raise GraphWriteError("asset home category is invalid") from None
         fingerprint = payload_fingerprint(
             operation, asset_id, name, description, expected_revision, self.owner_id,
             *([kind] if kind is not None else []),
+            *([home_category] if home_category is not None else []),
         )
         successor_id = f"asset_{sha256(f'{self.owner_id}:{idempotency_key}'.encode()).hexdigest()[:32]}"
         with self._lock:
@@ -619,6 +628,7 @@ class InMemoryGraphWriteService:
                 name=name,
                 description=description,
                 kind=kind,
+                home_category=home_category,
                 id=successor_id,
                 revision=current.revision + 1,
                 provenance=Provenance(

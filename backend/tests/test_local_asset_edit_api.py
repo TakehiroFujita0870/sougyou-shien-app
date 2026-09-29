@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.founder_graph import Asset, AssetKind, EgressPolicy
+from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy
 from dots.founder_graph_write import InMemoryGraphWriteService
 from dots.local_control import LocalControl, create_local_control_app
 from dots.local_home import LocalAssetWriter
@@ -49,9 +49,21 @@ def test_asset_edit_requires_local_csrf_and_forbids_sharing_changes(asset_client
     assert len(writes.nodes()) == 1
 
 
-def test_asset_edit_accepts_only_two_display_classifications(asset_client):
+def test_asset_edit_accepts_three_categories_without_replacing_domain_kind(asset_client):
     client, headers, payload, writes, original = asset_client
-    assert client.put(f"/api/assets/{original.id}", json={**payload, "kind": "person"}, headers=headers).status_code == 422
+    assert client.put(f"/api/assets/{original.id}", json={**payload, "category": "person"}, headers=headers).status_code == 422
+    saved = client.put(f"/api/assets/{original.id}", json={**payload, "category": "criterion"}, headers=headers)
+    assert saved.status_code == 200
+    revised = writes.get_node(saved.json()["id"])
+    assert revised.kind is AssetKind.KNOWLEDGE
+    assert revised.home_category is AssetHomeCategory.CRITERION
+    assert writes.get_node(original.id).kind is AssetKind.KNOWLEDGE
+
+
+def test_legacy_asset_edit_kind_is_accepted_as_category_alias(asset_client):
+    client, headers, payload, writes, original = asset_client
     saved = client.put(f"/api/assets/{original.id}", json={**payload, "kind": "barrier"}, headers=headers)
     assert saved.status_code == 200
-    assert writes.get_node(saved.json()["id"]).kind is AssetKind.BARRIER
+    revised = writes.get_node(saved.json()["id"])
+    assert revised.kind is AssetKind.KNOWLEDGE
+    assert revised.home_category is AssetHomeCategory.BARRIER

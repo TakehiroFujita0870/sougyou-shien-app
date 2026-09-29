@@ -98,7 +98,7 @@ def test_founder_graph_mcp_tools_and_capture_route_are_local_owner_scoped() -> N
     assert replay.json()["replayed"] is True
 
     asset = client.post("/v1/founder-graph/mcp/write/capture_asset", headers=headers,
-                        json={"name": "Synthetic asset", "kind": "knowledge", "summary": "A safe description", "idempotency_key": "asset-api"})
+                        json={"name": "Synthetic asset", "kind": "knowledge", "home_category": "criterion", "summary": "A safe description", "idempotency_key": "asset-api"})
     assert asset.status_code == 200
     assert asset.json()["target_type"] == "asset"
     assert client.post("/v1/founder-graph/mcp/write/capture_asset", headers=headers,

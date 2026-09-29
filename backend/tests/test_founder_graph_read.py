@@ -6,6 +6,7 @@ import pytest
 
 import dots.founder_graph_read as read_module
 from dots.founder_graph import Asset, AssetKind, EgressPolicy, Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship, Source, Status
+from dots.founder_graph_mcp import McpReadSurface
 from dots.founder_graph_read import GraphReadNotFoundError, GraphReadService, GraphReadTimeoutError
 from dots.founder_graph_write import InMemoryGraphWriteService
 
@@ -81,6 +82,30 @@ def test_person_asset_projection_exposes_canonical_revision_metadata() -> None:
 
     assert view.revision == person.revision == 1
     assert "revision" not in view.fields
+
+
+@pytest.mark.parametrize(
+    ("kind", "category"),
+    [(AssetKind.KNOWLEDGE, "strength"), (AssetKind.BARRIER, "barrier")],
+)
+def test_legacy_asset_category_is_resolved_for_search_and_mcp(kind, category) -> None:
+    writes, reads = _fixture()
+    legacy = Asset(
+        owner_id="owner-1", id=f"legacy-{category}", name="Legacy asset",
+        kind=kind, egress_policy=EgressPolicy.SHAREABLE,
+    )
+    writes.put_node(legacy, idempotency_key=f"legacy-{category}")
+    surface = McpReadSurface(reads)
+
+    page = reads.search("Legacy asset", owner_id="owner-1")
+    fetched = surface.call("fetch", {"id": legacy.id}, owner_id="owner-1")
+    searched = surface.call("search", {"query": "Legacy asset"}, owner_id="owner-1")
+
+    assert [hit.node.id for hit in page.hits] == [legacy.id]
+    assert page.hits[0].node.fields["home_category"] == category
+    assert fetched["fields"]["home_category"] == category
+    assert [hit["id"] for hit in searched["results"]] == [legacy.id]
+    assert searched["results"][0]["fields"]["home_category"] == category
 
 
 def test_current_asset_lineage_rejects_mixed_asset_subtypes() -> None:

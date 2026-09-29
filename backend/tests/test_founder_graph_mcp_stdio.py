@@ -104,7 +104,7 @@ def test_capture_asset_is_discoverable_and_callable_over_stdio() -> None:
     assert tool["inputSchema"]["required"] == ["name", "kind", "idempotency_key"]
     assert tool["inputSchema"]["additionalProperties"] is False
     captured = server.handle(request("tools/call", 91, {"name": "capture_asset", "arguments": {
-        "name": "Synthetic asset", "kind": "artifact", "summary": "Short metadata", "idempotency_key": "asset-stdio",
+        "name": "Synthetic asset", "kind": "knowledge", "home_category": "criterion", "summary": "Short metadata", "idempotency_key": "asset-stdio",
     }}))
     assert captured["result"]["structuredContent"]["target_type"] == "asset"
 

@@ -20,6 +20,13 @@ it('keeps draft capture, internal search, one proposal, permission, and both res
   expect(skill).toContain('既に提示または断られた同じ提案は繰り返さない');
 });
 
+it('captures a reusable criterion without turning it into a strength or an owner decision', () => {
+  expect(skill).toContain('`kind=knowledge, home_category=criterion`');
+  expect(skill).toContain('個別Ideaで決めた結論は再利用する判断基準と混同しない');
+  expect(skill).toContain('判断基準は実際に新しい案へ適用したときだけ根拠付き`REUSES`候補にできる');
+  expect(skill).toContain('機微な詳細は既定の`local_only`を維持');
+});
+
 it('keeps incremental findings and prior research lightweight before formal evidence', () => {
   expectInOrder('`append_research_finding`', '`capture_source`', '`save_idea_brief`', '`append_claim`', '`capture_evidence`', '`record_research_run`', '`save_researched_idea_brief`');
   expect(skill).toContain('URLが付いただけでは検証済みEvidenceとは呼ばない');

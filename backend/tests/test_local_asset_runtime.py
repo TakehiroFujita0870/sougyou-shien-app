@@ -34,7 +34,8 @@ def test_asset_writer_opens_on_demand_and_closes_after_success_or_failure(monkey
     monkeypatch.setattr(runtime, "LocalAssetWriter", Writer)
     writer = runtime.OnDemandAssetWriter()
     assert events == []
-    arguments = dict(name="edited", description="synthetic", expected_revision=1, idempotency_key="test-edit")
+    arguments = dict(name="edited", description="synthetic", expected_revision=1,
+                     idempotency_key="test-edit", home_category="criterion")
     if fails:
         with pytest.raises(ValueError, match="invalid synthetic edit"):
             writer.save("asset", **arguments)

@@ -5,7 +5,7 @@ from dots import founder_graph, founder_graph_types
 
 def test_domain_enums_are_reexported_without_changing_identity() -> None:
     enum_names = (
-        "Status", "ReportStatus", "AssetKind", "MaterialKind", "EgressPolicy",
+        "Status", "ReportStatus", "AssetKind", "AssetHomeCategory", "MaterialKind", "EgressPolicy",
         "ProvenanceOrigin", "ClaimType", "EvidencePolarity", "RelationshipStatus",
         "RelationType", "RelationAssertionEdgeType", "EvidenceEdgeType", "NodeType",
     )
@@ -15,6 +15,7 @@ def test_domain_enums_are_reexported_without_changing_identity() -> None:
 
     assert founder_graph.Status.ACTIVE.value == "active"
     assert founder_graph.NodeType.IDEA.value == "idea"
+    assert founder_graph.AssetHomeCategory.CRITERION.value == "criterion"
     assert founder_graph.RelationType.SUPERSEDES.value == "SUPERSEDES"
 
 

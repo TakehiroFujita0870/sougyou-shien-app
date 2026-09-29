@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | OwnerProfile | 本人一人 | `owner_<uuid>` | owner_id |
 | Idea | 一つの事業着想または派生案 | `idea_<uuid>` | owner_id, status, current_revision_id |
-| Asset | 本人の知識・経験等、または創業をためらわせる弱み・迷い一件 | `asset_<uuid>` | owner_id, asset_kind, status |
+| Asset | 本人の知識・経験、創業をためらわせる弱み・迷い、または再利用する判断基準一件 | `asset_<uuid>` | owner_id, asset_kind, home_category, status |
 | Person | 同一人物候補の確認後に確定した一人 | `person_<uuid>` | owner_id, status, dedupe fingerprint |
 | Organization | 一つの法人、団体、個人事業、非公式チーム | `org_<uuid>` | owner_id, status, normalized_name_hash |
 | Source | 一つの原本系列 | `source_<uuid>` | owner_id, source_kind, locator_hash, status |
@@ -39,7 +39,7 @@
 
 `Capability`は初期schemaで独立Labelにしない。`Asset.asset_kind=capability`として保存し、Person、OwnerProfile、IdeaからRelationAssertionで参照する。MarketとProductも初期schemaではClaimまたはFacetとして保存し、独立ライフサイクルが必要になった時点でmigration ADRを作る。
 
-弱み・迷いは`Asset.asset_kind=barrier`で保存する。既存Assetのkindは強み・経験として扱い、過去データの一括変更はしない。barrierを再利用可能な強みとして`REUSES`関係へ結び付けない。ChatGPTへ返すのは明示的に共有可能とした短い記述だけで、機微な詳細の既定値は非共有とする。
+アセット画面の分類は`Asset.home_category`の`strength`（強み・経験）、`barrier`（弱み・迷い）、`criterion`（判断基準）を正本とする。既存記録でこの項目がなければ、旧`asset_kind=barrier`だけを`barrier`、他を`strength`として表示する。過去データを一括変更せず、既存の詳細な`asset_kind`を分類変更で失わない。判断基準は再利用する選択の物差しであり、個別案について下した`Decision`とは異なる。弱み・迷いを強みとして`REUSES`へ結び付けない。判断基準を実際に使った案には根拠付きの`REUSES`候補を付けられるが、能力や強みとして表示しない。ChatGPTへ返すのは明示的に共有可能とした短い記述だけで、機微な詳細の既定値は非共有とする。
 
 ### 不変ノード
 

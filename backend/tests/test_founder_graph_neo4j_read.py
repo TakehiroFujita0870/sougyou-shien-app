@@ -516,11 +516,12 @@ def test_fetch_hides_foreign_and_non_current_rows() -> None:
 def test_neo4j_mcp_asset_search_and_fetch_use_only_safe_shareable_fields() -> None:
     driver, reads = _gateway()
     shareable = Asset(owner_id="owner-1", id="asset-shareable", name="Synthetic kit", kind="artifact",
-                      description="Safe synthetic summary", egress_policy=EgressPolicy.SHAREABLE)
+                      home_category="criterion", description="Safe synthetic summary",
+                      egress_policy=EgressPolicy.SHAREABLE)
     local = Asset(owner_id="owner-1", id="asset-local", name="Private kit", kind="data",
                   description="Private description", details={"private_notes": "synthetic secret"})
     driver.session_value.search_rows = [
-        _persisted_row(shareable, search_text="Synthetic kit Safe synthetic summary"),
+        _persisted_row(shareable, search_text="Synthetic kit criterion Safe synthetic summary"),
         _persisted_row(local, search_text="Private kit Private description"),
     ]
     driver.session_value.fetch_rows = [_persisted_row(shareable), _persisted_row(local)]
@@ -528,16 +529,43 @@ def test_neo4j_mcp_asset_search_and_fetch_use_only_safe_shareable_fields() -> No
 
     search = surface.call("search", {"query": "synthetic"}, owner_id="owner-1")
     assert [item["id"] for item in search["results"]] == [shareable.id]
-    assert set(search["results"][0]["fields"]) == {"name", "kind", "description", "status"}
+    assert set(search["results"][0]["fields"]) == {"name", "kind", "home_category", "description", "status"}
+    assert search["results"][0]["fields"]["home_category"] == "criterion"
     assert search["results"][0]["fields"]["description"] == "Safe synthetic summary"
+    criterion_search = surface.call("search", {"query": "criterion"}, owner_id="owner-1")
+    assert [item["id"] for item in criterion_search["results"]] == [shareable.id]
+    assert criterion_search["results"][0]["fields"]["home_category"] == "criterion"
     fetched = surface.call("fetch", {"id": shareable.id}, owner_id="owner-1")
     assert fetched["id"] == shareable.id
-    assert set(fetched["fields"]) == {"name", "kind", "description", "status"}
+    assert set(fetched["fields"]) == {"name", "kind", "home_category", "description", "status"}
+    assert fetched["fields"]["home_category"] == "criterion"
     assert fetched["fields"]["description"] == "Safe synthetic summary"
     with pytest.raises(McpReadError):
         surface.call("fetch", {"id": local.id}, owner_id="owner-1")
     assert "synthetic secret" not in json.dumps(search, ensure_ascii=False)
     assert "synthetic secret" not in json.dumps(fetched, ensure_ascii=False)
+
+
+def test_neo4j_mcp_search_and_fetch_resolve_legacy_asset_category() -> None:
+    driver, reads = _gateway()
+    legacy = Asset(
+        owner_id="owner-1", id="asset-legacy-strength", name="Legacy knowledge asset",
+        kind="knowledge", description="Old persisted summary", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    legacy_row = _persisted_row(legacy, search_text="Legacy knowledge asset knowledge Old persisted summary")
+    payload = json.loads(legacy_row["payload_json"])
+    payload.pop("home_category")
+    legacy_row["payload_json"] = json.dumps(payload, ensure_ascii=False)
+    driver.session_value.search_rows = [legacy_row]
+    driver.session_value.fetch_rows = [legacy_row]
+    surface = McpReadSurface(reads)
+
+    searched = surface.call("search", {"query": "Legacy knowledge"}, owner_id="owner-1")
+    fetched = surface.call("fetch", {"id": legacy.id}, owner_id="owner-1")
+
+    assert [item["id"] for item in searched["results"]] == [legacy.id]
+    assert searched["results"][0]["fields"]["home_category"] == "strength"
+    assert fetched["fields"]["home_category"] == "strength"
 
 
 def test_mcp_fetch_returns_validated_formal_relation_projection():
