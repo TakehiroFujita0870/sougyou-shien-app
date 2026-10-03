@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-29T11:26:05Z",
-  "baseline_main": "462ca8cd8374",
+  "updated_at": "2026-10-03T09:42:17Z",
+  "baseline_main": "3a593c11ab5d",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -49,6 +49,12 @@
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "強み・経験、弱み・迷い、判断基準を同一一覧の追加順で3列表示。PC画面の編集・分類選択とキーボード移動を確認。通常保存先への架空の判断基準の保存、再起動後の検索・表示、更新後のChatGPT会話からの分類付き保存と読み戻しを確認。古い接続定義による誤分類の架空記録は修正済み。既存資産は内容から自動再分類しない。",
       "evidence": [{"recorded_at": "2026-09-29T11:26:05Z", "scope": "main-412-413-plugin-1.0.14-live", "result": "passed", "reference": "PR #412・#413のCI成功、Linux全件検査、1280×720実画面の3列と編集画面、通常保存先の再起動後検索、Dotsプラグイン1.0.14の読戻し。ChatGPT既存試験会話 https://chatgpt.com/c/6abac1c2-e77c-83ee-9159-15750d16f817 から asset_c1405777e6112a90b510cbc315b71b72 を判断基準として保存・読み戻し、独立APIでも確認。"}]
+    },
+    {
+      "id": "neo4j_auth_mount", "title": "保存先の起動用鍵が再起動後も残る", "scope": "main-418-live-container-recreate-no-pc-reboot",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "一時フォルダーの鍵が消えてNeo4jだけ動き、画面が保存先を利用不可と判定した。鍵を本人専用の永続ファイルに置いた既存データ領域のコンテナへ再作成し、健康状態・画面のグラフ読取を確認。起動補助の修正はmain反映済み。PC全体の再起動試験は未実施。",
+      "evidence": [{"recorded_at": "2026-10-03T09:42:17Z", "scope": "main-418-live-container-recreate-no-pc-reboot", "result": "partial", "reference": "PR #418 CI成功、現行コードのローカル運用契約試験27件成功、通常保存先のDocker健康状態healthy、Dots.画面の保存先running・グラフready、同じデータ領域の保持を確認。"}]
     }
   ]
 }
