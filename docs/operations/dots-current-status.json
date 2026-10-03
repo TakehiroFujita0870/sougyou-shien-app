@@ -65,7 +65,7 @@
     {
       "id": "draft_relation_cleanup", "title": "下書きの関係整理と残存した架空出典の退役", "scope": "main-420-421-live-draft-relations-and-retirement",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
-      "note": "現行の非削除アイデアへ一章の下書きと根拠付き関係候補または明示的な空候補を保存し、整理待ちは残っていない。孤立した架空出典は履歴を保持した保管済みに変更し、通常グラフから消えた。外部事実は追加していない。",
+      "note": "未調査の下書きへ一章のBriefと根拠付き関係候補または明示的な空候補を保存し、整理待ちは残っていない。孤立した架空出典は履歴を保持した保管済みに変更し、通常グラフから消えた。外部事実は追加していない。",
       "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-420-421-live-draft-relations-and-retirement", "result": "passed", "reference": "通常Dotsの保存処理結果と本人限定の整理ジョブ読取で待機・失敗なし。孤立した架空Sourceの接続先を事前確認し、既存の版付き保存操作でarchive、/api/graphのready状態と非表示を読戻し。"}]
     },
     {
