@@ -69,3 +69,19 @@ def test_home_runtime_closes_connection_when_citation_projection_fails(monkeypat
     with pytest.raises(ValueError, match="invalid citation lineage"):
         runtime.OnDemandNeo4jHomeStore().read_citations("owner-mvp", ["evidence"])
     assert closed == [True]
+
+
+def test_graph_runtime_forwards_current_citations_and_closes_connection(monkeypatch):
+    calls = []
+
+    class Driver:
+        def close(self):
+            calls.append("closed")
+
+    monkeypatch.setattr(runtime, "create_neo4j_driver_from_env", lambda: calls.append("opened") or Driver())
+    expected = ({"idea_id": "idea-1", "source_id": "source-1", "evidence_id": "evidence-1", "url": "https://example.test/source"},)
+    monkeypatch.setattr(runtime.Neo4jGraphViewStore, "read_idea_citations",
+                        lambda self, owner_id, ids: calls.append((owner_id, ids)) or expected)
+    store = runtime.OnDemandNeo4jGraphViewStore()
+    assert store.read_idea_citations("owner-mvp", ["idea-1"]) == expected
+    assert calls == ["opened", ("owner-mvp", ["idea-1"]), "closed"]
