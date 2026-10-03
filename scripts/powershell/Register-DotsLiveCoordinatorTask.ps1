@@ -155,10 +155,18 @@ function New-DotsCoordinatorTaskArguments {
     param([Parameter(Mandatory = $true)][string]$ScriptPath)
     return '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $ScriptPath
 }
-function New-DotsCoordinatorTaskTrigger { param([string]$User) New-ScheduledTaskTrigger -AtLogOn -User $User }
+function New-DotsCoordinatorTaskTrigger {
+    param([string]$User)
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $User
+    $trigger.Repetition = New-CimInstance -ClientOnly -Namespace 'Root/Microsoft/Windows/TaskScheduler' -ClassName 'MSFT_TaskRepetitionPattern' -Property @{
+        Interval = 'PT5M'
+        StopAtDurationEnd = $false
+    }
+    return $trigger
+}
 function New-DotsCoordinatorTaskPrincipal { param([string]$UserId) New-ScheduledTaskPrincipal -UserId $UserId -LogonType Interactive -RunLevel Limited }
 function New-DotsCoordinatorTaskSettings {
-    New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::FromMinutes(3)) -Hidden
+    New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::FromMinutes(8)) -Hidden
 }
 function Register-DotsCoordinatorTaskDefinition {
     param([string]$TaskName, [object]$Action, [object]$Trigger, [object]$Principal, [object]$Settings, [string]$Description)
@@ -274,10 +282,13 @@ function Register-DotsLiveCoordinatorTask {
             logon_type = ([string]$coordinatorTask.Principal.LogonType -ceq 'Interactive')
             run_level = ([string]$coordinatorTask.Principal.RunLevel -ceq 'Limited')
             trigger_enabled = [bool]$coordinatorTriggers[0].Enabled
+            trigger_repetition = ([string]$coordinatorTriggers[0].Repetition.Interval -ceq 'PT5M' -and
+                [string]::IsNullOrEmpty([string]$coordinatorTriggers[0].Repetition.Duration) -and
+                -not [bool]$coordinatorTriggers[0].Repetition.StopAtDurationEnd)
             task_enabled = [bool]$coordinatorTask.Settings.Enabled
             hidden = [bool]$coordinatorTask.Settings.Hidden
             multiple_instances = ([string]$coordinatorTask.Settings.MultipleInstances -ceq 'IgnoreNew')
-            time_limit = ((Convert-DotsTaskExecutionTimeLimit -Value $coordinatorTask.Settings.ExecutionTimeLimit) -eq [TimeSpan]::FromMinutes(3))
+            time_limit = ((Convert-DotsTaskExecutionTimeLimit -Value $coordinatorTask.Settings.ExecutionTimeLimit) -eq [TimeSpan]::FromMinutes(8))
         }
         $invalid = @($validation.GetEnumerator() | Where-Object { -not $_.Value } | ForEach-Object { $_.Key })
         if ($invalid.Count -gt 0) {

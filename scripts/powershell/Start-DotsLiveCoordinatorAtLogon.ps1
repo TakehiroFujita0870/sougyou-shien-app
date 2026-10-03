@@ -17,7 +17,7 @@ function Write-DotsLiveCoordinatorStatus {
     param(
         [Parameter(Mandatory = $true)][ValidateSet('live-database', 'live-mcp-tunnel')][string]$Service,
         [Parameter(Mandatory = $true)][ValidateSet('success', 'failure', 'unavailable')][string]$Outcome,
-        [Parameter(Mandatory = $true)][ValidateSet('ready', 'database_preflight_failed', 'database_not_ready', 'mcp_tunnel_startup_failed', 'wsl_unavailable', 'explicit_stop')][string]$Code
+        [Parameter(Mandatory = $true)][ValidateSet('ready', 'database_preflight_failed', 'database_not_ready', 'api_not_ready', 'mcp_tunnel_startup_failed', 'wsl_unavailable', 'explicit_stop')][string]$Code
     )
     [void](Write-DotsLogonDiagnostic -Service $Service -Outcome $Outcome -Code $Code)
 }
@@ -236,6 +236,38 @@ function Start-DotsLiveApiService {
     return $false
 }
 
+function Test-DotsLiveServicesReady {
+    # A quick, read-only check keeps a recurring recovery task from repeatedly
+    # running Docker preflight against an already healthy installation.
+    try {
+        $dashboardRequest = [System.Net.HttpWebRequest]::Create('http://localhost:8765/api/status')
+        $dashboardRequest.Timeout = 3000
+        $dashboardRequest.ReadWriteTimeout = 3000
+        $dashboardResponse = [System.Net.HttpWebResponse]$dashboardRequest.GetResponse()
+        try {
+            $reader = New-Object System.IO.StreamReader($dashboardResponse.GetResponseStream())
+            try { $state = $reader.ReadToEnd() | ConvertFrom-Json -ErrorAction Stop }
+            finally { $reader.Dispose() }
+        }
+        finally { $dashboardResponse.Dispose() }
+        if ($state.services.database -cne 'running' -or $state.services.intent -cne 'running' -or
+            $state.services.api -cne 'running' -or $state.services.tunnel -cne 'running') { return $false }
+
+        $apiRequest = [System.Net.HttpWebRequest]::Create('http://127.0.0.1:8000/health')
+        $apiRequest.Timeout = 3000
+        $apiRequest.ReadWriteTimeout = 3000
+        $apiResponse = [System.Net.HttpWebResponse]$apiRequest.GetResponse()
+        try {
+            $reader = New-Object System.IO.StreamReader($apiResponse.GetResponseStream())
+            try { $health = $reader.ReadToEnd() | ConvertFrom-Json -ErrorAction Stop }
+            finally { $reader.Dispose() }
+        }
+        finally { $apiResponse.Dispose() }
+        return ($health.status -ceq 'ok' -and $health.service -ceq 'dots-api')
+    }
+    catch { return $false }
+}
+
 function Get-DotsLiveTunnelDiagnosticSnapshot {
     if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { return [pscustomobject]@{ Path = $null; Text = ''; LastWriteUtcTicks = 0L } }
     $path = Join-Path $env:LOCALAPPDATA 'Dots\startup\live-mcp-tunnel-latest.log'
@@ -291,25 +323,28 @@ function Invoke-DotsLiveLogonCoordinator {
         Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'explicit_stop'
         return [pscustomobject]@{ Started = $false; Outcome = 'stopped'; Code = 'explicit_stop' }
     }
-    $deadline = [System.Diagnostics.Stopwatch]::StartNew()
+    if (Test-DotsLiveServicesReady) {
+        return [pscustomobject]@{ Started = $true; Outcome = 'success'; Code = 'ready' }
+    }
+    $databaseDeadline = [System.Diagnostics.Stopwatch]::StartNew()
     $database = $null
-    while ($deadline.ElapsedMilliseconds -lt 120000) {
+    while ($databaseDeadline.ElapsedMilliseconds -lt 180000) {
         if (Test-DotsLiveStopIntent) {
             Write-DotsLiveCoordinatorStatus -Service 'live-database' -Outcome 'unavailable' -Code 'explicit_stop'
             Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'explicit_stop'
             return [pscustomobject]@{ Started = $false; Outcome = 'stopped'; Code = 'explicit_stop' }
         }
-        $remaining = [Math]::Max(1, 120000 - [int]$deadline.ElapsedMilliseconds)
-        $remainingSeconds = [int][Math]::Floor($remaining / 1000)
+        $remaining = [Math]::Max(1, 180000 - [int]$databaseDeadline.ElapsedMilliseconds)
+        $remainingSeconds = [Math]::Min(120, [int][Math]::Floor($remaining / 1000))
         if ($remainingSeconds -lt 1) { break }
-        $database = Invoke-DotsLiveHiddenStartupScript -ScriptPath $DatabaseScript -WaitForExit -StartupTimeoutSeconds $remainingSeconds -TimeoutMilliseconds $remaining
-        if (-not $database.Started -or $database.TimedOut) {
+        $database = Invoke-DotsLiveHiddenStartupScript -ScriptPath $DatabaseScript -WaitForExit -StartupTimeoutSeconds $remainingSeconds -TimeoutMilliseconds ([Math]::Min(120000, $remaining))
+        if (-not $database.Started) {
             Write-DotsLiveCoordinatorStatus -Service 'live-database' -Outcome 'failure' -Code 'database_preflight_failed'
             Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'database_not_ready'
             return [pscustomobject]@{ Started = $false; Outcome = 'failure'; Code = 'database_not_ready' }
         }
         if (-not $database.TimedOut -and $database.ExitCode -eq 0) { break }
-        $remaining = 120000 - [int]$deadline.ElapsedMilliseconds
+        $remaining = 180000 - [int]$databaseDeadline.ElapsedMilliseconds
         if ($remaining -le 0) { break }
         Start-Sleep -Milliseconds ([Math]::Min(1000, $remaining))
     }
@@ -324,10 +359,9 @@ function Invoke-DotsLiveLogonCoordinator {
         Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'explicit_stop'
         return [pscustomobject]@{ Started = $false; Outcome = 'stopped'; Code = 'explicit_stop' }
     }
-    $remaining = 120000 - [int]$deadline.ElapsedMilliseconds
-    if ($remaining -le 0 -or -not (Start-DotsLiveApiService -TimeoutMilliseconds ([Math]::Max(1, $remaining)))) {
-        Write-DotsLiveCoordinatorStatus -Service 'live-database' -Outcome 'failure' -Code 'database_not_ready'
-        Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'database_not_ready'
+    Write-DotsLiveCoordinatorStatus -Service 'live-database' -Outcome 'success' -Code 'ready'
+    if (-not (Start-DotsLiveApiService -TimeoutMilliseconds 120000)) {
+        Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'api_not_ready'
         return [pscustomobject]@{ Started = $false; Outcome = 'failure'; Code = 'api_not_ready' }
     }
     # Do not expose ChatGPT access if a stop request arrived while the API became ready.
@@ -337,23 +371,12 @@ function Invoke-DotsLiveLogonCoordinator {
         return [pscustomobject]@{ Started = $false; Outcome = 'stopped'; Code = 'explicit_stop' }
     }
     $beforeTunnel = Get-DotsLiveTunnelDiagnosticSnapshot
-    $remaining = 120000 - [int]$deadline.ElapsedMilliseconds
-    $remainingSeconds = [int][Math]::Floor($remaining / 1000)
-    if ($remainingSeconds -lt 1) {
-        Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'database_not_ready'
-        return [pscustomobject]@{ Started = $false; Outcome = 'failure'; Code = 'startup_deadline_exceeded' }
-    }
-    $tunnel = Invoke-DotsLiveHiddenStartupScript -ScriptPath $TunnelScript -WaitForExit:$false -StartupTimeoutSeconds $remainingSeconds
+    $tunnel = Invoke-DotsLiveHiddenStartupScript -ScriptPath $TunnelScript -WaitForExit:$false -StartupTimeoutSeconds 120
     if (-not $tunnel.Started) {
         Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'failure' -Code 'mcp_tunnel_startup_failed'
         return [pscustomobject]@{ Started = $false; Outcome = 'failure'; Code = 'tunnel_not_started' }
     }
-    $remaining = 120000 - [int]$deadline.ElapsedMilliseconds
-    if ($remaining -le 0) {
-        Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'failure' -Code 'mcp_tunnel_startup_failed'
-        return [pscustomobject]@{ Started = $false; Outcome = 'failure'; Code = 'startup_deadline_exceeded' }
-    }
-    $tunnelReady = Wait-DotsLiveTunnelReadiness -ProcessId $tunnel.ProcessId -BeforeStart $beforeTunnel -TimeoutMilliseconds $remaining
+    $tunnelReady = Wait-DotsLiveTunnelReadiness -ProcessId $tunnel.ProcessId -BeforeStart $beforeTunnel -TimeoutMilliseconds 120000
     if (-not $tunnelReady) {
         Write-DotsLiveCoordinatorStatus -Service 'live-mcp-tunnel' -Outcome 'failure' -Code 'mcp_tunnel_startup_failed'
         return [pscustomobject]@{ Started = $false; Outcome = 'failure'; Code = 'tunnel_not_ready' }
