@@ -15,6 +15,7 @@ Describe 'Invoke-DotsLiveLogonCoordinator' {
         $script:ApiCalls = @()
         Mock Write-DotsLogonDiagnostic { $true }
         Mock Start-DotsLiveDashboardController { $true }
+        Mock Test-DotsLiveServicesReady { $false }
         Mock Start-DotsLiveApiService { $script:ApiCalls += $TimeoutMilliseconds; return $true }
         Mock Test-DotsLiveStopIntent { $false }
         Mock Start-Sleep {}
@@ -64,10 +65,35 @@ Describe 'Invoke-DotsLiveLogonCoordinator' {
         Assert-MockCalled Wait-DotsLiveTunnelReadiness -Times 1 -ParameterFilter { $ProcessId -eq 1234 -and $TimeoutMilliseconds -gt 0 -and $TimeoutMilliseconds -le 120000 }
     }
 
+    It 'does not repeat preflight when all live services are already ready' {
+        Mock Test-DotsLiveServicesReady { $true }
+
+        $result = Invoke-DotsLiveLogonCoordinator -DatabaseScript 'db.ps1' -TunnelScript 'tunnel.ps1'
+
+        $result.Code | Should Be 'ready'
+        @($script:CoordinatorCalls).Count | Should Be 0
+        @($script:ApiCalls).Count | Should Be 0
+    }
+
+    It 'gives the API its own readiness budget after a slow successful database preflight' {
+        Mock Invoke-DotsLiveHiddenStartupScript {
+            if ($WaitForExit) {
+                [System.Threading.Thread]::Sleep(1500)
+                return [pscustomobject]@{ Started = $true; ExitCode = 0; TimedOut = $false }
+            }
+            return [pscustomobject]@{ Started = $true; ExitCode = $null; TimedOut = $false; ProcessId = 1234 }
+        }
+
+        $result = Invoke-DotsLiveLogonCoordinator -DatabaseScript 'db.ps1' -TunnelScript 'tunnel.ps1'
+
+        $result.Code | Should Be 'ready'
+        $script:ApiCalls[0] | Should BeGreaterThan 119000
+    }
+
     It 'never starts the tunnel when database preflight fails' {
         Mock Invoke-DotsLiveHiddenStartupScript {
             $script:CoordinatorCalls += $ScriptPath
-            return [pscustomobject]@{ Started = $true; ExitCode = 124; TimedOut = $true }
+            return [pscustomobject]@{ Started = $false; ExitCode = 127; TimedOut = $false }
         }
 
         $result = Invoke-DotsLiveLogonCoordinator -DatabaseScript 'db.ps1' -TunnelScript 'tunnel.ps1'
@@ -78,8 +104,30 @@ Describe 'Invoke-DotsLiveLogonCoordinator' {
         @($script:ApiCalls).Count | Should Be 0
     }
 
+    It 'retries a timed-out database preflight before starting the API' {
+        $script:PreflightAttempt = 0
+        Mock Invoke-DotsLiveHiddenStartupScript {
+            if ($WaitForExit) {
+                $script:PreflightAttempt++
+                if ($script:PreflightAttempt -eq 1) { return [pscustomobject]@{ Started = $true; ExitCode = 124; TimedOut = $true } }
+                return [pscustomobject]@{ Started = $true; ExitCode = 0; TimedOut = $false }
+            }
+            return [pscustomobject]@{ Started = $true; ExitCode = $null; TimedOut = $false; ProcessId = 1234 }
+        }
+
+        $result = Invoke-DotsLiveLogonCoordinator -DatabaseScript 'db.ps1' -TunnelScript 'tunnel.ps1'
+
+        $result.Code | Should Be 'ready'
+        $script:PreflightAttempt | Should Be 2
+        @($script:ApiCalls).Count | Should Be 1
+    }
+
     It 'does not start the tunnel when API systemd or HTTP health verification fails' {
         Mock Start-DotsLiveApiService { $script:ApiCalls += $TimeoutMilliseconds; return $false }
+        $script:DiagnosticCalls = @()
+        Mock Write-DotsLiveCoordinatorStatus {
+            $script:DiagnosticCalls += ('{0}:{1}:{2}' -f $Service, $Outcome, $Code)
+        }
 
         $result = Invoke-DotsLiveLogonCoordinator -DatabaseScript 'db.ps1' -TunnelScript 'tunnel.ps1'
 
@@ -87,6 +135,8 @@ Describe 'Invoke-DotsLiveLogonCoordinator' {
         @($script:CoordinatorCalls).Count | Should Be 1
         $script:CoordinatorCalls[0].ScriptPath | Should Be 'db.ps1'
         @($script:ApiCalls).Count | Should Be 1
+        ($script:DiagnosticCalls -contains 'live-database:success:ready') | Should Be $true
+        ($script:DiagnosticCalls -contains 'live-mcp-tunnel:unavailable:api_not_ready') | Should Be $true
     }
 
     It 'waits through an exited restore observation until the exact database is healthy' {

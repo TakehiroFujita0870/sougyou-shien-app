@@ -46,4 +46,14 @@ Describe 'Write-DotsLogonDiagnostic' {
         $record | Should Match 'service=live-mcp-tunnel outcome=unavailable code=database_not_ready'
         $record | Should Not Match 'outcome=success'
     }
+
+    It 'distinguishes API failure from database failure' {
+        Write-DotsLogonDiagnostic -Service 'live-database' -Outcome 'success' -Code 'ready' | Should Be $true
+        Write-DotsLogonDiagnostic -Service 'live-mcp-tunnel' -Outcome 'unavailable' -Code 'api_not_ready' | Should Be $true
+
+        $database = Get-Content -LiteralPath (Join-Path $TestDrive 'Dots\startup\live-database-latest.log') -Raw
+        $tunnel = Get-Content -LiteralPath (Join-Path $TestDrive 'Dots\startup\live-mcp-tunnel-latest.log') -Raw
+        $database | Should Match 'outcome=success code=ready'
+        $tunnel | Should Match 'outcome=unavailable code=api_not_ready'
+    }
 }

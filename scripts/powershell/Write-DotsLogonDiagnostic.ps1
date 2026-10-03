@@ -10,7 +10,7 @@ function Write-DotsLogonDiagnostic {
         [string]$Outcome,
 
         [Parameter(Mandatory = $true)]
-        [ValidateSet('ready', 'database_preflight_failed', 'database_not_ready', 'mcp_tunnel_startup_failed', 'wsl_unavailable', 'explicit_stop')]
+        [ValidateSet('ready', 'database_preflight_failed', 'database_not_ready', 'api_not_ready', 'mcp_tunnel_startup_failed', 'wsl_unavailable', 'explicit_stop')]
         [string]$Code
     )
 

@@ -59,9 +59,9 @@ Describe 'Register-DotsLiveCoordinatorTask' {
         Mock Remove-DotsCoordinatorTask { $script:FakeTaskCalls += "remove:$TaskName"; $script:FakeTasks.Remove($TaskName) }
         Mock New-DotsCoordinatorTaskArguments { return '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $ScriptPath }
         Mock New-DotsCoordinatorTaskAction { [pscustomobject]@{ Execute = $Execute; Arguments = $Argument; WorkingDirectory = $WorkingDirectory } }
-        Mock New-DotsCoordinatorTaskTrigger { [pscustomobject]@{ CimClass = [pscustomobject]@{ CimClassName = 'MSFT_TaskLogonTrigger' }; UserId = $User; Enabled = $true } }
+        Mock New-DotsCoordinatorTaskTrigger { [pscustomobject]@{ CimClass = [pscustomobject]@{ CimClassName = 'MSFT_TaskLogonTrigger' }; UserId = $User; Enabled = $true; Repetition = [pscustomobject]@{ Interval = 'PT5M'; Duration = ''; StopAtDurationEnd = $false } } }
         Mock New-DotsCoordinatorTaskPrincipal { [pscustomobject]@{ UserId = $UserId; LogonType = 'Interactive'; RunLevel = 'Limited' } }
-        Mock New-DotsCoordinatorTaskSettings { [pscustomobject]@{ Enabled = $true; MultipleInstances = 'IgnoreNew'; Hidden = $true; ExecutionTimeLimit = [TimeSpan]::FromMinutes(3) } }
+        Mock New-DotsCoordinatorTaskSettings { [pscustomobject]@{ Enabled = $true; MultipleInstances = 'IgnoreNew'; Hidden = $true; ExecutionTimeLimit = [TimeSpan]::FromMinutes(8) } }
         Mock Register-DotsCoordinatorTaskDefinition {
             $script:FakeTaskCalls += "register:$TaskName"
             $script:CoordinatorRegistration = [pscustomobject]@{ Action = $Action; Trigger = $Trigger; Principal = $Principal; Settings = $Settings; Description = $Description }
@@ -89,6 +89,8 @@ Describe 'Register-DotsLiveCoordinatorTask' {
         $script:CoordinatorRegistration.Principal.LogonType | Should Be 'Interactive'
         $script:CoordinatorRegistration.Principal.RunLevel | Should Be 'Limited'
         $script:CoordinatorRegistration.Settings.Hidden | Should Be $true
+        $script:CoordinatorRegistration.Settings.ExecutionTimeLimit | Should Be ([TimeSpan]::FromMinutes(8))
+        $script:CoordinatorRegistration.Trigger.Repetition.Interval | Should Be 'PT5M'
         $script:FakeTasks['Dots Founder Graph live database at logon'].State | Should Be 'Disabled'
         $script:FakeTasks['Dots live MCP tunnel at logon'].State | Should Be 'Running'
         $script:FakeTasks['Dots Founder Graph live database at logon'].Settings.Enabled | Should Be $false
@@ -214,6 +216,17 @@ Describe 'Register-DotsLiveCoordinatorTask' {
         $result.Blocked | Should Be $true
         @($result.BackupFiles).Count | Should Be 2
         @($script:FakeTaskCalls).Count | Should Be 0
+    }
+}
+
+Describe 'Recurring coordinator trigger' {
+    It 'uses an indefinitely repeating current-user logon trigger' {
+        $trigger = New-DotsCoordinatorTaskTrigger -User ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
+
+        $trigger.CimClass.CimClassName | Should Be 'MSFT_TaskLogonTrigger'
+        $trigger.Repetition.Interval | Should Be 'PT5M'
+        [string]$trigger.Repetition.Duration | Should Be ''
+        $trigger.Repetition.StopAtDurationEnd | Should Be $false
     }
 }
 
