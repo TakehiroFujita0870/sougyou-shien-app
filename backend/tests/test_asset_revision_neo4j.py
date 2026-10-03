@@ -240,3 +240,27 @@ def test_neo4j_asset_decoder_accepts_legacy_root_with_both_parent_fields_missing
     assert decoded.revision == 1
     assert decoded.supersedes_id is None
     assert decoded.home_category is None
+
+
+def test_neo4j_asset_decoder_normalizes_only_legacy_initial_capability() -> None:
+    gateway = Neo4jGraphGateway(
+        _Driver(_AssetRevisionSession(Asset(owner_id="owner-1", id="unused", name="Unused"))), "owner-1"
+    )
+    properties = _node_properties(Asset(owner_id="owner-1", id="legacy-capability", name="Legacy"))
+    payload = json.loads(properties["payload_json"])
+    payload["kind"] = "capability"
+    payload.pop("revision")
+    payload.pop("supersedes_id")
+    row = {
+        "id": "legacy-capability", "owner_id": "owner-1", "node_type": "asset",
+        "revision": 0, "supersedes_id": None, "payload_json": json.dumps(payload),
+    }
+
+    decoded = gateway._decode_asset_record(row)
+
+    assert decoded.kind is AssetKind.STRENGTH
+    assert decoded.revision == 1
+    assert decoded.revise(name="Updated").kind is AssetKind.STRENGTH
+    row["revision"] = 2
+    with pytest.raises(GraphWriteError, match="persisted Asset state is invalid"):
+        gateway._decode_asset_record(row)

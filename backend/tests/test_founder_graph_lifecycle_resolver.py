@@ -1,7 +1,7 @@
 from dataclasses import replace
 import json
 
-from dots.founder_graph import Asset, AssetHomeCategory, EgressPolicy, Idea, Provenance, Status
+from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, Idea, Provenance, Status
 from dots.founder_graph_neo4j import _node_properties
 from dots.founder_graph_lifecycle_resolver import (
     lifecycle_reference_aliases,
@@ -152,6 +152,7 @@ def test_asset_lifecycle_decoder_defaults_category_before_legacy_initial_row_nor
     payload.pop("home_category")
     payload.pop("revision")
     payload.pop("supersedes_id")
+    payload["kind"] = "capability"
 
     decoded = decode_asset_lifecycle_record(
         payload, owner_id="owner", expected_id=root.id,
@@ -162,6 +163,7 @@ def test_asset_lifecycle_decoder_defaults_category_before_legacy_initial_row_nor
     assert decoded.revision == 1
     assert decoded.supersedes_id is None
     assert decoded.home_category is None
+    assert decoded.kind is AssetKind.STRENGTH
 
 
 def test_lifecycle_alias_map_resolves_idea_and_asset_restore_chains_once() -> None:
