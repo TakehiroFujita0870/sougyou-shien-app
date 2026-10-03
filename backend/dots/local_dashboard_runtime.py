@@ -69,6 +69,10 @@ class OnDemandNeo4jGraphViewStore(GraphViewStore):
         with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jGraphViewStore(driver).read_edges(owner_id, ids)
 
+    def read_idea_citations(self, owner_id: str, idea_ids):
+        with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
+            return Neo4jGraphViewStore(driver).read_idea_citations(owner_id, idea_ids)
+
     def read_facet_region(self, owner_id: str, facet_id: str, depth: int):
         with managed_neo4j_driver(create_neo4j_driver_from_env) as driver:
             return Neo4jGraphViewStore(driver).read_facet_region(owner_id, facet_id, depth)
