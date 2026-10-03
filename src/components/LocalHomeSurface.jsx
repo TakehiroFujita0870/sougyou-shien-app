@@ -17,7 +17,7 @@ const ASSET_CATEGORIES = [
   { id: 'barrier', label: '弱み・迷い' },
   { id: 'criterion', label: '判断基準' },
 ];
-const compactResearchStatusLabel = (status) => ['prior_research_sources_missing', 'prior_research_import', 'research_sources_missing', 'researched'].includes(status) ? '調査済み' : status === 'unresearched' ? '未調査' : null;
+const compactResearchStatusLabel = (status) => ['prior_research_sources_missing', 'prior_research_import', 'research_sources_missing', 'researched', 'researched_url_only'].includes(status) ? '調査済み' : status === 'unresearched' ? '未調査' : null;
 
 function assetCategory(asset) {
   if (ASSET_CATEGORIES.some(({ id }) => id === asset.category)) return asset.category;
@@ -367,7 +367,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
             <button type="button" className="local-home__icon-button" aria-label={`削除: ${selectedIdea.title}`} title={canArchiveRecord('idea', selectedIdea.revision) ? `「${selectedIdea.title}」を削除` : '最新の記録情報を読み込んでから削除できます'} disabled={!canArchiveRecord('idea', selectedIdea.revision) || deletePending} onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setDeleteNotice(''); setDeleteConfirmation({ id: selectedIdea.id, kind: 'idea', title: selectedIdea.title, revision: selectedIdea.revision }); }}><TrashIcon /></button>
           </div>}
         </div>
-        {compactResearchStatusLabel(selectedIdea.research_status) && <div className="local-home__detail-status-row"><span className="local-home__status-badge" data-research-state={selectedIdea.research_status}>{compactResearchStatusLabel(selectedIdea.research_status)}</span></div>}
+        {compactResearchStatusLabel(selectedIdea.research_status) && <div className="local-home__detail-status-row">{selectedIdea.research_status === 'researched_url_only' && <span className="local-home__research-note">出典URLのみ・根拠未登録</span>}<span className="local-home__status-badge" data-research-state={selectedIdea.research_status}>{compactResearchStatusLabel(selectedIdea.research_status)}</span></div>}
         {ideaDraft?.id === selectedIdea.id ? <form onSubmit={saveIdea} className="local-home__edit-form local-home__idea-edit-form" onKeyDown={(event) => { if (event.key === 'Escape' && !ideaSaving) { event.stopPropagation(); setIdeaDraft(null); setIdeaNotice(''); setFocusIdeaId(selectedIdea.id); } }}>
           <p>題名だけの変更は調査結果を引き継ぎます。説明を変えると以前の調査は履歴に残り、この案の現行調査からは外れます。</p>
           <label htmlFor="idea-edit-title">題名</label>

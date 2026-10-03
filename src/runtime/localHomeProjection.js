@@ -51,6 +51,11 @@ export function projectLocalHome(result) {
       if (!idea.brief_origin && item.research_status === 'researched' && idea.brief_sections.every((section) => section.trim())) {
         idea.research_status = 'researched';
       }
+      if (!idea.brief_origin && item.research_status === 'researched_url_only'
+        && idea.report_markdown && idea.brief_sections.every((section) => section.trim())
+        && !idea.brief_citations?.some((chapter) => chapter.length > 0)) {
+        idea.research_status = 'researched_url_only';
+      }
     }
     return idea;
   });

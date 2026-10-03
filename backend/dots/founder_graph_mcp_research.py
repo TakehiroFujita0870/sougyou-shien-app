@@ -381,6 +381,7 @@ class McpResearchCampaignSurface:
             return definitions
         candidate_note = (
             "任意のrelation_candidate_manifestを同じ保存呼出しに含めると、本文保存後にDotsが候補を検証・処理します。"
+            "調査前の下書きも、実際に述べた本文だけを一つのMarkdown見出しへ保存し、根拠のある候補または空候補を提出できます。8章や外部根拠を捏造しないでください。"
             "candidate_processing.stateとerror_codeで結果を確認してください。省略は未評価pending、candidates: []は候補なしを確認済みです。"
             "処理状態は候補の反映件数を示しません。"
         )

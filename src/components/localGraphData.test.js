@@ -21,3 +21,11 @@ it('retains the actual root-to-leaf path and membership depth', () => {
   expect(result.edges).toEqual([{ source: 'root', target: 'leaf', label: '確定' }, { source: 'leaf', target: 'idea', label: '推測' }]);
   expect(regionGraphData('absent', hits, [])).toEqual({ nodes: [], edges: [] });
 });
+
+it('renders verified citation edges as a distinct Japanese relationship', () => {
+  const graph = {
+    nodes: [{ id: 'idea', kind: 'idea', label: '案' }, { id: 'source', kind: 'source', label: '資料', url: 'https://example.test/source' }],
+    edges: [{ source: 'idea', target: 'source', label: 'CITES' }], semantic_edges: [],
+  };
+  expect(semanticGraphData(graph).edges).toEqual([{ source: 'idea', target: 'source', label: '出典（根拠あり）' }]);
+});

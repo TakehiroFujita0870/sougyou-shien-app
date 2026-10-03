@@ -67,6 +67,19 @@ def test_h1_and_h2_canonical_headings_may_be_mixed() -> None:
     assert [item.section_index for item in projection.headings] == list(range(8))
 
 
+def test_noncanonical_subheadings_remain_inside_the_current_canonical_chapter() -> None:
+    markdown = (
+        f"## {SECTION_TITLES[0]}\n\n冒頭の一文\n\n"
+        "## 調査で見つけた事例\n\n[資料](https://example.test/case)\n\n"
+        "### 判断の補足\n\n追加の本文\n\n"
+        f"## {SECTION_TITLES[1]}\n\n次の章"
+    )
+    projection = project_markdown_report(markdown)
+
+    assert projection.headings[0].end_offset == markdown.index(f"## {SECTION_TITLES[1]}")
+    assert projection.links[0].section_index == 0
+
+
 def test_fenced_and_inline_code_headings_and_links_are_ignored() -> None:
     markdown = (
         "```markdown\n"

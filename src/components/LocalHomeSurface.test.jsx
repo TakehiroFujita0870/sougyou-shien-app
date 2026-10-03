@@ -657,6 +657,26 @@ it('distinguishes completed research with missing current sources from drafts an
   expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
 });
 
+it('labels an eight-chapter URL report as researched without claiming verified evidence', async () => {
+  const client = { getHome: vi.fn(async () => ({
+    status: 'ready', assets: [], profile: null,
+    ideas: [{ id: 'url-report', title: '公開資料を調べた案', description: '', summary: '',
+      research_status: 'researched_url_only', brief_revision: 2,
+      brief_sections: Array(8).fill('調査内容'),
+      report_markdown: '## エグゼクティブサマリー\n[公開資料](https://example.test/report)',
+      brief_citations: Array.from({ length: 8 }, () => []),
+    }],
+  })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+  expect(container.querySelector('.local-home__status-badge').textContent).toBe('調査済み');
+  expect(container.querySelector('.local-home__research-note').textContent).toBe('出典URLのみ・根拠未登録');
+  expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
+});
+
 it('uses the same researched badge for imported research while retaining citation detail', async () => {
   const client = { getHome: vi.fn(async () => ({
     status: 'ready', assets: [], profile: null,

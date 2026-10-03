@@ -423,6 +423,15 @@ def read_local_home(store: HomeStore, *, owner_id: str, storage_status: str = "r
                         display["research_status"] = "researched" if has_citations else "research_sources_missing"
                     elif brief.origin == "prior_research_import":
                         display["research_status"] = "prior_research_import" if has_citations else "prior_research_sources_missing"
+                    elif (
+                        brief.report_markdown is not None
+                        and report_projection.markdown_projection is not None
+                        and report_projection.markdown_projection.heading_status == "complete"
+                        and all(content.strip() for content in report_projection.section_contents)
+                        and any(link.section_index is not None for link in report_projection.markdown_projection.links)
+                    ):
+                        # The report documents research, but URL-only links are not verified Evidence.
+                        display["research_status"] = "researched_url_only"
                 elif brief is not None and isinstance(payload.get("provenance"), Mapping) and payload["provenance"].get("operation") == "revise_idea":
                     # Research for the prior content remains in history, not current.
                     display["research_status"] = "unresearched"

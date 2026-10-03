@@ -12,14 +12,17 @@ def node(identity, owner="owner-mvp", kind="idea", title="良いアイデア"):
 
 
 class Store:
-    def __init__(self, nodes=(), edges=()):
-        self.nodes, self.edges = nodes, edges
+    def __init__(self, nodes=(), edges=(), citations=()):
+        self.nodes, self.edges, self.citations = nodes, edges, citations
 
     def read_nodes(self, owner_id):
         return self.nodes
 
     def read_edges(self, owner_id, ids):
         return self.edges
+
+    def read_idea_citations(self, owner_id, idea_ids):
+        return self.citations
 
     def read_facet_region(self, owner_id, facet_id, depth):
         self.facet_calls = (owner_id, facet_id, depth)
@@ -64,6 +67,45 @@ def test_graph_exposes_only_safe_source_urls_for_navigation():
     assert "url" not in by_id["idea-with-locator"]
     assert "private-value" not in str(result)
     assert "PRIVATE SOURCE CONTENT" not in str(result)
+
+
+def test_graph_projects_one_current_shareable_citation_edge_without_private_metadata():
+    idea = node("idea-1")
+    idea["payload_json"] = json.dumps({"id": "idea-1", "owner_id": "owner-mvp", "title": "案", "egress_policy": "shareable"})
+    source = node("source-1", kind="source")
+    source["payload_json"] = json.dumps({
+        "id": "source-1", "owner_id": "owner-mvp", "title": "公開資料",
+        "locator": "https://example.test/source", "egress_policy": "shareable", "secret": "PRIVATE",
+    })
+    rows = [
+        {"idea_id": "idea-1", "source_id": "source-1", "evidence_id": "evidence-1", "url": "https://example.test/source"},
+        {"idea_id": "idea-1", "source_id": "source-1", "evidence_id": "evidence-2", "url": "https://example.test/source"},
+    ]
+    result = read_local_graph(Store([idea, source], citations=rows), owner_id="owner-mvp")
+    assert result["edges"] == [{"source": "idea-1", "target": "source-1", "label": "CITES"}]
+    assert "evidence-1" not in str(result)
+    assert "PRIVATE" not in str(result)
+
+
+def test_graph_does_not_project_citations_to_unsafe_or_private_sources():
+    idea = node("idea-1")
+    idea["payload_json"] = json.dumps({"id": "idea-1", "owner_id": "owner-mvp", "title": "案", "egress_policy": "shareable"})
+    private = node("source-private", kind="source")
+    private["payload_json"] = json.dumps({
+        "id": "source-private", "owner_id": "owner-mvp", "title": "内部資料",
+        "locator": "https://example.test/private", "egress_policy": "local_only",
+    })
+    unsafe = node("source-unsafe", kind="source")
+    unsafe["payload_json"] = json.dumps({
+        "id": "source-unsafe", "owner_id": "owner-mvp", "title": "秘密URL",
+        "locator": "https://example.test/?token=secret", "egress_policy": "shareable",
+    })
+    rows = [
+        {"idea_id": "idea-1", "source_id": "source-private", "evidence_id": "evidence-1", "url": "https://example.test/private"},
+        {"idea_id": "idea-1", "source_id": "source-unsafe", "evidence_id": "evidence-2", "url": "https://example.test/?token=secret"},
+    ]
+    result = read_local_graph(Store([idea, private, unsafe], citations=rows), owner_id="owner-mvp")
+    assert result["edges"] == []
 
 
 def test_graph_stopped_empty_and_foreign_owner_fail_closed():

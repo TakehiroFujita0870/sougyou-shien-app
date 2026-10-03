@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, Idea, Provenance, Status
 from dots.founder_graph_neo4j import _node_properties
 from dots.founder_graph_mcp_write import McpWriteSurface
@@ -383,6 +385,45 @@ def test_home_derives_researched_sections_from_markdown_without_duplicate_bodies
     assert idea["brief_citations"][0] == [{"url": "https://example.test/evidence", "title": "Verified evidence"}]
     assert idea["report_projection"]["links"][0]["verification_status"] == "url_only"
     assert idea["report_projection"]["links"][0]["evidence_ids"] == []
+
+
+def test_home_recognizes_complete_url_backed_research_without_claiming_verified_evidence():
+    rows = [node("idea-url-report", "idea", {"title": "調査した案", "status": "draft", "created_at": "2026-09-26T00:00:00Z"}, status="draft")]
+    markdown = "\n\n".join(
+        f"## {title}\n\n## 補足 {index}\n\n調査本文 {index}"
+        + ("\n\n[公開資料](https://example.test/source)" if index == 2 else "")
+        for index, title in enumerate(SECTION_TITLES)
+    )
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id="idea-url-report", based_on_idea_id="idea-url-report",
+        report_markdown=markdown, egress_policy="shareable",
+        sections=tuple(IdeaBriefSection(index=index) for index in range(8)),
+    )
+    idea = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")["ideas"][0]
+
+    assert idea["research_status"] == "researched_url_only"
+    assert idea["brief_sections"][2].startswith("## 補足 2")
+    assert idea["report_projection"]["links"][0]["section_index"] == 2
+    assert idea["report_projection"]["links"][0]["verification_status"] == "url_only"
+    assert not any(idea["brief_citations"])
+
+
+@pytest.mark.parametrize("last_section,include_link", [(False, True), (True, False)])
+def test_home_does_not_promote_partial_or_unlinked_markdown_to_researched(last_section, include_link):
+    rows = [node("idea-url-report", "idea", {"title": "下書き", "status": "draft", "created_at": "2026-09-26T00:00:00Z"}, status="draft")]
+    headings = SECTION_TITLES if last_section else SECTION_TITLES[:-1]
+    markdown = "\n\n".join(
+        f"## {title}\n\n本文 {index}"
+        + ("\n\n[公開資料](https://example.test/source)" if include_link and index == 2 else "")
+        for index, title in enumerate(headings)
+    )
+    brief = IdeaBriefVersion(
+        owner_id="owner-a", idea_lineage_root_id="idea-url-report", based_on_idea_id="idea-url-report",
+        report_markdown=markdown, egress_policy="shareable",
+        sections=tuple(IdeaBriefSection(index=index) for index in range(8)),
+    )
+    idea = read_local_home(Neo4jHomeStore(Driver(rows, (brief_row(brief),))), owner_id="owner-a")["ideas"][0]
+    assert idea["research_status"] == "unresearched"
 
 
 def test_home_keeps_prior_research_origin_and_current_citations_without_campaign_run():
