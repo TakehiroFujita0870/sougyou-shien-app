@@ -124,7 +124,9 @@ function Initialize-AuthSecret {
     }
     Require-Auth
     $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
-    $persistentPath = Join-Path ([System.IO.Path]::GetTempPath()) ("dots-founder-graph-auth-{0}.secret" -f $project)
+    # Docker may restart this container after Windows has cleared its temp
+    # directory. Keep the read-only bind source in the owner's local profile.
+    $persistentPath = Join-Path ([Environment]::GetFolderPath('UserProfile')) (".dots-founder-graph-auth-{0}.secret" -f $project)
     $temporaryPath = if ($PersistForContainer) { $persistentPath } else { [System.IO.Path]::GetTempFileName() }
     try {
         $encoding = [System.Text.UTF8Encoding]::new($false)
@@ -168,14 +170,6 @@ function Cleanup-AuthSecret {
     }
     $script:authSecretFile = $null
     $script:authSecretPersistent = $false
-}
-
-function Remove-PersistentAuthSecret {
-    $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
-    $persistentPath = Join-Path ([System.IO.Path]::GetTempPath()) ("dots-founder-graph-auth-{0}.secret" -f $project)
-    if (Test-Path -LiteralPath $persistentPath) {
-        Remove-Item -LiteralPath $persistentPath -Force -ErrorAction SilentlyContinue
-    }
 }
 
 function Reject-Comma {
@@ -381,8 +375,7 @@ try {
         }
         'stop' {
             Require-Docker; Require-ProjectName; Initialize-AuthSecret
-            try { Invoke-Compose @('stop', 'neo4j') }
-            finally { Remove-PersistentAuthSecret }
+            Invoke-Compose @('stop', 'neo4j')
         }
         'status' {
             Require-Docker; Require-ProjectName; Initialize-AuthSecret
