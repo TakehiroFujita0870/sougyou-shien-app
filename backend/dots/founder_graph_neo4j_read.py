@@ -48,8 +48,7 @@ from .founder_graph_read_contract import (
     single_record,
     tokens,
 )
-from .founder_graph_lifecycle_resolver import resolve_restored_idea_reference
-from .founder_graph_lifecycle_resolver import resolve_restored_asset_reference
+from .founder_graph_lifecycle_resolver import is_legacy_initial_asset_row, resolve_restored_asset_reference, resolve_restored_idea_reference
 from .founder_graph_read import (
     GraphReadError,
     GraphReadNotFoundError,
@@ -267,6 +266,12 @@ def node_view_from_row(row: Any, *, owner_id: str, prefix: str = "", strict: boo
         field_names = ("polarity", "confidence", "content_hash", "status", "egress_policy")
     values = {field_name: payload[field_name] for field_name in field_names if field_name in payload}
     if node_type is NodeType.ASSET:
+        row_revision = _row_value(row, f"{prefix}revision", 0)
+        scalar_parent = _row_value(row, f"{prefix}supersedes_id")
+        if is_legacy_initial_asset_row(payload, row_revision, scalar_parent):
+            values["revision"] = 1
+            if values.get("kind") == "capability":
+                values["kind"] = AssetKind.STRENGTH.value
         raw_category = values.get("home_category")
         if raw_category is None:
             raw_kind = values.get("kind")

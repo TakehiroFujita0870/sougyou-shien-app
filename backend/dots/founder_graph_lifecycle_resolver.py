@@ -16,6 +16,16 @@ _NON_CURRENT_IDEA_STATUSES = frozenset({
 _UNSET = object()
 
 
+def is_legacy_initial_asset_row(payload: Mapping[str, Any], row_revision: Any, scalar_parent: Any) -> bool:
+    """Recognize the pre-revision initial Asset shape, never a later revision."""
+
+    return (
+        "revision" not in payload and "supersedes_id" not in payload
+        and type(row_revision) is int and row_revision in {0, 1}
+        and scalar_parent is None
+    )
+
+
 def lifecycle_reference_aliases(records: Iterable[Idea | Asset]) -> dict[str, str]:
     """Build lifecycle-only aliases from a bounded set of typed owner records.
 
@@ -123,6 +133,10 @@ def decode_asset_lifecycle_record(
 
     if not isinstance(payload, Mapping):
         raise ValueError("persisted Asset payload is invalid")
+    legacy_capability = (
+        payload.get("kind") == "capability"
+        and is_legacy_initial_asset_row(payload, expected_revision, expected_supersedes_id)
+    )
     if "home_category" not in payload:
         # The category is optional on legacy rows, including the oldest
         # initial-row shape that also omits revision and predecessor fields.
@@ -180,7 +194,7 @@ def decode_asset_lifecycle_record(
         values["provenance"] = provenance
         values["status"] = Status(values["status"])
         values["egress_policy"] = EgressPolicy(values["egress_policy"])
-        values["kind"] = AssetKind(values["kind"])
+        values["kind"] = AssetKind.STRENGTH if legacy_capability else AssetKind(values["kind"])
         values.pop("kind") if person_record else None
         record = record_type(**values)
     except (KeyError, TypeError, ValueError):

@@ -568,6 +568,50 @@ def test_neo4j_mcp_search_and_fetch_resolve_legacy_asset_category() -> None:
     assert fetched["fields"]["home_category"] == "strength"
 
 
+def test_neo4j_mcp_fetch_and_search_normalize_legacy_initial_capability() -> None:
+    driver, reads = _gateway()
+    legacy = Asset(
+        owner_id="owner-1", id="asset-legacy-capability", name="Legacy capability",
+        kind="strength", description="Reusable skill", egress_policy=EgressPolicy.SHAREABLE,
+    )
+    row = _persisted_row(legacy, search_text="Legacy capability Reusable skill")
+    payload = json.loads(row["payload_json"])
+    payload["kind"] = "capability"
+    payload.pop("revision")
+    payload.pop("supersedes_id")
+    row["revision"] = 0
+    row["payload_json"] = json.dumps(payload)
+    driver.session_value.search_rows = [row]
+    driver.session_value.fetch_rows = [row]
+    surface = McpReadSurface(reads)
+
+    fetched = surface.call("fetch", {"id": legacy.id}, owner_id="owner-1")
+    searched = surface.call("search", {"query": "Legacy capability"}, owner_id="owner-1")
+
+    assert fetched["fields"]["kind"] == "strength"
+    assert reads.fetch(legacy.id, owner_id="owner-1").revision == 1
+    assert searched["results"][0]["fields"]["kind"] == "strength"
+
+
+def test_neo4j_search_hides_capability_kind_outside_legacy_initial_shape() -> None:
+    driver, reads = _gateway()
+    asset = Asset(
+        owner_id="owner-1", id="asset-invalid-capability", name="Invalid later capability",
+        egress_policy=EgressPolicy.SHAREABLE,
+    )
+    row = _persisted_row(asset, search_text="Invalid later capability")
+    payload = json.loads(row["payload_json"])
+    payload["kind"] = "capability"
+    row["payload_json"] = json.dumps(payload)
+    driver.session_value.search_rows = [row]
+
+    searched = McpReadSurface(reads).call(
+        "search", {"query": "Invalid later capability"}, owner_id="owner-1",
+    )
+
+    assert searched["results"] == []
+
+
 def test_mcp_fetch_returns_validated_formal_relation_projection():
     driver, reads = _gateway()
     idea, _claim, _evidence, _brief, assertion, endpoint_rows, formal_rows, brief_row = _formal_fixture()

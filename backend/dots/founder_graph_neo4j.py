@@ -80,6 +80,7 @@ from .founder_graph_neo4j_idea_brief import _decode_persisted_idea_brief, _seria
 from .founder_graph_job_store import FounderGraphJobStore
 from .founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
 from .founder_graph_neo4j_lifecycle import transition_asset_status_tx, transition_idea_status_tx
+from .founder_graph_lifecycle_resolver import is_legacy_initial_asset_row
 from .founder_graph_neo4j_relation_assertion import validate_relation_assertion_evidence_tx
 from .founder_graph_research_run import validate_research_run_timing
 from .idea_brief import IdeaBriefValidationError, IdeaBriefVersion
@@ -1301,7 +1302,10 @@ class Neo4jGraphGateway:
             )
             if node_type == NodeType.PERSON.value:
                 return PersonAsset(**common, contact=payload.get("contact", {}), private_notes=payload.get("private_notes", ""))
-            return Asset(**common, kind=payload.get("kind", AssetKind.KNOWLEDGE.value))
+            kind = payload.get("kind", AssetKind.KNOWLEDGE.value)
+            if kind == "capability" and is_legacy_initial_asset_row(payload, row_revision, scalar_parent):
+                kind = AssetKind.STRENGTH
+            return Asset(**common, kind=kind)
         except (KeyError, TypeError, ValueError, AttributeError, DomainValidationError):
             raise GraphWriteError("persisted Asset state is invalid") from None
 
