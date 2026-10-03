@@ -7,6 +7,7 @@ const INTERNAL_EDGE_LABELS = new Set([
   'HAS_SOURCE_REVISION', 'HAS_CHUNK', 'EVIDENCE_FROM', 'HAS_AUDIT_EVENT',
 ]);
 const RELATION_LABELS = {
+  CITES: '出典（根拠あり）',
   OWNS: '保有する', GOVERNED_BY: '方針に従う', USES_SKILL: 'スキルを使う',
   REUSES: '再利用する', USES: '利用する', SUPPORTS: '支える', ADDRESSES: '課題に応える', DERIVED_FROM: '派生した',
   EVALUATED_BY: '評価された', WORKS_AT: '所属する', HAS_CAPABILITY: '能力を持つ',

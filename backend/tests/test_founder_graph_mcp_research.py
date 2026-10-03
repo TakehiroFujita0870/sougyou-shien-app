@@ -716,6 +716,7 @@ def test_all_brief_save_tools_expose_optional_bounded_candidate_manifest():
         assert "同じ保存呼出し" in description and "本文保存後にDots" in description
         assert "candidate_processing.state" in description
         assert "candidates: []" in description
+        assert "調査前の下書きも" in description
         assert "link_entities" not in description and "classify_entity" not in description
 
     support_schema = tools["save_idea_brief"]["inputSchema"]["properties"][

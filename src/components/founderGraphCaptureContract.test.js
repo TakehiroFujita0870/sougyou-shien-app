@@ -50,6 +50,10 @@ it('uses one Markdown report with the canonical headings and no duplicate sectio
 
 it('sends supported relation candidates in the save call without claiming queued work is complete', () => {
   expectInOrder('`relation_candidate_manifest`', '`basis=brief_hypothesis`', '`basis=external_evidence`', '`fetch_idea_brief`');
+  expect(skill).toContain('下書き関係整理まで進み、調査の許諾は待たない');
+  expect(skill).toContain('`sections=[{index: 0}]`');
+  expect(skill).toContain('正規8章を捏造しない');
+  expect(skill).toContain('候補未提出の`pending`を通常の成功形にしない');
   expect(skill).toContain('`evidence_ids=[]`');
   expect(skill).toContain('`candidates: []`');
   expect(skill).toContain('`idea_id`は保存対象のIdea IDと一致させる');

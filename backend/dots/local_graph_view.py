@@ -39,6 +39,8 @@ class GraphViewStore(Protocol):
 
     def read_edges(self, owner_id: str, ids: Sequence[str]) -> Sequence[Mapping[str, Any]]: ...
 
+    def read_idea_citations(self, owner_id: str, idea_ids: Sequence[str]) -> Sequence[Mapping[str, str]]: ...
+
     def read_facet_region(self, owner_id: str, facet_id: str, depth: int) -> Sequence[Any]: ...
 
 
@@ -69,6 +71,28 @@ class Neo4jGraphViewStore:
     def read_edges(self, owner_id: str, ids: Sequence[str]) -> Sequence[Mapping[str, Any]]:
         with self._driver.session(database=self._database) as session:
             return tuple(dict(row) for row in session.run(self._EDGES, owner_id=owner_id, ids=list(ids)))
+
+    def read_idea_citations(self, owner_id: str, idea_ids: Sequence[str]) -> Sequence[Mapping[str, str]]:
+        """Reuse the canonical current-Brief and Evidence lineage checks."""
+        from .founder_graph_neo4j import Neo4jGraphGateway
+        from .founder_graph_neo4j_read import GraphReadNotFoundError, Neo4jGraphReadService
+
+        reads = Neo4jGraphReadService(Neo4jGraphGateway(self._driver, owner_id, database=self._database))
+        citations = []
+        for idea_id in idea_ids[:MAX_NODES]:
+            try:
+                brief = reads.fetch_idea_brief(idea_id, owner_id=owner_id)
+            except GraphReadNotFoundError:
+                continue
+            for chapter in brief["brief_citations"]:
+                for citation in chapter:
+                    citations.append({
+                        "idea_id": idea_id,
+                        "source_id": citation["source_id"],
+                        "evidence_id": citation["evidence_id"],
+                        "url": citation["url"],
+                    })
+        return tuple(citations)
 
     def read_facet_region(self, owner_id: str, facet_id: str, depth: int):
         from dots.founder_graph_neo4j import Neo4jGraphGateway
@@ -150,6 +174,32 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
             if not isinstance(relation, str) or not relation:
                 raise ValueError("unexpected relation type")
             edges.append({"source": row["source"], "target": row["target"], "label": relation[:60]})
+        read_citations = getattr(store, "read_idea_citations", None)
+        if callable(read_citations):
+            citation_rows = read_citations(owner_id, [node["id"] for node in nodes if node["kind"] == "idea"])
+            seen_citations = {(edge["source"], edge["target"]) for edge in edges if edge["label"] == "CITES"}
+            for citation in citation_rows:
+                idea_id, source_id = citation.get("idea_id"), citation.get("source_id")
+                if not isinstance(idea_id, str) or not isinstance(source_id, str):
+                    continue
+                if (idea_id, source_id) in seen_citations or idea_id not in included or source_id not in included:
+                    continue
+                idea, source = payloads.get(idea_id), payloads.get(source_id)
+                if (
+                    node_kinds.get(idea_id) != "idea" or node_kinds.get(source_id) != "source"
+                    or not isinstance(idea, Mapping) or not isinstance(source, Mapping)
+                    or idea.get("egress_policy") != "shareable" or source.get("egress_policy") != "shareable"
+                    or node_statuses.get(idea_id) in _EXCLUDED or node_statuses.get(source_id) in _EXCLUDED
+                    or citation_metadata(source) is None
+                    or citation["url"] != citation_metadata(source)["url"]
+                    or not isinstance(citation.get("evidence_id"), str)
+                ):
+                    continue
+                if len(edges) >= MAX_EDGES:
+                    truncated = True
+                    break
+                edges.append({"source": idea_id, "target": source_id, "label": "CITES"})
+                seen_citations.add((idea_id, source_id))
         lifecycle_aliases = _lifecycle_aliases(owner_id, payloads, node_kinds)
         semantic_edges = _semantic_edges(
             owner_id, payloads, node_kinds, node_statuses, globally_superseded_ids,

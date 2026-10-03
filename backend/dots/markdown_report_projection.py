@@ -191,10 +191,9 @@ def project_markdown_report(markdown: str) -> MarkdownReportProjection:
             title=title or "",
             heading_offset=heading_offset,
             body_offset=body_offset,
-            end_offset=boundaries[position + 1][0] if position + 1 < len(boundaries) else len(markdown),
+            end_offset=canonical[position + 1][0] if position + 1 < len(canonical) else len(markdown),
         )
-        for position, (heading_offset, section_index, title, body_offset) in enumerate(boundaries)
-        if section_index is not None
+        for position, (heading_offset, section_index, title, body_offset) in enumerate(canonical)
     )
 
     links_truncated = False

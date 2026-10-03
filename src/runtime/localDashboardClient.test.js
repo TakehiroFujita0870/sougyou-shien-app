@@ -214,6 +214,18 @@ describe('Local dashboard client', () => {
     const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
     expect(home.ideas[0].research_status).toBe('researched');
   });
+  it('keeps URL-backed research distinct from verified Evidence', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'ready', assets: [], profile: null,
+      ideas: [{ id: 'idea-1', title: '調査案', summary: '', description: '', research_status: 'researched_url_only',
+        brief_sections: Array(8).fill('調査本文'), brief_revision: 1,
+        report_markdown: '## エグゼクティブサマリー\n\n[資料](https://example.test/source)',
+        brief_citations: Array.from({ length: 8 }, () => []) }],
+    }));
+    const home = await createLocalDashboardClient({ fetchImpl, location: localLocation }).getHome();
+    expect(home.ideas[0].research_status).toBe('researched_url_only');
+    expect(home.ideas[0].brief_citations.flat()).toEqual([]);
+  });
   it('projects a bounded Markdown report only with its saved brief', async () => {
     const markdown = '## 事業モデル\n\n| 顧客 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |';
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
