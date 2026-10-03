@@ -1,22 +1,28 @@
-.markdown-report { color: #e8f0fc; font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+.markdown-report { max-width: 76ch; color: #e4edfb; font-size: 16px; line-height: 1.8; letter-spacing: .004em; overflow-wrap: break-word; }
 .markdown-report > :first-child { margin-top: 0; }
-.markdown-report h1, .markdown-report h2, .markdown-report h3 { color: #f7faff; line-height: 1.4; }
-.markdown-report h1 { margin: 24px 0 12px; font-size: 24px; }
-.markdown-report h2 { margin: 28px 0 12px; padding-left: 10px; border-left: 4px solid #85c5ff; font-size: 19px; }
-.markdown-report h3 { margin: 22px 0 8px; font-size: 16px; }
-.markdown-report p, .markdown-report ul, .markdown-report ol { margin: 10px 0 14px; }
-.markdown-report a { color: #91d8ff; font-weight: 700; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
-.markdown-report a:hover { color: #e0f5ff; }
+.markdown-report h1, .markdown-report h2, .markdown-report h3 { color: #f8fbff; line-height: 1.4; overflow-wrap: anywhere; }
+.markdown-report h1 { margin: 38px 0 17px; padding-bottom: 10px; border-bottom: 1px solid #57708d; font-size: 22px; font-weight: 750; letter-spacing: .01em; }
+.markdown-report h1:first-child { margin-top: 4px; }
+.markdown-report h2 { margin: 28px 0 12px; padding-left: 11px; border-left: 3px solid #8fc9ee; font-size: 18px; font-weight: 720; }
+.markdown-report h3 { margin: 23px 0 9px; color: #d9eafa; font-size: 16px; font-weight: 700; }
+.markdown-report p, .markdown-report ul, .markdown-report ol { margin: 12px 0 18px; }
+.markdown-report p + p { margin-top: 18px; }
+.markdown-report ul, .markdown-report ol { padding-left: 1.4em; }
+.markdown-report li { padding-left: .2em; margin: 5px 0; }
+.markdown-report li::marker { color: #9cc8df; }
+.markdown-report strong { color: #f9fbff; font-weight: 720; }
+.markdown-report a { color: #9ce1ff; font-weight: 650; text-decoration: underline; text-decoration-color: #78beda; text-decoration-thickness: 1px; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.markdown-report a:hover { color: #e9f8ff; text-decoration-color: currentColor; }
 .markdown-report a:focus-visible { outline: 2px solid #f0d594; outline-offset: 2px; }
-.markdown-report blockquote { margin: 16px 0; padding: 5px 15px; border-left: 3px solid #80b5df; color: #d8e9fa; background: #142b45; }
-.markdown-report code { color: #dff3ff; background: #11243a; border-radius: 3px; padding: 1px 4px; }
-.markdown-report pre { overflow: auto; padding: 14px; border-radius: 9px; background: #11243a; }
+.markdown-report blockquote { margin: 20px 0; padding: 11px 17px; border-left: 3px solid #80b5df; border-radius: 0 8px 8px 0; color: #d8e9fa; background: #142b45; }
+.markdown-report code { color: #dff3ff; background: #11243a; border-radius: 4px; padding: 1px 4px; }
+.markdown-report pre { overflow: auto; padding: 16px; border: 1px solid #344d68; border-radius: 9px; background: #101e30; }
 .markdown-report pre code { padding: 0; }
-.markdown-report table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 18px 0; }
-.markdown-report th, .markdown-report td { min-width: 100px; padding: 8px 12px; border: 1px solid #617998; text-align: left; }
-.markdown-report th { background: #284363; color: #fff; }
+.markdown-report table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 20px 0 24px; font-size: 14px; line-height: 1.55; }
+.markdown-report th, .markdown-report td { min-width: 100px; padding: 10px 12px; border: 1px solid #526c88; text-align: left; vertical-align: top; }
+.markdown-report th { background: #2a4561; color: #fff; }
 .markdown-report tr:nth-child(even) { background: #20354d; }
-.markdown-report__image, .markdown-report__diagram { display: block; margin: 20px 0; padding: 12px; border: 1px solid #526d8d; border-radius: 10px; background: #13243a; }
+.markdown-report__image, .markdown-report__diagram { display: block; margin: 24px 0; padding: 14px; border: 1px solid #526d8d; border-radius: 10px; background: #13243a; }
 .markdown-report__image img { display: block; max-width: 100%; max-height: 540px; margin: 0 auto; object-fit: contain; }
 .markdown-report__image-caption { display: block; margin-top: 8px; color: #bdcee5; font-size: 13px; }
 .markdown-report__diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }

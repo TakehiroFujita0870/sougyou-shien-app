@@ -15,6 +15,15 @@ function safePublicImageUrl(value) {
   return safe;
 }
 
+function compactBareUrl(url) {
+  const parsed = new URL(url);
+  const lastPathPart = parsed.pathname.split('/').filter(Boolean).at(-1);
+  if (!lastPathPart) return parsed.hostname;
+  const characters = Array.from(lastPathPart);
+  const shortPath = characters.length > 32 ? `${characters.slice(0, 32).join('')}…` : lastPathPart;
+  return `${parsed.hostname} / ${shortPath}`;
+}
+
 function MermaidDiagram({ source }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [view, setView] = useState({ status: 'loading', svg: '' });
@@ -41,7 +50,11 @@ export function MarkdownReport({ markdown }) {
     <ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
       a({ href, children }) {
         const url = safePublicCitationUrl(href);
-        return url ? <a href={url} target="_blank" rel="noopener noreferrer">{children} <span aria-hidden="true">↗</span></a> : <span>{children}</span>;
+        if (!url) return <span>{children}</span>;
+        const linkText = typeof children === 'string' ? children
+          : Array.isArray(children) && children.every((child) => typeof child === 'string') ? children.join('') : null;
+        const isBareUrl = linkText?.trim() === href || linkText?.trim() === url;
+        return <a href={url} title={isBareUrl ? url : undefined} target="_blank" rel="noopener noreferrer">{isBareUrl ? compactBareUrl(url) : children} <span aria-hidden="true">↗</span></a>;
       },
       img({ src, alt }) {
         const url = safePublicImageUrl(src);
