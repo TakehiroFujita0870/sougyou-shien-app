@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-10-03T09:42:17Z",
-  "baseline_main": "3a593c11ab5d",
+  "updated_at": "2026-10-03T11:46:22Z",
+  "baseline_main": "46323612868b",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -55,6 +55,24 @@
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
       "note": "一時フォルダーの鍵が消えてNeo4jだけ動き、画面が保存先を利用不可と判定した。鍵を本人専用の永続ファイルに置いた既存データ領域のコンテナへ再作成し、健康状態・画面のグラフ読取を確認。起動補助の修正はmain反映済み。PC全体の再起動試験は未実施。",
       "evidence": [{"recorded_at": "2026-10-03T09:42:17Z", "scope": "main-418-live-container-recreate-no-pc-reboot", "result": "partial", "reference": "PR #418 CI成功、現行コードのローカル運用契約試験27件成功、通常保存先のDocker健康状態healthy、Dots.画面の保存先running・グラフready、同じデータ領域の保持を確認。"}]
+    },
+    {
+      "id": "researched_report_display", "title": "実際の調査レポートの表示と出典線", "scope": "main-420-421-live-report-and-citations",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "正規8章と公開URLがある現行案を調査済みと表示し、URLだけで根拠未登録の場合は別表示にした。現行の根拠に結び付く出典線だけをグラフへ示す。ChatGPTの正本手順はプラグイン1.0.15へ更新済み。",
+      "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-420-421-live-report-and-citations", "result": "passed", "reference": "PR #420・#421の必須CI成功。通常DotsのMarkdown章本文の読戻し、PC画面の調査済み表示・出典リンク、グラフとサービス管理への遷移、正本プラグイン1.0.15の設定読戻しを確認。"}]
+    },
+    {
+      "id": "draft_relation_cleanup", "title": "下書きの関係整理と残存した架空出典の退役", "scope": "main-420-421-live-draft-relations-and-retirement",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "現行の非削除アイデアへ一章の下書きと根拠付き関係候補または明示的な空候補を保存し、整理待ちは残っていない。孤立した架空出典は履歴を保持した保管済みに変更し、通常グラフから消えた。外部事実は追加していない。",
+      "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-420-421-live-draft-relations-and-retirement", "result": "passed", "reference": "通常Dotsの保存処理結果と本人限定の整理ジョブ読取で待機・失敗なし。孤立した架空Sourceの接続先を事前確認し、既存の版付き保存操作でarchive、/api/graphのready状態と非表示を読戻し。"}]
+    },
+    {
+      "id": "legacy_capability_assets", "title": "画面にある旧アセットのChatGPTからの読取", "scope": "main-422-live-legacy-capability-read",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "旧初版の分類だけを現行の強みとして読み替える。保存本文や識別子は変更せず、通常Dotsの該当アセットを本人限定の直接読取と接続ツールから再取得した。",
+      "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-422-live-legacy-capability-read", "result": "passed", "reference": "PR #422のCI成功、backend全件・frontend全件成功。main 46323612868bの稼働後、旧分類の二件を直接読取し、うち一件を正本Dotsのfetchからkind=strengthで確認。"}]
     }
   ]
 }
