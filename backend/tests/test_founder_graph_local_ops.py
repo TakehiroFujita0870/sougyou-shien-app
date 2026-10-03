@@ -207,6 +207,30 @@ def test_compose_healthcheck_uses_readonly_secret_file() -> None:
     assert "neo4j/password" not in compose.lower()
 
 
+def test_windows_container_auth_file_is_not_in_temporary_storage() -> None:
+    helper = read_text(POWERSHELL_HELPER)
+
+    # Docker's restart policy outlives a PowerShell process. The bind source
+    # must survive Windows' temporary-file cleanup between logins.
+    assert re.search(
+        r"\$persistentPath\s*=\s*Join-Path\s+\(\[Environment\]::GetFolderPath\('UserProfile'\)\)",
+        helper,
+    )
+    assert not re.search(
+        r"\$persistentPath\s*=\s*Join-Path\s+\(\[System\.IO\.Path\]::GetTempPath\(\)\)",
+        helper,
+    )
+    assert "Remove-PersistentAuthSecret" not in helper
+
+
+def test_wsl_container_auth_file_is_not_in_temporary_storage() -> None:
+    helper = read_text(BASH_HELPER)
+
+    assert 'AUTH_SECRET_FILE="${HOME:?HOME must be set}/.dots-founder-graph-auth-${project}.secret"' in helper
+    assert 'AUTH_SECRET_FILE="${TMPDIR:-/tmp}/dots-founder-graph-auth-${project}.secret"' not in helper
+    assert "remove_persistent_auth_secret" not in helper
+
+
 def test_helpers_are_non_destructive_and_use_secret_file_health_and_capture() -> None:
     powershell = read_text(POWERSHELL_HELPER)
     bash = read_text(BASH_HELPER)

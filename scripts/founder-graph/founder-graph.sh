@@ -53,7 +53,8 @@ prepare_auth_secret() {
   umask 077
   if [[ "$persist" == 1 ]]; then
     local project="${FOUNDER_GRAPH_COMPOSE_PROJECT:-founder-graph-local}"
-    AUTH_SECRET_FILE="${TMPDIR:-/tmp}/dots-founder-graph-auth-${project}.secret"
+    # Docker's restart policy may outlive temporary-file cleanup.
+    AUTH_SECRET_FILE="${HOME:?HOME must be set}/.dots-founder-graph-auth-${project}.secret"
     PERSIST_AUTH_SECRET=1
   else
     AUTH_SECRET_FILE="$(mktemp "${TMPDIR:-/tmp}/founder-graph-auth.XXXXXX")" || fail 'could not create a private temporary auth file.'
@@ -82,12 +83,6 @@ cleanup_auth_secret() {
   fi
   AUTH_SECRET_FILE=""
   PERSIST_AUTH_SECRET=0
-}
-
-remove_persistent_auth_secret() {
-  local project="${FOUNDER_GRAPH_COMPOSE_PROJECT:-founder-graph-local}"
-  local path="${TMPDIR:-/tmp}/dots-founder-graph-auth-${project}.secret"
-  [[ ! -e "$path" ]] || rm -f -- "$path"
 }
 
 on_exit() {
@@ -327,7 +322,6 @@ main() {
           ;;
         stop)
           compose stop neo4j
-          remove_persistent_auth_secret
           ;;
         status)
           compose ps

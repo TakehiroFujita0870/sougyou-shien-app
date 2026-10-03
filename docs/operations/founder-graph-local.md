@@ -13,7 +13,7 @@ ComposeはHTTPとBoltを`127.0.0.1`へだけ公開する。コンテナ間の内
 
 - Windows PowerShellまたはWSL2のLinux native checkoutで実行する。Docker DesktopとDocker Compose v2が必要。WSL integrationが無い場合はWindows側のDocker CLIを使う。
 - Neo4j Communityイメージ`neo4j:5.26-community`が利用できることを確認する。イメージ取得は利用者が許可した環境で別途行い、このrunbookは外部接続を開始しない。
-- `FOUNDER_GRAPH_NEO4J_AUTH`へ、この端末だけで使う値を環境変数として設定する。形式は`neo4j/<local-password>`とし、実際のパスワードはコマンド履歴、ログ、Gitへ残さない。helperは`start`中だけComposeが参照し続けられる端末内の非公開secret fileを作り、`stop`で削除する。backupなど一回限りの操作では操作終了時に一時secret fileを削除する。credentialをDocker argv、`docker inspect`、ログへ渡さない。
+- `FOUNDER_GRAPH_NEO4J_AUTH`へ、この端末だけで使う値を環境変数として設定する。形式は`neo4j/<local-password>`とし、実際のパスワードはコマンド履歴、ログ、Gitへ残さない。helperは`start`で、Windowsでは本人のユーザープロファイル直下、WSLでは本人のhome直下にアクセス制限付きsecret fileを作る。Dockerの自動再起動後も同じファイルを読めるよう、`stop`では消さない。backupなど一回限りの操作では操作終了時に一時secret fileを削除する。credentialをDocker argv、`docker inspect`、ログへ渡さない。
 - Composeへ渡す環境変数名は`FOUNDER_GRAPH_NEO4J_AUTH_FILE`である。これはhelperが作るsecret fileの場所だけを示し、パスワードそのものを示さない。
 - Compose projectは`FOUNDER_GRAPH_COMPOSE_PROJECT`でnamespaceを指定できる。未設定時は`founder-graph-local`を使い、値は小文字のDocker project-name文字だけにする。
 
@@ -29,7 +29,7 @@ PowerShell:
 $env:FOUNDER_GRAPH_NEO4J_AUTH = 'neo4j/<local-password>'
 ```
 
-`.env`やcredentialファイルを新規作成してコミットしない。Composeの`${...:?}`ガードにより、helperが作るsecret file以外を使った未設定のままの起動は失敗する。`start`で作られたsecret fileはコンテナ停止まで残り、`stop`で削除される。
+`.env`やcredentialファイルを新規作成してコミットしない。Composeの`${...:?}`ガードにより、secret file未設定のままの起動は失敗する。`start`で作られたsecret fileは明示的な鍵の交換・撤去まで残し、通常の停止では削除しない。
 
 ## 構成とポート
 
