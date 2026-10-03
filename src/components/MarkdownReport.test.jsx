@@ -41,6 +41,23 @@ it('shows Markdown tables, safe citations and public images without executing HT
   expect(container.innerHTML).not.toContain('localhost:8765/private.png');
 });
 
+it('presents bare source URLs compactly without changing their destinations or authored labels', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  const bareUrl = 'https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/overview-plugins';
+  const markdown = `資料: ${bareUrl}\n\n[Microsoft公式資料](${bareUrl})`;
+  await act(async () => root.render(<MarkdownReport markdown={markdown} />));
+  const links = [...container.querySelectorAll('a')];
+  expect(links).toHaveLength(2);
+  expect(links.map((link) => link.getAttribute('href'))).toEqual([bareUrl, bareUrl]);
+  expect(links[0].textContent).toContain('learn.microsoft.com');
+  expect(links[0].textContent).not.toContain('/en-us/microsoft-365/copilot/extensibility/');
+  expect(links[0].getAttribute('title')).toBe(bareUrl);
+  expect(links[1].textContent).toContain('Microsoft公式資料');
+});
+
 it('renders Mermaid diagrams as sanitized SVG', async () => {
   const container = document.createElement('div');
   document.body.append(container);
