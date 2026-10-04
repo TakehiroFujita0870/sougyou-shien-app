@@ -9,6 +9,7 @@ from dots.founder_graph import Asset, Idea, NodeType, Status
 from dots.founder_graph_lifecycle_resolver import decode_asset_lifecycle_record, lifecycle_reference_aliases
 from dots.founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
 from dots.idea_brief import IdeaBriefVersion, SECTION_TITLES
+from dots.idea_brief_read_projection import project_idea_brief_for_read
 
 
 class GraphProvenanceNotFound(LookupError):
@@ -120,14 +121,18 @@ def read_local_graph_provenance(
         if latest is None or latest.id != brief.id:
             raise GraphProvenanceNotFound("provenance was not found")
         selected = brief.sections[section_index]
-        if selected.index != section_index or not selected.content.strip():
+        try:
+            content = project_idea_brief_for_read(brief.report_markdown, brief.sections).section_contents[section_index]
+        except (TypeError, ValueError, AttributeError):
+            raise GraphProvenanceNotFound("provenance was not found") from None
+        if selected.index != section_index or not content.strip():
             raise GraphProvenanceNotFound("provenance was not found")
         if not set(raw_ids).issubset(selected.evidence_ids):
             raise GraphProvenanceNotFound("provenance was not found")
         section = {
             "brief_id": brief.id, "revision": brief.revision,
             "idea_id": brief.based_on_idea_id, "section_index": section_index,
-            "title": SECTION_TITLES[section_index], "content": selected.content,
+            "title": SECTION_TITLES[section_index], "content": content,
         }
 
     evidence: list[dict[str, Any]] = []

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { semanticGraphData, regionGraphData } from './localGraphData.js';
-import { starRadius } from './localGraphPresentation.js';
+import { starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
 
 it('keeps semantic assertions and hides internal research and revision records without changing the input', () => {
   const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' },
@@ -66,4 +66,22 @@ it('uses neutral star sizes outside confirmed Facet hierarchy', () => {
   expect(starRadius(rootFacet)).toBeGreaterThan(starRadius(childFacet));
   expect(starRadius(unknownFacet)).toBe(5);
   expect(starRadius(idea)).toBe(5);
+});
+
+it('shows idea and Facet labels at rest, avoids collisions deterministically, and reveals other labels on zoom', () => {
+  const nodes = [
+    { id: 'facet-root', kind: 'facet', label: '顧客と現場', x: 0, y: 0 },
+    { id: 'idea-overlap', kind: 'idea', label: '現場向け支援の構想', x: 1, y: 0 },
+    { id: 'idea-clear', kind: 'idea', label: '小さく試す', x: 420, y: 0 },
+    { id: 'asset', kind: 'asset', label: '利用者インタビュー', x: 850, y: 0 },
+  ];
+  const measureText = (label, fontSize) => Array.from(label).length * fontSize;
+
+  const atRest = visibleGraphLabelIds(nodes, 0.9, new Set(), '', measureText);
+  expect([...atRest]).toEqual(['facet-root', 'idea-clear']);
+  expect([...visibleGraphLabelIds([...nodes].reverse(), 0.9, new Set(), '', measureText)])
+    .toEqual([...atRest]);
+
+  const zoomed = visibleGraphLabelIds(nodes, 1.4, new Set(['asset']), '', measureText);
+  expect(zoomed.has('asset')).toBe(true);
 });

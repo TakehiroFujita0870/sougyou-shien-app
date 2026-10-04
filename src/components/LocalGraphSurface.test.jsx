@@ -227,6 +227,27 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphHarness.graph.d3Force.mock.results[1].value.distance).toHaveBeenCalledWith(30);
     expect(graphHarness.graph.zoom).toHaveBeenCalledExactlyOnceWith(0.9, 0);
     const originalData = graphHarness.props.graphData;
+    const drawContext = {
+      save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
+      closePath: vi.fn(), fill: vi.fn(), arc: vi.fn(), stroke: vi.fn(),
+      measureText: vi.fn((label) => ({ width: Array.from(label).length * 8 })),
+      fillText: vi.fn(),
+    };
+    const fillStyles = [];
+    const shadowBlurs = [];
+    Object.defineProperty(drawContext, 'fillStyle', { set: (value) => fillStyles.push(value) });
+    Object.defineProperty(drawContext, 'shadowBlur', { set: (value) => shadowBlurs.push(value) });
+    originalData.nodes[0].x = 100;
+    originalData.nodes[0].y = 120;
+    act(() => {
+      graphHarness.props.onRenderFramePre(drawContext, 0.9);
+      graphHarness.props.nodeCanvasObject(originalData.nodes[0], drawContext, 0.9);
+    });
+    expect(drawContext.fillText).toHaveBeenCalledOnce();
+    expect(drawContext.fillText.mock.calls[0][0]).toBe('事業案');
+    expect(drawContext.fillText.mock.calls[0][1]).toBeCloseTo(100 + 5 + 5 / 0.9);
+    expect(fillStyles).toContain('#fff');
+    expect(shadowBlurs.some((blur) => blur > 0)).toBe(true);
     graphHarness.graph.zoom.mockClear();
     graphHarness.graph.d3Force.mockClear();
     const canvas = container.querySelector('.local-graph__canvas');
@@ -402,14 +423,19 @@ describe('LocalGraphSurface Facet exploration', () => {
 
     const graphAssertion = graphHarness.props.graphData.links.find((edge) => edge.assertionId === 'meaning-1');
     act(() => graphHarness.props.onLinkClick(graphAssertion));
-    expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).toContain('evidence-shareable-1');
+    expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent)
+      .toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
+    expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).not.toContain('meaning-1');
+    expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).not.toContain('evidence-shareable-1');
     const relationButtons = container.querySelectorAll('[aria-label="意味関係"] button');
     act(() => relationButtons[0].click());
     expect(container.textContent).toContain('推測');
     expect(container.textContent).toContain('82%');
-    expect(container.textContent).toContain('evidence-shareable-1');
-    expect(container.textContent).toContain('brief-12');
-    expect(container.textContent).toContain('観点 2');
+    expect(container.textContent).toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
+    expect(container.textContent).toContain('根拠 1件');
+    expect(container.textContent).toContain('概要の第3観点');
+    expect(container.textContent).not.toContain('evidence-shareable-1');
+    expect(container.textContent).not.toContain('brief-12');
     act(() => relationButtons[1].click());
     expect(container.textContent).toContain('確定');
     expect(container.textContent).toContain('100%');
@@ -425,11 +451,18 @@ describe('LocalGraphSurface Facet exploration', () => {
       evidence: [{ id: 'evidence-shareable-1', polarity: 'supports', confidence: 0.82, status: 'active', excerpt: 'PRIVATE' }],
     }));
     expect(container.textContent).toContain('合成概要の確認用本文。');
-    expect(container.textContent).toContain('観点 2: 顧客課題');
-    expect(container.textContent).not.toContain('観点 3');
-    expect(container.textContent).toContain('supports');
-    expect(container.textContent).toContain('active');
+    expect(container.textContent).toContain('第3観点: 顧客課題');
+    expect(container.textContent).not.toContain('brief-12');
+    expect(container.textContent).not.toContain('evidence-shareable-1');
+    expect(container.textContent).toContain('支持');
+    expect(container.textContent).toContain('有効');
     expect(container.textContent).not.toContain('PRIVATE');
+
+    act(() => graphHarness.props.onNodeClick(graphHarness.props.graphData.nodes[0]));
+    expect(container.querySelector('[aria-label="関連する意味関係"]')?.textContent)
+      .toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
+    expect(container.textContent).not.toContain('meaning-1');
+    expect(container.textContent).not.toContain('evidence-shareable-1');
   });
 
   it('aborts prior provenance reads and never replaces a newer selection with a stale response', async () => {
