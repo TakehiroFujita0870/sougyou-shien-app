@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius } from './localGraphPresentation.js';
 import { LocalGraphNodeSearch } from './LocalGraphNodeSearch.jsx';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
-const MIN_INITIAL_ZOOM = 0.7;
+const INITIAL_ZOOM = 0.9;
 const SEARCH_FOCUS_ZOOM = 1.2;
-const PAN_MOVE_THRESHOLD = 4;
+const EMPTY_GRAPH = { nodes: [], links: [] };
 
 function endpointId(endpoint) {
   return typeof endpoint === 'object' ? endpoint?.id : endpoint;
@@ -28,8 +28,17 @@ function drawStar(context, x, y, radius) {
 export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   const container = useRef(null);
   const graphRef = useRef(null);
-  const initialFit = useRef({ applied: false, userMoved: false });
-  const cameraGesture = useRef(null);
+  const [graphReady, setGraphReady] = useState(false);
+  const attachGraph = useCallback((graph) => {
+    graphRef.current = graph;
+    if (!graph) return;
+    // Configure before the library's deferred warmup, not after visible motion.
+    graph.d3Force('charge')?.strength(-18).distanceMax(160);
+    graph.d3Force('link')?.distance(30);
+    // A fixed initial scale also disables the library's node-count auto-zoom.
+    graph.zoom(INITIAL_ZOOM, 0);
+    setGraphReady(true);
+  }, []);
   const [selected, setSelected] = useState(null);
   const [hoveredId, setHoveredId] = useState('');
   const [Graph2D, setGraph2D] = useState(null);
@@ -85,14 +94,6 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    const graph = graphRef.current;
-    if (!graph) return;
-    graph.d3Force('charge')?.strength(-48);
-    graph.d3Force('link')?.distance(52);
-    graph.d3ReheatSimulation?.();
-  }, [Graph2D, graphData]);
-
   const selectSemanticEdge = (edge) => {
     setSelected({ ...edge, source: endpointId(edge.source), target: endpointId(edge.target), type: 'semantic-edge' });
     setProvenance(null);
@@ -117,7 +118,6 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
       graph.centerAt(graphNode.x, graphNode.y, 450);
       const zoom = graph.zoom();
       if (Number.isFinite(zoom) && zoom < SEARCH_FOCUS_ZOOM) graph.zoom(SEARCH_FOCUS_ZOOM, 450);
-      initialFit.current.applied = true;
     }
     selectNode(node);
   };
@@ -126,41 +126,6 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     setSelected(null);
     setProvenance(null);
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
-  };
-
-  const startCameraGesture = (event) => {
-    cameraGesture.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      moved: false,
-    };
-  };
-  const trackCameraGesture = (event) => {
-    const gesture = cameraGesture.current;
-    if (!gesture || (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId)) return;
-    if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) >= PAN_MOVE_THRESHOLD) {
-      gesture.moved = true;
-    }
-  };
-  const finishCameraGesture = (event) => {
-    const gesture = cameraGesture.current;
-    if (!gesture || (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId)) return;
-    queueMicrotask(() => {
-      if (cameraGesture.current === gesture) cameraGesture.current = null;
-    });
-  };
-  const markWheelInteraction = () => { initialFit.current.userMoved = true; };
-  const markPanInteraction = () => {
-    if (cameraGesture.current?.moved) initialFit.current.userMoved = true;
-  };
-  const fitInitialView = () => {
-    if (initialFit.current.applied || initialFit.current.userMoved || nodes.length === 0) return;
-    initialFit.current.applied = true;
-    const graph = graphRef.current;
-    if (!graph) return;
-    graph.zoomToFit(0, 44);
-    if (graph.zoom() < MIN_INITIAL_ZOOM) graph.zoom(MIN_INITIAL_ZOOM, 450);
   };
 
   useEffect(() => {
@@ -229,12 +194,10 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     context.fill();
   };
   return <div className="local-graph__frame">
-    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}
-      onPointerDownCapture={startCameraGesture} onPointerMoveCapture={trackCameraGesture}
-      onPointerUpCapture={finishCameraGesture} onPointerCancelCapture={finishCameraGesture} onWheelCapture={markWheelInteraction}>
+    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}>
       {Graph2D && <Graph2D
-        ref={graphRef}
-        graphData={graphData}
+        ref={attachGraph}
+        graphData={graphReady ? graphData : EMPTY_GRAPH}
         width={dimensions.width || 800}
         height={dimensions.height || 500}
         backgroundColor="rgba(0,0,0,0)"
@@ -255,14 +218,12 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         enablePointerInteraction
         autoPauseRedraw
         d3VelocityDecay={0.42}
-        warmupTicks={50}
-        cooldownTicks={220}
+        warmupTicks={120}
+        cooldownTicks={100}
         onNodeClick={selectNode}
         onNodeHover={(node) => setHoveredId(node?.id ?? '')}
-        onZoom={markPanInteraction}
         onLinkClick={(link) => link.assertionId ? selectSemanticEdge(link) : clearSelection()}
         onBackgroundClick={clearSelection}
-        onEngineStop={fitInitialView}
       />}
     </div>
     <LocalGraphNodeSearch nodes={nodes} onSelect={focusNode} />
