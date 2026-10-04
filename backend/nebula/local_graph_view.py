@@ -158,6 +158,8 @@ def read_local_graph(store: GraphViewStore, *, owner_id: str, storage_status: st
             if not isinstance(label, str) or not label.strip():
                 label = _KIND_LABELS.get(kind, "記録")
             projected_node = {"id": identity, "kind": kind, "label": label.strip()[:100]}
+            if kind == "asset" and payload.get("home_category") in ("strength", "barrier", "criterion"):
+                projected_node["category"] = payload["home_category"]
             if kind == "source":
                 citation = citation_metadata(payload)
                 if citation is not None:

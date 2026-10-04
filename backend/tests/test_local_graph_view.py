@@ -37,6 +37,23 @@ def test_graph_projects_safe_owner_nodes_and_relations():
     assert "PRIVATE" not in str(result)
 
 
+def test_graph_projects_saved_asset_category_without_details_or_title_inference():
+    rows = []
+    for identity, category, kind in [("criterion", "criterion", "asset"), ("strength", "strength", "asset"), ("unknown", "bogus", "asset"), ("source", "criterion", "source")]:
+        row = node(identity, kind=kind, title="判断基準と書いてあっても属性を使う")
+        payload = json.loads(row["payload_json"])
+        payload.update(home_category=category, name="資産", details={"private": "PRIVATE"})
+        row["payload_json"] = json.dumps(payload)
+        rows.append(row)
+    result = read_local_graph(Store(rows), owner_id="owner-mvp")
+    nodes = {item["id"]: item for item in result["nodes"]}
+    assert nodes["criterion"]["category"] == "criterion"
+    assert nodes["strength"]["category"] == "strength"
+    assert "category" not in nodes["unknown"]
+    assert "category" not in nodes["source"]
+    assert "PRIVATE" not in str(result)
+
+
 def test_graph_exposes_only_safe_source_urls_for_navigation():
     public = node("source-public", kind="source")
     public["payload_json"] = json.dumps({
