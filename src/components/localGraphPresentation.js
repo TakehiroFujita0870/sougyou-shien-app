@@ -19,7 +19,6 @@ export function relationStatusLabel(status) {
   if (status === 'proposed') return '提案';
   return '状態未設定';
 }
-
 export function initialPosition(identity, index) {
   let hash = 2166136261;
   for (const character of identity) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
@@ -46,26 +45,20 @@ export function starRadius(node) {
 
 const ALWAYS_LABELLED_KINDS = new Set(['idea', 'facet']);
 
-export function graphLabelX(node, label, scale, measureText, rightEdge = Infinity) {
-  const width = measureText(label, 12 / scale);
-  const right = node.x + starRadius(node) + 5 / scale;
-  return right + width + 8 / scale > rightEdge
-    ? node.x - starRadius(node) - 14 / scale - width : right;
-}
-
-function graphLabelBounds(node, label, scale, measureText, rightEdge) {
+function graphLabelBounds(node, label, scale, measureText, anchor) {
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return null;
   const fontSize = 12 / scale;
   const measuredWidth = measureText(label, fontSize);
   const width = Number.isFinite(measuredWidth) ? measuredWidth : Array.from(label).length * fontSize * 0.75;
-  const left = graphLabelX(node, label, scale, measureText, rightEdge);
-  const padding = 4 / scale;
-  return {
-    left,
-    right: left + Math.max(width, 8 / scale) + padding * 2,
-    top: node.y - 8 / scale,
-    bottom: node.y + 8 / scale,
-  };
+  const gap = starRadius(node) + 5 / scale;
+  const boxWidth = Math.max(width, 8 / scale) + 8 / scale;
+  const halfHeight = 8 / scale;
+  const left = anchor.includes('left') ? node.x - gap - boxWidth
+    : anchor.includes('right') ? node.x + gap : node.x - boxWidth / 2;
+  const y = anchor.includes('top') ? node.y - gap - halfHeight
+    : anchor.includes('bottom') ? node.y + gap + halfHeight : node.y;
+  return { left, right: left + boxWidth, top: y - halfHeight, bottom: y + halfHeight,
+    x: left + 4 / scale, y, anchor };
 }
 
 function gridCells(bounds, size) {
@@ -96,7 +89,7 @@ function addToGrid(bounds, grid, size) {
   }
 }
 
-export function visibleGraphLabelIds(nodes, globalScale, priorityIds = new Set(), hoveredId = '', measureText = (label, size) => Array.from(label).length * size * 0.75, rightEdge = Infinity) {
+export function graphLabelPlacements(nodes, globalScale, priorityIds = new Set(), hoveredId = '', measureText = (label, size) => Array.from(label).length * size * 0.75, viewport, previous = new Map()) {
   const scale = Number.isFinite(globalScale) ? Math.max(globalScale, 0.1) : 1;
   const emphasized = priorityIds instanceof Set ? priorityIds : new Set(priorityIds);
   const allLabelsAtZoom = scale >= 1.25;
@@ -121,17 +114,25 @@ export function visibleGraphLabelIds(nodes, globalScale, priorityIds = new Set()
       const selected = emphasized.has(node.id);
       const hovered = node.id === hoveredId;
       const priority = selected ? 0 : hovered ? 1 : node.kind === 'facet' ? 2 : node.kind === 'idea' ? 3 : 4;
-      return { node, priority, bounds: graphLabelBounds(node, shortLabel(node.label), scale, measureText, rightEdge) };
+      return { node, priority };
     })
-    .filter(({ bounds }) => bounds !== null)
+    .filter(({ node }) => Number.isFinite(node.x) && Number.isFinite(node.y))
     .sort((left, right) => left.priority - right.priority
       || (String(left.node.id) < String(right.node.id) ? -1 : String(left.node.id) > String(right.node.id) ? 1 : 0));
 
-  const visible = new Set();
-  for (const candidate of candidates) {
-    if (overlapsInGrid(candidate.bounds, occupied, gridSize)) continue;
-    visible.add(candidate.node.id);
-    addToGrid(candidate.bounds, occupied, gridSize);
+  const placements = new Map();
+  for (const { node } of candidates) {
+    const preferred = previous.get(node.id)?.anchor;
+    const anchors = [...new Set([preferred, 'right', 'left', 'top', 'bottom', 'top-right', 'top-left', 'bottom-right', 'bottom-left'].filter(Boolean))];
+    for (const anchor of anchors) {
+      const box = graphLabelBounds(node, shortLabel(node.label), scale, measureText, anchor);
+      if (viewport && (box.left < viewport.left || box.right > viewport.right
+        || box.top < viewport.top || box.bottom > viewport.bottom)) continue;
+      if (overlapsInGrid(box, occupied, gridSize)) continue;
+      placements.set(node.id, box);
+      addToGrid(box, occupied, gridSize);
+      break;
+    }
   }
-  return visible;
+  return placements;
 }
