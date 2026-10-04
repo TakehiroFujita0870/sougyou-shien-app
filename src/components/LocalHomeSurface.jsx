@@ -404,7 +404,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
     </section></div>}
     {home.status === 'loading' && <p role="status" className="local-home__notice">保存内容を読み込んでいます。</p>}
     {home.status === 'failed' && <div className="local-home__notice" role="alert">保存内容を読み込めませんでした。<button type="button" onClick={() => setAttempt((value) => value + 1)}>再試行</button></div>}
-    {home.status === 'stopped' && <div className="local-home__notice" role="status">Dots.は停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></div>}
+    {home.status === 'stopped' && <div className="local-home__notice" role="status">Nebulaは停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></div>}
     {['ready', 'empty'].includes(home.status) && tab === 'ideas' && <section className="local-home__idea-layout" aria-label="アイデア">
       <div className="local-home__idea-list">
         <h2 id="idea-list-heading" tabIndex={-1}>記録したアイデア <span>{home.ideas.length}件</span></h2>
@@ -414,7 +414,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
               <span className="local-home__idea-heading"><strong title={idea.title}>{idea.title}</strong></span>
             </button>
           </article>;
-        })}</div> : <p className="local-home__notice">まだアイデアの記録はありません。ChatGPTで話したアイデアをDots.へ保存すると、ここに並びます。</p>}
+        })}</div> : <p className="local-home__notice">まだアイデアの記録はありません。ChatGPTで話したアイデアをNebulaへ保存すると、ここに並びます。</p>}
       </div>
       {selectedIdea && <article className="local-home__idea-detail" aria-labelledby="selected-idea-heading">
         <div className="local-home__detail-header">

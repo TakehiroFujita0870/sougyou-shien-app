@@ -22,7 +22,7 @@ def create_app(
     founder_graph_owner_id: str = "local-owner",
     founder_graph_candidate_processor: Any | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Dots. API", version="0.1.0")
+    app = FastAPI(title="Nebula API", version="0.1.0")
     graph_writes = founder_graph_write_service or InMemoryGraphWriteService(founder_graph_owner_id)
     if graph_writes.owner_id != founder_graph_owner_id:
         raise ValueError("founder_graph_write_service owner must match founder_graph_owner_id")

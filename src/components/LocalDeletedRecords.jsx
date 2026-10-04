@@ -94,7 +94,7 @@ export function LocalDeletedRecords({ client }) {
 
     {initialLoading && <p role="status" className="local-deleted-records__message">削除済みの記録を読み込んでいます。</p>}
     {listing.status === 'empty' && <p className="local-deleted-records__message">削除済みの記録はありません。</p>}
-    {listing.status === 'stopped' && <p role="status" className="local-deleted-records__message">Dots.が停止中です。復元するにはサービスを起動してください。</p>}
+    {listing.status === 'stopped' && <p role="status" className="local-deleted-records__message">Nebulaが停止中です。復元するにはサービスを起動してください。</p>}
     {listing.status === 'failed' && <div className="local-deleted-records__message" role="alert">
       <span>削除済みの記録を読み込めませんでした。</span>
       <button type="button" disabled={Boolean(pendingKey)} onClick={() => setAttempt((value) => value + 1)}>再読み込み</button>

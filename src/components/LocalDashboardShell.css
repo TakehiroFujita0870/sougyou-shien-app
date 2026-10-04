@@ -18,12 +18,9 @@ html:has(.local-shell) { scrollbar-gutter: stable; }
 }
 .local-shell__sidebar { position: sticky; top: 0; height: 100dvh; padding: 24px 12px; border-right: 1px solid #293142; background: #111722; display: flex; flex-direction: column; }
 .local-shell__brand { display: flex; align-items: center; gap: 6px; padding: 0 4px; min-height: 44px; }
-.local-shell__brand-mark, .local-shell__brand-word { position: relative; display: block; flex: none; overflow: hidden; }
-.local-shell__brand-mark { width: 40px; height: 42px; }
-.local-shell__brand-word { width: 99px; height: 29px; }
-.local-shell__brand img { position: absolute; max-width: none; filter: invert(1); mix-blend-mode: screen; }
-.local-shell__brand-mark img { width: 69px; height: 69px; left: -16px; top: -7px; }
-.local-shell__brand-word img { width: 163px; height: 163px; left: -33px; top: -121px; }
+.local-shell__brand-mark { display: block; flex: none; width: 40px; height: 40px; }
+.local-shell__brand-mark img { display: block; width: 100%; height: 100%; }
+.local-shell__brand-word { font-size: 27px; font-weight: 650; letter-spacing: -.8px; line-height: 1.2; }
 .local-shell__nav { display: grid; gap: 6px; margin-top: 34px; }
 .local-shell__nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: #d3deef; font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
 .local-shell__nav button[aria-current='page'], .local-shell__nav button:hover { background: #232e42; color: #eef3ff; }

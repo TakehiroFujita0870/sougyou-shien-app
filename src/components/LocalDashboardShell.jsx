@@ -1,17 +1,16 @@
 import './LocalDashboardShell.css';
-import dotsIcon from '../../plugins/dots/assets/dots-icon.png';
 
-function DotsBrand() {
-  return <div className="local-shell__brand" role="img" aria-label="Dots.">
-    <span className="local-shell__brand-mark" aria-hidden="true"><img src={dotsIcon} alt="" /></span>
-    <span className="local-shell__brand-word" aria-hidden="true"><img src={dotsIcon} alt="" /></span>
+function NebulaBrand() {
+  return <div className="local-shell__brand" role="img" aria-label="Nebula">
+    <span className="local-shell__brand-mark" aria-hidden="true"><img src="/assets/nebula-icon.svg" alt="" /></span>
+    <span className="local-shell__brand-word" aria-hidden="true">Nebula</span>
   </div>;
 }
 
 export function LocalDashboardShell({ activePage, onSelect, children }) {
   return <div className="local-shell">
-    <aside className="local-shell__sidebar" aria-label="Dots. メニュー">
-      <DotsBrand />
+    <aside className="local-shell__sidebar" aria-label="Nebula メニュー">
+      <NebulaBrand />
       <nav className="local-shell__nav" aria-label="メイン">
         <button type="button" aria-current={activePage === 'local-home' ? 'page' : undefined} onClick={() => onSelect('local-home')}><span aria-hidden="true">⌂</span> ホーム</button>
         <button type="button" aria-current={activePage === 'graph' ? 'page' : undefined} onClick={() => onSelect('graph')}><span aria-hidden="true">✦</span> グラフ</button>

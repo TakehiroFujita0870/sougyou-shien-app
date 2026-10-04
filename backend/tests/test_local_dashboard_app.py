@@ -68,7 +68,7 @@ def _make_app(tmp_path, *, database_state="stopped", overview_store=None, graph_
     dist = tmp_path / "dist"
     assets = dist / "assets"
     assets.mkdir(parents=True)
-    (dist / "index.html").write_text("<main>Dots Dashboard</main>", encoding="utf-8")
+    (dist / "index.html").write_text("<main>Nebula Dashboard</main>", encoding="utf-8")
     (assets / "app.js").write_text("window.appReady = true;", encoding="utf-8")
     events: list[str] = []
     services = {
@@ -222,7 +222,7 @@ def test_factory_serves_built_page_status_and_stopped_overview_without_database_
     overview = client.get("/api/overview")
 
     assert page.status_code == 200
-    assert "Dots Dashboard" in page.text
+    assert "Nebula Dashboard" in page.text
     assert page.headers["cache-control"] == "no-store"
     assert status.status_code == 200
     assert status.json()["services"] == {

@@ -361,7 +361,7 @@ def _markdown_text(value: object) -> str:
 
 def _render_markdown(export: FounderGraphExport) -> str:
     lines = [
-        "# Dots Founder Graph export",
+        "# Nebula Founder Graph export",
         f"- schema_version: {_markdown_text(export.schema_version)}",
         f"- node_count: {len(export.nodes)}",
         f"- omitted_count: {export.omitted_count}",

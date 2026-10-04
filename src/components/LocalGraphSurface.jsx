@@ -21,7 +21,7 @@ export function LocalGraphSurface({ client, onOpenServices }) {
     <h1 id="local-graph-heading" className="sr-only">グラフ</h1>
     {graph.status === 'loading' && <p role="status">グラフを読み込んでいます。</p>}
     {graph.status === 'failed' && <p role="alert">グラフを読み込めませんでした。<button type="button" onClick={() => setAttempt((value) => value + 1)}>再試行</button></p>}
-    {graph.status === 'stopped' && <p role="status">Dots.は停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></p>}
+    {graph.status === 'stopped' && <p role="status">Nebulaは停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></p>}
     {graph.status === 'empty' && <p role="status">まだ表示できる記録はありません。</p>}
     {graph.status === 'ready' && <>
       <GraphCanvas client={client} nodes={semanticGraph.nodes} edges={semanticGraph.edges} />

@@ -114,6 +114,7 @@ def test_safe_export_is_stable_and_preserves_explicit_provenance_ids() -> None:
 
     assert first.json_text == second.json_text
     assert first.markdown == second.markdown
+    assert first.markdown.startswith("# Nebula Founder Graph export\n")
     assert [node["id"] for node in first.as_dict()["nodes"]] == ["a", "b"]
     assert first.as_dict()["provenance_ids"] == ["p0", "p1", "p2"]
 

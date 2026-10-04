@@ -54,12 +54,12 @@ describe('localhost dashboard app integration', () => {
     expect(nav.querySelector('[aria-current="page"]')?.textContent).toContain('ホーム');
     expect(app.container.querySelector('.local-shell__sky')).toBeTruthy();
     const brand = app.container.querySelector('.local-shell__brand');
-    expect(brand?.getAttribute('aria-label')).toBe('Dots.');
+    expect(brand?.getAttribute('aria-label')).toBe('Nebula');
     expect(brand.querySelector('svg')).toBeNull();
     expect([...brand.querySelectorAll('img')].map((image) => image.getAttribute('src'))).toEqual([
-      expect.stringMatching(/dots-icon.*\.png$/),
-      expect.stringMatching(/dots-icon.*\.png$/),
+      expect.stringMatching(/nebula-icon.*\.svg$/),
     ]);
+    expect(brand.textContent).toBe('Nebula');
     expect(globalThis.fetch.mock.calls.map(([path]) => path)).toEqual(['/api/home']);
     await app.unmount();
   });
@@ -80,7 +80,7 @@ describe('localhost dashboard app integration', () => {
     await act(async () => nav.querySelectorAll('button')[2].click());
     expect(app.container.querySelector('#local-control-heading')?.textContent).toBe('サービス管理');
     expect(app.container.querySelector('#local-control-heading')?.classList.contains('sr-only')).toBe(true);
-    expect(app.container.textContent).not.toContain('Dots. ローカル操作盤');
+    expect(app.container.textContent).not.toContain('Nebula ローカル操作盤');
     expect(globalThis.fetch.mock.calls.some(([path]) => path === '/api/status')).toBe(true);
     await app.unmount();
   });

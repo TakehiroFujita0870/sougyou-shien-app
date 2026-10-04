@@ -713,7 +713,7 @@ def test_all_brief_save_tools_expose_optional_bounded_candidate_manifest():
         assert manifest["properties"]["candidates"]["minItems"] == 0
         assert manifest["properties"]["candidates"]["maxItems"] == 64
         description = tools[tool_name]["description"]
-        assert "同じ保存呼出し" in description and "本文保存後にDots" in description
+        assert "同じ保存呼出し" in description and "本文保存後にNebula" in description
         assert "candidate_processing.state" in description
         assert "candidates: []" in description
         assert "調査前の下書きも" in description

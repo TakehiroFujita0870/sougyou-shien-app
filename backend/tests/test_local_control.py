@@ -421,7 +421,7 @@ def test_built_dashboard_and_assets_are_served_on_control_origin_while_database_
     dist = tmp_path / "dist"
     assets = dist / "assets"
     assets.mkdir(parents=True)
-    (dist / "index.html").write_text("<main>Dots local dashboard</main>", encoding="utf-8")
+    (dist / "index.html").write_text("<main>Nebula local dashboard</main>", encoding="utf-8")
     (assets / "app.js").write_text("window.dotsReady = true;", encoding="utf-8")
     control = LocalControl(
         {"database": FakeAdapter()},
@@ -445,7 +445,7 @@ def test_built_dashboard_and_assets_are_served_on_control_origin_while_database_
     overview = client.get("/api/overview")
 
     assert page.status_code == 200
-    assert "Dots local dashboard" in page.text
+    assert "Nebula local dashboard" in page.text
     assert page.headers["cache-control"] == "no-store"
     assert asset.status_code == 200
     assert asset.text == "window.dotsReady = true;"
