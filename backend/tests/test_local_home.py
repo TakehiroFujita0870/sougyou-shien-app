@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, Idea, Provenance, Status
-from dots.founder_graph_neo4j import _node_properties
-from dots.founder_graph_mcp_write import McpWriteSurface
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
-from dots.local_home import LocalAssetWriter, Neo4jHomeStore, read_local_home
+from nebula.founder_graph import Asset, AssetHomeCategory, AssetKind, Idea, Provenance, Status
+from nebula.founder_graph_neo4j import _node_properties
+from nebula.founder_graph_mcp_write import McpWriteSurface
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
+from nebula.local_home import LocalAssetWriter, Neo4jHomeStore, read_local_home
 
 
 class Session:
@@ -171,7 +171,7 @@ def test_mcp_criterion_capture_edit_and_reload_preserve_category_and_original_or
     )
     writes.put_node(later, idempotency_key="asset-later-create", operation="capture_asset")
     monkeypatch.setattr(
-        "dots.founder_graph.utc_now",
+        "nebula.founder_graph.utc_now",
         lambda: datetime(2027, 1, 1, tzinfo=timezone.utc),
     )
     edited = LocalAssetWriter(writes).save(

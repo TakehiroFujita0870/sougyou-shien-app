@@ -1,10 +1,10 @@
 import pytest
 
-from dots.founder_graph import EgressPolicy
-from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
+from nebula.founder_graph import EgressPolicy
+from nebula.founder_graph_mcp import McpReadError, McpReadSurface
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
 
 
 def test_capture_source_defaults_private_and_allows_explicit_public_metadata() -> None:

@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from dots.founder_graph import NodeType, ResearchCampaign, Source
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_write import (
+from nebula.founder_graph import NodeType, ResearchCampaign, Source
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     RevisionConflictError,
@@ -57,7 +57,7 @@ class RevisionLockSession:
             self.audit_reads += 1
             row = self.audit_row or self.replay
             return Result(row)
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             if self.replay_after_lock is not None:
                 self.audit_row = self.replay_after_lock
             row = self.existing_row if self.lock_match and self.existing_row and self.existing_row["owner_id"] == params.get("owner_id") else None
@@ -121,7 +121,7 @@ def test_existing_revisioned_node_locks_owner_target_before_validation_and_histo
     existing = {"owner_id": "owner-local", "node_type": node_type.value, "revision": current_revision}
     campaign_record = None
     if node_type is NodeType.RESEARCH_CAMPAIGN:
-        from dots.founder_graph_neo4j import _node_properties
+        from nebula.founder_graph_neo4j import _node_properties
 
         current = _campaign(aggregate_revision=current_revision)
         properties = _node_properties(current)
@@ -134,7 +134,7 @@ def test_existing_revisioned_node_locks_owner_target_before_validation_and_histo
 
     receipt = gateway.put_node(node, idempotency_key=f"update-{node_type.value}", expected_revision=current_revision)
 
-    lock_index = next(i for i, (query, _) in enumerate(session.calls) if "_dots_revision_write_lock" in query)
+    lock_index = next(i for i, (query, _) in enumerate(session.calls) if "_nebula_revision_write_lock" in query)
     source_history_indexes = [i for i, (query, _) in enumerate(session.calls) if "MATCH (r:SourceRevision {source_id: $source_id})" in query]
     history_create_index = next(i for i, (query, _) in enumerate(session.calls) if "CREATE (h:FounderGraphHistory" in query)
     node_set_index = next(i for i, (query, _) in enumerate(session.calls) if "SET n = $properties" in query)
@@ -144,7 +144,7 @@ def test_existing_revisioned_node_locks_owner_target_before_validation_and_histo
     assert session.calls[lock_index][1]["owner_id"] == "owner-local"
     assert lock_index < history_create_index < node_set_index < audit_index
     assert all(lock_index < index for index in source_history_indexes)
-    assert "_dots_revision_write_lock" not in json.dumps(session.calls[node_set_index][1]["properties"])
+    assert "_nebula_revision_write_lock" not in json.dumps(session.calls[node_set_index][1]["properties"])
 
 
 @pytest.mark.parametrize(
@@ -165,7 +165,7 @@ def test_stale_revision_after_lock_has_no_history_node_edge_or_audit_write(
     with pytest.raises(RevisionConflictError):
         gateway.put_node(node, idempotency_key=f"stale-{node_type.value}", expected_revision=expected_revision)
 
-    assert sum("_dots_revision_write_lock" in query for query, _ in session.calls) == 1
+    assert sum("_nebula_revision_write_lock" in query for query, _ in session.calls) == 1
     assert not any(
         marker in query
         for query, _ in session.calls
@@ -186,7 +186,7 @@ def test_foreign_owner_target_is_not_locked_or_reference_validated():
             expected_revision=1,
         )
 
-    lock_query = next(query for query, _ in session.calls if "_dots_revision_write_lock" in query)
+    lock_query = next(query for query, _ in session.calls if "_nebula_revision_write_lock" in query)
     assert "owner_id: $owner_id" in lock_query
     assert not any("SourceRevision" in query for query, _ in session.calls)
     assert not any(
@@ -228,7 +228,7 @@ def test_matching_initial_replay_returns_without_acquiring_revision_lock():
     receipt = gateway.put_node(node, idempotency_key="already-recorded", expected_revision=1)
 
     assert receipt.replayed is True
-    assert not any("_dots_revision_write_lock" in query for query, _ in session.calls)
+    assert not any("_nebula_revision_write_lock" in query for query, _ in session.calls)
     assert len(session.calls) == 1
 
 
@@ -252,7 +252,7 @@ def test_inflight_same_key_is_rechecked_after_lock_and_returns_receipt_without_p
     assert isinstance(receipt, WriteReceipt)
     assert receipt.replayed is True
     assert session.audit_reads == 2
-    assert sum("_dots_revision_write_lock" in query for query, _ in session.calls) == 1
+    assert sum("_nebula_revision_write_lock" in query for query, _ in session.calls) == 1
     assert not any(
         marker in query
         for query, _ in session.calls

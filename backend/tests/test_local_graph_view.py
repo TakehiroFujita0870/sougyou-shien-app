@@ -1,10 +1,10 @@
 import json
 from dataclasses import replace
 
-from dots.founder_graph import Asset, EgressPolicy, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
-from dots.founder_graph_neo4j_codec import node_properties
-from dots.founder_graph_facet_hierarchy import FacetPathNode, FacetRegionHit, RegionEntity
-from dots.local_graph_view import MAX_NODES, read_local_facet_region, read_local_graph
+from nebula.founder_graph import Asset, EgressPolicy, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
+from nebula.founder_graph_neo4j_codec import node_properties
+from nebula.founder_graph_facet_hierarchy import FacetPathNode, FacetRegionHit, RegionEntity
+from nebula.local_graph_view import MAX_NODES, read_local_facet_region, read_local_graph
 
 
 def node(identity, owner="owner-mvp", kind="idea", title="良いアイデア"):

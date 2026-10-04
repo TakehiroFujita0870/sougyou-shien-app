@@ -6,7 +6,7 @@ from threading import Event, Thread
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     EgressPolicy,
     Idea,
     NodeType,
@@ -16,9 +16,9 @@ from dots.founder_graph import (
     RelationshipStatus,
     Status,
 )
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_mcp import McpReadSurface, McpReadError
-from dots.idea_brief import SECTION_TITLES
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_mcp import McpReadSurface, McpReadError
+from nebula.idea_brief import SECTION_TITLES
 from test_founder_graph_relation_assertion_write import _setup
 
 

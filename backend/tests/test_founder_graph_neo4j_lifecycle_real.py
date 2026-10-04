@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset,
     AssetKind,
     Claim,
@@ -28,19 +28,19 @@ from dots.founder_graph import (
     SourceRevision,
     Status,
 )
-from dots.founder_graph_lifecycle_resolver import resolve_restored_idea_reference
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_neo4j_read import Neo4jGraphReadService
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.founder_graph_read import GraphReadNotFoundError
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.founder_graph_write import RevisionConflictError
+from nebula.founder_graph_lifecycle_resolver import resolve_restored_idea_reference
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_neo4j_read import Neo4jGraphReadService
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.founder_graph_read import GraphReadNotFoundError
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_write import RevisionConflictError
 from neo4j_disposable_harness import DisposableNeo4j, HarnessError, fixed_docker, is_opted_in, IMAGE
 
 
-OPT_IN = "DOTS_NEO4J_RECORD_LIFECYCLE_REAL"
+OPT_IN = "NEBULA_NEO4J_RECORD_LIFECYCLE_REAL"
 ROLE = "neo4j-record-lifecycle"
-NAME_PREFIX = "dots-lifecycle"
+NAME_PREFIX = "nebula-lifecycle"
 
 
 def _wait_ready(driver, timeout_seconds: float = 90) -> bool:

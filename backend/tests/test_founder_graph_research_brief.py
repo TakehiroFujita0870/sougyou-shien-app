@@ -5,7 +5,7 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph_read import (
+from nebula.founder_graph_read import (
     GraphReadError,
     GraphReadTimeoutError,
     GraphReadUnavailableError,
@@ -13,7 +13,7 @@ from dots.founder_graph_read import (
     SearchHit,
     SearchPage,
 )
-from dots.founder_graph_research_brief import build_research_brief
+from nebula.founder_graph_research_brief import build_research_brief
 
 
 @dataclass
@@ -101,12 +101,12 @@ def test_build_research_brief_combines_safe_ideas_assets_and_sources() -> None:
     assert [item.id for item in brief.items] == ["idea-1", "asset-1", "source-1"]
     assert [item.category for item in brief.items] == ["ideas", "assets", "sources"]
     assert brief.items[0].relation_path == ("idea-1", "REUSES", "asset-1")
-    assert brief.items[0].canonical_url == "dots://node/idea-1"
+    assert brief.items[0].canonical_url == "nebula://node/idea-1"
     assert brief.items[0].fields["summary"] == "A graph for founder decisions"
     assert "source_text" not in brief.items[0].fields
     assert brief.items[0].egress_policy == "shareable"
     assert brief.next_cursor == "5"
-    assert brief.as_dict()["items"][0]["canonical_url"] == "dots://node/idea-1"
+    assert brief.as_dict()["items"][0]["canonical_url"] == "nebula://node/idea-1"
     assert "owner_id" not in brief.as_dict()
 
     assert reads.calls == [{"query": "founder graph", "owner_id": "owner-1", "limit": 50, "cursor": None, "timeout_ms": 1_000}]

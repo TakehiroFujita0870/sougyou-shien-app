@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph_follow_up import (
+from nebula.founder_graph_follow_up import (
     FollowUpInputError,
     FollowUpIntent,
     FollowUpOperation,

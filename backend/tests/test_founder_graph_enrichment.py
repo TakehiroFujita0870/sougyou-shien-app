@@ -6,13 +6,13 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph_read import (
+from nebula.founder_graph_read import (
     GraphReadUnavailableError,
     NodeView,
     SearchHit,
     SearchPage,
 )
-from dots.founder_graph_enrichment import (
+from nebula.founder_graph_enrichment import (
     ClusterProposal,
     EnrichmentKind,
     FacetProposal,

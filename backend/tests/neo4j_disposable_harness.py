@@ -9,10 +9,10 @@ import subprocess
 from typing import Any, Callable, Mapping
 
 
-OPT_IN = "DOTS_NEO4J_REVISION_LOCK_REAL"
+OPT_IN = "NEBULA_NEO4J_REVISION_LOCK_REAL"
 IMAGE = "neo4j:5.26-community"
-ROLE_LABEL = "com.openai.dots.test"
-RUN_LABEL = "com.openai.dots.test_run"
+ROLE_LABEL = "com.openai.nebula.test"
+RUN_LABEL = "com.openai.nebula.test_run"
 DOCKER_CLI_CANDIDATES = (
     Path("/mnt/c/Users/hp/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe"),
     Path("/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe"),
@@ -20,7 +20,7 @@ DOCKER_CLI_CANDIDATES = (
 _RUN_RE = re.compile(r"^[0-9a-f]{32}$")
 _ID_RE = re.compile(r"^[0-9a-f]{64}$")
 _ROLE_RE = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
-_PREFIX_RE = re.compile(r"^dots-[a-z0-9-]{1,32}$")
+_PREFIX_RE = re.compile(r"^nebula-[a-z0-9-]{1,32}$")
 
 
 class HarnessError(RuntimeError):
@@ -134,7 +134,7 @@ def json_result(value: str | None) -> Mapping[str, Any]:
 class DisposableNeo4j:
     def __init__(
         self, docker: Docker, run_id: str, *,
-        role: str = "neo4j-revision-lock", name_prefix: str = "dots-rplock",
+        role: str = "neo4j-revision-lock", name_prefix: str = "nebula-rplock",
     ):
         if not _ROLE_RE.fullmatch(role) or not _PREFIX_RE.fullmatch(name_prefix):
             raise HarnessError("disposable Neo4j role or name prefix is invalid")

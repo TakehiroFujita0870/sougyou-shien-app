@@ -5,13 +5,13 @@ import json
 from types import SimpleNamespace
 import pytest
 
-from dots.founder_graph_mcp_stdio import FounderGraphStdioServer, create_stdio_server, run_stdio
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph import Idea
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
-import dots.founder_graph_mcp_stdio as stdio_module
+from nebula.founder_graph_mcp_stdio import FounderGraphStdioServer, create_stdio_server, run_stdio
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph import Idea
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
+import nebula.founder_graph_mcp_stdio as stdio_module
 
 
 def request(method: str, request_id: int, params: dict | None = None) -> dict:
@@ -177,7 +177,7 @@ def test_tools_call_captures_and_reads_a_shareable_idea_without_source_text() ->
                 "arguments": {
                     "title": "Shareable card-network idea",
                     "summary": "A synthetic business idea.",
-                    "source_text": "This private conversation text must not leave Dots.",
+                    "source_text": "This private conversation text must not leave Nebula",
                     "egress_policy": "shareable",
                     "idempotency_key": "shareable-idea-1",
                 },
@@ -233,8 +233,8 @@ def test_write_owner_error_is_converted_to_safe_json_rpc_error() -> None:
 
 def test_neo4j_backend_is_explicit_and_uses_environment_configuration(monkeypatch) -> None:
     fake_driver = object()
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", "local-only-test")
     monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", lambda: fake_driver)
 
     server = create_stdio_server("owner-persistent")
@@ -322,7 +322,7 @@ def test_stdio_closes_driver_when_owned_server_construction_fails(monkeypatch) -
 
 
 def test_unknown_backend_does_not_silently_fall_back(monkeypatch) -> None:
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "unknown")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "unknown")
 
     try:
         create_stdio_server("owner-a")

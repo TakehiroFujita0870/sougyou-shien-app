@@ -2,15 +2,15 @@ import json
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     DomainValidationError,
     NodeType,
     RelationAssertion,
     RelationType,
 )
-from dots.founder_graph_neo4j import _node_properties
-from dots.founder_graph_neo4j_read import _view_from_row
-from dots.founder_graph_read import _node_view
+from nebula.founder_graph_neo4j import _node_properties
+from nebula.founder_graph_neo4j_read import _view_from_row
+from nebula.founder_graph_read import _node_view
 
 
 def make_assertion(**overrides: object) -> RelationAssertion:

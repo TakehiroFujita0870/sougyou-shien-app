@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dots.founder_graph import Claim, EgressPolicy, MaterialKind, Source, SourceRevision
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_mcp_write import McpWriteSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
+from nebula.founder_graph import Claim, EgressPolicy, MaterialKind, Source, SourceRevision
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_mcp_write import McpWriteSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
 
 
 def test_facet_search_returns_only_shareable_facets() -> None:

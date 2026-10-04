@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, IdeaBriefValidationError, SECTION_TITLES
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion, IdeaBriefValidationError, SECTION_TITLES
 
 
 def test_partial_brief_has_eight_ordered_sections_without_inventing_content():

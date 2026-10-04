@@ -11,7 +11,7 @@ from huggingface_hub import snapshot_download
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from dots.founder_graph_local_models import (  # noqa: E402
+from nebula.founder_graph_local_models import (  # noqa: E402
     EMBEDDING_MODEL_ID,
     EMBEDDING_MODEL_REVISION,
     E5_BASE_MODEL_ID,

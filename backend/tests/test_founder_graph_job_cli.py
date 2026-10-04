@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dots.founder_graph_job_store import JobState
+from nebula.founder_graph_job_store import JobState
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "founder-graph" / "check_relation_candidate_jobs.py"
@@ -51,9 +51,9 @@ class FakeProcessor:
 def _configure_runtime(monkeypatch, processor):
     calls = []
     driver = SimpleNamespace(close=lambda: calls.append("closed"))
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "private-owner")
-    monkeypatch.setenv("DOTS_NEO4J_DATABASE", "neo4j")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "private-owner")
+    monkeypatch.setenv("NEBULA_NEO4J_DATABASE", "neo4j")
     monkeypatch.setattr(MODULE, "create_neo4j_driver_from_env", lambda: (calls.append("opened") or driver))
     monkeypatch.setattr(MODULE, "create_neo4j_graph_composition", lambda *_args, **_kwargs: "composition")
     monkeypatch.setattr(MODULE, "create_relation_candidate_job_processor", lambda _composition: processor)
@@ -127,16 +127,16 @@ def test_applying_an_empty_inspection_set_does_not_invoke_the_processor(monkeypa
 
 def test_cli_requires_explicit_owner_and_persistent_backend(monkeypatch, capsys):
     driver_opened = []
-    monkeypatch.delenv("DOTS_LOCAL_OWNER_ID", raising=False)
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.delenv("NEBULA_LOCAL_OWNER_ID", raising=False)
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
     monkeypatch.setattr(MODULE, "create_neo4j_driver_from_env", lambda: driver_opened.append(True))
 
     assert MODULE.main([]) == 2
     assert driver_opened == []
     assert "owner" in capsys.readouterr().err.lower()
 
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "owner-1")
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "memory")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "owner-1")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "memory")
     assert MODULE.main([]) == 2
     assert driver_opened == []
 

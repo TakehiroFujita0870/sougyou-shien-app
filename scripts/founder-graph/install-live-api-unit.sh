@@ -12,17 +12,17 @@ usage() {
 repo="$3"
 control_env="$4"
 auth_file="$5"
-unit_name='dots-live-api.service'
+unit_name='nebula-live-api.service'
 unit_source="$repo/scripts/founder-graph/$unit_name"
 unit_directory="$HOME/.config/systemd/user"
 unit_target="$unit_directory/$unit_name"
-expected_repo="$HOME/projects/dots-live"
-expected_control_env="$HOME/.config/dots/live-control-plane.env"
-expected_auth_file="$HOME/.config/dots/live-neo4j-auth.secret"
+expected_repo="$HOME/projects/nebula-live"
+expected_control_env="$HOME/.config/nebula/live-control-plane.env"
+expected_auth_file="$HOME/.config/nebula/live-neo4j-auth.secret"
 candidate=''
 installed_by_this_run=0
 
-fail() { printf '[dots live API installer] %s\n' "$1" >&2; exit 1; }
+fail() { printf '[nebula live API installer] %s\n' "$1" >&2; exit 1; }
 cleanup() {
   local exit_status=$?
   if [[ -n "$candidate" && -f "$candidate" ]]; then rm -f -- "$candidate"; fi
@@ -46,16 +46,16 @@ assert_control_env_file() {
   local file="$1" expected_target resolved_target
   if [[ -L "$file" ]]; then
     # Accept only the exact absolute target or its exact adjacent relative form.
-    [[ "$(readlink -- "$file")" == "$HOME/.config/dots/live-runtime-key.env" || \
+    [[ "$(readlink -- "$file")" == "$HOME/.config/nebula/live-runtime-key.env" || \
        "$(readlink -- "$file")" == 'live-runtime-key.env' ]] || \
       fail 'The control-plane link must target the approved same-directory runtime env file.'
-    [[ ! -L "$HOME/.config" && ! -L "$HOME/.config/dots" && -d "$HOME/.config/dots" ]] || \
+    [[ ! -L "$HOME/.config" && ! -L "$HOME/.config/nebula" && -d "$HOME/.config/nebula" ]] || \
       fail 'The control-plane directory path must not contain symlinks.'
-    expected_target="$HOME/.config/dots/live-runtime-key.env"
+    expected_target="$HOME/.config/nebula/live-runtime-key.env"
     [[ -f "$expected_target" && ! -L "$expected_target" ]] || \
       fail 'The approved runtime env target is unavailable or not a regular file.'
     resolved_target="$(realpath -e -- "$file")" || fail 'The control-plane target could not be resolved.'
-    [[ "$(realpath -e -- "$HOME/.config/dots")" == "$HOME/.config/dots" && \
+    [[ "$(realpath -e -- "$HOME/.config/nebula")" == "$HOME/.config/nebula" && \
        "$resolved_target" == "$expected_target" ]] || \
       fail 'The control-plane link did not resolve to the exact same-directory target.'
     assert_owner_only_file "$expected_target"
@@ -65,7 +65,7 @@ assert_control_env_file() {
 }
 
 [[ "$repo" == "$expected_repo" && -d "$repo" && ! -L "$repo" ]] || \
-  fail "The repository must be the current user's exact projects/dots-live directory."
+  fail "The repository must be the current user's exact projects/nebula-live directory."
 [[ "$HOME" == /* && -d "$HOME" && ! -L "$HOME" && "$(realpath -e -- "$HOME")" == "$HOME" ]] || \
   fail 'The current user home path is not a canonical regular directory.'
 [[ "$control_env" == "$expected_control_env" ]] || fail 'The control-plane file path does not match the expected user path.'
@@ -82,28 +82,28 @@ done
 
 # The source stays inert. Only this explicit, guarded installer creates the
 # approved installed variant, and it first validates the exact gate lines.
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0' "$unit_source")" == 1 ]] || \
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0' "$unit_source")" == 1 ]] || \
   fail 'The API template credential-rotation gate is missing or ambiguous.'
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=0' "$unit_source")" == 1 ]] || \
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=0' "$unit_source")" == 1 ]] || \
   fail 'The API template private-projection gate is missing or ambiguous.'
-grep -Fqx 'Environment=DOTS_LOCAL_OWNER_ID=owner-mvp' "$unit_source" || fail 'The API template owner target did not match.'
-grep -Fqx 'ExecStart=%h/.local/bin/uv run --project %h/projects/dots-live uvicorn --app-dir backend dots.main:app --host 127.0.0.1 --port 8000' "$unit_source" || \
+grep -Fqx 'Environment=NEBULA_LOCAL_OWNER_ID=owner-mvp' "$unit_source" || fail 'The API template owner target did not match.'
+grep -Fqx 'ExecStart=%h/.local/bin/uv run --project %h/projects/nebula-live uvicorn --app-dir backend nebula.main:app --host 127.0.0.1 --port 8000' "$unit_source" || \
   fail 'The API template listener or application target did not match.'
 
 mkdir -p -- "$unit_directory"
 [[ ! -L "$unit_directory" && "$(realpath -e -- "$unit_directory")" == "$unit_directory" ]] || \
   fail 'The systemd user unit directory did not resolve to the expected path.'
 [[ "$(stat -c '%u' -- "$unit_directory")" == "$(id -u)" ]] || fail 'The systemd user unit directory is not owned by the current user.'
-candidate="$(mktemp "$unit_directory/.dots-live-api.service.XXXXXX")" || fail 'A protected candidate unit could not be created.'
+candidate="$(mktemp "$unit_directory/.nebula-live-api.service.XXXXXX")" || fail 'A protected candidate unit could not be created.'
 chmod 0644 -- "$candidate"
 sed \
-  -e 's/^Environment=DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0$/Environment=DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1/' \
-  -e 's/^Environment=DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=0$/Environment=DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1/' \
+  -e 's/^Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0$/Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1/' \
+  -e 's/^Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=0$/Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1/' \
   "$unit_source" > "$candidate"
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1' "$candidate")" == 1 ]] || fail 'The installed credential gate did not pass read-back.'
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' "$candidate")" == 1 ]] || fail 'The installed private-projection gate did not pass read-back.'
-grep -Fqx 'Environment=DOTS_LOCAL_OWNER_ID=owner-mvp' "$candidate" || fail 'The installed owner target did not pass read-back.'
-grep -Fqx 'ExecStart=%h/.local/bin/uv run --project %h/projects/dots-live uvicorn --app-dir backend dots.main:app --host 127.0.0.1 --port 8000' "$candidate" || \
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1' "$candidate")" == 1 ]] || fail 'The installed credential gate did not pass read-back.'
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' "$candidate")" == 1 ]] || fail 'The installed private-projection gate did not pass read-back.'
+grep -Fqx 'Environment=NEBULA_LOCAL_OWNER_ID=owner-mvp' "$candidate" || fail 'The installed owner target did not pass read-back.'
+grep -Fqx 'ExecStart=%h/.local/bin/uv run --project %h/projects/nebula-live uvicorn --app-dir backend nebula.main:app --host 127.0.0.1 --port 8000' "$candidate" || \
   fail 'The installed API listener did not pass read-back.'
 
 if [[ -e "$unit_target" || -L "$unit_target" ]]; then
@@ -118,4 +118,4 @@ cmp -s -- "$candidate" "$unit_target" || fail 'Installed API unit read-back fail
 # Definition reload only: never enable or start the API service here.
 systemctl --user daemon-reload || fail 'Systemd could not reload unit definitions; the new file will be rolled back.'
 installed_by_this_run=0
-printf '%s\n' '[dots live API installer] Approved API unit installed; it was not enabled or started.'
+printf '%s\n' '[nebula live API installer] Approved API unit installed; it was not enabled or started.'

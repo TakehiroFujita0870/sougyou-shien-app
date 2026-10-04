@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Claim,
     ContentChunk,
     EgressPolicy,
@@ -25,11 +25,11 @@ from dots.founder_graph import (
     SourceRevision,
     relation_assertion_structural_edges,
 )
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.founder_graph_write import GraphWriteError, IdempotencyConflictError, RevisionConflictError
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.founder_graph_write import GraphWriteError, IdempotencyConflictError, RevisionConflictError
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
 
 
 class Result:
@@ -84,7 +84,7 @@ class RelationTx:
         if "idea_lineage_root_id: $root_id" in query:
             return Result(row for row in self.briefs.values()
                           if row["owner_id"] == owner and row["idea_lineage_root_id"] == params["root_id"])
-        if "_dots_idea_write_lock" in query:
+        if "_nebula_idea_write_lock" in query:
             row = self.nodes.get(params["id"])
             return Result(({key: row[key] for key in ("id", "owner_id", "node_type", "revision")},)
                           if row and row["owner_id"] == owner else ())

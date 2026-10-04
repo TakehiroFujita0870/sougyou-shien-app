@@ -1,10 +1,10 @@
 """HTTP composition must reuse the canonical owner-bound brief store."""
 
-from dots import main as main_module
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_neo4j_read import Neo4jGraphReadService
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
-from dots.founder_graph_write import InMemoryGraphWriteService
+from nebula import main as main_module
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_neo4j_read import Neo4jGraphReadService
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
+from nebula.founder_graph_write import InMemoryGraphWriteService
 
 
 def _capture_surface(monkeypatch):

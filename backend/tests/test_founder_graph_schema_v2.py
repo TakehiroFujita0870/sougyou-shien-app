@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     ContentChunk,
     DomainValidationError,
     EntityRevision,

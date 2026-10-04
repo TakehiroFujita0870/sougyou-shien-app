@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph import Asset, AssetKind, EgressPolicy, Idea, KnowledgeAsset, PersonAsset, Status
-from dots.founder_graph_write import (
+from nebula.founder_graph import Asset, AssetKind, EgressPolicy, Idea, KnowledgeAsset, PersonAsset, Status
+from nebula.founder_graph_write import (
     GraphWriteNotFoundError,
     InMemoryGraphWriteService,
     RevisionConflictError,

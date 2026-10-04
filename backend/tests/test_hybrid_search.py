@@ -1,4 +1,4 @@
-from dots.hybrid_search import (
+from nebula.hybrid_search import (
     ChunkCandidate,
     DeterministicFakeEmbeddingAdapter,
     EmbeddingUnavailable,

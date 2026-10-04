@@ -54,7 +54,7 @@ prepare_auth_secret() {
   if [[ "$persist" == 1 ]]; then
     local project="${FOUNDER_GRAPH_COMPOSE_PROJECT:-founder-graph-local}"
     # Docker's restart policy may outlive temporary-file cleanup.
-    AUTH_SECRET_FILE="${HOME:?HOME must be set}/.dots-founder-graph-auth-${project}.secret"
+    AUTH_SECRET_FILE="${HOME:?HOME must be set}/.nebula-founder-graph-auth-${project}.secret"
     PERSIST_AUTH_SECRET=1
   else
     AUTH_SECRET_FILE="$(mktemp "${TMPDIR:-/tmp}/founder-graph-auth.XXXXXX")" || fail 'could not create a private temporary auth file.'

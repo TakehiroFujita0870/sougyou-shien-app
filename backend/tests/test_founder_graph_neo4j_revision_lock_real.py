@@ -13,9 +13,9 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, MaterialKind, ResearchCampaign, Source, SourceRevision
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_revision
-from dots.founder_graph_write import InMemoryGraphWriteService, RevisionConflictError, validate_capture_source
+from nebula.founder_graph import EgressPolicy, MaterialKind, ResearchCampaign, Source, SourceRevision
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_revision
+from nebula.founder_graph_write import InMemoryGraphWriteService, RevisionConflictError, validate_capture_source
 from neo4j_disposable_harness import (
     IMAGE, OPT_IN, DisposableNeo4j, HarnessError, fixed_docker, is_opted_in,
 )
@@ -48,12 +48,12 @@ def _tagged_gateway(
 
 @pytest.mark.parametrize("purpose,metadata", [
     ("revision_lock", {
-        "dots_revision_lock_run": "b" * 32,
-        "dots_revision_lock_writer": "writer-a",
+        "nebula_revision_lock_run": "b" * 32,
+        "nebula_revision_lock_writer": "writer-a",
     }),
     ("relation_assertion", {
-        "dots_relation_assertion_run": "b" * 32,
-        "dots_relation_assertion_writer": "writer-a",
+        "nebula_relation_assertion_run": "b" * 32,
+        "nebula_relation_assertion_writer": "writer-a",
     }),
 ])
 def test_race_gateway_factory_uses_purpose_tagged_transaction_path(purpose, metadata):
@@ -95,14 +95,14 @@ def _assert_blocked_writer(driver: Any, *, run_id: str) -> bool:
     with driver.session(database="neo4j") as session:
         rows = list(session.run(
             "SHOW TRANSACTIONS YIELD metaData, currentQuery, status, resourceInformation "
-            "WHERE metaData.dots_revision_lock_run = $run_id "
-            "AND metaData.dots_revision_lock_writer = 'writer-b' "
+            "WHERE metaData.nebula_revision_lock_run = $run_id "
+            "AND metaData.nebula_revision_lock_writer = 'writer-b' "
             "RETURN status, currentQuery, resourceInformation",
             run_id=run_id,
         ))
     return any(
         is_blocked_status(row.get("status"))
-        and "_dots_revision_write_lock" in str(row.get("currentQuery") or "")
+        and "_nebula_revision_write_lock" in str(row.get("currentQuery") or "")
         and bool(row.get("resourceInformation"))
         for row in rows
     )
@@ -115,14 +115,14 @@ def _stored_snapshot(driver: Any, *, owner: str, node_id: str, keys: tuple[str, 
                 "MATCH (n:Source {id: $id, owner_id: $owner}) "
                 "OPTIONAL MATCH (n)-[edge:CURRENT_SOURCE_REVISION]->(r:SourceRevision {owner_id: $owner}) "
                 "RETURN n.payload_json AS payload_json, n.current_revision_id AS current_revision_id, "
-                "collect(r.id) AS current_ids, n._dots_revision_write_lock AS lock_value",
+                "collect(r.id) AS current_ids, n._nebula_revision_write_lock AS lock_value",
                 id=node_id, owner=owner,
             ).single()
         else:
             row = session.run(
                 "MATCH (n:ResearchCampaign {id: $id, owner_id: $owner}) "
                 "RETURN n.payload_json AS payload_json, n.aggregate_revision AS current_revision_id, "
-                "n._dots_revision_write_lock AS lock_value",
+                "n._nebula_revision_write_lock AS lock_value",
                 id=node_id, owner=owner,
             ).single()
         history = session.run(

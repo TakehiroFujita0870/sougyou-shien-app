@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dots import idea_brief_neo4j
+from nebula import idea_brief_neo4j
 
 
 class _CanonicalStore:

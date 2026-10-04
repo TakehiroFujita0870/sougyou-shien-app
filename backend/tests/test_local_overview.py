@@ -4,7 +4,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import json
 
-from dots.local_overview import Neo4jOverviewStore, read_local_overview
+from nebula.local_overview import Neo4jOverviewStore, read_local_overview
 
 
 OWNER = "owner-a"

@@ -1,6 +1,6 @@
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Claim,
     EgressPolicy,
     Evidence,
@@ -15,8 +15,8 @@ from dots.founder_graph import (
     Source,
     SourceRevision,
 )
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_write import InMemoryGraphWriteService
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_write import InMemoryGraphWriteService
 
 
 def _seed_evidence(writes: InMemoryGraphWriteService, key: str) -> Evidence:

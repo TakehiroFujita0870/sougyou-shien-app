@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dots import local_dashboard_runtime as runtime
+from nebula import local_dashboard_runtime as runtime
 
 
 @pytest.mark.parametrize("fails", [False, True])

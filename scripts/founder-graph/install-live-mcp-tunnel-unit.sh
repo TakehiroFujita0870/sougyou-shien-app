@@ -9,13 +9,13 @@ fi
 repo="$1"
 control_env="$2"
 auth_file="$3"
-unit_source="$repo/scripts/founder-graph/dots-live-mcp-tunnel.service"
+unit_source="$repo/scripts/founder-graph/nebula-live-mcp-tunnel.service"
 unit_directory="$HOME/.config/systemd/user"
-unit_target="$unit_directory/dots-live-mcp-tunnel.service"
-env_link="$HOME/.config/dots/live-control-plane.env"
-expected_auth_file="$HOME/.config/dots/live-neo4j-auth.secret"
+unit_target="$unit_directory/nebula-live-mcp-tunnel.service"
+env_link="$HOME/.config/nebula/live-control-plane.env"
+expected_auth_file="$HOME/.config/nebula/live-neo4j-auth.secret"
 
-fail() { printf '[dots live unit installer] %s\n' "$1" >&2; exit 1; }
+fail() { printf '[nebula live unit installer] %s\n' "$1" >&2; exit 1; }
 assert_owner_only_file() {
   local file="$1" expected_owner expected_mode actual
   [[ -f "$file" && ! -L "$file" ]] || fail 'A required live configuration file is unavailable or not regular.'
@@ -31,7 +31,7 @@ assert_owner_only_file() {
 assert_owner_only_file "$control_env"
 assert_owner_only_file "$auth_file"
 
-mkdir -p "$HOME/.config/dots" "$unit_directory"
+mkdir -p "$HOME/.config/nebula" "$unit_directory"
 if [[ -L "$env_link" ]]; then
   [[ "$(readlink -- "$env_link")" == "$control_env" ]] || fail 'The existing live control-plane link points elsewhere.'
 elif [[ -e "$env_link" ]]; then
@@ -49,4 +49,4 @@ fi
 
 # Reload definitions only. This does not start or enable the external tunnel.
 systemctl --user daemon-reload
-printf '%s\n' '[dots live unit installer] Dormant live unit is installed; activation flags remain controlled by the unit.'
+printf '%s\n' '[nebula live unit installer] Dormant live unit is installed; activation flags remain controlled by the unit.'

@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from dots.founder_graph_neo4j_idea_brief import (
+from nebula.founder_graph_neo4j_idea_brief import (
     _decode_persisted_idea_brief,
     _serialize_persisted_idea_brief,
 )
-from dots.idea_brief import IdeaBriefSection, IdeaBriefValidationError, IdeaBriefVersion
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefValidationError, IdeaBriefVersion
 
 
 def brief_fixture() -> IdeaBriefVersion:
@@ -235,7 +235,7 @@ def test_empty_section_draft_roundtrips_as_eight_unchanged_empty_sections():
 
 
 def test_schema_v3_adds_non_searchable_idea_brief_label_and_non_destructive_rollback():
-    from dots.founder_graph_schema import (
+    from nebula.founder_graph_schema import (
         SCHEMA_VERSION,
         migration_queries,
         rollback_queries,

@@ -14,7 +14,7 @@ if (-not (Test-Utf8Preflight)) { throw 'UTF-8 preflight failed.' }
 if ($ClonePath -like '/mnt/c/*') { throw 'WSL native clone is required; /mnt/c is not allowed.' }
 if ($HoldSeconds -lt 60) { throw 'HoldSeconds must be at least 60.' }
 
-$stateDirectory = Join-Path $env:LOCALAPPDATA 'Dots.'
+$stateDirectory = Join-Path $env:LOCALAPPDATA 'Nebula'
 $statePath = Join-Path $stateDirectory 'wsl-preview.json'
 if (Test-Path -LiteralPath $statePath) { throw "Preview state already exists: $statePath" }
 
@@ -30,10 +30,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect WSL listen ports.' }
 if (($listeners -match ":$UiPort\s") -or ($listeners -match ":$ApiPort\s")) { throw "Port conflict detected on $UiPort or $ApiPort; no process was stopped." }
 
 New-Item -ItemType Directory -Force -Path $stateDirectory | Out-Null
-$viteUnit = "dots-preview-vite-$UiPort"
-$apiUnit = "dots-preview-api-$ApiPort"
+$viteUnit = "nebula-preview-vite-$UiPort"
+$apiUnit = "nebula-preview-api-$ApiPort"
 $viteArgs = @('-d', $Distribution, '-u', $User, '--', 'systemd-run', '--user', "--unit=$viteUnit", '--collect', "--property=WorkingDirectory=$ClonePath", '/usr/bin/npm', 'run', 'dev', '--', '--host', '0.0.0.0', '--port', $UiPort)
-$apiArgs = @('-d', $Distribution, '-u', $User, '--', 'systemd-run', '--user', "--unit=$apiUnit", '--collect', "--property=WorkingDirectory=$ClonePath", "/home/$User/.local/bin/uv", 'run', 'uvicorn', '--app-dir', 'backend', 'dots.main:app', '--host', '0.0.0.0', '--port', $ApiPort)
+$apiArgs = @('-d', $Distribution, '-u', $User, '--', 'systemd-run', '--user', "--unit=$apiUnit", '--collect', "--property=WorkingDirectory=$ClonePath", "/home/$User/.local/bin/uv", 'run', 'uvicorn', '--app-dir', 'backend', 'nebula.main:app', '--host', '0.0.0.0', '--port', $ApiPort)
 $viteHost = $null
 $apiHost = $null
 $viteStarted = $false

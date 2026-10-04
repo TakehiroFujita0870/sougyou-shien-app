@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph_rerank_evaluation import (
+from nebula.founder_graph_rerank_evaluation import (
     RerankEvaluationCase,
     RerankEvaluationError,
     build_fixed_rerank_fixture,
     evaluate_reranker,
 )
-from dots.model_catalog import ModelCatalog, ModelCatalogEntry
+from nebula.model_catalog import ModelCatalog, ModelCatalogEntry
 
 
 _RERANK_CATALOG = ModelCatalog((

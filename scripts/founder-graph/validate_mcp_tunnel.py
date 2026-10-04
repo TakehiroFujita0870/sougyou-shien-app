@@ -13,10 +13,10 @@ from pathlib import Path
 
 
 RUNBOOK = Path("docs/operations/founder-graph-mcp-tunnel.md")
-MAIN = Path("backend/dots/main.py")
-READ_MCP = Path("backend/dots/founder_graph_mcp.py")
-WRITE_MCP = Path("backend/dots/founder_graph_mcp_write.py")
-STDIO_MCP = Path("backend/dots/founder_graph_mcp_stdio.py")
+MAIN = Path("backend/nebula/main.py")
+READ_MCP = Path("backend/nebula/founder_graph_mcp.py")
+WRITE_MCP = Path("backend/nebula/founder_graph_mcp_write.py")
+STDIO_MCP = Path("backend/nebula/founder_graph_mcp_stdio.py")
 
 REQUIRED_RUNBOOK_TOKENS = (
     "Secure MCP Tunnel",

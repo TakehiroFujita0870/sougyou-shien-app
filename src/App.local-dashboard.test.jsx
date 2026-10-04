@@ -36,7 +36,7 @@ function mountApp() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  sessionStorage.removeItem('dots:selected-surface');
+  sessionStorage.removeItem('nebula:selected-surface');
 });
 
 describe('localhost dashboard app integration', () => {

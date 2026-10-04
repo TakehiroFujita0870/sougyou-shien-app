@@ -4,8 +4,8 @@ from copy import deepcopy
 
 import pytest
 
-from dots.founder_graph import ReportSection, ReportVersion
-from dots.founder_graph_report_diff import (
+from nebula.founder_graph import ReportSection, ReportVersion
+from nebula.founder_graph_report_diff import (
     FOUNDER_GRAPH_REPORT_CHAPTERS,
     ReportDiffInputError,
     diff_report_versions,

@@ -126,7 +126,7 @@ function Initialize-AuthSecret {
     $project = if ([string]::IsNullOrWhiteSpace($env:FOUNDER_GRAPH_COMPOSE_PROJECT)) { 'founder-graph-local' } else { $env:FOUNDER_GRAPH_COMPOSE_PROJECT }
     # Docker may restart this container after Windows has cleared its temp
     # directory. Keep the read-only bind source in the owner's local profile.
-    $persistentPath = Join-Path ([Environment]::GetFolderPath('UserProfile')) (".dots-founder-graph-auth-{0}.secret" -f $project)
+    $persistentPath = Join-Path ([Environment]::GetFolderPath('UserProfile')) (".nebula-founder-graph-auth-{0}.secret" -f $project)
     $temporaryPath = if ($PersistForContainer) { $persistentPath } else { [System.IO.Path]::GetTempFileName() }
     try {
         $encoding = [System.Text.UTF8Encoding]::new($false)

@@ -1,0 +1,120 @@
+{
+  "updated_at": "2026-10-04T12:01:06Z",
+  "baseline_main": "9e9b5f876eef",
+  "items": [
+    {
+      "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "画面遷移の故障は修正済み。変更や再発なしに再試験しない。",
+      "evidence": [{"recorded_at": "2026-09-26T04:30:34Z", "scope": "live-graph-navigation-rp02", "result": "passed", "reference": "Git履歴と当時の実画面検査記録。PCのホーム・サービス管理への遷移を確認。"}]
+    },
+    {
+      "id": "first_tunnel_search", "title": "接続再起動後の初回検索", "scope": "live-search-after-ready-and-control-plane-poll",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "準備完了確認後の初回検索を確認済み。準備前の任意の呼出までは保証しない。",
+      "evidence": [{"recorded_at": "2026-09-26T06:07:09Z", "scope": "live-search-after-ready-and-control-plane-poll", "result": "passed", "reference": "当時の実接続で初回検索3回成功。元の記録はGit履歴。"}]
+    },
+    {
+      "id": "private_connection", "title": "非公開・本人用の接続設定", "scope": "personal-plugin-private-registration-and-loopback",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "非公開登録とPC内限定待受を確認。本人アカウント・鍵・PCの利用者を信頼する境界は残る。",
+      "evidence": [{"recorded_at": "2026-09-27T01:07:00Z", "scope": "personal-plugin-private-registration-and-loopback", "result": "passed", "reference": "正本プラグインのUSER/PRIVATE設定と当時のローカル待受確認。"}]
+    },
+    {
+      "id": "phone_asset_write", "title": "スマホChatGPTからの資産保存", "scope": "chatgpt-mobile-asset-write-after-catalog-update",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "本人がスマホから保存し、正本検索と画面表示を確認。スマホの別会話での再検索はこの検査範囲では未報告。表示故障を意味しない。",
+      "evidence": [{"recorded_at": "2026-09-27T01:26:12Z", "scope": "chatgpt-mobile-asset-write-after-catalog-update", "result": "partial", "reference": "本人のスマホ保存報告と正本DotsからのIdea・Asset読取確認。"}]
+    },
+    {
+      "id": "grounded_storage", "title": "根拠付き関係の保存と再起動後の取得", "scope": "isolated-neo4j-storage-main-288-290",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "not_applicable", "next_action": "none",
+      "note": "隔離Neo4jの合成試験。実ChatGPTの意味抽出の証明とは区別する。",
+      "evidence": [{"recorded_at": "2026-09-26T19:29:13Z", "scope": "isolated-neo4j-storage-main-288-290", "result": "passed", "reference": "https://github.com/TakehiroFujita0870/sougyou-shien-app/pull/290"}]
+    },
+    {
+      "id": "semantic_conversation_reuse", "title": "実会話での意味関係の再利用と訂正", "scope": "live-researched-idea-to-independent-chat",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "根拠付き分類と最新関係を保存し、別会話で出典とともに再利用済み。外部調査や本人データの変更はこの確認に含まない。",
+      "evidence": [{"recorded_at": "2026-09-27T12:53:09Z", "scope": "live-researched-idea-to-independent-chat", "result": "passed", "reference": "当時の実ChatGPT別会話と独立した通常保存先の読取確認。詳細経緯はGit・会話履歴。"}]
+    },
+    {
+      "id": "markdown_idea_report", "title": "Markdownレポートの部分追記と意味関係の再利用", "scope": "main-410-live-chatgpt-synthetic-restart",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "通常のNebulaへ合成データで短い発見とURLを追記し、別のアイデアでは8章Markdownを保持して意味関係を保存。サービス再起動後、別のChatGPT会話から関係ID・状態・根拠文・Brief版を取得した。URLだけの記録は検証済みEvidenceではない。実データへの新しい書き込み試験は含まない。",
+      "evidence": [{"recorded_at": "2026-09-28T20:04:49Z", "scope": "main-410-live-chatgpt-synthetic-restart", "result": "passed", "reference": "PR #405–#410と通常Dotsの再起動後のChatGPT保存会話 https://chatgpt.com/c/6ababd0b-590c-83e8-b285-615727d239a6 、別会話検索 https://chatgpt.com/c/6abac1c2-e77c-83ee-9159-15750d16f817 。"}]
+    },
+    {
+      "id": "asset_home_categories", "title": "資産の3分類と追加順の3列表示", "scope": "main-412-413-plugin-1.0.14-live",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "強み・経験、弱み・迷い、判断基準を同一一覧の追加順で3列表示。PC画面の編集・分類選択とキーボード移動を確認。通常保存先への架空の判断基準の保存、再起動後の検索・表示、更新後のChatGPT会話からの分類付き保存と読み戻しを確認。古い接続定義による誤分類の架空記録は修正済み。既存資産は内容から自動再分類しない。",
+      "evidence": [{"recorded_at": "2026-09-29T11:26:05Z", "scope": "main-412-413-plugin-1.0.14-live", "result": "passed", "reference": "PR #412・#413のCI成功、Linux全件検査、1280×720実画面の3列と編集画面、通常保存先の再起動後検索、Dotsプラグイン1.0.14の読戻し。ChatGPT既存試験会話 https://chatgpt.com/c/6abac1c2-e77c-83ee-9159-15750d16f817 から asset_c1405777e6112a90b510cbc315b71b72 を判断基準として保存・読み戻し、独立APIでも確認。"}]
+    },
+    {
+      "id": "neo4j_auth_mount", "title": "保存先の起動用鍵が再起動後も残る", "scope": "main-418-live-container-recreate-no-pc-reboot",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "一時フォルダーの鍵が消えてNeo4jだけ動き、画面が保存先を利用不可と判定した。鍵を本人専用の永続ファイルに置いた既存データ領域のコンテナへ再作成し、健康状態・画面のグラフ読取を確認。起動補助の修正はmain反映済み。PC全体の再起動試験は未実施。",
+      "evidence": [{"recorded_at": "2026-10-03T09:42:17Z", "scope": "main-418-live-container-recreate-no-pc-reboot", "result": "partial", "reference": "PR #418 CI成功、現行コードのローカル運用契約試験27件成功、通常保存先のDocker健康状態healthy、Dots.画面の保存先running・グラフready、同じデータ領域の保持を確認。"}]
+    },
+    {
+      "id": "researched_report_display", "title": "実際の調査レポートの表示と出典線", "scope": "main-420-421-live-report-and-citations",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "正規8章と公開URLがある現行案を調査済みと表示し、URLだけで根拠未登録の場合は別表示にした。現行の根拠に結び付く出典線だけをグラフへ示す。ChatGPTの正本手順はプラグイン1.0.15へ更新済み。",
+      "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-420-421-live-report-and-citations", "result": "passed", "reference": "PR #420・#421の必須CI成功。通常DotsのMarkdown章本文の読戻し、PC画面の調査済み表示・出典リンク、グラフとサービス管理への遷移、正本プラグイン1.0.15の設定読戻しを確認。"}]
+    },
+    {
+      "id": "draft_relation_cleanup", "title": "下書きの関係整理と残存した架空出典の退役", "scope": "main-420-421-live-draft-relations-and-retirement",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "未調査の下書きへ一章のBriefと根拠付き関係候補または明示的な空候補を保存し、整理待ちは残っていない。孤立した架空出典は履歴を保持した保管済みに変更し、通常グラフから消えた。外部事実は追加していない。",
+      "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-420-421-live-draft-relations-and-retirement", "result": "passed", "reference": "通常Dotsの保存処理結果と本人限定の整理ジョブ読取で待機・失敗なし。孤立した架空Sourceの接続先を事前確認し、既存の版付き保存操作でarchive、/api/graphのready状態と非表示を読戻し。"}]
+    },
+    {
+      "id": "legacy_capability_assets", "title": "画面にある旧アセットのChatGPTからの読取", "scope": "main-422-live-legacy-capability-read",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "旧初版の分類だけを現行の強みとして読み替える。保存本文や識別子は変更せず、通常Nebulaの該当アセットを本人限定の直接読取と接続ツールから再取得した。",
+      "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-422-live-legacy-capability-read", "result": "passed", "reference": "PR #422のCI成功、backend全件・frontend全件成功。main 46323612868bの稼働後、旧分類の二件を直接読取し、うち一件を正本Dotsのfetchからkind=strengthで確認。"}]
+    },
+    {
+      "id": "report_reading_ui", "title": "レポートの読書画面", "scope": "main-424-live-report-reading-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "保存したMarkdownを変更せず、章・出典・長文の読書表示と一つの縦スクロールを整えた。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-424-live-report-reading-1280", "result": "passed", "reference": "PR #424の必須CI成功と通常DotsのPC 1280×720画面で長文・下書きの表示、公開リンク、スクロールを確認。"}]
+    },
+    {
+      "id": "unified_idea_presentation", "title": "全アイデアの共通表示", "scope": "main-428-live-all-idea-presentation-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "Markdown、旧章別形式、下書きを同じ見出し・出典・操作配置で表示。存在しない章や根拠は補わず、保存本文は不変。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-428-live-all-idea-presentation-1280", "result": "passed", "reference": "PR #428の必須CI成功。通常DotsのPC 1280×720で現存する全アイデアを横断確認し、共通章見出し、状態、出典、操作位置と画面遷移を確認。"}]
+    },
+    {
+      "id": "starfield_graph_ui", "title": "平面の星空グラフ", "scope": "live-wide-graph-and-inward-labels-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "十字のない光点を大きくし、出典・アセット・アイデア・分類のサイズ差と淡い白・橙・青白・クリーム色で識別。配色は黒体放射を参考にした表現で実測温度ではない。通常表示では常設の検索・意味関係一覧を置かず、横長の画面へ物理配置を一度だけ拡大して収める。右端の名称は内側へ向ける。選択・根拠・安全な出典リンクを維持し、操作後は自動で倍率を戻さない。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-426-427-429-430-live-starfield-1280", "result": "passed", "reference": "PR #426・#427・#429・#430の必須CI成功、独立レビュー。500点の合成画面と検索・根拠を確認。通常DotsのPC 1280×720で検索から星への視点移動、補助欄の可読性、ホーム・サービス管理への遷移を確認。"}, {"recorded_at": "2026-10-04T05:10:32Z", "scope": "main-432-live-compact-stable-starfield-1280", "result": "passed", "reference": "PR #432、head 2b6c530045b2の全frontend検査・build・必須CI成功と独立レビュー。main c05c20c71ad1を稼働反映し、通常DotsのPC 1280×720で密な配置、配置後の倍率維持、検索から点への移動、ホーム・サービス管理への遷移を確認。ブラウザーエラーなし。保存内容とDBは変更なし。"}, {"recorded_at": "2026-10-04T06:18:08Z", "scope": "main-434-435-live-luminous-semantic-starfield-1280", "result": "passed", "reference": "PR #434・#435のfrontend 136件・build・必須CI成功と独立レビュー。main fa4b73d6cb5aを通常配信元へ反映。PC 1280×720で既定の丸点になる描画設定の誤りを再現後、星の芯・光輪・主要名称、検索、選択から意味関係と根拠章への操作、ホーム各タブとサービス管理への遷移、全サービス稼働を確認。"}, {"recorded_at": "2026-10-04T06:29:57Z", "scope": "main-436-437-live-natural-point-starfield-1280", "result": "passed", "reference": "利用者が十字形の光を拒否したため、PR #436で小さな白い点と淡い円形光へ変更。実機で配置前の非有限座標による停止を再現し、PR #437で有限値確認を追加。各PRのfrontend 136件・build・必須CI・独立レビュー成功。main 6625e9646574を通常配信元へ反映し、PC 1280×720で十字のない光点と主要名称、初回描画、テーマ検索と関連案選択、ホームへの遷移を確認。現行配信版の描画エラーなし。保存内容は変更なし。"}, {"recorded_at": "2026-10-04T06:46:00Z", "scope": "main-439-live-stellar-kind-colors-1280", "result": "passed", "reference": "PR #439のfrontend 137件・build・必須CI成功と独立レビュー。main 19a74b0cf8f8を通常配信元へ反映し、PC 1280×720で拡大した光点、種類別の淡い配色、主要名称、分類検索と関連案表示、ホーム・サービス管理への遷移を確認。ブラウザーエラーなし。DBへの書き込みなし。"}, {"recorded_at": "2026-10-04T07:06:00Z", "scope": "live-wide-graph-and-inward-labels-1280", "result": "passed", "reference": "PR #441のfrontend 137件・build・必須CI成功と独立レビュー。main 7fae85c4ee06を通常配信元へ反映し、PC 1280×720で常設欄の撤去と大きな横長配置を確認。右端の名称切れを実機再現し、本差分の共通アンカー補正をbuildして配信。名称の内向き表示、分類の星の選択、関係から確認済みの根拠表示、サービス管理への遷移を確認。ブラウザーエラーなし。表示補正の16件とbuild成功、DBへの書き込みなし。"}]
+    },
+    {
+      "id": "graph_picking_labels", "title": "星と名称の一回選択と空き位置への名称配置", "scope": "main-443-live-graph-picking-and-labels",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "押下位置を直接照合し、5px以内の手ぶれは一回選択、微小な星・視点移動だけ復元。名称は画面内の8方向から空き位置を使い、有効な位置を維持。実ドラッグは選択を変えない。描画と名称の操作範囲を共有し、出典は安全な新タブを単発起動。保存内容とDBは変更していない。",
+      "evidence": [{"recorded_at": "2026-10-04T08:14:40Z", "scope": "main-443-live-graph-picking-and-labels", "result": "passed", "reference": "PR #443、main efb3fbaecefa、frontend142件・build・必須CI・独立レビュー成功。利用中のPCタブで現場業務の生産性向上の2px手ぶれ選択と線強調、別の名称の一回選択、20pxドラッグによる非選択を確認。1280×720で空き位置の名称、BYAKU公式への単一新タブ、関係と根拠章、ホーム各タブ・サービス管理との遷移と全サービス稼働を確認。既定寸法に戻し、ブラウザーエラーなし。通常配信元は同一build・清潔なmain、HTTP200。"}]
+    },
+    {
+      "id": "shared_home_background", "title": "全アイデアの共通背景と表示幅", "scope": "main-445-live-stable-home-background-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "共通の星空を画面に固定し、本文の長さやスクロールバーの有無で位置・大きさ・表示幅が変わらない。本文の縦スクロールと保存内容は変更なし。",
+      "evidence": [{"recorded_at": "2026-10-04T10:09:13Z", "scope": "main-445-live-stable-home-background-1280", "result": "passed", "reference": "PR #445、main 4d29c0e4f786。frontend143件・build・必須CI・独立レビュー成功。通常DotsのPC 1280×720で全アイデアの背景寸法・位置・本文幅が一致し、長文スクロールでも背景不変。ホーム各タブ・グラフの星選択・サービス管理への遷移、全サービス稼働とブラウザーエラーなしを確認。既定寸法へ戻し、通常配信元は清潔なmain、同一build、HTTP200。DB変更なし。"}]
+    },
+    {
+      "id": "nebula_product_rename", "title": "Nebulaの画面・既存ChatGPT登録", "scope": "nebula-n1-n2-n3-live",
+      "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "integrate",
+      "note": "N-1の画面は正式版へ反映。既存ChatGPT接続名と個人ラベルをNebulaへ変更し、同じID・権限を維持。本人用プラグインは同じID・USER/PRIVATEを保ち、Nebula表示とSVG・手順を1.0.16へ更新。内部設定・起動名の切替はN-2/N-3で継続。OpenAIが変更を拒否する非表示package名だけは保持。",
+      "evidence": [{"recorded_at": "2026-10-04T12:01:06Z", "scope": "nebula-n1-n2-n3-live", "result": "partial", "reference": "PR #447 main 9e9b5f876eef、frontend143件・backend1422 passed/10 skipped・build・必須CI・独立レビュー成功。本体1280×720のNebula表示とロゴ、旧配信元へのbuild反映、稼働中3サービスを確認。ChatGPT設定で既存通常接続のNebula表示、元の権限・接続IDを確認。pluginrel_6ac23faa8f5c81918fbd2fa89042ab1aの読戻しで表示名・SVG・通常接続ID・USER/PRIVATEを確認。保存内容は変更なし。"}]
+    },
+    {
+      "id": "existing_graph_semantic_enrichment", "title": "既存案と経験の意味関係整理", "scope": "live-existing-brief-grounded-enrichment-20261004",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "共通テーマ・必要能力・経験の再利用候補を提案として追加。本人の確定判断や外部事実と区別し、根拠のない記録は接続しない。今回の操作は一意キーから追跡し、既存撤回機能で取り消せる。",
+      "evidence": [{"recorded_at": "2026-10-04T06:18:08Z", "scope": "live-existing-brief-grounded-enrichment-20261004", "result": "passed", "reference": "既存MCP経由で分類3件・分類関係7件・必要能力2件・再利用3件を追加。独立レビュー後、過剰な必要能力3件は撤回して再利用へ訂正。75点50関係、孤立27点。追加12関係すべての根拠章を通常APIで読み戻し、既存7案のBrief ID・Markdown・章を保存前と比較して不変、再送の重複防止を確認。監査キー graph-enrich-20261004-。PR #434の根拠読取修正はbackend 1422 passed / 10 skipped。"}]
+    }
+  ]
+}

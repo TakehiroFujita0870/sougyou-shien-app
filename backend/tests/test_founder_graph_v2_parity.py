@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     ContentChunk,
     EntityRevision,
     Facet,
@@ -15,10 +15,10 @@ from dots.founder_graph import (
     RelationshipStatus,
     Status,
 )
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_read import Neo4jGraphReadService
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_read import Neo4jGraphReadService
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
 
 
 class _Result:

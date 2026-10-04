@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     ContentChunk,
     EgressPolicy,
     Idea,
@@ -14,7 +14,7 @@ from dots.founder_graph import (
     split_source_content,
     _paragraph_boundaries,
 )
-from dots.founder_graph_write import (
+from nebula.founder_graph_write import (
     InMemoryGraphWriteService,
     capture_idea_payload_fingerprint,
     payload_fingerprint,

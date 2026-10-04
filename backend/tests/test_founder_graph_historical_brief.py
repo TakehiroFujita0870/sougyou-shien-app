@@ -3,9 +3,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import Idea, Provenance, ResearchCampaign, ResearchRun, Status
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.founder_graph_historical_brief import (
+from nebula.founder_graph import Idea, Provenance, ResearchCampaign, ResearchRun, Status
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_historical_brief import (
     HistoricalResearchValidationError,
     validate_historical_researched_brief,
 )

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Organization, PersonAsset
-from dots.founder_graph_contact_import import (
+from nebula.founder_graph import EgressPolicy, Organization, PersonAsset
+from nebula.founder_graph_contact_import import (
     MAX_CSV_BYTES,
     MAX_FIELD_LENGTH,
     ContactImportError,
@@ -12,10 +12,10 @@ from dots.founder_graph_contact_import import (
     normalize_contact_input,
     normalize_contact_row,
 )
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_mcp_write import McpWriteSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_mcp_write import McpWriteSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
 
 
 def test_mapping_row_produces_write_surface_payloads_without_relationships() -> None:

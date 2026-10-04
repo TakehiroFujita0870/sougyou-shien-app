@@ -3,10 +3,10 @@ from dataclasses import replace
 
 import pytest
 
-from dots.founder_graph import ContentChunk, EgressPolicy, MaterialKind, NodeType, Source, SourceRevision
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_write import (
+from nebula.founder_graph import ContentChunk, EgressPolicy, MaterialKind, NodeType, Source, SourceRevision
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     InMemoryGraphWriteService,

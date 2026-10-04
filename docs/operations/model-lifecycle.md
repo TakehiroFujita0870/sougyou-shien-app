@@ -1,14 +1,14 @@
 # AIモデルとAPIのライフサイクル
 
-> 2026-09-20のFounder Graphピボットにより、料金プランとStandard既定モデルはピボット前の履歴になった。新しい製品runtimeは[Dots Founder Graph ピボット・実装全体計画](../plans/founder-graph-pivot.md)を優先し、Dots側の意味処理はLuna論理キー、Deep ResearchはChatGPT側、local LLMは将来の差し替え候補とする。本書の秘密管理、評価、切り戻し規律は継続する。
+> 2026-09-20のFounder Graphピボットにより、料金プランとStandard既定モデルはピボット前の履歴になった。新しい製品runtimeは[Nebula Founder Graph ピボット・実装全体計画](../plans/founder-graph-pivot.md)を優先し、Nebula側の意味処理はLuna論理キー、Deep ResearchはChatGPT側、local LLMは将来の差し替え候補とする。本書の秘密管理、評価、切り戻し規律は継続する。
 
 ピボット前内容の最終検証日: 2026-08-09
 
 ## 目的
 
-Dots.がAIプロバイダーを安全に扱い、モデルの追加・価格変更・廃止に追随できるようにする。本書はAPIキー、公式情報の確認、評価、切り戻し規律の正本である。製品runtimeとモデル用途の選択はFounder Graph計画を優先する。
+NebulaがAIプロバイダーを安全に扱い、モデルの追加・価格変更・廃止に追随できるようにする。本書はAPIキー、公式情報の確認、評価、切り戻し規律の正本である。製品runtimeとモデル用途の選択はFounder Graph計画を優先する。
 
-Codexの全役割に使う既定の`gpt-6-luna / xhigh`と、Dots製品runtimeの抽出・名寄せ・分類・label候補で使うLuna論理キーは別の設定である。利用者による別モデルや思考量の明示指定を優先する。検索embeddingと再順位付けは、利用者指定済みのSentence Transformers対応の固定多言語ローカルモデル（E5-base / mMARCO）を使い、Lunaによる再順位付けは行わない。製品runtimeのモデル本体は今回変更しない。用途、固定版、capabilityは実装内のカタログで管理する。
+Codexの全役割に使う既定の`gpt-6-luna / xhigh`と、Nebula製品runtimeの抽出・名寄せ・分類・label候補で使うLuna論理キーは別の設定である。利用者による別モデルや思考量の明示指定を優先する。検索embeddingと再順位付けは、利用者指定済みのSentence Transformers対応の固定多言語ローカルモデル（E5-base / mMARCO）を使い、Lunaによる再順位付けは行わない。製品runtimeのモデル本体は今回変更しない。用途、固定版、capabilityは実装内のカタログで管理する。
 
 ## ピボット前の初回リリース境界（履歴）
 

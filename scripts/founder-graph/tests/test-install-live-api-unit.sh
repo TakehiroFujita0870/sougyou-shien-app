@@ -8,16 +8,16 @@ trap 'rm -rf -- "$temp_root"' EXIT
 
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 home="$temp_root/home"
-fake_repo="$home/projects/dots-live"
-control_env="$home/.config/dots/live-control-plane.env"
-auth_file="$home/.config/dots/live-neo4j-auth.secret"
+fake_repo="$home/projects/nebula-live"
+control_env="$home/.config/nebula/live-control-plane.env"
+auth_file="$home/.config/nebula/live-neo4j-auth.secret"
 unit_dir="$home/.config/systemd/user"
-mkdir -p "$fake_repo/scripts/founder-graph" "$home/.config/dots" "$temp_root/bin"
-cp "$repo/scripts/founder-graph/dots-live-api.service" "$fake_repo/scripts/founder-graph/"
-printf '%s\n' 'fake runtime config, not a credential' > "$home/.config/dots/live-runtime-key.env"
+mkdir -p "$fake_repo/scripts/founder-graph" "$home/.config/nebula" "$temp_root/bin"
+cp "$repo/scripts/founder-graph/nebula-live-api.service" "$fake_repo/scripts/founder-graph/"
+printf '%s\n' 'fake runtime config, not a credential' > "$home/.config/nebula/live-runtime-key.env"
 printf '%s\n' 'fake auth bytes, not a credential' > "$auth_file"
-chmod 600 "$home/.config/dots/live-runtime-key.env" "$auth_file"
-ln -s "$home/.config/dots/live-runtime-key.env" "$control_env"
+chmod 600 "$home/.config/nebula/live-runtime-key.env" "$auth_file"
+ln -s "$home/.config/nebula/live-runtime-key.env" "$control_env"
 cp "$repo/scripts/founder-graph/tests/fixtures/fake-systemctl.sh" "$temp_root/bin/systemctl"
 chmod +x "$temp_root/bin/systemctl"
 export SYSTEMCTL_LOG="$temp_root/systemctl.log"
@@ -33,14 +33,14 @@ missing_flag_output="$(HOME="$home" PATH="$temp_root/bin:$PATH" bash "$installer
   --confirm-credential-rotation "$fake_repo" "$control_env" "$auth_file" 2>&1)"
 missing_flag_status=$?
 set -e
-[[ $missing_flag_status -ne 0 && ! -e "$unit_dir/dots-live-api.service" ]] || fail 'A missing approval flag installed the API unit.'
+[[ $missing_flag_status -ne 0 && ! -e "$unit_dir/nebula-live-api.service" ]] || fail 'A missing approval flag installed the API unit.'
 [[ ! -e "$SYSTEMCTL_LOG" ]] || fail 'Systemd was touched before both approval flags were supplied.'
 
 run_installer "${args[@]}" >/dev/null || fail 'Valid approvals and owner-only files did not install the unit.'
-installed="$unit_dir/dots-live-api.service"
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1' "$installed")" == 1 ]] || fail 'Installed rotation approval gate is not enabled.'
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' "$installed")" == 1 ]] || fail 'Installed projection approval gate is not enabled.'
-[[ "$(grep -Fxc 'Environment=DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0' "$fake_repo/scripts/founder-graph/dots-live-api.service")" == 1 ]] || fail 'The source template was modified.'
+installed="$unit_dir/nebula-live-api.service"
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1' "$installed")" == 1 ]] || fail 'Installed rotation approval gate is not enabled.'
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' "$installed")" == 1 ]] || fail 'Installed projection approval gate is not enabled.'
+[[ "$(grep -Fxc 'Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0' "$fake_repo/scripts/founder-graph/nebula-live-api.service")" == 1 ]] || fail 'The source template was modified.'
 [[ "$(<"$SYSTEMCTL_LOG")" == '--user daemon-reload' ]] || fail 'The installer enabled or started the unit.'
 
 # Only the exact absolute target and exact adjacent relative form are accepted.
@@ -57,7 +57,7 @@ set -e
 [[ $link_status -ne 0 && "$link_output" == *'approved same-directory runtime env file'* ]] || fail 'An arbitrary control-plane symlink target was accepted.'
 [[ "$(<"$SYSTEMCTL_LOG")" == "$before_link_rejection" ]] || fail 'Systemd was reloaded after a symlink validation failure.'
 rm -- "$control_env"
-ln -s "$home/.config/dots/live-runtime-key.env" "$control_env"
+ln -s "$home/.config/nebula/live-runtime-key.env" "$control_env"
 
 # An identical rerun is idempotent; a conflicting unit is preserved and rejected.
 run_installer "${args[@]}" >/dev/null || fail 'An identical installed unit was not accepted.'
@@ -75,7 +75,7 @@ path_output="$(HOME="$home" PATH="$temp_root/bin:$PATH" bash "$installer" \
   --confirm-credential-rotation --confirm-private-projection-review "$home/other" "$control_env" "$auth_file" 2>&1)"
 path_status=$?
 set -e
-[[ $path_status -ne 0 && "$path_output" == *'exact projects/dots-live directory'* ]] || fail 'An unexpected repository path was accepted.'
+[[ $path_status -ne 0 && "$path_output" == *'exact projects/nebula-live directory'* ]] || fail 'An unexpected repository path was accepted.'
 chmod 644 "$auth_file"
 set +e
 mode_output="$(HOME="$home" PATH="$temp_root/bin:$PATH" bash "$installer" "${args[@]:0:3}" "$control_env" "$auth_file" 2>&1)"

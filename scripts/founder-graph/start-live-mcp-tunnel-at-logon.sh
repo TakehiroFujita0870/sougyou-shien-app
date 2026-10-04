@@ -5,13 +5,13 @@ set -Eeuo pipefail
 readonly container_name='founder-graph-local-neo4j-1'
 readonly live_volume_name='founder-graph-local_founder_graph_neo4j_data'
 readonly compose_project='founder-graph-local'
-readonly tunnel_service='dots-live-mcp-tunnel.service'
+readonly tunnel_service='nebula-live-mcp-tunnel.service'
 readonly tunnel_health_port='8082'
 readonly tunnel_health_stable_checks=3
 readonly docker_cli_candidate='/mnt/c/Users/hp/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe'
-startup_timeout_seconds="${DOTS_STARTUP_TIMEOUT_SECONDS:-120}"
+startup_timeout_seconds="${NEBULA_STARTUP_TIMEOUT_SECONDS:-120}"
 
-log() { printf '[dots live tunnel startup] %s\n' "$1"; }
+log() { printf '[nebula live tunnel startup] %s\n' "$1"; }
 fail() { log "$1"; exit 1; }
 [[ "$startup_timeout_seconds" =~ ^[0-9]+$ ]] || fail 'The startup timeout was invalid; no tunnel was started.'
 startup_timeout_seconds=$((10#$startup_timeout_seconds))
@@ -64,8 +64,8 @@ sys.exit(0 if ok else 1)' <<<"$health_json"
 }
 
 resolve_docker_cli() {
-  if [[ -n "${DOTS_DOCKER_CLI:-}" && -x "$DOTS_DOCKER_CLI" ]]; then
-    printf '%s\n' "$DOTS_DOCKER_CLI"
+  if [[ -n "${NEBULA_DOCKER_CLI:-}" && -x "$NEBULA_DOCKER_CLI" ]]; then
+    printf '%s\n' "$NEBULA_DOCKER_CLI"
   elif [[ -x "$docker_cli_candidate" ]]; then
     printf '%s\n' "$docker_cli_candidate"
   elif command -v docker.exe >/dev/null 2>&1; then
@@ -124,10 +124,10 @@ fi
 
 service_environment="$(run_before_deadline systemctl --user show "$tunnel_service" --property=Environment --value 2>/dev/null)" || \
   fail 'The live tunnel safety configuration could not be inspected; no tunnel was started.'
-credential_gate="$(grep -oE 'DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=[^[:space:]\"]+' <<<"$service_environment" || true)"
-egress_gate="$(grep -oE 'DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=[^[:space:]\"]+' <<<"$service_environment" || true)"
-if [[ "$credential_gate" != 'DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1' || \
-      "$egress_gate" != 'DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' ]]; then
+credential_gate="$(grep -oE 'NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=[^[:space:]\"]+' <<<"$service_environment" || true)"
+egress_gate="$(grep -oE 'NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=[^[:space:]\"]+' <<<"$service_environment" || true)"
+if [[ "$credential_gate" != 'NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1' || \
+      "$egress_gate" != 'NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' ]]; then
   fail 'Live tunnel safety gates are absent or unconfirmed; no tunnel was started.'
 fi
 

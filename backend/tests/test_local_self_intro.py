@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dots.local_self_intro import Neo4jSelfIntroductionWriter, SelfIntroductionConflict
+from nebula.local_self_intro import Neo4jSelfIntroductionWriter, SelfIntroductionConflict
 
 
 class Store:

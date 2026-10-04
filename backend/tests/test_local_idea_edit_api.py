@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from dots.founder_graph_write import RevisionConflictError, WriteReceipt
-from dots.local_control import LocalControl, create_local_control_app
+from nebula.founder_graph_write import RevisionConflictError, WriteReceipt
+from nebula.local_control import LocalControl, create_local_control_app
 
 
 class IdeaWriter:

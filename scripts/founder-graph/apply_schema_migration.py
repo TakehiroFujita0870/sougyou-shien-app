@@ -11,9 +11,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from dots.founder_graph_neo4j import Neo4jGraphGateway  # noqa: E402
-from dots.founder_graph_runtime import create_neo4j_driver_from_env  # noqa: E402
-from dots.founder_graph_schema import SCHEMA_VERSION  # noqa: E402
+from nebula.founder_graph_neo4j import Neo4jGraphGateway  # noqa: E402
+from nebula.founder_graph_runtime import create_neo4j_driver_from_env  # noqa: E402
+from nebula.founder_graph_schema import SCHEMA_VERSION  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,8 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--current-version", type=int, required=True)
     parser.add_argument("--target-version", type=int, default=SCHEMA_VERSION)
     args = parser.parse_args(argv)
-    owner_id = (os.environ.get("DOTS_LOCAL_OWNER_ID") or "local-owner").strip()
-    database = (os.environ.get("DOTS_NEO4J_DATABASE") or "neo4j").strip()
+    owner_id = (os.environ.get("NEBULA_LOCAL_OWNER_ID") or "local-owner").strip()
+    database = (os.environ.get("NEBULA_NEO4J_DATABASE") or "neo4j").strip()
     driver = create_neo4j_driver_from_env()
     try:
         gateway = Neo4jGraphGateway(driver, owner_id, database=database)

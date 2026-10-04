@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph import PersonAsset, Status
-from dots.founder_graph_name_resolution import (
+from nebula.founder_graph import PersonAsset, Status
+from nebula.founder_graph_name_resolution import (
     NameResolutionError,
     evaluate_top_3_candidates,
     find_namesake_candidates,

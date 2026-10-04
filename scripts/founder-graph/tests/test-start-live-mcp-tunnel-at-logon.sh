@@ -65,7 +65,7 @@ write_executable "$test_root/home/.local/bin/tunnel-client" \
 
 # Explicitly stopped DB is not started and never touches systemd.
 set +e
-stopped_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" DB_STATE=exited bash "$startup" 2>&1)"
+stopped_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" DB_STATE=exited bash "$startup" 2>&1)"
 stopped_status=$?
 set -e
 [[ "$stopped_status" -eq 0 ]] || fail "Stopped DB should leave tunnel unavailable without error: $stopped_output"
@@ -76,20 +76,20 @@ set -e
 # Live tunnel safety flags are required before systemctl start.
 : > "$COMMAND_LOG"
 set +e
-blocked_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=0' bash "$startup" 2>&1)"
+blocked_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=0' bash "$startup" 2>&1)"
 blocked_status=$?
 set -e
 [[ "$blocked_status" -ne 0 ]] || fail 'Unconfirmed live safety flags were accepted.'
 [[ "$blocked_output" == *'safety gates'* ]] || fail 'Safety-gate failure was not observable.'
-! grep -q -- '--user start dots-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Tunnel start ran without both safety flags.'
+! grep -q -- '--user start nebula-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Tunnel start ran without both safety flags.'
 
 # Only healthy live DB plus both exact approval flags may start the separate live unit.
 : > "$COMMAND_LOG"
 rm -f "$test_root/home/health-attempts"
-ready_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' bash "$startup" 2>&1)" || \
+ready_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' bash "$startup" 2>&1)" || \
   fail "Healthy DB with confirmed safety flags should pass: $ready_output"
-[[ "$ready_output" == *'[dots live tunnel startup] Normal database and live MCP tunnel are ready.'* ]] || fail 'Ready result marker was not observable.'
-grep -q -- '--user start dots-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Confirmed safe service was not started.'
+[[ "$ready_output" == *'[nebula live tunnel startup] Normal database and live MCP tunnel are ready.'* ]] || fail 'Ready result marker was not observable.'
+grep -q -- '--user start nebula-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Confirmed safe service was not started.'
 ! grep -Eq 'docker (start|run|create|restart|compose up|compose create)' "$COMMAND_LOG" || fail 'A live DB mutation was issued.'
 [[ "$(<"$test_root/home/health-attempts")" == 3 ]] || fail 'The tunnel was not kept healthy across three probes.'
 
@@ -97,38 +97,38 @@ grep -q -- '--user start dots-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'C
 # ready within the same common deadline. No database-start command is issued.
 : > "$COMMAND_LOG"
 rm -f "$test_root/home/db-inspect-attempts" "$test_root/home/health-attempts"
-delayed_database_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' DB_INSPECT_FAILURES=1 DB_HEALTH_STARTING_CHECKS=2 bash "$startup" 2>&1)" || \
+delayed_database_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' DB_INSPECT_FAILURES=1 DB_HEALTH_STARTING_CHECKS=2 bash "$startup" 2>&1)" || \
   fail "A transiently delayed healthy database did not recover: $delayed_database_output"
-[[ "$delayed_database_output" == *'[dots live tunnel startup] Normal database and live MCP tunnel are ready.'* ]] || fail 'Delayed DB readiness marker was not observable.'
+[[ "$delayed_database_output" == *'[nebula live tunnel startup] Normal database and live MCP tunnel are ready.'* ]] || fail 'Delayed DB readiness marker was not observable.'
 [[ "$(<"$test_root/home/db-inspect-attempts")" -ge 4 ]] || fail 'DB inspection was not retried after the initial unavailable result.'
 ! grep -Eq 'docker (start|run|create|restart|compose up|compose create)' "$COMMAND_LOG" || fail 'A command that can start/recreate the live DB was issued while waiting.'
 
 : > "$COMMAND_LOG"
 rm -f "$test_root/home/db-inspect-attempts" "$test_root/home/db-state-attempts" "$test_root/home/health-attempts"
-created_database_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' DB_STATE_CREATED_ONCE=1 bash "$startup" 2>&1)" || \
+created_database_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' DB_STATE_CREATED_ONCE=1 bash "$startup" 2>&1)" || \
   fail "A database transitioning from created to running did not recover: $created_database_output"
-[[ "$created_database_output" == *'[dots live tunnel startup] Normal database and live MCP tunnel are ready.'* ]] || fail 'Created-state startup was not retried to readiness.'
+[[ "$created_database_output" == *'[nebula live tunnel startup] Normal database and live MCP tunnel are ready.'* ]] || fail 'Created-state startup was not retried to readiness.'
 ! grep -Eq 'docker (start|run|create|restart|compose up|compose create)' "$COMMAND_LOG" || fail 'A database creation/start command was issued during readiness waiting.'
 # Tunnel start failures and failed health probes never become ready states.
 short_startup="$test_root/start-live-short.sh"
-sed 's/startup_timeout_seconds="${DOTS_STARTUP_TIMEOUT_SECONDS:-120}"/startup_timeout_seconds="${DOTS_STARTUP_TIMEOUT_SECONDS:-3}"/' "$startup" > "$short_startup"
+sed 's/startup_timeout_seconds="${NEBULA_STARTUP_TIMEOUT_SECONDS:-120}"/startup_timeout_seconds="${NEBULA_STARTUP_TIMEOUT_SECONDS:-3}"/' "$startup" > "$short_startup"
 : > "$COMMAND_LOG"
 set +e
-tunnel_start_failure="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' SYSTEMCTL_START_FAILURE=1 bash "$startup" 2>&1)"
+tunnel_start_failure="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' SYSTEMCTL_START_FAILURE=1 bash "$startup" 2>&1)"
 tunnel_start_status=$?
 set -e
 [[ "$tunnel_start_status" -ne 0 && "$tunnel_start_failure" == *'service failed to start'* ]] || fail 'A failed live service start was reported ready.'
 
 : > "$COMMAND_LOG"
 set +e
-delayed_tunnel_start="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' SYSTEMCTL_START_DELAY=4 bash "$short_startup" 2>&1)"
+delayed_tunnel_start="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' SYSTEMCTL_START_DELAY=4 bash "$short_startup" 2>&1)"
 delayed_tunnel_status=$?
 set -e
 [[ "$delayed_tunnel_status" -ne 0 && "$delayed_tunnel_start" == *'startup deadline'* ]] || fail 'A delayed tunnel start exceeded the common deadline without failing closed.'
 
 : > "$COMMAND_LOG"
 set +e
-tunnel_health_failure="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' TUNNEL_HEALTH_FAILURE=1 bash "$short_startup" 2>&1)"
+tunnel_health_failure="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' TUNNEL_HEALTH_FAILURE=1 bash "$short_startup" 2>&1)"
 tunnel_health_status=$?
 set -e
 [[ "$tunnel_health_status" -ne 0 && "$tunnel_health_failure" == *'did not remain healthy'* ]] || fail 'A failed tunnel health probe was reported ready.'
@@ -136,7 +136,7 @@ set -e
 : > "$COMMAND_LOG"
 rm -f "$test_root/home/health-attempts"
 set +e
-transient_tunnel_health="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' TUNNEL_HEALTH_TRANSIENT=1 bash "$short_startup" 2>&1)"
+transient_tunnel_health="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' TUNNEL_HEALTH_TRANSIENT=1 bash "$short_startup" 2>&1)"
 transient_tunnel_status=$?
 set -e
 [[ "$transient_tunnel_status" -ne 0 && "$transient_tunnel_health" == *'lost health during its stability check'* ]] || \
@@ -144,7 +144,7 @@ set -e
 
 : > "$COMMAND_LOG"
 set +e
-missing_poll_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' TUNNEL_POLL_FAILURE=1 bash "$short_startup" 2>&1)"
+missing_poll_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' TUNNEL_POLL_FAILURE=1 bash "$short_startup" 2>&1)"
 missing_poll_status=$?
 set -e
 [[ "$missing_poll_status" -ne 0 && "$missing_poll_output" == *'did not remain healthy'* ]] || \
@@ -153,22 +153,22 @@ set -e
 # Unhealthy database remains fail closed and does not start the tunnel.
 : > "$COMMAND_LOG"
 set +e
-unhealthy_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" DB_HEALTH=unhealthy SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' bash "$short_startup" 2>&1)"
+unhealthy_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" DB_HEALTH=unhealthy SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' bash "$short_startup" 2>&1)"
 unhealthy_status=$?
 set -e
 [[ "$unhealthy_status" -ne 0 && "$unhealthy_output" == *'did not become ready within 120 seconds'* ]] || fail 'Unhealthy DB was not safely withheld at the startup deadline.'
-! grep -q -- '--user start dots-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Tunnel started with unhealthy DB.'
+! grep -q -- '--user start nebula-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Tunnel started with unhealthy DB.'
 
 # Use a three-second copy for a real delay/failure case without waiting for the
 # production 120-second ceiling. Later commands must receive a reduced budget.
 set +e
  : > "$COMMAND_LOG"
  : > "$TIMEOUT_LOG"
-delayed_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" TIMEOUT_LOG="$TIMEOUT_LOG" SERVICE_ENV='DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=1' DOCKER_INFO_DELAY=2.5 bash "$short_startup" 2>&1)"
+delayed_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" TIMEOUT_LOG="$TIMEOUT_LOG" SERVICE_ENV='NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=1 NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=1' DOCKER_INFO_DELAY=2.5 bash "$short_startup" 2>&1)"
 delayed_status=$?
 set -e
 [[ "$delayed_status" -ne 0 ]] || fail 'A delayed startup that consumed the remaining deadline was reported as ready.'
-! grep -q -- '--user start dots-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'A deadline overrun still started the tunnel.'
+! grep -q -- '--user start nebula-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'A deadline overrun still started the tunnel.'
 maximum_timeout="$(awk '{value=$1; sub(/s$/, "", value); value*=1000; if (value > max) max=value} END {print max+0}' "$TIMEOUT_LOG")"
 [[ "$maximum_timeout" -le 3000 ]] || fail 'A delayed step received more than the total startup budget.'
 [[ "$(wc -l < "$TIMEOUT_LOG")" -le 5 ]] || fail 'Too many checks continued after the delayed step consumed the startup deadline.'
@@ -178,17 +178,17 @@ awk '{value=$1; sub(/s$/, "", value); if (NR > 1 && value > previous) exit 1; pr
 
 : > "$COMMAND_LOG"
 set +e
-failed_engine_output="$(PATH="$test_root/bin:$PATH" DOTS_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" DOCKER_INFO_FAILURE=1 bash "$short_startup" 2>&1)"
+failed_engine_output="$(PATH="$test_root/bin:$PATH" NEBULA_DOCKER_CLI="$test_root/docker" HOME="$test_root/home" COMMAND_LOG="$COMMAND_LOG" DOCKER_INFO_FAILURE=1 bash "$short_startup" 2>&1)"
 failed_engine_status=$?
 set -e
 [[ "$failed_engine_status" -ne 0 && "$failed_engine_output" == *'Docker Engine did not become ready'* ]] || fail 'Docker Engine failure did not fail closed.'
-! grep -q -- '--user start dots-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Tunnel started while Docker Engine was unavailable.'
+! grep -q -- '--user start nebula-live-mcp-tunnel.service' "$COMMAND_LOG" || fail 'Tunnel started while Docker Engine was unavailable.'
 
 # The PowerShell task uses wait-only mode after persisting its finite startup
 # result. This mode must not run the startup script a second time.
 write_executable "$test_root/bin/systemctl-inactive" \
   '#!/usr/bin/env bash' \
-  '[[ "$*" == "--user is-active --quiet dots-live-mcp-tunnel.service" ]] || exit 2' \
+  '[[ "$*" == "--user is-active --quiet nebula-live-mcp-tunnel.service" ]] || exit 2' \
   'exit 3'
 mkdir -p "$test_root/keepalive-bin"
 ln -s "$test_root/bin/systemctl-inactive" "$test_root/keepalive-bin/systemctl"

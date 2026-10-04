@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from dots.idea_brief import IdeaBriefSection, SECTION_TITLES
-from dots.idea_brief_read_projection import project_brief_support_quote, project_idea_brief_for_read
+from nebula.idea_brief import IdeaBriefSection, SECTION_TITLES
+from nebula.idea_brief_read_projection import project_brief_support_quote, project_idea_brief_for_read
 
 
 def _legacy_sections() -> tuple[IdeaBriefSection, ...]:

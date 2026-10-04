@@ -6,14 +6,14 @@ from typing import Any
 
 import pytest
 
-from dots.founder_graph_read import (
+from nebula.founder_graph_read import (
     GraphReadTimeoutError,
     GraphReadUnavailableError,
     NodeView,
     SearchHit,
     SearchPage,
 )
-from dots.founder_graph_export import (
+from nebula.founder_graph_export import (
     FounderGraphExportError,
     FounderGraphExportLimitError,
     FounderGraphExportTooLargeError,

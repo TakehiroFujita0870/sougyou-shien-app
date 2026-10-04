@@ -226,8 +226,8 @@ def test_windows_container_auth_file_is_not_in_temporary_storage() -> None:
 def test_wsl_container_auth_file_is_not_in_temporary_storage() -> None:
     helper = read_text(BASH_HELPER)
 
-    assert 'AUTH_SECRET_FILE="${HOME:?HOME must be set}/.dots-founder-graph-auth-${project}.secret"' in helper
-    assert 'AUTH_SECRET_FILE="${TMPDIR:-/tmp}/dots-founder-graph-auth-${project}.secret"' not in helper
+    assert 'AUTH_SECRET_FILE="${HOME:?HOME must be set}/.nebula-founder-graph-auth-${project}.secret"' in helper
+    assert 'AUTH_SECRET_FILE="${TMPDIR:-/tmp}/nebula-founder-graph-auth-${project}.secret"' not in helper
     assert "remove_persistent_auth_secret" not in helper
 
 

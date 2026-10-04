@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from dots.idea_brief import SECTION_TITLES
-from dots.markdown_report_projection import (
+from nebula.idea_brief import SECTION_TITLES
+from nebula.markdown_report_projection import (
     find_unique_visible_quote,
     has_visible_markdown_content,
     project_markdown_report,

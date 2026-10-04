@@ -5,7 +5,7 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset,
     AssetHomeCategory,
     AssetKind,

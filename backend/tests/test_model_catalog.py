@@ -1,6 +1,6 @@
 import pytest
 
-from dots.model_catalog import (
+from nebula.model_catalog import (
     DEFAULT_MODEL_CATALOG,
     LUNA_LOGICAL_KEY,
     ModelCatalog,

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Provenance, ResearchCampaign, ResearchRun, Status
-from dots.founder_graph_write import (
+from nebula.founder_graph import EgressPolicy, Provenance, ResearchCampaign, ResearchRun, Status
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     InMemoryGraphWriteService,

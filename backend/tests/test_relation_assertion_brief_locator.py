@@ -5,11 +5,11 @@ import json
 
 import pytest
 
-from dots.founder_graph import DomainValidationError, EgressPolicy
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_read import _decode_assertion
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_read import GraphReadService
+from nebula.founder_graph import DomainValidationError, EgressPolicy
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_read import _decode_assertion
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_read import GraphReadService
 from test_founder_graph_relation_assertion_write import _setup
 
 

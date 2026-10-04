@@ -11,15 +11,15 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset, Claim, EgressPolicy, Evidence, Idea, NodeType, Provenance,
     RelationAssertion, RelationType, RelationshipStatus, ResearchCampaign, ResearchRun, Status,
 )
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.idea_brief_neo4j import Neo4jIdeaBriefStore
-from dots.local_graph_provenance import (
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.idea_brief_neo4j import Neo4jIdeaBriefStore
+from nebula.local_graph_provenance import (
     GraphProvenanceNotFound, Neo4jGraphProvenanceStore, read_local_graph_provenance,
 )
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from hashlib import sha256
 
-from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, KnowledgeAsset
-from dots.founder_graph_write import (
+from nebula.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, KnowledgeAsset
+from nebula.founder_graph_write import (
     GraphWriteNotFoundError,
     GraphWriteError,
     IdempotencyConflictError,
@@ -12,8 +12,8 @@ from dots.founder_graph_write import (
     NodeAlreadyExistsError,
     RevisionConflictError,
 )
-from dots.founder_graph_read import GraphReadNotFoundError, GraphReadService
-from dots.founder_graph_lifecycle_resolver import resolve_restored_asset_reference
+from nebula.founder_graph_read import GraphReadNotFoundError, GraphReadService
+from nebula.founder_graph_lifecycle_resolver import resolve_restored_asset_reference
 
 
 def test_revise_asset_appends_owner_scoped_shareable_revision_and_replays() -> None:

@@ -3,13 +3,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from dots.founder_graph_job_store import (
+from nebula.founder_graph_job_store import (
     FounderGraphJobStore, JobConflictError, JobLeaseError, JobState, JobStoreError,
     _job_from_row,
 )
-from dots.founder_graph import NodeType, RelationType
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.relation_candidate_manifest import CandidateEntityRef, validate_relation_candidate_manifest
+from nebula.founder_graph import NodeType, RelationType
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.relation_candidate_manifest import CandidateEntityRef, validate_relation_candidate_manifest
 
 
 class Result:

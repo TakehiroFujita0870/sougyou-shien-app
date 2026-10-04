@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from dots.founder_graph_mcp_stdio import create_stdio_server
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.main import create_app
+from nebula.founder_graph_mcp_stdio import create_stdio_server
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.main import create_app
 
 
 EXPECTED_DESTRUCTIVE_HINTS = {

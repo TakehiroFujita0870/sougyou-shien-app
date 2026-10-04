@@ -1,9 +1,9 @@
 from dataclasses import replace
 import json
 
-from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, Idea, Provenance, Status
-from dots.founder_graph_neo4j import _node_properties
-from dots.founder_graph_lifecycle_resolver import (
+from nebula.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, Idea, Provenance, Status
+from nebula.founder_graph_neo4j import _node_properties
+from nebula.founder_graph_lifecycle_resolver import (
     lifecycle_reference_aliases,
     decode_asset_lifecycle_record,
     resolve_restored_asset_reference,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dots.founder_graph import NodeType
-from dots.founder_graph_neo4j_read import required_node_id, required_owner
-from dots.founder_graph_read_contract import (
+from nebula.founder_graph import NodeType
+from nebula.founder_graph_neo4j_read import required_node_id, required_owner
+from nebula.founder_graph_read_contract import (
     FIELD_ALLOWLIST,
     NON_CURRENT_STATUSES,
     result_rows,

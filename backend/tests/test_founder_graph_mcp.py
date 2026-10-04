@@ -5,11 +5,11 @@ from dataclasses import replace
 
 import pytest
 
-from dots.founder_graph import Claim, EgressPolicy, Evidence, Idea, MaterialKind, PersonAsset, RelationType, Relationship, ResearchMaterial, Source, SourceRevision
-from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_read import GraphReadService, GraphReadTimeoutError, GraphReadUnavailableError, NodeView, RelationPathStep, SearchHit
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
+from nebula.founder_graph import Claim, EgressPolicy, Evidence, Idea, MaterialKind, PersonAsset, RelationType, Relationship, ResearchMaterial, Source, SourceRevision
+from nebula.founder_graph_mcp import McpReadError, McpReadSurface
+from nebula.founder_graph_read import GraphReadService, GraphReadTimeoutError, GraphReadUnavailableError, NodeView, RelationPathStep, SearchHit
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
 
 
 def _surface() -> tuple[InMemoryGraphWriteService, McpReadSurface]:
@@ -191,7 +191,7 @@ def test_search_and_fetch_return_shareable_projection_only() -> None:
     fetched = surface.call("fetch", {"id": material.id}, owner_id="owner-1")
 
     assert searched["results"][0]["id"] == material.id
-    assert searched["results"][0]["canonical_url"] == "dots://node/material-1"
+    assert searched["results"][0]["canonical_url"] == "nebula://node/material-1"
     assert fetched["text"] == "A shareable finding"
     assert fetched["locator"] == material.locator
 

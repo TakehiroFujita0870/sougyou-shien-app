@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset,
     Claim,
     EgressPolicy,
@@ -25,9 +25,9 @@ from dots.founder_graph import (
     Status,
     _ALLOWED_RELATION_ENDPOINTS,
 )
-from dots.founder_graph_mcp_write import McpWriteSurface
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_mcp_write import McpWriteSurface
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from founder_graph_post_research_fixtures import (
     EXPECTED_GRAPHS,
     ExpectedGraph,

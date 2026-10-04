@@ -8,14 +8,14 @@ trap 'rm -rf -- "$temp_root"' EXIT
 
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 home="$temp_root/home"
-fake_repo="$home/projects/dots-live"
-control_env="$home/.config/dots/live-control-plane.env"
-control_env_target="$home/.config/dots/live-runtime-key.env"
-auth_file="$home/.config/dots/live-neo4j-auth.secret"
+fake_repo="$home/projects/nebula-live"
+control_env="$home/.config/nebula/live-control-plane.env"
+control_env_target="$home/.config/nebula/live-runtime-key.env"
+auth_file="$home/.config/nebula/live-neo4j-auth.secret"
 unit_dir="$home/.config/systemd/user"
-installed="$unit_dir/dots-local-dashboard.service"
-mkdir -p "$fake_repo/scripts/founder-graph" "$fake_repo/dist" "$home/.config/dots" "$temp_root/bin"
-cp "$repo/scripts/founder-graph/dots-local-dashboard.service" "$fake_repo/scripts/founder-graph/"
+installed="$unit_dir/nebula-local-dashboard.service"
+mkdir -p "$fake_repo/scripts/founder-graph" "$fake_repo/dist" "$home/.config/nebula" "$temp_root/bin"
+cp "$repo/scripts/founder-graph/nebula-local-dashboard.service" "$fake_repo/scripts/founder-graph/"
 printf '%s\n' 'fake control settings' > "$control_env_target"
 printf '%s\n' 'fake auth bytes' > "$auth_file"
 printf '%s\n' '<!doctype html>' > "$fake_repo/dist/index.html"
@@ -60,7 +60,7 @@ mv "$control_env_target.missing" "$control_env_target"
 # Installing the exact fixed template reloads definitions only.
 run_installer >/dev/null || fail 'The valid fixed controller unit did not install.'
 [[ -f "$installed" ]] || fail 'The fixed controller unit was not written.'
-cmp -s "$fake_repo/scripts/founder-graph/dots-local-dashboard.service" "$installed" || fail 'The installed definition differs from the approved fixed source.'
+cmp -s "$fake_repo/scripts/founder-graph/nebula-local-dashboard.service" "$installed" || fail 'The installed definition differs from the approved fixed source.'
 [[ "$(<"$SYSTEMCTL_LOG")" == '--user daemon-reload' ]] || fail 'The installer started or enabled a user service.'
 
 # A conflicting existing definition is preserved byte-for-byte.

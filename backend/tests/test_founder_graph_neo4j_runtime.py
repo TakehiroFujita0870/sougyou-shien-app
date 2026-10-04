@@ -7,21 +7,21 @@ import json
 from unittest.mock import patch
 
 import pytest
-import dots.main as main_module
-import dots.founder_graph_mcp_stdio as stdio_module
+import nebula.main as main_module
+import nebula.founder_graph_mcp_stdio as stdio_module
 from fastapi.testclient import TestClient
-from dots.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship, ResearchCampaign, ResearchRun
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService, PersistedNodeReference
-from dots.founder_graph_write import IdempotencyConflictError
-from dots.founder_graph_neo4j_read import Neo4jGraphReadService
-from dots.founder_graph_runtime import (
+from nebula.founder_graph import Idea, NodeType, PersonAsset, RelationType, Relationship, ResearchCampaign, ResearchRun
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService, PersistedNodeReference
+from nebula.founder_graph_write import IdempotencyConflictError
+from nebula.founder_graph_neo4j_read import Neo4jGraphReadService
+from nebula.founder_graph_runtime import (
     create_neo4j_driver_from_env,
     create_neo4j_graph_composition,
     resolve_graph_backend,
 )
-from dots.main import create_app, create_configured_app, create_neo4j_app
-from dots.founder_graph_mcp_stdio import create_neo4j_stdio_server
+from nebula.main import create_app, create_configured_app, create_neo4j_app
+from nebula.founder_graph_mcp_stdio import create_neo4j_stdio_server
 
 
 @dataclass
@@ -59,7 +59,7 @@ class _Session:
         if "MATCH (n {id: $node_id, owner_id: $owner_id})" in query:
             return _Result(self.records.get(params["node_id"]))
         if "MATCH (i:Idea" in query and "RETURN i.id AS id" in query:
-            if "SET i._dots_idea_write_lock" in query:
+            if "SET i._nebula_idea_write_lock" in query:
                 return _Result(self.records.get(params["id"]))
             if "{id: $id, owner_id: $owner_id}" in query:
                 return _Result(self.records.get(params["id"]))
@@ -109,9 +109,9 @@ def test_composition_binds_one_gateway_without_implicit_connection() -> None:
 
 def test_normal_search_defaults_to_base_and_reranks_forty_candidates(monkeypatch) -> None:
     session = _Session({})
-    monkeypatch.delenv("DOTS_SEARCH_PROFILE", raising=False)
-    monkeypatch.delenv("DOTS_SEARCH_RERANK_ENABLED", raising=False)
-    monkeypatch.delenv("DOTS_SEARCH_RERANK_CANDIDATE_LIMIT", raising=False)
+    monkeypatch.delenv("NEBULA_SEARCH_PROFILE", raising=False)
+    monkeypatch.delenv("NEBULA_SEARCH_RERANK_ENABLED", raising=False)
+    monkeypatch.delenv("NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT", raising=False)
 
     composition = create_neo4j_graph_composition(_Driver(session), "owner-1")
 
@@ -123,7 +123,7 @@ def test_normal_search_defaults_to_base_and_reranks_forty_candidates(monkeypatch
 
 
 def test_normal_graph_writes_store_the_pinned_base_vector() -> None:
-    from dots.founder_graph_local_models import E5_BASE_DIMENSIONS, E5_BASE_MODEL_ID, E5_BASE_MODEL_REVISION
+    from nebula.founder_graph_local_models import E5_BASE_DIMENSIONS, E5_BASE_MODEL_ID, E5_BASE_MODEL_REVISION
 
     class SearchModels:
         embedding_model_id = E5_BASE_MODEL_ID
@@ -145,7 +145,7 @@ def test_normal_graph_writes_store_the_pinned_base_vector() -> None:
 
 
 def test_normal_reindex_backfills_the_base_property_and_model_provenance() -> None:
-    from dots.founder_graph_local_models import E5_BASE_DIMENSIONS, E5_BASE_MODEL_ID, E5_BASE_MODEL_REVISION
+    from nebula.founder_graph_local_models import E5_BASE_DIMENSIONS, E5_BASE_MODEL_ID, E5_BASE_MODEL_REVISION
 
     class SearchModels:
         embedding_model_id = E5_BASE_MODEL_ID
@@ -184,26 +184,26 @@ def test_normal_reindex_backfills_the_base_property_and_model_provenance() -> No
 
 def test_normal_search_rejects_legacy_or_disabled_configuration(monkeypatch) -> None:
     session = _Session({})
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", "small")
-    with pytest.raises(RuntimeError, match="DOTS_SEARCH_PROFILE must be base"):
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", "small")
+    with pytest.raises(RuntimeError, match="NEBULA_SEARCH_PROFILE must be base"):
         create_neo4j_graph_composition(_Driver(session), "owner-1")
 
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", "base")
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_ENABLED", "0")
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", "base")
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_ENABLED", "0")
     with pytest.raises(RuntimeError, match="local reranker to be enabled"):
         create_neo4j_graph_composition(_Driver(session), "owner-1")
 
 
 def test_synthetic_profile_selects_base_index_and_rerank_cap_40(monkeypatch) -> None:
     session = _Session({})
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", "e5base-synthetic")
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "dots-synthetic-test")
-    monkeypatch.setenv("DOTS_NEO4J_URI", "bolt://127.0.0.1:7688")
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_ENABLED", "1")
-    monkeypatch.setattr("dots.founder_graph_runtime._validate_synthetic_search_target", lambda **_kwargs: None)
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", "e5base-synthetic")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "nebula-synthetic-test")
+    monkeypatch.setenv("NEBULA_NEO4J_URI", "bolt://127.0.0.1:7688")
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_ENABLED", "1")
+    monkeypatch.setattr("nebula.founder_graph_runtime._validate_synthetic_search_target", lambda **_kwargs: None)
 
-    composition = create_neo4j_graph_composition(_Driver(session), "dots-synthetic-test")
+    composition = create_neo4j_graph_composition(_Driver(session), "nebula-synthetic-test")
 
     assert composition.gateway.search_models.embedding_profile == "base"
     assert composition.reads._vector_index_name == "dots_founder_graph_vector_e5base_synthetic"
@@ -214,61 +214,61 @@ def test_synthetic_profile_selects_base_index_and_rerank_cap_40(monkeypatch) -> 
 @pytest.mark.parametrize(
     ("owner_id", "database", "uri", "backend_owner"),
     [
-        ("normal-owner", "neo4j", "bolt://127.0.0.1:7688", "dots-synthetic-test"),
-        ("dots-synthetic-test", "neo4j", "bolt://127.0.0.1:7687", "dots-synthetic-test"),
-        ("dots-synthetic-test", "system", "bolt://127.0.0.1:7688", "dots-synthetic-test"),
-        ("dots-synthetic-test", "neo4j", "bolt://localhost:7688", "dots-synthetic-test"),
-        ("dots-synthetic-test", "neo4j", "bolt://127.0.0.1:7688", "normal-owner"),
+        ("normal-owner", "neo4j", "bolt://127.0.0.1:7688", "nebula-synthetic-test"),
+        ("nebula-synthetic-test", "neo4j", "bolt://127.0.0.1:7687", "nebula-synthetic-test"),
+        ("nebula-synthetic-test", "system", "bolt://127.0.0.1:7688", "nebula-synthetic-test"),
+        ("nebula-synthetic-test", "neo4j", "bolt://localhost:7688", "nebula-synthetic-test"),
+        ("nebula-synthetic-test", "neo4j", "bolt://127.0.0.1:7688", "normal-owner"),
     ],
 )
 def test_synthetic_profile_rejects_wrong_owner_database_or_uri(monkeypatch, owner_id, database, uri, backend_owner) -> None:
-    from dots.founder_graph_runtime import _validate_synthetic_search_target
+    from nebula.founder_graph_runtime import _validate_synthetic_search_target
 
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", "e5base-synthetic")
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", backend_owner)
-    monkeypatch.setenv("DOTS_NEO4J_URI", uri)
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", "e5base-synthetic")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", backend_owner)
+    monkeypatch.setenv("NEBULA_NEO4J_URI", uri)
     with pytest.raises(RuntimeError, match="synthetic"):
         _validate_synthetic_search_target(owner_id=owner_id, database=database)
 
 
-@pytest.mark.parametrize("volume", ["dots-chatgpt-synthetic-neo4j-v2", "normal-dots-volume"])
+@pytest.mark.parametrize("volume", ["nebula-chatgpt-synthetic-neo4j-v2", "normal-nebula-volume"])
 def test_synthetic_profile_requires_exact_container_volume_and_loopback_binding(monkeypatch, volume) -> None:
     from types import SimpleNamespace
-    from dots.founder_graph_runtime import _validate_synthetic_search_target
+    from nebula.founder_graph_runtime import _validate_synthetic_search_target
 
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "dots-synthetic-test")
-    monkeypatch.setenv("DOTS_NEO4J_URI", "bolt://127.0.0.1:7688")
-    monkeypatch.setattr("dots.founder_graph_runtime.shutil.which", lambda _binary: "/usr/bin/docker")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "nebula-synthetic-test")
+    monkeypatch.setenv("NEBULA_NEO4J_URI", "bolt://127.0.0.1:7688")
+    monkeypatch.setattr("nebula.founder_graph_runtime.shutil.which", lambda _binary: "/usr/bin/docker")
     mounts = [{"Type": "volume", "Name": volume, "Destination": "/data"}]
     bindings = {"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": "7688"}]}
     monkeypatch.setattr(
-        "dots.founder_graph_runtime.subprocess.run",
+        "nebula.founder_graph_runtime.subprocess.run",
         lambda *_args, **_kwargs: SimpleNamespace(
             stdout=f"{json.dumps(mounts)}|{json.dumps(bindings)}|running"
         ),
     )
-    if volume != "dots-chatgpt-synthetic-neo4j-v2":
+    if volume != "nebula-chatgpt-synthetic-neo4j-v2":
         with pytest.raises(RuntimeError, match="synthetic graph volume"):
-            _validate_synthetic_search_target(owner_id="dots-synthetic-test", database="neo4j")
+            _validate_synthetic_search_target(owner_id="nebula-synthetic-test", database="neo4j")
     else:
-        _validate_synthetic_search_target(owner_id="dots-synthetic-test", database="neo4j")
+        _validate_synthetic_search_target(owner_id="nebula-synthetic-test", database="neo4j")
 
 
 def test_synthetic_profile_uses_explicit_docker_cli_without_systemd_path(monkeypatch, tmp_path) -> None:
     from types import SimpleNamespace
-    from dots.founder_graph_runtime import _validate_synthetic_search_target
+    from nebula.founder_graph_runtime import _validate_synthetic_search_target
 
     cli = tmp_path / "docker.exe"
     cli.write_text("", encoding="utf-8")
     cli.chmod(0o700)
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "dots-synthetic-test")
-    monkeypatch.setenv("DOTS_NEO4J_URI", "bolt://127.0.0.1:7688")
-    monkeypatch.setenv("DOTS_DOCKER_CLI", str(cli))
-    monkeypatch.setattr("dots.founder_graph_runtime.shutil.which", lambda _binary: None)
-    mounts = [{"Type": "volume", "Name": "dots-chatgpt-synthetic-neo4j-v2", "Destination": "/data"}]
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "nebula-synthetic-test")
+    monkeypatch.setenv("NEBULA_NEO4J_URI", "bolt://127.0.0.1:7688")
+    monkeypatch.setenv("NEBULA_DOCKER_CLI", str(cli))
+    monkeypatch.setattr("nebula.founder_graph_runtime.shutil.which", lambda _binary: None)
+    mounts = [{"Type": "volume", "Name": "nebula-chatgpt-synthetic-neo4j-v2", "Destination": "/data"}]
     bindings = {"7687/tcp": [{"HostIp": "127.0.0.1", "HostPort": "7688"}]}
     calls = []
 
@@ -276,23 +276,23 @@ def test_synthetic_profile_uses_explicit_docker_cli_without_systemd_path(monkeyp
         calls.append(command)
         return SimpleNamespace(stdout=f"{json.dumps(mounts)}|{json.dumps(bindings)}|running")
 
-    monkeypatch.setattr("dots.founder_graph_runtime.subprocess.run", fake_run)
-    _validate_synthetic_search_target(owner_id="dots-synthetic-test", database="neo4j")
+    monkeypatch.setattr("nebula.founder_graph_runtime.subprocess.run", fake_run)
+    _validate_synthetic_search_target(owner_id="nebula-synthetic-test", database="neo4j")
 
     assert calls[0][0] == str(cli)
 
 
 def test_synthetic_profile_rejects_invalid_explicit_docker_cli(monkeypatch, tmp_path) -> None:
-    from dots.founder_graph_runtime import _validate_synthetic_search_target
+    from nebula.founder_graph_runtime import _validate_synthetic_search_target
 
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "dots-synthetic-test")
-    monkeypatch.setenv("DOTS_NEO4J_URI", "bolt://127.0.0.1:7688")
-    monkeypatch.setenv("DOTS_DOCKER_CLI", str(tmp_path / "missing-docker.exe"))
-    monkeypatch.setattr("dots.founder_graph_runtime.shutil.which", lambda _binary: "/usr/bin/docker")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "nebula-synthetic-test")
+    monkeypatch.setenv("NEBULA_NEO4J_URI", "bolt://127.0.0.1:7688")
+    monkeypatch.setenv("NEBULA_DOCKER_CLI", str(tmp_path / "missing-docker.exe"))
+    monkeypatch.setattr("nebula.founder_graph_runtime.shutil.which", lambda _binary: "/usr/bin/docker")
 
-    with pytest.raises(RuntimeError, match="DOTS_DOCKER_CLI"):
-        _validate_synthetic_search_target(owner_id="dots-synthetic-test", database="neo4j")
+    with pytest.raises(RuntimeError, match="NEBULA_DOCKER_CLI"):
+        _validate_synthetic_search_target(owner_id="nebula-synthetic-test", database="neo4j")
 
 
 def _live_inspect_result(
@@ -348,29 +348,29 @@ def _configure_live_guard(
     auth_file = tmp_path / "live-auth-file"
     auth_file.touch()
     auth_file.chmod(0o600)
-    monkeypatch.setenv("DOTS_CONNECTION_PROFILE", "live")
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", owner)
-    monkeypatch.setenv("DOTS_NEO4J_URI", uri)
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(auth_file))
-    monkeypatch.setenv("DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED", "1")
-    monkeypatch.setenv("DOTS_LIVE_EGRESS_REVIEW_CONFIRMED", "1")
-    monkeypatch.delenv("DOTS_DOCKER_CLI", raising=False)
-    monkeypatch.setattr("dots.founder_graph_runtime.shutil.which", lambda _binary: "/usr/bin/docker")
+    monkeypatch.setenv("NEBULA_CONNECTION_PROFILE", "live")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", owner)
+    monkeypatch.setenv("NEBULA_NEO4J_URI", uri)
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(auth_file))
+    monkeypatch.setenv("NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED", "1")
+    monkeypatch.setenv("NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED", "1")
+    monkeypatch.delenv("NEBULA_DOCKER_CLI", raising=False)
+    monkeypatch.setattr("nebula.founder_graph_runtime.shutil.which", lambda _binary: "/usr/bin/docker")
     queue = list(results if results is not None else _live_inspect_result())
-    monkeypatch.setattr("dots.founder_graph_runtime.subprocess.run", lambda *_args, **_kwargs: queue.pop(0))
+    monkeypatch.setattr("nebula.founder_graph_runtime.subprocess.run", lambda *_args, **_kwargs: queue.pop(0))
 
 
 def test_live_profile_requires_both_pre_activation_gates(monkeypatch, tmp_path) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
-    monkeypatch.setenv("DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED", "0")
+    monkeypatch.setenv("NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED", "0")
     with pytest.raises(RuntimeError, match="rotation"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
-    monkeypatch.setenv("DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED", "1")
-    monkeypatch.delenv("DOTS_LIVE_EGRESS_REVIEW_CONFIRMED")
+    monkeypatch.setenv("NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED", "1")
+    monkeypatch.delenv("NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED")
     with pytest.raises(RuntimeError, match="security review"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
@@ -382,14 +382,14 @@ def test_live_profile_requires_both_pre_activation_gates(monkeypatch, tmp_path) 
 def test_live_profile_requires_absolute_auth_file_and_rejects_password_env(
     monkeypatch, tmp_path, auth_file, password_env
 ) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", auth_file)
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", auth_file)
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
     if password_env is not None:
-        monkeypatch.setenv("DOTS_NEO4J_PASSWORD", password_env)
-    with pytest.raises(RuntimeError, match="DOTS_NEO4J_AUTH_FILE|DOTS_NEO4J_PASSWORD"):
+        monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", password_env)
+    with pytest.raises(RuntimeError, match="NEBULA_NEO4J_AUTH_FILE|NEBULA_NEO4J_PASSWORD"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
 
@@ -398,24 +398,24 @@ def test_live_profile_requires_absolute_auth_file_and_rejects_password_env(
     [
         ("", None),
         ("relative/live-auth", None),
-        ("/tmp/dots-live-neo4j-auth", "test-only-not-a-secret"),
-        ("/tmp/dots-live-neo4j-auth", ""),
+        ("/tmp/nebula-live-neo4j-auth", "test-only-not-a-secret"),
+        ("/tmp/nebula-live-neo4j-auth", ""),
     ],
 )
 def test_live_driver_requires_absolute_auth_file_and_rejects_password_env(monkeypatch, auth_file, password_env) -> None:
-    monkeypatch.setenv("DOTS_CONNECTION_PROFILE", "live")
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", auth_file)
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
+    monkeypatch.setenv("NEBULA_CONNECTION_PROFILE", "live")
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", auth_file)
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
     if password_env is not None:
-        monkeypatch.setenv("DOTS_NEO4J_PASSWORD", password_env)
+        monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", password_env)
 
-    with pytest.raises(RuntimeError, match="DOTS_NEO4J_AUTH_FILE|DOTS_NEO4J_PASSWORD"):
+    with pytest.raises(RuntimeError, match="NEBULA_NEO4J_AUTH_FILE|NEBULA_NEO4J_PASSWORD"):
         create_neo4j_driver_from_env()
 
 
 @pytest.mark.parametrize("mode", [0o640, 0o604, 0o777])
 def test_live_auth_file_rejects_group_or_other_permissions(monkeypatch, tmp_path, mode) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
     auth_file = tmp_path / "live-auth-file"
@@ -425,7 +425,7 @@ def test_live_auth_file_rejects_group_or_other_permissions(monkeypatch, tmp_path
 
 
 def test_live_auth_file_rejects_symlink_and_non_regular_file(monkeypatch, tmp_path) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
     target = tmp_path / "auth-target"
@@ -433,30 +433,30 @@ def test_live_auth_file_rejects_symlink_and_non_regular_file(monkeypatch, tmp_pa
     target.chmod(0o600)
     link = tmp_path / "auth-link"
     link.symlink_to(target)
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(link))
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(link))
     with pytest.raises(RuntimeError, match="owner-only"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
     directory = tmp_path / "auth-directory"
     directory.mkdir()
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(directory))
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(directory))
     with pytest.raises(RuntimeError, match="owner-only"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
 
 def test_live_auth_file_requires_current_user_ownership(monkeypatch, tmp_path) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
     current_uid = __import__("os").geteuid()
-    monkeypatch.setattr("dots.founder_graph_runtime.os.geteuid", lambda: current_uid + 1)
+    monkeypatch.setattr("nebula.founder_graph_runtime.os.geteuid", lambda: current_uid + 1)
     with pytest.raises(RuntimeError, match="owner-only"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
 
 def test_live_auth_reader_rechecks_open_file_metadata_before_read(monkeypatch, tmp_path) -> None:
     import os
-    from dots.founder_graph_runtime import _read_neo4j_auth_file
+    from nebula.founder_graph_runtime import _read_neo4j_auth_file
 
     _configure_live_guard(monkeypatch, tmp_path)
     auth_file = tmp_path / "live-auth-file"
@@ -466,22 +466,22 @@ def test_live_auth_reader_rechecks_open_file_metadata_before_read(monkeypatch, t
         auth_file.chmod(0o640)
         return real_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr("dots.founder_graph_runtime.os.open", make_permissions_unsafe_then_open)
+    monkeypatch.setattr("nebula.founder_graph_runtime.os.open", make_permissions_unsafe_then_open)
     with pytest.raises(RuntimeError, match="owner-only"):
         _read_neo4j_auth_file()
 
 
 def test_live_profile_rejects_synthetic_environment_prefix(monkeypatch, tmp_path) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
-    monkeypatch.setenv("DOTS_SYNTHETIC_PROFILE", "enabled")
+    monkeypatch.setenv("NEBULA_SYNTHETIC_PROFILE", "enabled")
     with pytest.raises(RuntimeError, match="synthetic"):
         _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
 
 def test_live_profile_accepts_only_exact_read_only_container_and_volume_inspects(monkeypatch, tmp_path) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path)
     calls = []
@@ -491,7 +491,7 @@ def test_live_profile_accepts_only_exact_read_only_container_and_volume_inspects
         calls.append((command, kwargs))
         return results.pop(0)
 
-    monkeypatch.setattr("dots.founder_graph_runtime.subprocess.run", fake_run)
+    monkeypatch.setattr("nebula.founder_graph_runtime.subprocess.run", fake_run)
     _validate_live_search_target(owner_id="owner-mvp", database="neo4j")
 
     assert [call[0][1:3] for call in calls] == [["inspect", "--format"], ["volume", "inspect"]]
@@ -503,7 +503,7 @@ def test_live_profile_accepts_only_exact_read_only_container_and_volume_inspects
 @pytest.mark.parametrize(
     ("owner", "database", "uri"),
     [
-        ("dots-synthetic-test", "neo4j", "bolt://127.0.0.1:7687"),
+        ("nebula-synthetic-test", "neo4j", "bolt://127.0.0.1:7687"),
         ("owner-mvp", "system", "bolt://127.0.0.1:7687"),
         ("owner-mvp", "neo4j", "bolt://127.0.0.1:7688"),
         ("owner-mvp", "neo4j", "bolt://localhost:7687"),
@@ -511,7 +511,7 @@ def test_live_profile_accepts_only_exact_read_only_container_and_volume_inspects
     ],
 )
 def test_live_profile_rejects_wrong_owner_database_or_uri(monkeypatch, tmp_path, owner, database, uri) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path, owner=owner, uri=uri)
     with pytest.raises(RuntimeError, match="live"):
@@ -521,9 +521,9 @@ def test_live_profile_rejects_wrong_owner_database_or_uri(monkeypatch, tmp_path,
 @pytest.mark.parametrize(
     "result_kwargs",
     [
-        {"project": "dots-chatgpt-synthetic"},
+        {"project": "nebula-chatgpt-synthetic"},
         {"service": "synthetic-neo4j"},
-        {"volume": "dots-chatgpt-synthetic-neo4j"},
+        {"volume": "nebula-chatgpt-synthetic-neo4j"},
         {"role": "synthetic"},
         {"volume_database": "synthetic"},
         {"host_ip": "0.0.0.0"},
@@ -540,7 +540,7 @@ def test_live_profile_rejects_wrong_owner_database_or_uri(monkeypatch, tmp_path,
     ],
 )
 def test_live_profile_rejects_container_or_volume_identity_mismatch(monkeypatch, tmp_path, result_kwargs) -> None:
-    from dots.founder_graph_runtime import _validate_live_search_target
+    from nebula.founder_graph_runtime import _validate_live_search_target
 
     _configure_live_guard(monkeypatch, tmp_path, results=_live_inspect_result(**result_kwargs))
     with pytest.raises(RuntimeError, match="live"):
@@ -549,11 +549,11 @@ def test_live_profile_rejects_container_or_volume_identity_mismatch(monkeypatch,
 
 def test_live_profile_uses_base_index_and_reranker(monkeypatch) -> None:
     session = _Session({})
-    monkeypatch.setenv("DOTS_CONNECTION_PROFILE", "live")
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", "base")
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_ENABLED", "1")
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_CANDIDATE_LIMIT", "40")
-    monkeypatch.setattr("dots.founder_graph_runtime._validate_live_search_target", lambda **_kwargs: None)
+    monkeypatch.setenv("NEBULA_CONNECTION_PROFILE", "live")
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", "base")
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_ENABLED", "1")
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT", "40")
+    monkeypatch.setattr("nebula.founder_graph_runtime._validate_live_search_target", lambda **_kwargs: None)
 
     composition = create_neo4j_graph_composition(_Driver(session), "owner-mvp")
 
@@ -566,18 +566,18 @@ def test_live_profile_uses_base_index_and_reranker(monkeypatch) -> None:
 def test_live_service_template_is_separate_and_inactive_by_default() -> None:
     from pathlib import Path
 
-    service_path = Path(__file__).resolve().parents[2] / "scripts/founder-graph/dots-live-mcp-tunnel.service"
+    service_path = Path(__file__).resolve().parents[2] / "scripts/founder-graph/nebula-live-mcp-tunnel.service"
     service = service_path.read_text(encoding="utf-8")
 
-    assert "DOTS_CONNECTION_PROFILE=live" in service
-    assert "DOTS_LOCAL_OWNER_ID=owner-mvp" in service
-    assert "DOTS_NEO4J_URI=bolt://127.0.0.1:7687" in service
-    assert "DOTS_SEARCH_PROFILE=base" in service
-    assert "DOTS_SEARCH_RERANK_ENABLED=1" in service
-    assert "DOTS_SEARCH_RERANK_CANDIDATE_LIMIT=40" in service
-    assert "DOTS_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0" in service
-    assert "DOTS_LIVE_EGRESS_REVIEW_CONFIRMED=0" in service
-    assert "DOTS_SEARCH_PROFILE=e5base-synthetic" not in service
+    assert "NEBULA_CONNECTION_PROFILE=live" in service
+    assert "NEBULA_LOCAL_OWNER_ID=owner-mvp" in service
+    assert "NEBULA_NEO4J_URI=bolt://127.0.0.1:7687" in service
+    assert "NEBULA_SEARCH_PROFILE=base" in service
+    assert "NEBULA_SEARCH_RERANK_ENABLED=1" in service
+    assert "NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT=40" in service
+    assert "NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0" in service
+    assert "NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=0" in service
+    assert "NEBULA_SEARCH_PROFILE=e5base-synthetic" not in service
 
 
 @pytest.mark.parametrize(
@@ -593,11 +593,11 @@ def test_live_profile_rejects_synthetic_search_settings_before_target_inspection
         nonlocal called
         called = True
 
-    monkeypatch.setenv("DOTS_CONNECTION_PROFILE", "live")
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", search_profile)
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_ENABLED", rerank_enabled)
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_CANDIDATE_LIMIT", candidate_limit)
-    monkeypatch.setattr("dots.founder_graph_runtime._validate_live_search_target", validator)
+    monkeypatch.setenv("NEBULA_CONNECTION_PROFILE", "live")
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", search_profile)
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_ENABLED", rerank_enabled)
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT", candidate_limit)
+    monkeypatch.setattr("nebula.founder_graph_runtime._validate_live_search_target", validator)
 
     with pytest.raises(RuntimeError, match="live search profile"):
         create_neo4j_graph_composition(_Driver(_Session({})), "owner-mvp")
@@ -605,11 +605,11 @@ def test_live_profile_rejects_synthetic_search_settings_before_target_inspection
 
 
 def test_live_profile_accepts_promoted_base_search_settings(monkeypatch) -> None:
-    monkeypatch.setenv("DOTS_CONNECTION_PROFILE", "live")
-    monkeypatch.setenv("DOTS_SEARCH_PROFILE", "base")
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_ENABLED", "1")
-    monkeypatch.setenv("DOTS_SEARCH_RERANK_CANDIDATE_LIMIT", "40")
-    monkeypatch.setattr("dots.founder_graph_runtime._validate_live_search_target", lambda **_kwargs: None)
+    monkeypatch.setenv("NEBULA_CONNECTION_PROFILE", "live")
+    monkeypatch.setenv("NEBULA_SEARCH_PROFILE", "base")
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_ENABLED", "1")
+    monkeypatch.setenv("NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT", "40")
+    monkeypatch.setattr("nebula.founder_graph_runtime._validate_live_search_target", lambda **_kwargs: None)
 
     composition = create_neo4j_graph_composition(_Driver(_Session({})), "owner-mvp")
 
@@ -632,18 +632,18 @@ def test_app_rejects_persistent_write_without_matching_persistent_read() -> None
 
 
 def test_backend_resolution_prefers_explicit_memory_for_isolated_tests(monkeypatch) -> None:
-    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
-    monkeypatch.delenv("DOTS_NEO4J_AUTH_FILE", raising=False)
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "memory")
+    monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.delenv("NEBULA_NEO4J_AUTH_FILE", raising=False)
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "memory")
 
     assert resolve_graph_backend() == "memory"
     assert create_configured_app().title == "Nebula API"
 
 
 def test_backend_resolution_uses_configured_neo4j_without_backend_flag(monkeypatch) -> None:
-    monkeypatch.delenv("DOTS_GRAPH_BACKEND", raising=False)
-    monkeypatch.delenv("DOTS_NEO4J_AUTH_FILE", raising=False)
-    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.delenv("NEBULA_GRAPH_BACKEND", raising=False)
+    monkeypatch.delenv("NEBULA_NEO4J_AUTH_FILE", raising=False)
+    monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", "local-only-test")
 
     assert resolve_graph_backend() == "neo4j"
 
@@ -653,9 +653,9 @@ def test_backend_resolution_uses_auth_file_when_password_is_not_in_environment(
 ) -> None:
     auth_file = tmp_path / "neo4j-auth"
     auth_file.write_text("neo4j/synthetic-only-secret\n", encoding="utf-8")
-    monkeypatch.delenv("DOTS_GRAPH_BACKEND", raising=False)
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(auth_file))
+    monkeypatch.delenv("NEBULA_GRAPH_BACKEND", raising=False)
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(auth_file))
 
     assert resolve_graph_backend() == "neo4j"
 
@@ -665,11 +665,11 @@ def test_neo4j_driver_reads_username_and_password_from_auth_file(
 ) -> None:
     auth_file = tmp_path / "neo4j-auth"
     auth_file.write_text("neo4j/synthetic-only-secret\n", encoding="utf-8")
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(auth_file))
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
-    monkeypatch.delenv("DOTS_NEO4J_USERNAME", raising=False)
-    monkeypatch.delenv("DOTS_NEO4J_URI", raising=False)
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(auth_file))
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
+    monkeypatch.delenv("NEBULA_NEO4J_USERNAME", raising=False)
+    monkeypatch.delenv("NEBULA_NEO4J_URI", raising=False)
 
     with patch("neo4j.GraphDatabase.driver", return_value="driver") as driver_factory:
         assert create_neo4j_driver_from_env() == "driver"
@@ -685,9 +685,9 @@ def test_neo4j_auth_file_rejects_symlinks_without_leaking_content(monkeypatch, t
     alias = tmp_path / "alias"
     source.write_text(f"neo4j/{secret}\n", encoding="utf-8")
     alias.symlink_to(source)
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(alias))
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(alias))
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
 
     try:
         create_neo4j_driver_from_env()
@@ -704,9 +704,9 @@ def test_neo4j_auth_file_rejects_malformed_content_without_leaking_content(
     secret = "synthetic-only-secret"
     auth_file = tmp_path / "neo4j-auth"
     auth_file.write_text(f"malformed/{secret}/extra\nsecond-line", encoding="utf-8")
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_NEO4J_AUTH_FILE", str(auth_file))
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_NEO4J_AUTH_FILE", str(auth_file))
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
 
     try:
         create_neo4j_driver_from_env()
@@ -719,9 +719,9 @@ def test_neo4j_auth_file_rejects_malformed_content_without_leaking_content(
 
 def test_configured_app_wires_neo4j_when_selected(monkeypatch) -> None:
     session = _Session({})
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "owner-persistent")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "owner-persistent")
     monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", lambda: _Driver(session))
 
     app = create_configured_app()
@@ -739,7 +739,7 @@ def test_configured_app_closes_only_its_owned_driver_on_shutdown(monkeypatch) ->
         def close(self):
             self.close_calls += 1
 
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
     driver = ClosableDriver()
     monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", lambda: driver)
 
@@ -764,7 +764,7 @@ def test_configured_app_closes_driver_if_app_composition_fails(monkeypatch) -> N
             self.close_calls += 1
 
     driver = ClosableDriver()
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
     monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", lambda: driver)
     monkeypatch.setattr(main_module, "create_neo4j_app", lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("composition failed")))
 
@@ -774,9 +774,9 @@ def test_configured_app_closes_driver_if_app_composition_fails(monkeypatch) -> N
 
 
 def test_configured_neo4j_outage_fails_closed_for_fastapi_and_stdio(monkeypatch) -> None:
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.setenv("DOTS_NEO4J_PASSWORD", "local-only-test")
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "owner-persistent")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.setenv("NEBULA_NEO4J_PASSWORD", "local-only-test")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "owner-persistent")
     monkeypatch.setattr(main_module, "create_neo4j_driver_from_env", _UnavailableDriver)
     monkeypatch.setattr(stdio_module, "create_neo4j_driver_from_env", _UnavailableDriver)
 
@@ -796,7 +796,7 @@ def test_configured_neo4j_outage_fails_closed_for_fastapi_and_stdio(monkeypatch)
 
 
 def test_unknown_backend_fails_closed_before_app_creation(monkeypatch) -> None:
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "unknown")
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "unknown")
 
     try:
         create_configured_app()
@@ -807,14 +807,14 @@ def test_unknown_backend_fails_closed_before_app_creation(monkeypatch) -> None:
 
 
 def test_selected_neo4j_without_password_does_not_fall_back(monkeypatch) -> None:
-    monkeypatch.setenv("DOTS_GRAPH_BACKEND", "neo4j")
-    monkeypatch.delenv("DOTS_NEO4J_PASSWORD", raising=False)
-    monkeypatch.delenv("DOTS_NEO4J_AUTH_FILE", raising=False)
+    monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "neo4j")
+    monkeypatch.delenv("NEBULA_NEO4J_PASSWORD", raising=False)
+    monkeypatch.delenv("NEBULA_NEO4J_AUTH_FILE", raising=False)
 
     try:
         create_configured_app()
     except RuntimeError as error:
-        assert "DOTS_NEO4J_PASSWORD or DOTS_NEO4J_AUTH_FILE" in str(error)
+        assert "NEBULA_NEO4J_PASSWORD or NEBULA_NEO4J_AUTH_FILE" in str(error)
     else:  # pragma: no cover - assertion branch
         raise AssertionError("Neo4j configuration errors must not fall back to memory")
 

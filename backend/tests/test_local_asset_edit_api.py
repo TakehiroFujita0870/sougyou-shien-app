@@ -1,10 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.local_control import LocalControl, create_local_control_app
-from dots.local_home import LocalAssetWriter
+from nebula.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.local_control import LocalControl, create_local_control_app
+from nebula.local_home import LocalAssetWriter
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dots.local_graph_processing import GraphProcessingReadError, Neo4jGraphProcessingStore
+from nebula.local_graph_processing import GraphProcessingReadError, Neo4jGraphProcessingStore
 
 
 class Result:

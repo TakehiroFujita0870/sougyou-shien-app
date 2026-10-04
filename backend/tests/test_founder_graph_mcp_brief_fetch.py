@@ -4,14 +4,14 @@ import json
 
 from fastapi.testclient import TestClient
 
-from dots.founder_graph import EgressPolicy, Idea
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_mcp_stdio import FounderGraphStdioServer
-from dots.founder_graph_mcp_write import McpWriteSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.main import create_app
+from nebula.founder_graph import EgressPolicy, Idea
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_mcp_stdio import FounderGraphStdioServer
+from nebula.founder_graph_mcp_write import McpWriteSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.main import create_app
 
 
 def _seed_brief_surface() -> tuple[InMemoryGraphWriteService, str]:
