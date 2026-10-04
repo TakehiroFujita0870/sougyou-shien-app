@@ -62,21 +62,31 @@ function safeIdeaCitations(citations) {
   });
 }
 
-function IdeaCitationList({ citations }) {
-  const uniqueCitations = [...new Map(citations.map((citation) => [citation.href, citation])).values()];
-  if (!uniqueCitations.length) return null;
-  return <div className="local-home__citation" aria-label="出典">
-    <strong>出典</strong>
-    <ul>{uniqueCitations.map((citation) => <li key={citation.href}><a href={citation.href} target="_blank" rel="noopener noreferrer">{citation.title} <span aria-hidden="true">↗</span></a></li>)}</ul>
-  </div>;
+function ideaCitationGroups(citationChapters) {
+  if (!Array.isArray(citationChapters)) return [];
+  return IDEA_SECTIONS.flatMap((heading, index) => {
+    const citations = safeIdeaCitations(citationChapters[index]);
+    const uniqueCitations = [...new Map(citations.map((citation) => [citation.href, citation])).values()];
+    return uniqueCitations.length ? [{ heading, citations: uniqueCitations }] : [];
+  });
 }
 
-function IdeaReadingSection({ heading, body, citations = [] }) {
-  if (!body && !citations.length) return null;
+function IdeaCitationList({ groups }) {
+  if (!groups.length) return null;
+  return <section className="local-home__citation" aria-label="出典">
+    <h3 className="local-home__citation-heading">出典</h3>
+    {groups.map((group) => <div className="local-home__citation-group" key={group.heading}>
+      <h4>{group.heading}</h4>
+      <ul>{group.citations.map((citation) => <li key={citation.href}><a href={citation.href} target="_blank" rel="noopener noreferrer">{citation.title} <span aria-hidden="true">↗</span></a></li>)}</ul>
+    </div>)}
+  </section>;
+}
+
+function IdeaReadingSection({ heading, body }) {
+  if (!body) return null;
   return <section className="local-home__idea-reading-section">
     <h3>{heading}</h3>
-    {body && <p className="local-home__idea-reading-body">{body}</p>}
-    <IdeaCitationList citations={citations} />
+    <p className="local-home__idea-reading-body">{body}</p>
   </section>;
 }
 
@@ -84,8 +94,7 @@ function ideaReadingSections(idea) {
   return IDEA_SECTIONS.flatMap((heading, index) => {
     const savedBody = nonEmptyText(idea.brief_sections?.[index]);
     const body = savedBody || (index === 0 ? nonEmptyText(idea.summary) : '');
-    const citations = safeIdeaCitations(idea.brief_citations?.[index]);
-    return body || citations.length ? [{ heading, body, citations }] : [];
+    return body ? [{ heading, body }] : [];
   });
 }
 
@@ -191,9 +200,7 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   const selectedIdeaDescription = selectedIdeaSections.some((section) => section.body === candidateIdeaDescription)
     ? ''
     : candidateIdeaDescription;
-  const reportCitations = selectedIdea?.report_markdown && Array.isArray(selectedIdea.brief_citations)
-    ? safeIdeaCitations(selectedIdea.brief_citations.flat())
-    : [];
+  const selectedIdeaCitationGroups = selectedIdea ? ideaCitationGroups(selectedIdea.brief_citations) : [];
   function editIdea(idea) {
     setIdeaDraft({ id: idea.id, title: idea.title, description: idea.description ?? '', revision: idea.revision });
     setIdeaNotice('');
@@ -431,11 +438,12 @@ export function LocalHomeSurface({ client, onOpenServices }) {
         {selectedIdea.report_markdown
           ? <div className="local-home__idea-content local-home__idea-content--markdown">
             <MarkdownReport markdown={selectedIdea.report_markdown} chapterHeadings={IDEA_SECTIONS} />
-            <IdeaCitationList citations={reportCitations} />
+            <IdeaCitationList groups={selectedIdeaCitationGroups} />
           </div>
-          : (selectedIdeaDescription || selectedIdeaSections.length > 0) && <div className="local-home__idea-content">
+          : (selectedIdeaDescription || selectedIdeaSections.length > 0 || selectedIdeaCitationGroups.length > 0) && <div className="local-home__idea-content">
             {selectedIdeaDescription && <IdeaReadingSection heading="説明" body={selectedIdeaDescription} />}
             {selectedIdeaSections.map((section) => <IdeaReadingSection key={section.heading} {...section} />)}
+            <IdeaCitationList groups={selectedIdeaCitationGroups} />
           </div>}
       </article>}
     </section>}

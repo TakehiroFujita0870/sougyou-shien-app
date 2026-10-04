@@ -1,10 +1,10 @@
 .markdown-report { max-width: 76ch; color: #e4edfb; font-size: 15px; line-height: 1.7; letter-spacing: .004em; overflow-wrap: break-word; }
 .markdown-report > :first-child { margin-top: 0; }
-.markdown-report h1, .markdown-report h2, .markdown-report h3 { color: #f8fbff; line-height: 1.4; overflow-wrap: anywhere; }
+.markdown-report h3, .markdown-report h4, .markdown-report h5, .markdown-report h6 { color: #f8fbff; line-height: 1.4; overflow-wrap: anywhere; }
 .markdown-report__title-heading { margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid #57708d; font-size: 19px; font-weight: 750; letter-spacing: .01em; }
 .markdown-report__chapter-heading { margin: 22px 0 8px; padding: 12px 0 0 9px; border-top: 1px solid #52627c; border-left: 3px solid #9cc7ff; font-size: 16px; font-weight: 750; }
 .markdown-report > .markdown-report__chapter-heading:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-.markdown-report h2.markdown-report__subheading, .markdown-report h3.markdown-report__subheading { margin: 18px 0 8px; color: #d9eafa; font-size: 15px; font-weight: 700; }
+.markdown-report__subheading { margin: 18px 0 8px; color: #d9eafa; font-size: 15px; font-weight: 700; }
 .markdown-report p, .markdown-report ul, .markdown-report ol { margin: 0 0 12px; }
 .markdown-report p + p { margin-top: 12px; }
 .markdown-report ul, .markdown-report ol { padding-left: 1.4em; }

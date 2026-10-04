@@ -47,8 +47,10 @@
 .local-home__idea-reading-section:first-child { padding-top: 0; border-top: 0; }
 .local-home__idea-reading-section h3 { margin: 0; padding-left: 9px; border-left: 3px solid #9cc7ff; color: #f3f7ff; font-size: 16px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
 .local-home__idea-reading-body { margin: 0; color: #e2eaf6; font-size: 15px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.local-home__citation { margin-top: 0; padding: 10px 12px; border-left: 3px solid #63bfe8; background: #142944; }
-.local-home__citation strong { color: #bfe8ff; font-size: 12px; }
+.local-home__citation { margin-top: 12px; padding: 10px 12px; border-left: 3px solid #63bfe8; background: #142944; }
+.local-home__citation-heading { margin: 0 0 8px; color: #bfe8ff; font-size: 16px; line-height: 1.4; }
+.local-home__citation-group + .local-home__citation-group { margin-top: 9px; padding-top: 8px; border-top: 1px solid #405c78; }
+.local-home__citation-group h4 { margin: 0 0 4px; color: #cfe4f8; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .local-home__citation ul { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 0; padding: 0; list-style: none; }
 .local-home__citation a, .local-home__idea-content .markdown-report a { color: #94dbff; font-size: 14px; font-weight: 650; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .local-home__citation a:hover { color: #e0f6ff; }

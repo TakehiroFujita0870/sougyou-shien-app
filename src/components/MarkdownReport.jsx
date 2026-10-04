@@ -56,13 +56,24 @@ export function MarkdownReport({ markdown, chapterHeadings = [] }) {
   return <div className="markdown-report" aria-label="保存したレポート">
     <ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
       h1({ children }) {
-        return <h1 className={isChapterHeading(children) ? 'markdown-report__chapter-heading' : 'markdown-report__title-heading'}>{children}</h1>;
+        return <h3 className={isChapterHeading(children) ? 'markdown-report__chapter-heading' : 'markdown-report__title-heading'}>{children}</h3>;
       },
       h2({ children }) {
-        return <h2 className={isChapterHeading(children) ? 'markdown-report__chapter-heading' : 'markdown-report__subheading'}>{children}</h2>;
+        return isChapterHeading(children)
+          ? <h3 className="markdown-report__chapter-heading">{children}</h3>
+          : <h4 className="markdown-report__subheading">{children}</h4>;
       },
       h3({ children }) {
-        return <h3 className="markdown-report__subheading">{children}</h3>;
+        return <h5 className="markdown-report__subheading">{children}</h5>;
+      },
+      h4({ children }) {
+        return <h6 className="markdown-report__subheading">{children}</h6>;
+      },
+      h5({ children }) {
+        return <h6 className="markdown-report__subheading">{children}</h6>;
+      },
+      h6({ children }) {
+        return <h6 className="markdown-report__subheading">{children}</h6>;
       },
       a({ href, children }) {
         const url = safePublicCitationUrl(href);
