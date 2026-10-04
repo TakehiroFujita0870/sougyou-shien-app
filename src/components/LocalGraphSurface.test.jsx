@@ -18,6 +18,7 @@ const graphHarness = vi.hoisted(() => {
     graph: {
       zoomToFit: vi.fn(),
       centerAt: vi.fn(),
+      screen2GraphCoords: (x, y) => ({ x, y }),
       zoom: vi.fn((scale) => {
         if (scale === undefined) return zoomLevel;
         zoomLevel = scale;
@@ -80,6 +81,7 @@ function pointerEvent(type, x, y) {
     clientX: { value: x },
     clientY: { value: y },
     pointerId: { value: 1 },
+    button: { value: 0 },
   });
   return event;
 }
@@ -98,6 +100,31 @@ async function mountGraphSurface(client) {
   await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
   await flushEffects();
   return container;
+}
+
+function settleGraph() {
+  graphHarness.props.graphData.nodes.forEach((node, index) => {
+    if (!Number.isFinite(node.x)) Object.assign(node, { x: index * 60, y: index % 3 * 60 });
+  });
+  act(() => graphHarness.props.onEngineStop());
+}
+
+function clickNode(container, node, movement = 0) {
+  settleGraph();
+  const current = graphHarness.props.graphData.nodes.find(item => item.id === node.id);
+  const canvas = container.querySelector('.local-graph__canvas');
+  act(() => {
+    canvas.dispatchEvent(pointerEvent('pointerdown', current.x, current.y));
+    canvas.dispatchEvent(pointerEvent('pointermove', current.x + movement, current.y));
+    canvas.dispatchEvent(pointerEvent('pointerup', current.x + movement, current.y));
+  });
+}
+
+function clickRelation(container, edge) {
+  clickNode(container, { id: typeof edge.source === 'object' ? edge.source.id : edge.source });
+  const button = [...container.querySelectorAll('.local-graph__selected-relations button')]
+    .find(item => item.textContent.includes(` → ${edge.label} → `));
+  act(() => button.click());
 }
 
 describe('LocalGraphSurface Facet exploration', () => {
@@ -179,7 +206,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(client.getFacetRegion).not.toHaveBeenCalled();
     expect(container.querySelector('input[type="search"]')).toBeNull();
     expect(container.querySelector('[aria-label="意味関係"]')).toBeNull();
-    act(() => graphHarness.props.onNodeClick(graphHarness.props.graphData.nodes[419]));
+    clickNode(container, graphHarness.props.graphData.nodes[419], 2);
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('食品店の顧客調査');
     const incidentLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-419' || link.target === 'node-419');
     const unrelatedLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-0' && link.target === 'node-23');
@@ -239,12 +266,13 @@ describe('LocalGraphSurface Facet exploration', () => {
     });
     expect(drawContext.fillText).toHaveBeenCalledOnce();
     expect(drawContext.fillText.mock.calls[0][0]).toBe('事業案');
-    expect(drawContext.fillText.mock.calls[0][1]).toBeCloseTo(100 + starRadius(originalData.nodes[0]) + 5 / 0.9);
+    expect(drawContext.fillText.mock.calls[0][1]).toBeCloseTo(100 + starRadius(originalData.nodes[0]) + 9 / 0.9);
     expect(fillStyles).toContain(COLORS.idea);
     expect(shadowBlurs.some((blur) => blur > 0)).toBe(true);
     expect(drawContext.createRadialGradient).toHaveBeenCalledOnce();
     expect(drawContext.lineTo).not.toHaveBeenCalled();
     expect(drawContext.arc).toHaveBeenCalledWith(100, 120, 1.98, 0, Math.PI * 2);
+    settleGraph();
     graphHarness.graph.zoom.mockClear();
     graphHarness.graph.d3Force.mockClear();
     const canvas = container.querySelector('.local-graph__canvas');
@@ -254,11 +282,11 @@ describe('LocalGraphSurface Facet exploration', () => {
       canvas.dispatchEvent(pointerEvent('pointerdown', 20, 20));
       canvas.dispatchEvent(pointerEvent('pointermove', 22, 20));
       canvas.dispatchEvent(pointerEvent('pointerup', 20, 20));
-      graphHarness.props.onNodeClick(originalData.nodes[0]);
     });
+    clickNode(container, originalData.nodes[0]);
     expect(graphHarness.props.graphData).toBe(originalData);
     expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
-    expect(graphHarness.graph.zoom).not.toHaveBeenCalled();
+    expect(graphHarness.graph.zoom.mock.calls.every(args => args.length === 0)).toBe(true);
     expect(graphHarness.graph.d3Force).not.toHaveBeenCalled();
   });
 
@@ -282,12 +310,12 @@ describe('LocalGraphSurface Facet exploration', () => {
     graphHarness.graph.centerAt.mockClear();
     graphHarness.props.graphData.nodes[0].x = 99;
     act(() => {
-      graphHarness.props.onNodeClick(graphHarness.props.graphData.nodes[0]);
       graphHarness.props.onEngineStop();
     });
+    clickNode(container, graphHarness.props.graphData.nodes[0]);
     expect(graphHarness.props.graphData.nodes[0].x).toBe(99);
-    expect(graphHarness.graph.zoom).not.toHaveBeenCalled();
-    expect(graphHarness.graph.centerAt).not.toHaveBeenCalled();
+    expect(graphHarness.graph.zoom.mock.calls.every(args => args.length === 0)).toBe(true);
+    expect(graphHarness.graph.centerAt.mock.calls.every(args => args.length === 0)).toBe(true);
   });
 
   it('keeps the existing graph data and exposes no Facet controls when no Facets exist', async () => {
@@ -334,22 +362,59 @@ describe('LocalGraphSurface Facet exploration', () => {
     mounted.push({ root, container });
     await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
     await flushEffects();
+    clickNode(container, nodes[0], 5);
     act(() => graphHarness.props.onNodeClick(nodes[0]));
     expect(open).toHaveBeenCalledOnce();
     expect(open).toHaveBeenCalledWith('https://example.test/research', '_blank', 'noopener,noreferrer');
     expect(container.querySelector('.local-graph__canvas')).toBeTruthy();
     expect(container.querySelector('.local-graph__selected')).toBeNull();
 
-    act(() => graphHarness.props.onNodeClick(nodes[1]));
+    clickNode(container, nodes[1]);
     expect(open).toHaveBeenCalledOnce();
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('危険な出典');
 
-    act(() => graphHarness.props.onNodeClick(nodes[2]));
+    clickNode(container, nodes[2]);
     expect(open).toHaveBeenCalledOnce();
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('URLなし');
 
-    act(() => graphHarness.props.onNodeClick(nodes[3]));
+    clickNode(container, nodes[3]);
     expect(open).toHaveBeenCalledOnce();
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('事業案');
+  });
+
+  it('selects names with minor jitter, restores native micro-movement, and rejects cancelled or real drags', async () => {
+    const container = await mountGraphSurface({ getGraph: vi.fn().mockResolvedValue({
+      status: 'ready', nodes: [{ id: 'a', kind: 'idea', label: '事業案' },
+        { id: 'b', kind: 'asset', label: '経験' }], edges: [],
+    }) });
+    settleGraph();
+    const node = graphHarness.props.graphData.nodes[0];
+    Object.assign(node, { x: 100, y: 100 });
+    Object.assign(graphHarness.props.graphData.nodes[1], { x: 400, y: 400 });
+    const canvas = container.querySelector('.local-graph__canvas');
+    act(() => graphHarness.props.onRenderFramePre({ save() {}, restore() {}, measureText: () => ({ width: 36 }) }, 1));
+    act(() => {
+      canvas.dispatchEvent(pointerEvent('pointerdown', 130, 100));
+      canvas.dispatchEvent(pointerEvent('pointermove', 132, 100));
+      canvas.dispatchEvent(pointerEvent('pointerup', 132, 100));
+    });
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('事業案');
+    act(() => {
+      canvas.dispatchEvent(pointerEvent('pointerdown', 100, 100));
+      node.x = 102; // Simulate d3's pre-threshold movement.
+      canvas.dispatchEvent(pointerEvent('pointerup', 102, 100));
+    });
+    expect(node.x).toBe(100);
+    clickNode(container, graphHarness.props.graphData.nodes[1], 6);
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('事業案');
+    act(() => {
+      canvas.dispatchEvent(pointerEvent('pointerdown', 400, 400));
+      canvas.dispatchEvent(pointerEvent('pointermove', 420, 400));
+      canvas.dispatchEvent(pointerEvent('pointerup', 400, 400));
+      canvas.dispatchEvent(pointerEvent('pointerdown', 400, 400));
+      canvas.dispatchEvent(pointerEvent('pointercancel', 400, 400));
+      canvas.dispatchEvent(pointerEvent('pointerup', 400, 400));
+    });
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('事業案');
   });
 
@@ -411,13 +476,13 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(container.textContent).not.toContain('private-evidence');
 
     const graphAssertion = graphHarness.props.graphData.links.find((edge) => edge.assertionId === 'meaning-1');
-    act(() => graphHarness.props.onLinkClick(graphAssertion));
+    clickRelation(container, graphAssertion);
     expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent)
       .toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
     expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).not.toContain('meaning-1');
     expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).not.toContain('evidence-shareable-1');
-    const relationButtons = graphHarness.props.graphData.links.map(edge => ({ click: () => graphHarness.props.onLinkClick(edge) }));
-    act(() => relationButtons[0].click());
+    const relationButtons = graphHarness.props.graphData.links.map(edge => ({ click: () => clickRelation(container, edge) }));
+    relationButtons[0].click();
     expect(container.textContent).toContain('推測');
     expect(container.textContent).toContain('82%');
     expect(container.textContent).toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
@@ -425,11 +490,11 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(container.textContent).toContain('概要の第3観点');
     expect(container.textContent).not.toContain('evidence-shareable-1');
     expect(container.textContent).not.toContain('brief-12');
-    act(() => relationButtons[1].click());
+    relationButtons[1].click();
     expect(container.textContent).toContain('確定');
     expect(container.textContent).toContain('100%');
 
-    act(() => relationButtons[0].click());
+    relationButtons[0].click();
     act(() => container.querySelector('[aria-label="意味関係と根拠"] button').click());
     await flushEffects();
     expect(client.getSemanticEdgeProvenance).toHaveBeenCalledWith('meaning-1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
@@ -447,7 +512,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(container.textContent).toContain('有効');
     expect(container.textContent).not.toContain('PRIVATE');
 
-    act(() => graphHarness.props.onNodeClick(graphHarness.props.graphData.nodes[0]));
+    clickNode(container, graphHarness.props.graphData.nodes[0]);
     expect(container.querySelector('[aria-label="関連する意味関係"]')?.textContent)
       .toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
     expect(container.textContent).not.toContain('meaning-1');
@@ -479,14 +544,14 @@ describe('LocalGraphSurface Facet exploration', () => {
     mounted.push({ root, container });
     await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
     await flushEffects();
-    const relationButtons = graphHarness.props.graphData.links.map(edge => ({ click: () => graphHarness.props.onLinkClick(edge) }));
-    act(() => relationButtons[0].click());
+    const relationButtons = graphHarness.props.graphData.links.map(edge => ({ click: () => clickRelation(container, edge) }));
+    relationButtons[0].click();
     await flushEffects();
     act(() => container.querySelector('[aria-label="意味関係と根拠"] button').click());
     await flushEffects();
     expect(pending['edge-one']).toBeTruthy();
 
-    act(() => relationButtons[1].click());
+    relationButtons[1].click();
     await flushEffects();
     expect(pending['edge-one'].signal.aborted).toBe(true);
     expect(container.textContent).not.toContain('古い章の内容');

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { COLORS, graphLabelX, nodeKindLabel, relationStatusLabel, shortLabel, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
+import { COLORS, graphLabelPlacements, nodeKindLabel, relationStatusLabel, shortLabel, starRadius } from './localGraphPresentation.js';
 import { fitWideGraph } from './localGraphLayout.js';
+import { graphHitTarget, isGraphClick } from './localGraphInteraction.js';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
 const INITIAL_ZOOM = 0.9;
@@ -61,8 +62,8 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const preparedGraph = useRef(null);
   const [layoutReady, setLayoutReady] = useState(false);
-  const visibleLabelIds = useRef(new Set());
-  const labelRightEdge = useRef(Infinity);
+  const labelPlacements = useRef(new Map());
+  const pointerPress = useRef(null);
   const [provenanceRequest, setProvenanceRequest] = useState({ assertionId: '', attempt: 0 });
   const [provenance, setProvenance] = useState(null);
   const [renderError, setRenderError] = useState(false);
@@ -153,6 +154,41 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
   };
 
+  const pointerPoint = (event) => {
+    const bounds = container.current.getBoundingClientRect();
+    return graphRef.current?.screen2GraphCoords?.(event.clientX - bounds.left, event.clientY - bounds.top);
+  };
+  const pointerDown = (event) => {
+    if (event.button !== 0 || !layoutReady) return;
+    // Snapshot the actual press, not the library's previous animation-frame hover.
+    if (pointerPress.current) { pointerPress.current = null; return; }
+    const target = graphHitTarget(pointerPoint(event), graphData.nodes, graphData.links, labelPlacements.current, graphRef.current.zoom());
+    pointerPress.current = { id: event.pointerId, x: event.clientX, y: event.clientY, maxDistance: 0, target,
+      center: graphRef.current.centerAt(),
+      position: target?.type === 'node' ? { x: target.node.x, y: target.node.y, fx: target.node.fx, fy: target.node.fy } : null };
+  };
+  const pointerMove = (event) => {
+    const press = pointerPress.current;
+    if (press?.id === event.pointerId) press.maxDistance = Math.max(press.maxDistance,
+      Math.hypot(event.clientX - press.x, event.clientY - press.y));
+  };
+  const pointerUp = (event) => {
+    pointerMove(event);
+    const press = pointerPress.current;
+    pointerPress.current = null;
+    if (press?.id !== event.pointerId || !isGraphClick(press)) return;
+    // d3 may already have nudged a node/camera below its drag threshold.
+    // Undo only that micro-movement; real drags keep their final position.
+    if (press.position) Object.assign(press.target.node, press.position);
+    const center = graphRef.current.centerAt();
+    if (press.center && center && (center.x !== press.center.x || center.y !== press.center.y)) {
+      graphRef.current.centerAt(press.center.x, press.center.y, 0);
+    }
+    if (press.target?.type === 'node') selectNode(press.target.node);
+    else if (press.target?.link.assertionId) selectSemanticEdge(press.target.link);
+    else clearSelection();
+  };
+
   useEffect(() => {
     if (!selectedAssertionId || provenanceRequest.assertionId !== selectedAssertionId) return undefined;
     const controller = new AbortController();
@@ -183,10 +219,12 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
     const scale = Math.max(globalScale, 0.1);
     context.save();
     context.font = `500 ${12 / scale}px system-ui, sans-serif`;
-    labelRightEdge.current = graphRef.current?.screen2GraphCoords?.((dimensions.width || 800) - 12, 0)?.x ?? Infinity;
-    visibleLabelIds.current = visibleGraphLabelIds(
+    const corner = graphRef.current?.screen2GraphCoords?.(12, 12);
+    const opposite = graphRef.current?.screen2GraphCoords?.((dimensions.width || 800) - 12, (dimensions.height || 500) - 12);
+    const viewport = corner && opposite ? { left: corner.x, top: corner.y, right: opposite.x, bottom: opposite.y } : undefined;
+    labelPlacements.current = graphLabelPlacements(
       graphData.nodes, scale, selectedNodeIds, hoveredId,
-      (label) => context.measureText(label).width, labelRightEdge.current,
+      (label) => context.measureText(label).width, viewport, labelPlacements.current,
     );
     context.restore();
   };
@@ -212,7 +250,8 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
       context.arc(node.x, node.y, radius + 2.5 / scale, 0, Math.PI * 2);
       context.stroke();
     }
-    if (visibleLabelIds.current.has(node.id)) {
+    const placement = labelPlacements.current.get(node.id);
+    if (placement) {
       context.globalAlpha = 1;
       context.font = `500 ${12 / scale}px system-ui, sans-serif`;
       context.textBaseline = 'middle';
@@ -220,7 +259,7 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
       context.shadowColor = '#02050a';
       context.shadowBlur = 4 / scale;
       const label = shortLabel(node.label);
-      context.fillText(label, graphLabelX(node, label, scale, text => context.measureText(text).width, labelRightEdge.current), node.y);
+      context.fillText(label, placement.x, placement.y);
     }
     context.restore();
   };
@@ -231,13 +270,18 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
     return endpointId(link.source) === selected.id || endpointId(link.target) === selected.id;
   };
   const paintPointerArea = (node, color, context) => {
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
     context.fillStyle = color;
     context.beginPath();
     context.arc(node.x, node.y, starRadius(node) + 4, 0, Math.PI * 2);
     context.fill();
+    const box = labelPlacements.current.get(node.id);
+    if (box) context.fillRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
   };
   return <div className="local-graph__frame">
-    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}>
+    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}
+      onPointerDownCapture={pointerDown} onPointerMoveCapture={pointerMove} onPointerUpCapture={pointerUp}
+      onPointerCancelCapture={() => { pointerPress.current = null; }} onPointerLeave={() => { pointerPress.current = null; }}>
       {Graph2D && <div style={{ visibility: layoutReady ? 'visible' : 'hidden' }}><Graph2D
         ref={attachGraph}
         graphData={graphReady ? graphData : EMPTY_GRAPH}
@@ -265,10 +309,10 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
         warmupTicks={120}
         cooldownTicks={0}
         onEngineStop={prepareLayout}
-        onNodeClick={selectNode}
+        onNodeClick={() => {}}
         onNodeHover={(node) => setHoveredId(node?.id ?? '')}
-        onLinkClick={(link) => link.assertionId ? selectSemanticEdge(link) : clearSelection()}
-        onBackgroundClick={clearSelection}
+        onLinkClick={() => {}}
+        onBackgroundClick={() => {}}
       /></div>}
     </div>
     {renderError && <p role="alert">平面グラフを表示できませんでした。画面を再読み込みしてください。</p>}

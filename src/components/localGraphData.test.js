@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { semanticGraphData, regionGraphData } from './localGraphData.js';
-import { COLORS, graphLabelX, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
+import { COLORS, graphLabelPlacements, starRadius } from './localGraphPresentation.js';
 
 it('keeps semantic assertions and hides internal research and revision records without changing the input', () => {
   const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' },
@@ -85,10 +85,12 @@ it('uses distinct pastel stellar colors for main kinds, without green or violet 
 it('places right-edge names inward and checks collisions at the same inward position', () => {
   const node = { id: 'edge', kind: 'idea', label: '右端のアイデア', x: 90, y: 0 };
   const measure = () => 80;
-  expect(graphLabelX(node, node.label, 1, measure, 100)).toBeLessThan(node.x - 80);
-  expect(visibleGraphLabelIds([node], 1, new Set(), '', measure, 100).has(node.id)).toBe(true);
+  const viewport = { left: -100, right: 100, top: -100, bottom: 100 };
+  expect(graphLabelPlacements([node], 1, new Set(), '', measure, viewport).get(node.id).anchor).toBe('left');
   const obstruction = { id: 'other', kind: 'asset', label: '別の点', x: 20, y: 0 };
-  expect(visibleGraphLabelIds([node, obstruction], 1, new Set(), '', measure, 100).has(node.id)).toBe(false);
+  const placement = graphLabelPlacements([node, obstruction], 1, new Set(), '', measure, viewport).get(node.id);
+  expect(placement.anchor).not.toBe('left');
+  expect(placement.right).toBeLessThanOrEqual(100);
 });
 
 it('shows idea and Facet labels at rest, avoids collisions deterministically, and reveals other labels on zoom', () => {
@@ -100,11 +102,11 @@ it('shows idea and Facet labels at rest, avoids collisions deterministically, an
   ];
   const measureText = (label, fontSize) => Array.from(label).length * fontSize;
 
-  const atRest = visibleGraphLabelIds(nodes, 0.9, new Set(), '', measureText);
-  expect([...atRest]).toEqual(['facet-root', 'idea-clear']);
-  expect([...visibleGraphLabelIds([...nodes].reverse(), 0.9, new Set(), '', measureText)])
+  const atRest = graphLabelPlacements(nodes, 0.9, new Set(), '', measureText);
+  expect([...atRest.keys()]).toEqual(['facet-root', 'idea-clear', 'idea-overlap']);
+  expect([...graphLabelPlacements([...nodes].reverse(), 0.9, new Set(), '', measureText)])
     .toEqual([...atRest]);
 
-  const zoomed = visibleGraphLabelIds(nodes, 1.4, new Set(['asset']), '', measureText);
+  const zoomed = graphLabelPlacements(nodes, 1.4, new Set(['asset']), '', measureText);
   expect(zoomed.has('asset')).toBe(true);
 });
