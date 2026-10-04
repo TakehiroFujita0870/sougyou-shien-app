@@ -1,21 +1,21 @@
 .local-deleted-records { display: grid; gap: 10px; }
 .local-deleted-records__heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .local-deleted-records__heading h2 { margin: 0; font-size: 16px; font-weight: 650; }
-.local-deleted-records__heading p { margin: 3px 0 0; color: #c2cee0; font-size: 12px; line-height: 1.45; }
-.local-deleted-records__heading > span { color: #c2cee0; font-size: 12px; }
-.local-deleted-records__message { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; color: #d3deef; font-size: 14px; line-height: 1.5; }
-.local-deleted-records__message button { min-height: 32px; padding: 4px 9px; border: 1px solid #8399b9; border-radius: 7px; background: #263850; color: #f0f5ff; cursor: pointer; }
+.local-deleted-records__heading p { margin: 3px 0 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.45; }
+.local-deleted-records__heading > span { color: var(--color-text-muted); font-size: 12px; }
+.local-deleted-records__message { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; color: var(--color-text-muted); font-size: 14px; line-height: 1.5; }
+.local-deleted-records__message button { min-height: 32px; padding: 4px 9px; border: 1px solid #8f918c; border-radius: var(--radius-control); background: var(--color-surface-raised); color: var(--color-text); cursor: pointer; }
 .local-deleted-records__message button:disabled { cursor: not-allowed; opacity: .6; }
 .local-deleted-records__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.local-deleted-records__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 9px 10px; border: 1px solid #42516a; border-radius: 9px; background: #172435; }
+.local-deleted-records__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 9px 10px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); }
 .local-deleted-records__copy { min-width: 0; }
 .local-deleted-records__title-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.local-deleted-records__title-row h3 { overflow: hidden; margin: 0; color: #edf2fc; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.local-deleted-records__title-row span { flex: none; padding: 1px 6px; border: 1px solid #647b9c; border-radius: 999px; color: #d8e4f5; font-size: 11px; line-height: 1.35; }
-.local-deleted-records__copy p { display: -webkit-box; overflow: hidden; margin: 3px 0 0; color: #bfccdf; font-size: 12px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.local-deleted-records__item > button { flex: none; min-width: 48px; min-height: 32px; padding: 4px 9px; border: 0; border-radius: 7px; background: transparent; color: #f0f5ff; font-size: 12px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+.local-deleted-records__title-row h3 { overflow: hidden; margin: 0; color: var(--color-text); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.local-deleted-records__title-row span { flex: none; padding: 1px 6px; border: 1px solid var(--color-border-subtle); border-radius: 999px; color: var(--color-text-muted); font-size: 11px; line-height: 1.35; }
+.local-deleted-records__copy p { display: -webkit-box; overflow: hidden; margin: 3px 0 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.local-deleted-records__item > button { flex: none; min-width: 48px; min-height: 32px; padding: 4px 9px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text); font-size: 12px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 .local-deleted-records__item:hover > button, .local-deleted-records__item:focus-within > button { opacity: 1; pointer-events: auto; }
 .local-deleted-records__item > button:hover, .local-deleted-records__item > button:focus-visible { background: #345073; }
 .local-deleted-records__item > button:disabled { cursor: not-allowed; opacity: .6; }
-.local-deleted-records__notice { margin: 0; color: #d3deef; font-size: 12px; line-height: 1.5; }
-.local-deleted-records button:focus-visible { outline: 2px solid #f0d594; outline-offset: 2px; }
+.local-deleted-records__notice { margin: 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.5; }
+.local-deleted-records button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }

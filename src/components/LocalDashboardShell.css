@@ -2,13 +2,18 @@ html:has(.local-shell) { scrollbar-gutter: stable; }
 .local-shell {
   --local-sidebar-width: 192px;
   --color-canvas: #0e131d;
-  --color-surface: #1b293b;
-  --color-muted: #aab8ce;
-  --color-text: #e9eef8;
-  --color-text-muted: #c7d3e6;
-  --color-border-subtle: #344158;
-  --color-primary: #cbd9f3;
-  --color-focus: #d5b97f;
+  --color-surface: #1d2835;
+  --color-surface-raised: #293645;
+  --color-muted: #aeaba5;
+  --color-text: #f3eedf;
+  --color-text-muted: #ccc8bf;
+  --color-border-subtle: #47505b;
+  --color-primary: #eee1c5;
+  --color-focus: #e5cfa3;
+  --color-link: #a9dbea;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-panel: 22px;
   color-scheme: dark;
   display: grid;
   grid-template-columns: var(--local-sidebar-width) minmax(0, 1fr);
@@ -20,11 +25,11 @@ html:has(.local-shell) { scrollbar-gutter: stable; }
 .local-shell__brand { display: flex; align-items: center; gap: 6px; padding: 0 4px; min-height: 44px; }
 .local-shell__brand-mark { display: block; flex: none; width: 40px; height: 40px; }
 .local-shell__brand-mark img { display: block; width: 100%; height: 100%; }
-.local-shell__brand-word { font-size: 27px; font-weight: 650; letter-spacing: -.8px; line-height: 1.2; }
+.local-shell__brand-word { font-family: 'Nebula Rounded', ui-rounded, sans-serif; font-size: 29px; font-weight: 700; letter-spacing: -.7px; line-height: 1.2; color: var(--color-text); }
 .local-shell__nav { display: grid; gap: 6px; margin-top: 34px; }
-.local-shell__nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: #d3deef; font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
-.local-shell__nav button[aria-current='page'], .local-shell__nav button:hover { background: #232e42; color: #eef3ff; }
-.local-shell__nav button[aria-current='page'] { box-shadow: inset 3px 0 #c6d9f8; }
+.local-shell__nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text-muted); font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
+.local-shell__nav button[aria-current='page'], .local-shell__nav button:hover { background: var(--color-surface-raised); color: var(--color-text); }
+.local-shell__nav button[aria-current='page'] { box-shadow: inset 3px 0 var(--color-primary); }
 .local-shell__nav button span { width: 18px; flex: none; font-size: 18px; line-height: 18px; text-align: center; }
 .local-shell__workspace { min-width: 0; }
 .local-shell__content { position: relative; isolation: isolate; min-height: 100dvh; }
@@ -33,4 +38,4 @@ html:has(.local-shell) { scrollbar-gutter: stable; }
 .local-shell button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
 .local-shell .local-control-confirm-button { color: #172036; }
 .local-shell main[aria-labelledby='local-control-heading'] > header > section > button,
-.local-shell main[aria-labelledby='local-control-heading'] [role='alertdialog'] button:not(.local-control-confirm-button) { border-color: #8399b9; }
+.local-shell main[aria-labelledby='local-control-heading'] [role='alertdialog'] button:not(.local-control-confirm-button) { border-color: #8f918c; }
