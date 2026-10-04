@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius } from './localGraphPresentation.js';
+import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
 import { LocalGraphNodeSearch } from './LocalGraphNodeSearch.jsx';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
@@ -9,6 +9,23 @@ const EMPTY_GRAPH = { nodes: [], links: [] };
 
 function endpointId(endpoint) {
   return typeof endpoint === 'object' ? endpoint?.id : endpoint;
+}
+
+function relationshipText(edge, labelsById) {
+  const source = labelsById.get(endpointId(edge.source)) ?? '名称を確認できない記録';
+  const target = labelsById.get(endpointId(edge.target)) ?? '名称を確認できない記録';
+  return `${source} → ${edge.label} → ${target}`;
+}
+
+function evidencePolarityLabel(polarity) {
+  if (polarity === 'supports') return '支持';
+  if (polarity === 'contradicts') return '反証';
+  if (polarity === 'neutral') return '補足';
+  return '根拠';
+}
+
+function evidenceStatusLabel(status) {
+  return status === 'active' ? '有効' : '状態未設定';
 }
 
 function drawStar(context, x, y, radius) {
@@ -43,6 +60,7 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   const [hoveredId, setHoveredId] = useState('');
   const [Graph2D, setGraph2D] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const visibleLabelIds = useRef(new Set());
   const [provenanceRequest, setProvenanceRequest] = useState({ assertionId: '', attempt: 0 });
   const [provenance, setProvenance] = useState(null);
   const [renderError, setRenderError] = useState(false);
@@ -65,6 +83,9 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
       if (endpointId(edge.target) === selected.id) selectedNodeIds.add(endpointId(edge.source));
     }
   }
+  const selectedNodeRelations = selected?.type === 'node'
+    ? semanticEdges.filter((edge) => endpointId(edge.source) === selected.id || endpointId(edge.target) === selected.id)
+    : [];
   useEffect(() => {
     let active = true;
     import('react-force-graph-2d').then(({ default: ForceGraph2D }) => {
@@ -154,30 +175,49 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     };
   }, [client, selectedAssertionId, provenanceRequest.assertionId, provenanceRequest.attempt]);
 
+  const prepareFrame = (context, globalScale) => {
+    const scale = Math.max(globalScale, 0.1);
+    context.save();
+    context.font = `500 ${12 / scale}px system-ui, sans-serif`;
+    visibleLabelIds.current = visibleGraphLabelIds(
+      graphData.nodes, scale, selectedNodeIds, hoveredId,
+      (label) => context.measureText(label).width,
+    );
+    context.restore();
+  };
+
   const renderNode = (node, context, globalScale) => {
     const radius = starRadius(node);
     const selectedOrRelated = selectedNodeIds.has(node.id);
     const isSelected = selected?.type === 'node' && selected.id === node.id;
-    const isHighlighted = selectedOrRelated || hoveredId === node.id;
     const scale = Math.max(globalScale, 0.1);
     context.save();
-    context.globalAlpha = selected && !selectedOrRelated ? 0.2 : 0.96;
+    context.globalAlpha = selected && !selectedOrRelated ? 0.2 : 0.68;
     context.fillStyle = COLORS[node.kind] ?? '#c4d4ed';
     context.shadowColor = context.fillStyle;
-    context.shadowBlur = isSelected ? radius * 1.8 : radius > 8 ? radius * 0.8 : 2;
+    context.shadowBlur = isSelected ? radius * 2.2 : Math.max(4, radius * 1.15);
     drawStar(context, node.x, node.y, radius);
     context.shadowBlur = 0;
+    context.globalAlpha = selected && !selectedOrRelated ? 0.62 : 0.98;
+    context.fillStyle = '#fff';
+    context.beginPath();
+    context.arc(node.x, node.y, Math.max(1.5, radius * 0.31), 0, Math.PI * 2);
+    context.fill();
     if (isSelected) {
       context.strokeStyle = '#f7fbff';
       context.lineWidth = 1.5 / scale;
+      context.beginPath();
+      context.arc(node.x, node.y, radius + 2.5 / scale, 0, Math.PI * 2);
       context.stroke();
     }
-    if (isHighlighted) {
+    if (visibleLabelIds.current.has(node.id)) {
       context.globalAlpha = 1;
       context.font = `500 ${12 / scale}px system-ui, sans-serif`;
       context.textBaseline = 'middle';
       context.fillStyle = '#f4f7ff';
-      context.fillText(shortLabel(node.label), node.x + radius + 5, node.y);
+      context.shadowColor = '#02050a';
+      context.shadowBlur = 4 / scale;
+      context.fillText(shortLabel(node.label), node.x + radius + 5 / scale, node.y);
     }
     context.restore();
   };
@@ -209,6 +249,7 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         nodeCanvasObjectMode="replace"
         nodeCanvasObject={renderNode}
         nodePointerAreaPaint={paintPointerArea}
+        onRenderFramePre={prepareFrame}
         linkLabel={(link) => link.label}
         linkColor={(link) => isHighlightedLink(link) ? 'rgba(222, 236, 255, 0.94)' : selected ? 'rgba(155, 179, 220, 0.025)' : 'rgba(155, 179, 220, 0.22)'}
         linkWidth={(link) => isHighlightedLink(link) ? 2.2 : selected ? 0.45 : 0.7}
@@ -228,14 +269,21 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     </div>
     <LocalGraphNodeSearch nodes={nodes} onSelect={focusNode} />
     {renderError && <p role="alert">平面グラフを表示できませんでした。画面を再読み込みしてください。</p>}
-    {selected?.type === 'node' && <aside className="local-graph__selected"><span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong></aside>}
+    {selected?.type === 'node' && <aside className="local-graph__selected" aria-label="選択した記録">
+      <span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong>
+      {selectedNodeRelations.length > 0 && <section className="local-graph__selected-relations" aria-label="関連する意味関係">
+        <strong>関連する意味関係</strong>
+        {selectedNodeRelations.map((edge) => <button key={edge.assertionId} type="button"
+          onClick={() => selectSemanticEdge(edge)}>{relationshipText(edge, labelsById)}</button>)}
+      </section>}
+    </aside>}
     {selected?.type === 'semantic-edge' && <aside className="local-graph__selected" aria-label="意味関係と根拠">
       <span>{relationStatusLabel(selected.status)}{typeof selected.confidence === 'number' ? ` · 確信度 ${Math.round(selected.confidence * 100)}%` : ''}</span>
-      <strong>{selected.label}</strong>
-      {selected.evidenceIds.length > 0 && <small>根拠ID: {selected.evidenceIds.join('、')}</small>}
+      <strong>{relationshipText(selected, labelsById)}</strong>
+      {selected.evidenceIds.length > 0 && <small>根拠 {selected.evidenceIds.length}件</small>}
       {typeof selected.basedOnBriefId === 'string' && Number.isInteger(selected.basedOnBriefSectionIndex)
         && selected.basedOnBriefSectionIndex >= 0 && selected.basedOnBriefSectionIndex <= 7
-        && <small>概要: {selected.basedOnBriefId} · 観点 {selected.basedOnBriefSectionIndex}</small>}
+        && <small>概要の第{selected.basedOnBriefSectionIndex + 1}観点</small>}
       <button type="button" disabled={provenance?.assertion_id === selected.assertionId && provenance.status === 'loading'}
         onClick={() => setProvenanceRequest((previous) => ({ assertionId: selected.assertionId, attempt: previous.attempt + 1 }))}>
         {provenance?.assertion_id === selected.assertionId && provenance.status === 'loading' ? '根拠を確認中…' : '根拠を確認'}
@@ -248,11 +296,11 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         && <small role="alert">根拠を確認できませんでした。関係が更新された可能性があります。</small>}
       {provenance?.assertion_id === selected.assertionId && provenance.status === 'ready' && <section aria-label="確認済みの根拠">
         {provenance.section ? <>
-          <small>概要 {provenance.section.brief_id} · 第{provenance.section.revision}版 · 観点 {provenance.section.section_index}: {provenance.section.title}</small>
+          <small>概要 第{provenance.section.revision}版 · 第{provenance.section.section_index + 1}観点: {provenance.section.title}</small>
           <p>{provenance.section.content}</p>
         </> : <small>この関係は概要の章に結び付いていません。</small>}
         {provenance.evidence.length > 0 ? provenance.evidence.map((evidence) => <small key={evidence.id}>
-          根拠 {evidence.id} · {evidence.polarity} · 確信度 {Math.round(evidence.confidence * 100)}% · {evidence.status}
+          {evidencePolarityLabel(evidence.polarity)} · 確信度 {Math.round(evidence.confidence * 100)}% · {evidenceStatusLabel(evidence.status)}
         </small>) : <small>共有可能な根拠の詳細はありません。</small>}
       </section>}
     </aside>}
@@ -268,7 +316,7 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         <span>{hit.classification_status === 'confirmed' ? '確定' : '推測'} · {hit.kind === 'idea' ? '案' : '資産'} · 深度 {hit.depth}</span>
         <span>{hit.facet_path.map((item) => item.label).join(' → ')}</span>
         {hit.taxonomy_status_path.length > 0 && <span>親子関係: {hit.taxonomy_status_path.map((status) => status === 'confirmed' ? '確定' : '推測').join(' · ')}</span>}
-        <small>根拠ID: {hit.evidence_ids.join('、')}</small>
+        <small>根拠 {hit.evidence_ids.length}件</small>
       </article>)}
     </aside>}
   </div>;

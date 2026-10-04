@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 import json
@@ -153,6 +153,24 @@ def test_provenance_returns_only_exact_brief_section_and_shareable_evidence_meta
         "evidence": [{"id": "ev-share", "polarity": "supports", "confidence": 0.8, "status": "active"}],
     }
     assert "MUST NOT LEAK" not in repr(result)
+
+
+def test_provenance_reads_markdown_section_without_duplicated_stored_body():
+    store = FakeStore()
+    store.brief = replace(store.brief,
+        report_markdown="# 顧客とマーケットサイズ\n\n保存済みの顧客仮説。",
+        sections=(IdeaBriefSection(index=2, evidence_ids=("ev-share", "ev-private")),))
+    result = read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
+    assert result["section"]["content"] == "保存済みの顧客仮説。"
+    assert store.brief.sections[2].content == ""
+
+
+def test_provenance_rejects_ambiguous_markdown_even_if_legacy_body_exists():
+    store = FakeStore()
+    store.brief = replace(store.brief, report_markdown=
+        "# 顧客とマーケットサイズ\n\n一つ目。\n\n# 顧客とマーケットサイズ\n\n二つ目。")
+    with pytest.raises(GraphProvenanceNotFound):
+        read_local_graph_provenance(store, assertion_id="ra", owner_id="owner", at=NOW)
 
 
 @pytest.mark.parametrize("case", ["successor", "idea_successor", "old_brief", "wrong_owner", "wrong_idea", "wrong_kind", "wrong_section", "malformed_evidence", "expired"])

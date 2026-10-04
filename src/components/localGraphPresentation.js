@@ -34,3 +34,88 @@ export function starRadius(node) {
   if (node.kind !== 'facet' || !Number.isInteger(node.abstractionDepth) || node.abstractionDepth < 0) return 5;
   return Math.max(5.5, 13 / Math.sqrt(1 + node.abstractionDepth * 0.8));
 }
+
+const ALWAYS_LABELLED_KINDS = new Set(['idea', 'facet']);
+
+function graphLabelBounds(node, label, scale, measureText) {
+  if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return null;
+  const fontSize = 12 / scale;
+  const measuredWidth = measureText(label, fontSize);
+  const width = Number.isFinite(measuredWidth) ? measuredWidth : Array.from(label).length * fontSize * 0.75;
+  const left = node.x + starRadius(node) + 5 / scale;
+  const padding = 4 / scale;
+  return {
+    left,
+    right: left + Math.max(width, 8 / scale) + padding * 2,
+    top: node.y - 8 / scale,
+    bottom: node.y + 8 / scale,
+  };
+}
+
+function gridCells(bounds, size) {
+  const cells = [];
+  for (let x = Math.floor(bounds.left / size); x <= Math.floor(bounds.right / size); x += 1) {
+    for (let y = Math.floor(bounds.top / size); y <= Math.floor(bounds.bottom / size); y += 1) {
+      cells.push(x + ',' + y);
+    }
+  }
+  return cells;
+}
+
+function overlapsInGrid(bounds, grid, size) {
+  for (const cell of gridCells(bounds, size)) {
+    for (const other of grid.get(cell) ?? []) {
+      if (bounds.left < other.right && bounds.right > other.left
+        && bounds.top < other.bottom && bounds.bottom > other.top) return true;
+    }
+  }
+  return false;
+}
+
+function addToGrid(bounds, grid, size) {
+  for (const cell of gridCells(bounds, size)) {
+    const occupants = grid.get(cell);
+    if (occupants) occupants.push(bounds);
+    else grid.set(cell, [bounds]);
+  }
+}
+
+export function visibleGraphLabelIds(nodes, globalScale, priorityIds = new Set(), hoveredId = '', measureText = (label, size) => Array.from(label).length * size * 0.75) {
+  const scale = Number.isFinite(globalScale) ? Math.max(globalScale, 0.1) : 1;
+  const emphasized = priorityIds instanceof Set ? priorityIds : new Set(priorityIds);
+  const allLabelsAtZoom = scale >= 1.25;
+  const labelNodes = nodes.filter((node) => ALWAYS_LABELLED_KINDS.has(node.kind)
+    || allLabelsAtZoom || emphasized.has(node.id) || node.id === hoveredId);
+  const gridSize = 36 / scale;
+  const occupied = new Map();
+
+  for (const node of nodes) {
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) continue;
+    const margin = 2 / scale;
+    const radius = starRadius(node) + margin;
+    addToGrid({
+      left: node.x - radius, right: node.x + radius,
+      top: node.y - radius, bottom: node.y + radius,
+    }, occupied, gridSize);
+  }
+
+  const candidates = labelNodes
+    .filter((node) => typeof node.label === 'string' && node.label.length > 0)
+    .map((node) => {
+      const selected = emphasized.has(node.id);
+      const hovered = node.id === hoveredId;
+      const priority = selected ? 0 : hovered ? 1 : node.kind === 'facet' ? 2 : node.kind === 'idea' ? 3 : 4;
+      return { node, priority, bounds: graphLabelBounds(node, shortLabel(node.label), scale, measureText) };
+    })
+    .filter(({ bounds }) => bounds !== null)
+    .sort((left, right) => left.priority - right.priority
+      || (String(left.node.id) < String(right.node.id) ? -1 : String(left.node.id) > String(right.node.id) ? 1 : 0));
+
+  const visible = new Set();
+  for (const candidate of candidates) {
+    if (overlapsInGrid(candidate.bounds, occupied, gridSize)) continue;
+    visible.add(candidate.node.id);
+    addToGrid(candidate.bounds, occupied, gridSize);
+  }
+  return visible;
+}
