@@ -31,9 +31,9 @@ function evidenceStatusLabel(status) {
 function drawStarlight(context, x, y, radius, color) {
   const haloRadius = radius * 1.8;
   const halo = context.createRadialGradient(x, y, 0, x, y, haloRadius);
-  halo.addColorStop(0, '#ffffffb0');
-  halo.addColorStop(0.12, '#ffffff55');
-  halo.addColorStop(0.32, `${color}24`);
+  halo.addColorStop(0, `${color}b0`);
+  halo.addColorStop(0.12, `${color}66`);
+  halo.addColorStop(0.32, `${color}32`);
   halo.addColorStop(0.65, `${color}08`);
   halo.addColorStop(1, `${color}00`);
   context.fillStyle = halo;
@@ -196,9 +196,9 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     context.globalAlpha = selected && !selectedOrRelated ? 0.2 : 0.85;
     drawStarlight(context, node.x, node.y, radius, COLORS[node.kind] ?? '#c4d4ed');
     context.globalAlpha = selected && !selectedOrRelated ? 0.35 : 0.98;
-    context.fillStyle = '#fff';
+    context.fillStyle = COLORS[node.kind] ?? '#eef2fa';
     context.beginPath();
-    context.arc(node.x, node.y, Math.max(0.75, radius * 0.16), 0, Math.PI * 2);
+    context.arc(node.x, node.y, Math.max(1.2, radius * 0.22), 0, Math.PI * 2);
     context.fill();
     if (isSelected) {
       context.strokeStyle = '#f7fbff';
