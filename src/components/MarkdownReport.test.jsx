@@ -58,6 +58,31 @@ it('presents bare source URLs compactly without changing their destinations or a
   expect(links[1].textContent).toContain('Microsoft公式資料');
 });
 
+it('uses the same chapter style for canonical H1 and H2 headings', async () => {
+  const chapterHeadings = ['エグゼクティブサマリー', 'ビジネスモデル'];
+  const markdown = [
+    '# レポートタイトル',
+    `## ${chapterHeadings[0]}`,
+    '概要本文',
+    `# ${chapterHeadings[1]}`,
+    '事業本文',
+    '### 補足',
+    '補足本文',
+  ].join('\n\n');
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<MarkdownReport markdown={markdown} chapterHeadings={chapterHeadings} />));
+
+  expect(container.querySelector('h1.markdown-report__title-heading')?.textContent).toBe('レポートタイトル');
+  expect([...container.querySelectorAll('.markdown-report__chapter-heading')].map((heading) => [heading.tagName, heading.textContent])).toEqual([
+    ['H2', chapterHeadings[0]], ['H1', chapterHeadings[1]],
+  ]);
+  expect(container.querySelector('h3.markdown-report__subheading')?.textContent).toBe('補足');
+  expect(markdown).toContain(`# ${chapterHeadings[1]}`);
+});
+
 it('renders Mermaid diagrams as sanitized SVG', async () => {
   const container = document.createElement('div');
   document.body.append(container);
