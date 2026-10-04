@@ -1,7 +1,13 @@
 {
-  "updated_at": "2026-10-04T12:37:44Z",
+  "updated_at": "2026-10-04T13:33:00Z",
   "baseline_main": "159a2ac1235d",
   "items": [
+    {
+      "id": "approved_nebula_logo", "title": "採用された7つの星の正式ロゴ", "scope": "approved-logo-03-left",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "本体は反映済み。プラグインの保存値も更新済みだが、ChatGPTの一覧画面は汎用アイコンのまま。表示反映の確認は未完了。",
+      "evidence": [{"recorded_at": "2026-10-04T13:33:00Z", "scope": "approved-logo-03-left", "result": "partial", "reference": "PR #451 main cce42a04abd7、CI・frontend144件・build成功。通常配信のホームとグラフで7星を確認。既存本人プラグイン1.0.18は256px透明PNG6900bytesと元の接続・USER/PRIVATEをAPI読戻しで確認。ChatGPT一覧は汎用アイコン表示のため成功扱いにしない。"}]
+    },
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
