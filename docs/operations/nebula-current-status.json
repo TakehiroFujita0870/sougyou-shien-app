@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-10-04T12:01:06Z",
-  "baseline_main": "9e9b5f876eef",
+  "updated_at": "2026-10-04T12:37:44Z",
+  "baseline_main": "159a2ac1235d",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -105,10 +105,10 @@
       "evidence": [{"recorded_at": "2026-10-04T10:09:13Z", "scope": "main-445-live-stable-home-background-1280", "result": "passed", "reference": "PR #445、main 4d29c0e4f786。frontend143件・build・必須CI・独立レビュー成功。通常DotsのPC 1280×720で全アイデアの背景寸法・位置・本文幅が一致し、長文スクロールでも背景不変。ホーム各タブ・グラフの星選択・サービス管理への遷移、全サービス稼働とブラウザーエラーなしを確認。既定寸法へ戻し、通常配信元は清潔なmain、同一build、HTTP200。DB変更なし。"}]
     },
     {
-      "id": "nebula_product_rename", "title": "Nebulaの画面・既存ChatGPT登録", "scope": "nebula-n1-n2-n3-live",
-      "implementation": "implemented", "verification": "partial", "delivery": "mixed", "runtime": "active", "next_action": "integrate",
-      "note": "N-1の画面は正式版へ反映。既存ChatGPT接続名と個人ラベルをNebulaへ変更し、同じID・権限を維持。本人用プラグインは同じID・USER/PRIVATEを保ち、Nebula表示とSVG・手順を1.0.16へ更新。内部設定・起動名の切替はN-2/N-3で継続。OpenAIが変更を拒否する非表示package名だけは保持。",
-      "evidence": [{"recorded_at": "2026-10-04T12:01:06Z", "scope": "nebula-n1-n2-n3-live", "result": "partial", "reference": "PR #447 main 9e9b5f876eef、frontend143件・backend1422 passed/10 skipped・build・必須CI・独立レビュー成功。本体1280×720のNebula表示とロゴ、旧配信元へのbuild反映、稼働中3サービスを確認。ChatGPT設定で既存通常接続のNebula表示、元の権限・接続IDを確認。pluginrel_6ac23faa8f5c81918fbd2fa89042ab1aの読戻しで表示名・SVG・通常接続ID・USER/PRIVATEを確認。保存内容は変更なし。"}]
+      "id": "nebula_product_rename", "title": "Nebulaへの改名と既存接続・自動起動の維持", "scope": "nebula-n1-n2-n3-live",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "画面・ロゴ・パッケージ・設定・起動名・現行文書・定期点検をNebulaへ統一。既存ChatGPT接続と本人用プラグインのID・権限・USER/PRIVATEを維持。通常データは不変。変更不可の非表示package名と既存Neo4j索引・制約名、復旧コピーと過去証拠だけは旧名を保持する。PC再起動自体はせず、同じログイン起動入口を実行して検証した。",
+      "evidence": [{"recorded_at": "2026-10-04T12:01:06Z", "scope": "nebula-n1-n2-n3-live", "result": "partial", "reference": "PR #447 main 9e9b5f876eef、frontend143件・backend1422 passed/10 skipped・build・必須CI・独立レビュー成功。本体1280×720のNebula表示とロゴ、旧配信元へのbuild反映、稼働中3サービスを確認。ChatGPT設定で既存通常接続のNebula表示、元の権限・接続IDを確認。pluginrel_6ac23faa8f5c81918fbd2fa89042ab1aの読戻しで表示名・SVG・通常接続ID・USER/PRIVATEを確認。保存内容は変更なし。"}, {"recorded_at": "2026-10-04T12:37:44Z", "scope": "nebula-n1-n2-n3-live", "result": "passed", "reference": "PR #448・#449 main159a2ac1235d。改名後のfrontend143件・backend1422 passed/10 skipped・build・必須CI・独立N-2レビュー・PowerShell構文検査成功。実配信元を/home/hp/projects/nebula-live実ディレクトリへ切替。Windows起動タスクは同じXML設定・非表示・5分再確認を維持し、実行結果0。停止状態のDACLを保ってコピーし、旧タスク/WSL unit/profileを復旧先へ退避。3サービスactive、既存接続search成功・nebula://参照確認。通常DBの641ノード・237関係・ID集合digestは前後一致。1280×720のホーム・アセット・グラフ・サービス管理を確認。本人用プラグイン1.0.16、ツール情報更新と同じ接続IDを確認。"}]
     },
     {
       "id": "existing_graph_semantic_enrichment", "title": "既存案と経験の意味関係整理", "scope": "live-existing-brief-grounded-enrichment-20261004",
