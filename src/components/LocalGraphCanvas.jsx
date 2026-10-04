@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius } from './localGraphPresentation.js';
+import { LocalGraphNodeSearch } from './LocalGraphNodeSearch.jsx';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
+
+const MIN_INITIAL_ZOOM = 0.7;
+const SEARCH_FOCUS_ZOOM = 1.2;
+const PAN_MOVE_THRESHOLD = 4;
 
 function endpointId(endpoint) {
   return typeof endpoint === 'object' ? endpoint?.id : endpoint;
@@ -23,6 +28,8 @@ function drawStar(context, x, y, radius) {
 export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   const container = useRef(null);
   const graphRef = useRef(null);
+  const initialFit = useRef({ applied: false, userMoved: false });
+  const cameraGesture = useRef(null);
   const [selected, setSelected] = useState(null);
   const [hoveredId, setHoveredId] = useState('');
   const [Graph2D, setGraph2D] = useState(null);
@@ -103,10 +110,57 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     setSelected({ type: 'node', id: node.id, kind: node.kind, label: node.label });
   };
 
+  const focusNode = (node) => {
+    const graphNode = graphData.nodes.find((candidate) => candidate.id === node.id);
+    const graph = graphRef.current;
+    if (graph && Number.isFinite(graphNode?.x) && Number.isFinite(graphNode?.y)) {
+      graph.centerAt(graphNode.x, graphNode.y, 450);
+      const zoom = graph.zoom();
+      if (Number.isFinite(zoom) && zoom < SEARCH_FOCUS_ZOOM) graph.zoom(SEARCH_FOCUS_ZOOM, 450);
+      initialFit.current.applied = true;
+    }
+    selectNode(node);
+  };
+
   const clearSelection = () => {
     setSelected(null);
     setProvenance(null);
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
+  };
+
+  const startCameraGesture = (event) => {
+    cameraGesture.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+  };
+  const trackCameraGesture = (event) => {
+    const gesture = cameraGesture.current;
+    if (!gesture || (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId)) return;
+    if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) >= PAN_MOVE_THRESHOLD) {
+      gesture.moved = true;
+    }
+  };
+  const finishCameraGesture = (event) => {
+    const gesture = cameraGesture.current;
+    if (!gesture || (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId)) return;
+    queueMicrotask(() => {
+      if (cameraGesture.current === gesture) cameraGesture.current = null;
+    });
+  };
+  const markWheelInteraction = () => { initialFit.current.userMoved = true; };
+  const markPanInteraction = () => {
+    if (cameraGesture.current?.moved) initialFit.current.userMoved = true;
+  };
+  const fitInitialView = () => {
+    if (initialFit.current.applied || initialFit.current.userMoved || nodes.length === 0) return;
+    initialFit.current.applied = true;
+    const graph = graphRef.current;
+    if (!graph) return;
+    graph.zoomToFit(0, 44);
+    if (graph.zoom() < MIN_INITIAL_ZOOM) graph.zoom(MIN_INITIAL_ZOOM, 450);
   };
 
   useEffect(() => {
@@ -175,7 +229,9 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     context.fill();
   };
   return <div className="local-graph__frame">
-    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}>
+    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}
+      onPointerDownCapture={startCameraGesture} onPointerMoveCapture={trackCameraGesture}
+      onPointerUpCapture={finishCameraGesture} onPointerCancelCapture={finishCameraGesture} onWheelCapture={markWheelInteraction}>
       {Graph2D && <Graph2D
         ref={graphRef}
         graphData={graphData}
@@ -203,10 +259,13 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         cooldownTicks={220}
         onNodeClick={selectNode}
         onNodeHover={(node) => setHoveredId(node?.id ?? '')}
+        onZoom={markPanInteraction}
         onLinkClick={(link) => link.assertionId ? selectSemanticEdge(link) : clearSelection()}
         onBackgroundClick={clearSelection}
+        onEngineStop={fitInitialView}
       />}
     </div>
+    <LocalGraphNodeSearch nodes={nodes} onSelect={focusNode} />
     {renderError && <p role="alert">平面グラフを表示できませんでした。画面を再読み込みしてください。</p>}
     {selected?.type === 'node' && <aside className="local-graph__selected"><span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong></aside>}
     {selected?.type === 'semantic-edge' && <aside className="local-graph__selected" aria-label="意味関係と根拠">

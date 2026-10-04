@@ -7,8 +7,15 @@
 .local-graph__selected { position: absolute; bottom: 16px; left: 16px; display: grid; gap: 4px; max-width: min(420px, 80%); padding: 12px 16px; border: 1px solid #5d7498; border-radius: 12px; background: #162239ec; }
 .local-graph__selected span { color: #acc3e4; font-size: 11px; text-transform: uppercase; }
 .local-graph__selected strong { overflow-wrap: anywhere; }
-.local-graph__depth { position: absolute; z-index: 2; top: 12px; left: 14px; margin: 0; padding: 6px 9px; border-radius: 7px; color: #c9d9f1; background: #101c2ddd; font-size: 11px; pointer-events: none; }
-.local-graph__evidence { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; gap: 6px; width: min(300px, 30%); max-height: 46%; overflow: auto; padding: 8px; border: 1px solid #435974; border-radius: 10px; background: #101c2ddd; }
+.local-graph__node-search { position: absolute; z-index: 2; top: 12px; left: 12px; display: grid; gap: 5px; width: min(270px, calc(50% - 24px)); max-height: 42%; overflow: auto; padding: 9px; border: 1px solid #435974; border-radius: 10px; color: #c9d9f1; background: #101c2ddd; font-size: 12px; }
+.local-graph__node-search label { display: grid; gap: 5px; }
+.local-graph__node-search input { min-width: 0; padding: 7px 9px; border: 1px solid #536987; border-radius: 7px; color: #eef4ff; background: #17243a; }
+.local-graph__node-search p { margin: 0; color: #bdcce2; font-size: 11px; }
+.local-graph__node-results { display: grid; gap: 4px; max-height: 180px; overflow: auto; }
+.local-graph__node-result { display: grid; gap: 2px; width: 100%; padding: 6px 7px; border: 1px solid #394e6b; border-radius: 6px; color: #d8e5f7; background: #17243a; font: inherit; cursor: pointer; text-align: left; text-decoration: none; overflow-wrap: anywhere; }
+.local-graph__node-result:focus-visible { outline: 2px solid #9bc7ff; outline-offset: 2px; }
+.local-graph__node-result span { color: #9fb4d2; font-size: 10px; }
+.local-graph__evidence { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; gap: 6px; width: min(250px, calc(50% - 24px)); max-height: 34%; overflow: auto; padding: 8px; border: 1px solid #435974; border-radius: 10px; background: #101c2ddd; }
 .local-graph__evidence article { display: grid; gap: 3px; padding: 5px 4px; border-bottom: 1px solid #344760; font-size: 11px; }
 .local-graph__evidence strong { overflow-wrap: anywhere; font-size: 12px; }
 .local-graph__evidence span { color: #c2d3ec; }
