@@ -187,6 +187,7 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   };
 
   const renderNode = (node, context, globalScale) => {
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
     const radius = starRadius(node);
     const selectedOrRelated = selectedNodeIds.has(node.id);
     const isSelected = selected?.type === 'node' && selected.id === node.id;
