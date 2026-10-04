@@ -49,6 +49,55 @@ function canArchiveRecord(kind, revision) {
   return Number.isSafeInteger(revision) && revision >= (kind === 'idea' ? 0 : 1);
 }
 
+function nonEmptyText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function safeIdeaCitations(citations) {
+  if (!Array.isArray(citations)) return [];
+  return citations.flatMap((citation) => {
+    if (!citation || typeof citation.title !== 'string' || !citation.title.trim() || typeof citation.url !== 'string') return [];
+    const href = safePublicCitationUrl(citation.url);
+    return href ? [{ href, title: citation.title.trim() }] : [];
+  });
+}
+
+function ideaCitationGroups(citationChapters) {
+  if (!Array.isArray(citationChapters)) return [];
+  return IDEA_SECTIONS.flatMap((heading, index) => {
+    const citations = safeIdeaCitations(citationChapters[index]);
+    const uniqueCitations = [...new Map(citations.map((citation) => [citation.href, citation])).values()];
+    return uniqueCitations.length ? [{ heading, citations: uniqueCitations }] : [];
+  });
+}
+
+function IdeaCitationList({ groups }) {
+  if (!groups.length) return null;
+  return <section className="local-home__citation" aria-label="出典">
+    <h3 className="local-home__citation-heading">出典</h3>
+    {groups.map((group) => <div className="local-home__citation-group" key={group.heading}>
+      <h4>{group.heading}</h4>
+      <ul>{group.citations.map((citation) => <li key={citation.href}><a href={citation.href} target="_blank" rel="noopener noreferrer">{citation.title} <span aria-hidden="true">↗</span></a></li>)}</ul>
+    </div>)}
+  </section>;
+}
+
+function IdeaReadingSection({ heading, body }) {
+  if (!body) return null;
+  return <section className="local-home__idea-reading-section">
+    <h3>{heading}</h3>
+    <p className="local-home__idea-reading-body">{body}</p>
+  </section>;
+}
+
+function ideaReadingSections(idea) {
+  return IDEA_SECTIONS.flatMap((heading, index) => {
+    const savedBody = nonEmptyText(idea.brief_sections?.[index]);
+    const body = savedBody || (index === 0 ? nonEmptyText(idea.summary) : '');
+    return body ? [{ heading, body }] : [];
+  });
+}
+
 export function LocalHomeSurface({ client, onOpenServices }) {
   const [tab, setTab] = useState('ideas');
   const [home, setHome] = useState({ status: 'loading', ideas: [], assets: [], profile: null });
@@ -144,6 +193,14 @@ export function LocalHomeSurface({ client, onOpenServices }) {
   }, [deleteConfirmation, deletePending]);
 
   const selectedIdea = home.ideas.find((idea) => idea.id === selectedId) ?? home.ideas[0] ?? null;
+  const selectedIdeaSections = selectedIdea && !selectedIdea.report_markdown ? ideaReadingSections(selectedIdea) : [];
+  const candidateIdeaDescription = selectedIdea && !selectedIdea.report_markdown && selectedIdea.research_status !== 'researched'
+    ? nonEmptyText(selectedIdea.description)
+    : '';
+  const selectedIdeaDescription = selectedIdeaSections.some((section) => section.body === candidateIdeaDescription)
+    ? ''
+    : candidateIdeaDescription;
+  const selectedIdeaCitationGroups = selectedIdea ? ideaCitationGroups(selectedIdea.brief_citations) : [];
   function editIdea(idea) {
     setIdeaDraft({ id: idea.id, title: idea.title, description: idea.description ?? '', revision: idea.revision });
     setIdeaNotice('');
@@ -376,24 +433,18 @@ export function LocalHomeSurface({ client, onOpenServices }) {
           <textarea id="idea-edit-description" rows={6} maxLength={4000} value={ideaDraft.description} onChange={(event) => setIdeaDraft((current) => ({ ...current, description: event.target.value }))} />
           {ideaNotice && <p role="alert">{ideaNotice}</p>}
           <div><button type="submit" disabled={!ideaDraft.title.trim() || ideaSaving}>{ideaSaving ? '保存中…' : '保存する'}</button><button type="button" disabled={ideaSaving} onClick={() => { setIdeaDraft(null); setIdeaNotice(''); }}>キャンセル</button></div>
-        </form> : <>
-          {!selectedIdea.report_markdown && selectedIdea.research_status !== 'researched' && selectedIdea.description && <p className="local-home__idea-description">{selectedIdea.description}</p>}
-        </>}
+        </form> : null}
         {ideaNotice && !ideaDraft && <p role="status">{ideaNotice}</p>}
-        {selectedIdea.report_markdown ? <><MarkdownReport markdown={selectedIdea.report_markdown} />
-          {selectedIdea.brief_citations?.some((chapter) => chapter.length > 0) && <div className="local-home__citation"><strong>保存済みの出典</strong><ul>{[...new Map(selectedIdea.brief_citations.flat().filter((citation) => safePublicCitationUrl(citation.url)).map((citation) => [citation.url, citation])).values()].map((citation) => <li key={citation.url}><a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()} <span aria-hidden="true">↗</span></a></li>)}</ul></div>}
-        </> : <div className="local-home__section-list">{IDEA_SECTIONS.map((heading, index) => {
-          const saved = selectedIdea.brief_sections?.[index]?.trim();
-          const content = saved || (index === 0 ? selectedIdea.summary : '') || '未整理';
-          const citations = Array.isArray(selectedIdea.brief_citations?.[index])
-            ? selectedIdea.brief_citations[index].filter((citation) => citation && typeof citation.title === 'string' && citation.title.trim() && safePublicCitationUrl(citation.url))
-            : [];
-          return <section key={heading}>
-            <h3>{heading}</h3>
-            <p className={content === '未整理' ? 'local-home__unwritten' : ''}>{content}</p>
-            {citations.length > 0 && <div className="local-home__citation"><strong>出典</strong><ul>{citations.map((citation, citationIndex) => <li key={`${citation.source_id ?? citation.evidence_id ?? citation.url}-${citationIndex}`}><a href={safePublicCitationUrl(citation.url)} target="_blank" rel="noopener noreferrer">{citation.title.trim()} <span aria-hidden="true">↗</span></a></li>)}</ul></div>}
-          </section>;
-        })}</div>}
+        {selectedIdea.report_markdown
+          ? <div className="local-home__idea-content local-home__idea-content--markdown">
+            <MarkdownReport markdown={selectedIdea.report_markdown} chapterHeadings={IDEA_SECTIONS} />
+            <IdeaCitationList groups={selectedIdeaCitationGroups} />
+          </div>
+          : (selectedIdeaDescription || selectedIdeaSections.length > 0 || selectedIdeaCitationGroups.length > 0) && <div className="local-home__idea-content">
+            {selectedIdeaDescription && <IdeaReadingSection heading="説明" body={selectedIdeaDescription} />}
+            {selectedIdeaSections.map((section) => <IdeaReadingSection key={section.heading} {...section} />)}
+            <IdeaCitationList groups={selectedIdeaCitationGroups} />
+          </div>}
       </article>}
     </section>}
     {['ready', 'empty'].includes(home.status) && tab === 'assets' && <section className="local-home__asset-layout" aria-label="あなたのアセット">

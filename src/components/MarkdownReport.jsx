@@ -24,6 +24,12 @@ function compactBareUrl(url) {
   return `${parsed.hostname} / ${shortPath}`;
 }
 
+function headingText(children) {
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(headingText).join('');
+  return children?.props ? headingText(children.props.children) : '';
+}
+
 function MermaidDiagram({ source }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [view, setView] = useState({ status: 'loading', svg: '' });
@@ -45,9 +51,30 @@ function MermaidDiagram({ source }) {
   return <figure className="markdown-report__diagram" role="img" aria-label="レポート内の図"><div dangerouslySetInnerHTML={{ __html: view.svg }} /></figure>;
 }
 
-export function MarkdownReport({ markdown }) {
+export function MarkdownReport({ markdown, chapterHeadings = [] }) {
+  const isChapterHeading = (children) => chapterHeadings.includes(headingText(children).trim());
   return <div className="markdown-report" aria-label="保存したレポート">
     <ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
+      h1({ children }) {
+        return <h3 className={isChapterHeading(children) ? 'markdown-report__chapter-heading' : 'markdown-report__title-heading'}>{children}</h3>;
+      },
+      h2({ children }) {
+        return isChapterHeading(children)
+          ? <h3 className="markdown-report__chapter-heading">{children}</h3>
+          : <h4 className="markdown-report__subheading">{children}</h4>;
+      },
+      h3({ children }) {
+        return <h5 className="markdown-report__subheading">{children}</h5>;
+      },
+      h4({ children }) {
+        return <h6 className="markdown-report__subheading">{children}</h6>;
+      },
+      h5({ children }) {
+        return <h6 className="markdown-report__subheading">{children}</h6>;
+      },
+      h6({ children }) {
+        return <h6 className="markdown-report__subheading">{children}</h6>;
+      },
       a({ href, children }) {
         const url = safePublicCitationUrl(href);
         if (!url) return <span>{children}</span>;
