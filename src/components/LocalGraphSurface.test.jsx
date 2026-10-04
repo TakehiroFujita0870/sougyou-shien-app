@@ -227,6 +227,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphHarness.graph.d3Force.mock.results[1].value.distance).toHaveBeenCalledWith(30);
     expect(graphHarness.graph.zoom).toHaveBeenCalledExactlyOnceWith(0.9, 0);
     const originalData = graphHarness.props.graphData;
+    // ForceGraph treats a string mode as a node property, not a constant.
+    expect(typeof graphHarness.props.nodeCanvasObjectMode).toBe('function');
+    expect(graphHarness.props.nodeCanvasObjectMode(originalData.nodes[0])).toBe('replace');
     const drawContext = {
       save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
       closePath: vi.fn(), fill: vi.fn(), arc: vi.fn(), stroke: vi.fn(),
