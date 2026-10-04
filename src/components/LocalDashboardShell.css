@@ -1,4 +1,6 @@
+html:has(.local-shell) { scrollbar-gutter: stable; }
 .local-shell {
+  --local-sidebar-width: 192px;
   --color-canvas: #0e131d;
   --color-surface: #1b293b;
   --color-muted: #aab8ce;
@@ -9,7 +11,7 @@
   --color-focus: #d5b97f;
   color-scheme: dark;
   display: grid;
-  grid-template-columns: 192px minmax(0, 1fr);
+  grid-template-columns: var(--local-sidebar-width) minmax(0, 1fr);
   min-height: 100dvh;
   background: var(--color-canvas);
   color: var(--color-text);
@@ -29,7 +31,7 @@
 .local-shell__nav button span { width: 18px; flex: none; font-size: 18px; line-height: 18px; text-align: center; }
 .local-shell__workspace { min-width: 0; }
 .local-shell__content { position: relative; isolation: isolate; min-height: 100dvh; }
-.local-shell__sky { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, #0e131d33, #0e131da8), url('/assets/starfield-v1.png') center / cover; opacity: .7; pointer-events: none; }
+.local-shell__sky { position: fixed; inset: 0; left: var(--local-sidebar-width); z-index: -1; background: linear-gradient(180deg, #0e131d33, #0e131da8), url('/assets/starfield-v1.png') center / cover; opacity: .7; pointer-events: none; }
 .local-shell__body { position: relative; padding: 20px 30px 35px; }
 .local-shell button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
 .local-shell .local-control-confirm-button { color: #172036; }
