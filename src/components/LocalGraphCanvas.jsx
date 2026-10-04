@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius } from './localGraphPresentation.js';
+import { LocalGraphNodeSearch } from './LocalGraphNodeSearch.jsx';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
+
+const MIN_INITIAL_ZOOM = 0.7;
 
 function endpointId(endpoint) {
   return typeof endpoint === 'object' ? endpoint?.id : endpoint;
@@ -23,6 +26,7 @@ function drawStar(context, x, y, radius) {
 export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   const container = useRef(null);
   const graphRef = useRef(null);
+  const initialFit = useRef({ applied: false, userMoved: false });
   const [selected, setSelected] = useState(null);
   const [hoveredId, setHoveredId] = useState('');
   const [Graph2D, setGraph2D] = useState(null);
@@ -109,6 +113,16 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
   };
 
+  const markCameraInteraction = () => { initialFit.current.userMoved = true; };
+  const fitInitialView = () => {
+    if (initialFit.current.applied || initialFit.current.userMoved || nodes.length === 0) return;
+    initialFit.current.applied = true;
+    const graph = graphRef.current;
+    if (!graph) return;
+    graph.zoomToFit(0, 44);
+    if (graph.zoom() < MIN_INITIAL_ZOOM) graph.zoom(MIN_INITIAL_ZOOM, 450);
+  };
+
   useEffect(() => {
     if (!selectedAssertionId || provenanceRequest.assertionId !== selectedAssertionId) return undefined;
     const controller = new AbortController();
@@ -175,7 +189,8 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     context.fill();
   };
   return <div className="local-graph__frame">
-    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}>
+    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}
+      onPointerDownCapture={markCameraInteraction} onWheelCapture={markCameraInteraction}>
       {Graph2D && <Graph2D
         ref={graphRef}
         graphData={graphData}
@@ -205,8 +220,10 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         onNodeHover={(node) => setHoveredId(node?.id ?? '')}
         onLinkClick={(link) => link.assertionId ? selectSemanticEdge(link) : clearSelection()}
         onBackgroundClick={clearSelection}
+        onEngineStop={fitInitialView}
       />}
     </div>
+    <LocalGraphNodeSearch nodes={nodes} onSelect={selectNode} />
     {renderError && <p role="alert">平面グラフを表示できませんでした。画面を再読み込みしてください。</p>}
     {selected?.type === 'node' && <aside className="local-graph__selected"><span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong></aside>}
     {selected?.type === 'semantic-edge' && <aside className="local-graph__selected" aria-label="意味関係と根拠">

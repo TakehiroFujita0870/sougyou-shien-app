@@ -12,6 +12,12 @@ const graphHarness = vi.hoisted(() => {
     ready: new Promise((resolve) => { resolveImport = resolve; }),
     release: () => resolveImport(),
     props: null,
+    graph: {
+      zoomToFit: vi.fn(),
+      zoom: vi.fn((scale) => scale === undefined ? 0.2 : scale),
+      d3Force: vi.fn(() => ({ strength: vi.fn(), distance: vi.fn() })),
+      d3ReheatSimulation: vi.fn(),
+    },
     instances: [],
     unmounts: [],
   };
@@ -20,8 +26,9 @@ const graphHarness = vi.hoisted(() => {
 vi.mock('react-force-graph-2d', async () => {
   await graphHarness.ready;
   const React = await import('react');
-  const MockForceGraph2D = React.forwardRef((props, _ref) => {
+  const MockForceGraph2D = React.forwardRef((props, ref) => {
     graphHarness.props = props;
+    React.useImperativeHandle(ref, () => graphHarness.graph);
     React.useEffect(() => {
       const instance = { destroyed: false };
       graphHarness.instances.push(instance);
@@ -40,6 +47,10 @@ afterEach(() => {
   for (const item of mounted) act(() => { item.root.unmount(); item.container.remove(); });
   mounted = [];
   graphHarness.props = null;
+  graphHarness.graph.zoomToFit.mockClear();
+  graphHarness.graph.zoom.mockClear();
+  graphHarness.graph.d3Force.mockClear();
+  graphHarness.graph.d3ReheatSimulation.mockClear();
   graphHarness.instances.length = 0;
   graphHarness.unmounts.length = 0;
   vi.restoreAllMocks();
@@ -75,7 +86,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphHarness.instances).toHaveLength(0);
   });
 
-  it('renders 500 nodes and realistic links in one plane, supports selection, and tears down on navigation', async () => {
+  it('renders 500 nodes and realistic links in one plane, supports keyboard node search, and tears down on navigation', async () => {
     const resizeObservers = [];
     globalThis.ResizeObserver = class {
       constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); resizeObservers.push(this); }
@@ -116,12 +127,38 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphHarness.props.enableNodeDrag).toBe(true);
     expect(graphHarness.props.enableZoomInteraction).toBe(true);
     expect(graphHarness.props.enablePanInteraction).toBe(true);
+    expect(graphHarness.props.autoPauseRedraw).toBe(true);
+    const originalNodeRenderer = graphHarness.props.nodeCanvasObject;
+    act(() => graphHarness.props.onNodeHover(nodes[5]));
+    expect(graphHarness.props.nodeCanvasObject).not.toBe(originalNodeRenderer);
+    act(() => graphHarness.props.onEngineStop());
+    expect(graphHarness.graph.zoomToFit).toHaveBeenCalledOnce();
+    expect(graphHarness.graph.zoomToFit).toHaveBeenCalledWith(0, 44);
+    expect(graphHarness.graph.zoom).toHaveBeenNthCalledWith(1);
+    expect(graphHarness.graph.zoom).toHaveBeenNthCalledWith(2, 0.7, 450);
+    act(() => {
+      container.querySelector('.local-graph__canvas').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      graphHarness.props.onEngineStop();
+    });
+    expect(graphHarness.graph.zoomToFit).toHaveBeenCalledOnce();
     expect(graphHarness.props.graphData.nodes.slice(0, 3).map(({ abstractionDepth }) => abstractionDepth)).toEqual([0, 1, 2]);
     expect(graphHarness.props.graphData.nodes[8].abstractionDepth).toBeNull();
     expect(container.textContent).not.toContain('深度');
     expect(container.querySelector('.local-graph__depth')).toBeNull();
     expect(client.getFacetRegion).not.toHaveBeenCalled();
-    act(() => graphHarness.props.onNodeClick(nodes[419]));
+    const search = container.querySelector('input[type="search"]');
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    const searchStartedAt = performance.now();
+    act(() => {
+      valueSetter.call(search, '食品店の顧客調査');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(performance.now() - searchStartedAt).toBeLessThan(100);
+    const result = container.querySelector('.local-graph__node-result');
+    expect(result?.tagName).toBe('BUTTON');
+    result.focus();
+    expect(document.activeElement).toBe(result);
+    act(() => result.click());
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('食品店の顧客調査');
     const incidentLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-419' || link.target === 'node-419');
     const unrelatedLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-0' && link.target === 'node-23');
@@ -134,6 +171,27 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphInstance.destroyed).toBe(true);
     expect(graphHarness.unmounts).toContain(graphInstance);
     expect(resizeObserver.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('skips the initial fit if the user has moved the graph first', async () => {
+    const client = {
+      getGraph: vi.fn().mockResolvedValue({
+        status: 'ready', truncated: false, nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案' }], edges: [],
+      }),
+      getFacetRegion: vi.fn(),
+    };
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
+    await flushEffects();
+
+    act(() => {
+      container.querySelector('.local-graph__canvas').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      graphHarness.props.onEngineStop();
+    });
+    expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
   });
 
   it('keeps the existing graph data and exposes no Facet controls when no Facets exist', async () => {
