@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-10-03T11:46:22Z",
-  "baseline_main": "46323612868b",
+  "updated_at": "2026-10-04T03:18:20Z",
+  "baseline_main": "c59484108823",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -73,6 +73,24 @@
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "旧初版の分類だけを現行の強みとして読み替える。保存本文や識別子は変更せず、通常Dotsの該当アセットを本人限定の直接読取と接続ツールから再取得した。",
       "evidence": [{"recorded_at": "2026-10-03T11:46:22Z", "scope": "main-422-live-legacy-capability-read", "result": "passed", "reference": "PR #422のCI成功、backend全件・frontend全件成功。main 46323612868bの稼働後、旧分類の二件を直接読取し、うち一件を正本Dotsのfetchからkind=strengthで確認。"}]
+    },
+    {
+      "id": "report_reading_ui", "title": "レポートの読書画面", "scope": "main-424-live-report-reading-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "保存したMarkdownを変更せず、章・出典・長文の読書表示と一つの縦スクロールを整えた。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-424-live-report-reading-1280", "result": "passed", "reference": "PR #424の必須CI成功と通常DotsのPC 1280×720画面で長文・下書きの表示、公開リンク、スクロールを確認。"}]
+    },
+    {
+      "id": "unified_idea_presentation", "title": "全アイデアの共通表示", "scope": "main-428-live-all-idea-presentation-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "Markdown、旧章別形式、下書きを同じ見出し・出典・操作配置で表示。存在しない章や根拠は補わず、保存本文は不変。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-428-live-all-idea-presentation-1280", "result": "passed", "reference": "PR #428の必須CI成功。通常DotsのPC 1280×720で現存する全アイデアを横断確認し、共通章見出し、状態、出典、操作位置と画面遷移を確認。"}]
+    },
+    {
+      "id": "starfield_graph_ui", "title": "平面の星空グラフ", "scope": "main-426-427-429-430-live-starfield-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "分類の確定した階層を星の大きさで示し、検索、選択、意味関係と根拠、出典の安全な新規タブを維持。旧3D表示は撤去済み。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-426-427-429-430-live-starfield-1280", "result": "passed", "reference": "PR #426・#427・#429・#430の必須CI成功、独立レビュー。500点の合成画面と検索・根拠を確認。通常DotsのPC 1280×720で検索から星への視点移動、補助欄の可読性、ホーム・サービス管理への遷移を確認。"}]
     }
   ]
 }
