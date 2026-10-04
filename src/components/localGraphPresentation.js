@@ -46,12 +46,19 @@ export function starRadius(node) {
 
 const ALWAYS_LABELLED_KINDS = new Set(['idea', 'facet']);
 
-function graphLabelBounds(node, label, scale, measureText) {
+export function graphLabelX(node, label, scale, measureText, rightEdge = Infinity) {
+  const width = measureText(label, 12 / scale);
+  const right = node.x + starRadius(node) + 5 / scale;
+  return right + width + 8 / scale > rightEdge
+    ? node.x - starRadius(node) - 14 / scale - width : right;
+}
+
+function graphLabelBounds(node, label, scale, measureText, rightEdge) {
   if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return null;
   const fontSize = 12 / scale;
   const measuredWidth = measureText(label, fontSize);
   const width = Number.isFinite(measuredWidth) ? measuredWidth : Array.from(label).length * fontSize * 0.75;
-  const left = node.x + starRadius(node) + 5 / scale;
+  const left = graphLabelX(node, label, scale, measureText, rightEdge);
   const padding = 4 / scale;
   return {
     left,
@@ -89,7 +96,7 @@ function addToGrid(bounds, grid, size) {
   }
 }
 
-export function visibleGraphLabelIds(nodes, globalScale, priorityIds = new Set(), hoveredId = '', measureText = (label, size) => Array.from(label).length * size * 0.75) {
+export function visibleGraphLabelIds(nodes, globalScale, priorityIds = new Set(), hoveredId = '', measureText = (label, size) => Array.from(label).length * size * 0.75, rightEdge = Infinity) {
   const scale = Number.isFinite(globalScale) ? Math.max(globalScale, 0.1) : 1;
   const emphasized = priorityIds instanceof Set ? priorityIds : new Set(priorityIds);
   const allLabelsAtZoom = scale >= 1.25;
@@ -114,7 +121,7 @@ export function visibleGraphLabelIds(nodes, globalScale, priorityIds = new Set()
       const selected = emphasized.has(node.id);
       const hovered = node.id === hoveredId;
       const priority = selected ? 0 : hovered ? 1 : node.kind === 'facet' ? 2 : node.kind === 'idea' ? 3 : 4;
-      return { node, priority, bounds: graphLabelBounds(node, shortLabel(node.label), scale, measureText) };
+      return { node, priority, bounds: graphLabelBounds(node, shortLabel(node.label), scale, measureText, rightEdge) };
     })
     .filter(({ bounds }) => bounds !== null)
     .sort((left, right) => left.priority - right.priority
