@@ -1,6 +1,9 @@
 export const COLORS = {
-  idea: '#8dbbff', asset: '#f3bd86', person: '#e4a6c7', owner_profile: '#f5d776',
-  source: '#96d7c5', organization: '#b6a4ef', report_version: '#a5b7d8', facet: '#b6a4ef',
+  // Pastel stellar-temperature palette, used as kind cues rather than measured temperatures.
+  idea: '#d4e3ff', asset: '#ffd1a8', source: '#f4f2ee', facet: '#fff1d2',
+  person: '#ffd2bb', owner_profile: '#ffe3b8', organization: '#e4edff',
+  research_material: '#fff7e8', decision: '#ffdcc2', experiment: '#deebff',
+  instruction_artifact: '#fff0d8', report_version: '#f4f2ee',
 };
 const NODE_KIND_LABELS = {
   idea: 'アイデア', asset: 'アセット', person: '人物', owner_profile: '本人',
@@ -31,8 +34,14 @@ export function shortLabel(label) {
 }
 
 export function starRadius(node) {
-  if (node.kind !== 'facet' || !Number.isInteger(node.abstractionDepth) || node.abstractionDepth < 0) return 5;
-  return Math.max(5.5, 13 / Math.sqrt(1 + node.abstractionDepth * 0.8));
+  if (node.kind === 'facet') {
+    if (!Number.isInteger(node.abstractionDepth) || node.abstractionDepth < 0) return 11;
+    return Math.max(11, 16 / Math.sqrt(1 + node.abstractionDepth * 0.8));
+  }
+  if (node.kind === 'idea') return 9;
+  if (node.kind === 'asset' || node.kind === 'owner_profile') return 7;
+  if (node.kind === 'person' || node.kind === 'organization') return 8;
+  return 5.5;
 }
 
 const ALWAYS_LABELLED_KINDS = new Set(['idea', 'facet']);

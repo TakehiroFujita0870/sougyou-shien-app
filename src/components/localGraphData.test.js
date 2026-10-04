@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { semanticGraphData, regionGraphData } from './localGraphData.js';
-import { starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
+import { COLORS, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
 
 it('keeps semantic assertions and hides internal research and revision records without changing the input', () => {
   const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' },
@@ -58,14 +58,28 @@ it('assigns abstraction depth only along unambiguous confirmed Facet taxonomy', 
   ]);
 });
 
-it('uses neutral star sizes outside confirmed Facet hierarchy', () => {
+it('distinguishes kinds by larger sizes without inventing Facet hierarchy', () => {
   const unknownFacet = { kind: 'facet', abstractionDepth: null };
   const idea = { kind: 'idea', abstractionDepth: 0 };
   const rootFacet = { kind: 'facet', abstractionDepth: 0 };
   const childFacet = { kind: 'facet', abstractionDepth: 1 };
   expect(starRadius(rootFacet)).toBeGreaterThan(starRadius(childFacet));
-  expect(starRadius(unknownFacet)).toBe(5);
-  expect(starRadius(idea)).toBe(5);
+  expect(starRadius(unknownFacet)).toBe(11);
+  expect(starRadius(idea)).toBe(9);
+  expect(starRadius(unknownFacet)).toBeGreaterThan(starRadius(idea));
+  expect(starRadius(idea)).toBeGreaterThan(starRadius({ kind: 'asset' }));
+  expect(starRadius({ kind: 'asset' })).toBeGreaterThan(starRadius({ kind: 'source' }));
+  expect(starRadius({ kind: 'source' })).toBeGreaterThan(5);
+});
+
+it('uses distinct pastel stellar colors for main kinds, without green or violet hues', () => {
+  expect(new Set(['idea', 'asset', 'source', 'facet'].map(kind => COLORS[kind])).size).toBe(4);
+  for (const color of Object.values(COLORS)) {
+    expect(color).toMatch(/^#[a-f0-9]{6}$/);
+    const [red, green, blue] = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16));
+    expect(Math.min(red, green, blue)).toBeGreaterThanOrEqual(160);
+    expect((red >= green && green >= blue) || (blue >= green && green >= red)).toBe(true);
+  }
 });
 
 it('shows idea and Facet labels at rest, avoids collisions deterministically, and reveals other labels on zoom', () => {

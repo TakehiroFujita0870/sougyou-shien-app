@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalGraphSurface, semanticGraphData } from './LocalGraphSurface';
+import { COLORS, starRadius } from './localGraphPresentation.js';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -252,12 +253,12 @@ describe('LocalGraphSurface Facet exploration', () => {
     });
     expect(drawContext.fillText).toHaveBeenCalledOnce();
     expect(drawContext.fillText.mock.calls[0][0]).toBe('事業案');
-    expect(drawContext.fillText.mock.calls[0][1]).toBeCloseTo(100 + 5 + 5 / 0.9);
-    expect(fillStyles).toContain('#fff');
+    expect(drawContext.fillText.mock.calls[0][1]).toBeCloseTo(100 + starRadius(originalData.nodes[0]) + 5 / 0.9);
+    expect(fillStyles).toContain(COLORS.idea);
     expect(shadowBlurs.some((blur) => blur > 0)).toBe(true);
     expect(drawContext.createRadialGradient).toHaveBeenCalledOnce();
     expect(drawContext.lineTo).not.toHaveBeenCalled();
-    expect(drawContext.arc).toHaveBeenCalledWith(100, 120, 0.8, 0, Math.PI * 2);
+    expect(drawContext.arc).toHaveBeenCalledWith(100, 120, 1.98, 0, Math.PI * 2);
     graphHarness.graph.zoom.mockClear();
     graphHarness.graph.d3Force.mockClear();
     const canvas = container.querySelector('.local-graph__canvas');
