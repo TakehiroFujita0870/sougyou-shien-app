@@ -33,6 +33,7 @@ export function shortLabel(label) {
 }
 
 export function starRadius(node) {
+  if (node.kind === 'asset' && node.category === 'criterion') return 16;
   if (node.kind === 'facet') {
     if (!Number.isInteger(node.abstractionDepth) || node.abstractionDepth < 0) return 11;
     return Math.max(11, 16 / Math.sqrt(1 + node.abstractionDepth * 0.8));
@@ -94,6 +95,7 @@ export function graphLabelPlacements(nodes, globalScale, priorityIds = new Set()
   const emphasized = priorityIds instanceof Set ? priorityIds : new Set(priorityIds);
   const allLabelsAtZoom = scale >= 1.25;
   const labelNodes = nodes.filter((node) => ALWAYS_LABELLED_KINDS.has(node.kind)
+    || (node.kind === 'asset' && node.category === 'criterion')
     || allLabelsAtZoom || emphasized.has(node.id) || node.id === hoveredId);
   const gridSize = 36 / scale;
   const occupied = new Map();

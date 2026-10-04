@@ -2,6 +2,14 @@ import { expect, it } from 'vitest';
 import { semanticGraphData, regionGraphData } from './localGraphData.js';
 import { COLORS, graphLabelPlacements, starRadius } from './localGraphPresentation.js';
 
+it('makes saved decision criteria prominent even when they have no edges yet', () => {
+  const criterion = { id: 'criterion', kind: 'asset', category: 'criterion', label: '小さく試す', x: 0, y: 0 };
+  expect(starRadius(criterion)).toBeGreaterThan(starRadius({ kind: 'idea' }));
+  expect(starRadius(criterion)).toBeGreaterThanOrEqual(starRadius({ kind: 'asset', category: 'strength' }) * 2);
+  expect(graphLabelPlacements([criterion], .9).has(criterion.id)).toBe(true);
+  expect(starRadius({ kind: 'source', category: 'criterion' })).toBe(5.5);
+});
+
 it('keeps semantic assertions and hides internal research and revision records without changing the input', () => {
   const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' },
     { id: 'claim', kind: 'claim', label: 'claim' }, { id: 'brief', kind: 'idea_brief_version', label: 'idea brief version' }],
