@@ -28,17 +28,17 @@ function evidenceStatusLabel(status) {
   return status === 'active' ? '有効' : '状態未設定';
 }
 
-function drawStar(context, x, y, radius) {
+function drawStarlight(context, x, y, radius, color) {
+  const haloRadius = radius * 1.8;
+  const halo = context.createRadialGradient(x, y, 0, x, y, haloRadius);
+  halo.addColorStop(0, '#ffffffb0');
+  halo.addColorStop(0.12, '#ffffff55');
+  halo.addColorStop(0.32, `${color}24`);
+  halo.addColorStop(0.65, `${color}08`);
+  halo.addColorStop(1, `${color}00`);
+  context.fillStyle = halo;
   context.beginPath();
-  for (let point = 0; point < 8; point += 1) {
-    const angle = -Math.PI / 2 + point * Math.PI / 4;
-    const pointRadius = point % 2 === 0 ? radius : radius * 0.3;
-    const pointX = x + Math.cos(angle) * pointRadius;
-    const pointY = y + Math.sin(angle) * pointRadius;
-    if (point === 0) context.moveTo(pointX, pointY);
-    else context.lineTo(pointX, pointY);
-  }
-  context.closePath();
+  context.arc(x, y, haloRadius, 0, Math.PI * 2);
   context.fill();
 }
 
@@ -192,16 +192,12 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     const isSelected = selected?.type === 'node' && selected.id === node.id;
     const scale = Math.max(globalScale, 0.1);
     context.save();
-    context.globalAlpha = selected && !selectedOrRelated ? 0.2 : 0.68;
-    context.fillStyle = COLORS[node.kind] ?? '#c4d4ed';
-    context.shadowColor = context.fillStyle;
-    context.shadowBlur = isSelected ? radius * 2.2 : Math.max(4, radius * 1.15);
-    drawStar(context, node.x, node.y, radius);
-    context.shadowBlur = 0;
-    context.globalAlpha = selected && !selectedOrRelated ? 0.62 : 0.98;
+    context.globalAlpha = selected && !selectedOrRelated ? 0.2 : 0.85;
+    drawStarlight(context, node.x, node.y, radius, COLORS[node.kind] ?? '#c4d4ed');
+    context.globalAlpha = selected && !selectedOrRelated ? 0.35 : 0.98;
     context.fillStyle = '#fff';
     context.beginPath();
-    context.arc(node.x, node.y, Math.max(1.5, radius * 0.31), 0, Math.PI * 2);
+    context.arc(node.x, node.y, Math.max(0.75, radius * 0.16), 0, Math.PI * 2);
     context.fill();
     if (isSelected) {
       context.strokeStyle = '#f7fbff';
