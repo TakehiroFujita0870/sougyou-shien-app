@@ -1,7 +1,7 @@
 """The local controller's production wiring must remain inert at import time."""
 
-from dots import local_dashboard_runtime as runtime
-from dots.local_overview import StoredOverviewNode
+from nebula import local_dashboard_runtime as runtime
+from nebula.local_overview import StoredOverviewNode
 
 
 def test_runtime_constructs_fixed_localhost_app_without_contacting_services():

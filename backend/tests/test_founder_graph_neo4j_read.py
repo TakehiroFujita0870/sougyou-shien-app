@@ -7,14 +7,14 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, Provenance, RelationAssertion, RelationAssertionBasis, Source, SourceRevision
-from dots.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
-from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
-from dots.founder_graph_read import GraphReadError, GraphReadNotFoundError, NodeView, RelationPathStep
+from nebula.founder_graph import ContentChunk, EgressPolicy, Evidence, Idea, NodeType, Provenance, RelationAssertion, RelationAssertionBasis, Source, SourceRevision
+from nebula.founder_graph import Asset, Claim, PersonAsset, RelationAssertionEdgeType, RelationType, Status, relation_assertion_structural_edges
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_read import GraphRelationView, Neo4jGraphReadService
+from nebula.founder_graph_mcp import McpReadError, McpReadSurface
+from nebula.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
+from nebula.founder_graph_read import GraphReadError, GraphReadNotFoundError, NodeView, RelationPathStep
 
 
 class FakeResult:
@@ -129,7 +129,7 @@ def test_hybrid_fulltext_query_uses_escaped_or_terms_for_cjk() -> None:
 
 
 def test_legacy_search_query_hides_superseded_idea_revisions() -> None:
-    from dots.founder_graph_neo4j_read import _SEARCH_QUERY
+    from nebula.founder_graph_neo4j_read import _SEARCH_QUERY
 
     assert "n.node_type IN ['idea', 'asset', 'person']" in _SEARCH_QUERY
     assert "supersedes_id: n.id" in _SEARCH_QUERY
@@ -995,7 +995,7 @@ def test_search_and_fetch_project_inferred_successor_with_superseded_history_ref
     ]
     evidence_row = next(row for row in old_rows if row["relation"] == "EVIDENCED_BY")
     next(row for row in formal_rows if row["relation"] == "EVIDENCED_BY").update({"_lineage": evidence_row["_lineage"]})
-    from dots.founder_graph_neo4j_read import _checked_historical_supersedes_ref
+    from nebula.founder_graph_neo4j_read import _checked_historical_supersedes_ref
     history_row = next(row for row in formal_rows if row["relation"] == RelationAssertionEdgeType.SUPERSEDES.value)
     assert _checked_historical_supersedes_ref(history_row, owner_id="owner-1", successor=current).id == predecessor.id
     endpoint_rows[current.id] = _persisted_row(current, search_text="")
@@ -1045,7 +1045,7 @@ def test_historical_supersedes_ref_rejects_unrelated_or_invalid_predecessor(muta
     endpoint_rows[prior.id] = _persisted_row(prior)
     row = _formal_edge_row(current, RelationAssertionEdgeType.SUPERSEDES.value, endpoint_rows[prior.id])
 
-    from dots.founder_graph_neo4j_read import _checked_historical_supersedes_ref
+    from nebula.founder_graph_neo4j_read import _checked_historical_supersedes_ref
     with pytest.raises((GraphReadNotFoundError, ValueError)):
         _checked_historical_supersedes_ref(row, owner_id="owner-1", successor=current)
 

@@ -64,6 +64,6 @@ def validate(data):
 
 
 if __name__ == "__main__":
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / "docs/operations/dots-current-status.json"
+    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / "docs/operations/nebula-current-status.json"
     validate(json.loads(target.read_text(encoding="utf-8")))
     print("Progress record consistency: PASS (not an execution or completion proof)")

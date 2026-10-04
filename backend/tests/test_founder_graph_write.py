@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     EgressPolicy,
     Evidence,
     Idea,
@@ -16,7 +16,7 @@ from dots.founder_graph import (
     Source,
     SourceRevision,
 )
-from dots.founder_graph_write import (
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     InMemoryGraphWriteService,

@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Claim,
     ContentChunk,
     Evidence,
@@ -26,9 +26,9 @@ from dots.founder_graph import (
     RelationshipStatus,
     SourceRevision,
 )
-from dots.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.founder_graph_write import RevisionConflictError
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.founder_graph_write import RevisionConflictError
 from neo4j_disposable_harness import (
     IMAGE,
     DisposableNeo4j,
@@ -39,9 +39,9 @@ from neo4j_disposable_harness import (
 from neo4j_revision_lock_transactions import TaggedDriver, is_blocked_status
 
 
-OPT_IN = "DOTS_NEO4J_RELATION_ASSERTION_REAL"
+OPT_IN = "NEBULA_NEO4J_RELATION_ASSERTION_REAL"
 ROLE = "neo4j-relation-assertion"
-NAME_PREFIX = "dots-relassert"
+NAME_PREFIX = "nebula-relassert"
 
 
 def _poll_until_ready(driver, timeout_seconds: float = 90) -> bool:
@@ -146,14 +146,14 @@ def _assert_blocked_relation_writer(driver, *, run_id: str) -> bool:
     with driver.session(database="neo4j") as session:
         rows = list(session.run(
             "SHOW TRANSACTIONS YIELD metaData, currentQuery, status, resourceInformation "
-            "WHERE metaData.dots_relation_assertion_run = $run_id "
-            "AND metaData.dots_relation_assertion_writer = 'writer-b' "
+            "WHERE metaData.nebula_relation_assertion_run = $run_id "
+            "AND metaData.nebula_relation_assertion_writer = 'writer-b' "
             "RETURN status, currentQuery, resourceInformation",
             run_id=run_id,
         ))
     return any(
         is_blocked_status(row.get("status"))
-        and "_dots_relation_write_lock" in str(row.get("currentQuery") or "")
+        and "_nebula_relation_write_lock" in str(row.get("currentQuery") or "")
         and bool(row.get("resourceInformation"))
         for row in rows
     )
@@ -183,7 +183,7 @@ def _snapshot(driver, owner: str) -> dict[str, tuple[tuple[object, ...], ...]]:
         ))
         family_locks = tuple(tuple(row.values()) for row in session.run(
             "MATCH (l:FounderGraphAssertionFamilyLock {owner_id:$owner}) "
-            "RETURN l.family_key AS family_key, l._dots_relation_write_lock AS active_lock "
+            "RETURN l.family_key AS family_key, l._nebula_relation_write_lock AS active_lock "
             "ORDER BY family_key",
             owner=owner,
         ))

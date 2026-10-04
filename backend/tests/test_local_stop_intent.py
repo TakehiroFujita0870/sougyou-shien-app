@@ -4,14 +4,14 @@ from collections.abc import Sequence
 
 import pytest
 
-from dots.local_stop_intent import (
+from nebula.local_stop_intent import (
     POWERSHELL_EXE,
     STOP_INTENT_SCRIPT,
     CommandResult,
     StopIntentError,
     WindowsStopIntentAdapter,
 )
-from dots.local_control_runner import SubprocessCommandRunner
+from nebula.local_control_runner import SubprocessCommandRunner
 
 
 class FakeRunner:

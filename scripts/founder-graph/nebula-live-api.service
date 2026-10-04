@@ -1,0 +1,31 @@
+# Dormant deployment template. Do not install or activate before credential
+# rotation and private-projection review are complete and separately approved.
+[Unit]
+Description=Nebula live Founder Graph API
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/nebula-live
+EnvironmentFile=%h/.config/nebula/live-control-plane.env
+Environment=NEBULA_NEO4J_AUTH_FILE=%h/.config/nebula/live-neo4j-auth.secret
+Environment=NEBULA_DOCKER_CLI=/mnt/c/Users/hp/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe
+Environment=PYTHONPATH=%h/projects/nebula-live/backend
+Environment=NEBULA_CONNECTION_PROFILE=live
+Environment=NEBULA_GRAPH_BACKEND=neo4j
+Environment=NEBULA_LOCAL_OWNER_ID=owner-mvp
+Environment=NEBULA_NEO4J_DATABASE=neo4j
+Environment=NEBULA_NEO4J_URI=bolt://127.0.0.1:7687
+Environment=NEBULA_SEARCH_PROFILE=base
+Environment=NEBULA_SEARCH_RERANK_ENABLED=1
+Environment=NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT=40
+# These explicit gates keep this template inert until separately approved.
+Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0
+Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=0
+ExecStartPre=%h/.local/bin/uv run --project %h/projects/nebula-live python -c "from nebula.main import app; from nebula.founder_graph_runtime import create_neo4j_driver_from_env; driver=create_neo4j_driver_from_env(); driver.verify_connectivity(); driver.close()"
+ExecStart=%h/.local/bin/uv run --project %h/projects/nebula-live uvicorn --app-dir backend nebula.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=15
+UMask=0077

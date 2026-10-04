@@ -5,9 +5,9 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Evidence, NodeType, RelationAssertionBasis, RelationType, Status
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.relation_candidate_manifest import (
+from nebula.founder_graph import EgressPolicy, Evidence, NodeType, RelationAssertionBasis, RelationType, Status
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.relation_candidate_manifest import (
     CandidateEntityRef,
     CandidateManifestValidationError,
     validate_relation_candidate_manifest,

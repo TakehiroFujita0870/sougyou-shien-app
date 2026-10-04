@@ -1,6 +1,6 @@
 ---
 name: finish-and-merge
-description: Dotsの変更が意味単位で完了したとき、対象外の変更を守りながら検査、commit、push、PR、review、mainへのmerge、main smokeまで自動で閉じる。
+description: Nebulaの変更が意味単位で完了したとき、対象外の変更を守りながら検査、commit、push、PR、review、mainへのmerge、main smokeまで自動で閉じる。
 ---
 
 # Finish and Merge

@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset,
     AssetKind,
     Claim,
@@ -23,7 +23,7 @@ from dots.founder_graph import (
     SourceRevision,
     Status,
 )
-from dots.founder_graph_neo4j import (
+from nebula.founder_graph_neo4j import (
     _content_chunk_ids as gateway_content_chunk_ids,
     _node_properties as gateway_node_properties,
     _node_revision as gateway_node_revision,
@@ -31,7 +31,7 @@ from dots.founder_graph_neo4j import (
     _rows as gateway_rows,
     _single as gateway_single,
 )
-from dots.founder_graph_neo4j_codec import (
+from nebula.founder_graph_neo4j_codec import (
     content_chunk_ids as _content_chunk_ids,
     json_value as _json_value,
     node_properties as _node_properties,
@@ -40,7 +40,7 @@ from dots.founder_graph_neo4j_codec import (
     result_rows as _rows,
     single_record as _single,
 )
-from dots.founder_graph_write import GraphWriteError
+from nebula.founder_graph_write import GraphWriteError
 
 
 class _StrictSingleResult:

@@ -4,16 +4,16 @@ import json
 
 from fastapi.testclient import TestClient
 
-from dots.local_dashboard_app import (
+from nebula.local_dashboard_app import (
     LOCAL_DASHBOARD_HOST,
     LOCAL_DASHBOARD_ORIGIN,
     LOCAL_DASHBOARD_START_ORDER,
     LOCAL_DASHBOARD_STOP_ORDER,
     create_local_dashboard_app,
 )
-from dots.local_graph_proxy import LocalGraphSearchProxy, ProxyResponse
-from dots.local_overview import StoredOverviewNode
-from dots.founder_graph_facet_hierarchy import FacetRegionHit, RegionEntity
+from nebula.local_graph_proxy import LocalGraphSearchProxy, ProxyResponse
+from nebula.local_overview import StoredOverviewNode
+from nebula.founder_graph_facet_hierarchy import FacetRegionHit, RegionEntity
 
 
 class FakeService:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dots import founder_graph, founder_graph_chunking
+from nebula import founder_graph, founder_graph_chunking
 
 
 def test_chunking_contract_is_reexported_without_changing_identity() -> None:

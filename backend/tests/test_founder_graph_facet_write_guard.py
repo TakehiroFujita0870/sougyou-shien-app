@@ -4,9 +4,9 @@ from dataclasses import replace
 
 import pytest
 
-from dots.founder_graph import NodeType, RelationAssertion, RelationType, RelationshipStatus
-from dots.founder_graph_facet_hierarchy import FacetHierarchyError, FacetNode
-from dots.founder_graph_facet_write_guard import validate_facet_taxonomy_write
+from nebula.founder_graph import NodeType, RelationAssertion, RelationType, RelationshipStatus
+from nebula.founder_graph_facet_hierarchy import FacetHierarchyError, FacetNode
+from nebula.founder_graph_facet_write_guard import validate_facet_taxonomy_write
 
 
 def _assertion(

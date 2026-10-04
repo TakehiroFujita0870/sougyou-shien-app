@@ -5,9 +5,9 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.local_control import LocalControl, create_local_control_app
-from dots.local_dashboard_host import DashboardBuildMissing, mount_local_dashboard
-from dots.local_overview import StoredOverviewNode
+from nebula.local_control import LocalControl, create_local_control_app
+from nebula.local_dashboard_host import DashboardBuildMissing, mount_local_dashboard
+from nebula.local_overview import StoredOverviewNode
 
 
 class FakeAdapter:
@@ -422,7 +422,7 @@ def test_built_dashboard_and_assets_are_served_on_control_origin_while_database_
     assets = dist / "assets"
     assets.mkdir(parents=True)
     (dist / "index.html").write_text("<main>Nebula local dashboard</main>", encoding="utf-8")
-    (assets / "app.js").write_text("window.dotsReady = true;", encoding="utf-8")
+    (assets / "app.js").write_text("window.nebulaReady = true;", encoding="utf-8")
     control = LocalControl(
         {"database": FakeAdapter()},
         expected_host="127.0.0.1:8765",
@@ -448,7 +448,7 @@ def test_built_dashboard_and_assets_are_served_on_control_origin_while_database_
     assert "Nebula local dashboard" in page.text
     assert page.headers["cache-control"] == "no-store"
     assert asset.status_code == 200
-    assert asset.text == "window.dotsReady = true;"
+    assert asset.text == "window.nebulaReady = true;"
     assert asset.headers["cache-control"] == "no-store"
     assert overview.status_code == 200
     assert overview.json()["status"] == "stopped"

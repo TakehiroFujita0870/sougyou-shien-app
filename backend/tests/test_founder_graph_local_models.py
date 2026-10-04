@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from types import ModuleType
 
-from dots.founder_graph_local_models import (
+from nebula.founder_graph_local_models import (
     E5_BASE_DIMENSIONS,
     E5_BASE_MODEL_ID,
     E5_BASE_MODEL_REVISION,
@@ -137,7 +137,7 @@ def test_base_missing_cache_fails_closed_without_network(monkeypatch) -> None:
 
 def test_model_manifest_records_pins_hashes_runtime_and_dimensions(tmp_path, monkeypatch) -> None:
     import hashlib
-    import dots.founder_graph_local_models as local_models
+    import nebula.founder_graph_local_models as local_models
 
     embedding_path = tmp_path / "e5-base"
     reranker_path = tmp_path / "mmarco"
@@ -186,7 +186,7 @@ def test_model_manifest_records_pins_hashes_runtime_and_dimensions(tmp_path, mon
 
 
 def test_manifest_resolves_only_cached_files_and_fails_when_missing(tmp_path, monkeypatch) -> None:
-    from dots.founder_graph_local_models import LocalSearchModelUnavailable
+    from nebula.founder_graph_local_models import LocalSearchModelUnavailable
 
     embedding_path = tmp_path / "e5-base"
     reranker_path = tmp_path / "mmarco"
@@ -206,7 +206,7 @@ def test_manifest_resolves_only_cached_files_and_fails_when_missing(tmp_path, mo
 
     hub.try_to_load_from_cache = cached_file
     monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
-    import dots.founder_graph_local_models as local_models
+    import nebula.founder_graph_local_models as local_models
     monkeypatch.setattr(local_models, "package_version", lambda _package: "test-version")
 
     manifest = build_local_search_manifest("base", python_version="3.test")

@@ -1,0 +1,29 @@
+# Dormant deployment template. Do not install or activate before credential
+# rotation and private-projection review are complete and separately approved.
+[Unit]
+Description=Nebula live Founder Graph MCP tunnel
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/nebula-live
+# The auth path below must remain an absolute regular file restricted to its owner.
+EnvironmentFile=%h/.config/nebula/live-control-plane.env
+Environment=NEBULA_NEO4J_AUTH_FILE=%h/.config/nebula/live-neo4j-auth.secret
+Environment=NEBULA_DOCKER_CLI=/mnt/c/Users/hp/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe
+Environment=PYTHONPATH=%h/projects/nebula-live/backend
+Environment=NEBULA_CONNECTION_PROFILE=live
+Environment=NEBULA_GRAPH_BACKEND=neo4j
+Environment=NEBULA_LOCAL_OWNER_ID=owner-mvp
+Environment=NEBULA_NEO4J_DATABASE=neo4j
+Environment=NEBULA_NEO4J_URI=bolt://127.0.0.1:7687
+Environment=NEBULA_SEARCH_PROFILE=base
+Environment=NEBULA_SEARCH_RERANK_ENABLED=1
+Environment=NEBULA_SEARCH_RERANK_CANDIDATE_LIMIT=40
+Environment=NEBULA_LIVE_CREDENTIAL_ROTATION_CONFIRMED=0
+Environment=NEBULA_LIVE_EGRESS_REVIEW_CONFIRMED=0
+ExecStart=%h/.local/bin/tunnel-client run --profile nebula-live
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077

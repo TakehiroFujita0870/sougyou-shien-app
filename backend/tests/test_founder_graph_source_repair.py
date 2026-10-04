@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from dots.founder_graph import ContentChunk, Idea, Source, SourceRevision, build_content_chunks
-from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
+from nebula.founder_graph import ContentChunk, Idea, Source, SourceRevision, build_content_chunks
+from nebula.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
 
 
 def _legacy_capture(content: str = "A saved conversation.") -> tuple[InMemoryGraphWriteService, Source, SourceRevision]:

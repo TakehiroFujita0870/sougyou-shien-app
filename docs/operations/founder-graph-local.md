@@ -105,16 +105,16 @@ test "$live_volume_before" = "$live_volume_after"
 
 backendの`Neo4jGraphGateway`は、composition rootから明示的に渡されたNeo4j Python driverだけを使う。driverを生成する責務は通常起動のcomposition rootに限定し、gateway自体はNodeType / RelationTypeのallowlist、owner境界、idempotency audit、Campaign / Sourceのrevision historyをparameterized Cypherへ変換する。任意Cypherを受け取るAPIはない。
 
-実機接続を行う場合は、Composeがhealthyになった後に、credentialを環境変数またはsecret managerから読み、コード・argv・ログへ展開しないcomposition rootからdriverを生成する。`create_neo4j_app()`または`create_neo4j_stdio_server()`へ同じowner-bound gateway compositionを明示注入できる。FastAPI通常起動（`dots.main:app`）とMCP標準起動は、`DOTS_GRAPH_BACKEND=neo4j`または`DOTS_NEO4J_PASSWORD`を指定した場合にNeo4jを通常保存先として選ぶ。単体テストでは`DOTS_GRAPH_BACKEND=memory`を明示できる。Neo4j接続情報が不足または接続不能な場合に黙って一時メモリへ切り替えない。
+実機接続を行う場合は、Composeがhealthyになった後に、credentialを環境変数またはsecret managerから読み、コード・argv・ログへ展開しないcomposition rootからdriverを生成する。`create_neo4j_app()`または`create_neo4j_stdio_server()`へ同じowner-bound gateway compositionを明示注入できる。FastAPI通常起動（`nebula.main:app`）とMCP標準起動は、`NEBULA_GRAPH_BACKEND=neo4j`または`NEBULA_NEO4J_PASSWORD`を指定した場合にNeo4jを通常保存先として選ぶ。単体テストでは`NEBULA_GRAPH_BACKEND=memory`を明示できる。Neo4j接続情報が不足または接続不能な場合に黙って一時メモリへ切り替えない。
 
 MCP標準起動をNeo4jへ向けるPowerShell例:
 
 ```powershell
-$env:DOTS_GRAPH_BACKEND = 'neo4j'
-$env:DOTS_LOCAL_OWNER_ID = 'owner-mvp'
-$env:DOTS_NEO4J_URI = 'bolt://127.0.0.1:7687'
-$env:DOTS_NEO4J_USERNAME = 'neo4j'
-$env:DOTS_NEO4J_PASSWORD = '<same-local-password>'
+$env:NEBULA_GRAPH_BACKEND = 'neo4j'
+$env:NEBULA_LOCAL_OWNER_ID = 'owner-mvp'
+$env:NEBULA_NEO4J_URI = 'bolt://127.0.0.1:7687'
+$env:NEBULA_NEO4J_USERNAME = 'neo4j'
+$env:NEBULA_NEO4J_PASSWORD = '<same-local-password>'
 ```
 
 MCPから検索結果を返す情報には`egress_policy=shareable`を明示する。`local_only`の情報は、誤って外部へ出さないためMCP検索結果から除外される。
@@ -122,11 +122,11 @@ MCPから検索結果を返す情報には`egress_policy=shareable`を明示す�
 ```python
 import os
 from neo4j import GraphDatabase
-from dots.main import create_neo4j_app
+from nebula.main import create_neo4j_app
 
 driver = GraphDatabase.driver(
     "bolt://127.0.0.1:7687",
-    auth=("neo4j", os.environ["DOTS_NEO4J_PASSWORD"]),
+    auth=("neo4j", os.environ["NEBULA_NEO4J_PASSWORD"]),
 )
 app = create_neo4j_app(driver, "local-owner")
 ```
@@ -286,7 +286,7 @@ live volume key/aliasを含む名前やlabelは拒否する。
 
 ## Safe JSON export の offline backup manifest
 
-Dotsのowner-scoped safe JSON exportは、Neo4j dumpとは別に、`founder-graph-backup-manifest-v1` manifestへ固定し、Dockerなしで検証できる。
+Nebulaのowner-scoped safe JSON exportは、Neo4j dumpとは別に、`founder-graph-backup-manifest-v1` manifestへ固定し、Dockerなしで検証できる。
 `verify_export_backup.py`はcanonical JSON、export schema、owner、node / relation count、byte count、
 SHA-256、root相対POSIX pathを検査する。private、local-only、contact、instruction path、symlink、
 `..` traversalは拒否し、manifestは既存ファイルを上書きしない。

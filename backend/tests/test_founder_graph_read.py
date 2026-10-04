@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-import dots.founder_graph_read as read_module
-from dots.founder_graph import Asset, AssetKind, EgressPolicy, Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship, Source, Status
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_read import GraphReadNotFoundError, GraphReadService, GraphReadTimeoutError
-from dots.founder_graph_write import InMemoryGraphWriteService
+import nebula.founder_graph_read as read_module
+from nebula.founder_graph import Asset, AssetKind, EgressPolicy, Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship, Source, Status
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_read import GraphReadNotFoundError, GraphReadService, GraphReadTimeoutError
+from nebula.founder_graph_write import InMemoryGraphWriteService
 
 
 def _fixture() -> tuple[InMemoryGraphWriteService, GraphReadService]:

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "backend") not in sys.path:
     sys.path.insert(0, str(ROOT / "backend"))
 
-from dots.founder_graph_schema import migration_queries, rollback_queries, schema_manifest  # noqa: E402
+from nebula.founder_graph_schema import migration_queries, rollback_queries, schema_manifest  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,7 +1,7 @@
 [project]
-name = "dots"
+name = "nebula"
 version = "0.1.0"
-description = "Dots. deterministic product API"
+description = "Nebula deterministic product API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.116.1",

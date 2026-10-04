@@ -76,6 +76,6 @@ def test_invalid_progress_is_rejected(mutation):
 
 
 def test_repository_snapshot_and_common_gate():
-    MODULE.validate(json.loads((ROOT / "docs/operations/dots-current-status.json").read_text(encoding="utf-8")))
+    MODULE.validate(json.loads((ROOT / "docs/operations/nebula-current-status.json").read_text(encoding="utf-8")))
     for path in ["AGENTS.md", "skills/dev/finish-and-merge/SKILL.md"]:
         assert "progress-reporting.md" in (ROOT / path).read_text(encoding="utf-8")

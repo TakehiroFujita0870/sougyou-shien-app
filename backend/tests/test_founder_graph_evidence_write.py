@@ -5,11 +5,11 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import Claim, ContentChunk, Evidence, EgressPolicy, MaterialKind, NodeType, Source, SourceRevision
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_read import _view_from_row
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
+from nebula.founder_graph import Claim, ContentChunk, Evidence, EgressPolicy, MaterialKind, NodeType, Source, SourceRevision
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_read import _view_from_row
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
 
 
 def _seed() -> tuple[InMemoryGraphWriteService, str, str]:

@@ -41,7 +41,7 @@ function MermaidDiagram({ source }) {
     }
     import('mermaid').then(async ({ default: mermaid }) => {
       mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', flowchart: { htmlLabels: false }, suppressErrorRendering: true });
-      const { svg } = await mermaid.render(`dotsreport${id}`, source);
+      const { svg } = await mermaid.render(`nebulareport${id}`, source);
       if (active) setView({ status: 'ready', svg: DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ['foreignObject'] }) });
     }).catch(() => { if (active) setView({ status: 'failed', svg: '' }); });
     return () => { active = false; };

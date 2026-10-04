@@ -1,6 +1,6 @@
 import pytest
 
-from dots.local_dashboard_driver import managed_neo4j_driver
+from nebula.local_dashboard_driver import managed_neo4j_driver
 
 
 def test_driver_is_created_only_when_context_is_entered_and_closed_after_success():

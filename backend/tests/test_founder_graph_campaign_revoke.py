@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from dots.founder_graph import DomainValidationError, ResearchCampaign, Status, utc_now
+from nebula.founder_graph import DomainValidationError, ResearchCampaign, Status, utc_now
 
 
 def test_revoke_creates_unauthorized_campaign_revision_and_is_retry_safe() -> None:

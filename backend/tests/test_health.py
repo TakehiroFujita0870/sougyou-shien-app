@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from dots.main import app, create_app
+from nebula.main import app, create_app
 
 def test_health() -> None:
     response = TestClient(app).get("/health")

@@ -21,18 +21,18 @@ from neo4j_disposable_harness import (
 
 
 def test_real_gate_requires_exact_opt_in_without_invoking_docker():
-    assert not is_opted_in({}) and not is_opted_in({"DOTS_NEO4J_REVISION_LOCK_REAL": "true"})
-    assert is_opted_in({"DOTS_NEO4J_REVISION_LOCK_REAL": "1"})
-    assert not is_opted_in({"DOTS_NEO4J_RELATION_ASSERTION_REAL": "true"}, "DOTS_NEO4J_RELATION_ASSERTION_REAL")
-    assert is_opted_in({"DOTS_NEO4J_RELATION_ASSERTION_REAL": "1"}, "DOTS_NEO4J_RELATION_ASSERTION_REAL")
+    assert not is_opted_in({}) and not is_opted_in({"NEBULA_NEO4J_REVISION_LOCK_REAL": "true"})
+    assert is_opted_in({"NEBULA_NEO4J_REVISION_LOCK_REAL": "1"})
+    assert not is_opted_in({"NEBULA_NEO4J_RELATION_ASSERTION_REAL": "true"}, "NEBULA_NEO4J_RELATION_ASSERTION_REAL")
+    assert is_opted_in({"NEBULA_NEO4J_RELATION_ASSERTION_REAL": "1"}, "NEBULA_NEO4J_RELATION_ASSERTION_REAL")
 
 
 def test_disposable_harness_can_use_a_distinct_relation_assertion_identity():
     helper = DisposableNeo4j(
-        None, "a" * 32, role="neo4j-relation-assertion", name_prefix="dots-relassert",
+        None, "a" * 32, role="neo4j-relation-assertion", name_prefix="nebula-relassert",
     )
-    assert helper.name == "dots-relassert-aaaaaaaaaaaaaaaa"
-    assert helper.network_name == "dots-relassert-aaaaaaaaaaaaaaaa-net"
+    assert helper.name == "nebula-relassert-aaaaaaaaaaaaaaaa"
+    assert helper.network_name == "nebula-relassert-aaaaaaaaaaaaaaaa-net"
     assert helper._labels() == (
         "--label", f"{ROLE_LABEL}=neo4j-relation-assertion",
         "--label", f"{RUN_LABEL}={'a' * 32}",
@@ -47,19 +47,19 @@ def test_container_identity_requires_exact_run_image_network_mounts_and_loopback
     run_id = "a" * 32
     labels = {ROLE_LABEL: "neo4j-revision-lock", RUN_LABEL: run_id}
     container = {
-        "Name": "/dots-rplock-a", "Config": {"Labels": labels, "Image": IMAGE},
-        "Mounts": [{"Type": "volume", "Name": "dots-rplock-a-data"}],
-        "HostConfig": {"NetworkMode": "dots-rplock-a-net",
+        "Name": "/nebula-rplock-a", "Config": {"Labels": labels, "Image": IMAGE},
+        "Mounts": [{"Type": "volume", "Name": "nebula-rplock-a-data"}],
+        "HostConfig": {"NetworkMode": "nebula-rplock-a-net",
                        "PortBindings": {"7687/tcp": [{"HostIp": "127.0.0.1"}]}},
     }
-    expected = {"name": "dots-rplock-a", "run_id": run_id,
-                "volume_names": {"dots-rplock-a-data"}, "network_name": "dots-rplock-a-net"}
+    expected = {"name": "nebula-rplock-a", "run_id": run_id,
+                "volume_names": {"nebula-rplock-a-data"}, "network_name": "nebula-rplock-a-net"}
     assert safe_container_identity(container, **expected)
     for changed in (
         {**container, "Name": "/other"},
         {**container, "Config": {"Labels": {**labels, RUN_LABEL: "b" * 32}, "Image": IMAGE}},
         {**container, "Config": {"Labels": labels, "Image": "unexpected:image"}},
-        {**container, "Mounts": [{"Type": "bind", "Name": "dots-rplock-a-data"}]},
+        {**container, "Mounts": [{"Type": "bind", "Name": "nebula-rplock-a-data"}]},
         {**container, "Mounts": [{"Type": "volume", "Name": "unexpected"}]},
         {**container, "HostConfig": {"NetworkMode": "other", "PortBindings": {"7687/tcp": [{"HostIp": "0.0.0.0"}]}}},
     ):
@@ -69,14 +69,14 @@ def test_container_identity_requires_exact_run_image_network_mounts_and_loopback
 def test_cleanup_resource_guards_reject_wrong_labels_and_internal_networks():
     run_id = "a" * 32
     labels = {ROLE_LABEL: "neo4j-revision-lock", RUN_LABEL: run_id}
-    assert safe_labeled_resource({"Name": "dots-rplock-a-data", "Labels": labels},
-                                  name="dots-rplock-a-data", run_id=run_id)
-    assert not safe_labeled_resource({"Name": "dots-rplock-a-data", "Labels": labels},
-                                      name="dots-rplock-a-data", run_id="b" * 32)
-    network = {"Name": "dots-rplock-a-net", "Labels": labels, "Driver": "bridge", "Internal": False}
-    assert safe_network(network, name="dots-rplock-a-net", run_id=run_id)
-    assert not safe_network({**network, "Internal": True}, name="dots-rplock-a-net", run_id=run_id)
-    assert not safe_network({**network, "Driver": "overlay"}, name="dots-rplock-a-net", run_id=run_id)
+    assert safe_labeled_resource({"Name": "nebula-rplock-a-data", "Labels": labels},
+                                  name="nebula-rplock-a-data", run_id=run_id)
+    assert not safe_labeled_resource({"Name": "nebula-rplock-a-data", "Labels": labels},
+                                      name="nebula-rplock-a-data", run_id="b" * 32)
+    network = {"Name": "nebula-rplock-a-net", "Labels": labels, "Driver": "bridge", "Internal": False}
+    assert safe_network(network, name="nebula-rplock-a-net", run_id=run_id)
+    assert not safe_network({**network, "Internal": True}, name="nebula-rplock-a-net", run_id=run_id)
+    assert not safe_network({**network, "Driver": "overlay"}, name="nebula-rplock-a-net", run_id=run_id)
 
 
 def test_cleanup_refuses_unowned_container_or_resource_before_remove():
@@ -90,19 +90,19 @@ def test_cleanup_refuses_unowned_container_or_resource_before_remove():
             return ""
 
     run_id = "a" * 32
-    docker = FakeDocker({"Name": "/dots-rplock-a", "Config": {"Labels": {}}, "Mounts": []})
+    docker = FakeDocker({"Name": "/nebula-rplock-a", "Config": {"Labels": {}}, "Mounts": []})
     helper = DisposableNeo4j(docker, run_id)
-    helper.name = "dots-rplock-a"
+    helper.name = "nebula-rplock-a"
     with pytest.raises(RuntimeError, match="refusing to remove"):
         helper._remove_owned_container()
     with pytest.raises(RuntimeError, match="refusing to remove"):
-        helper._remove_owned_resource("volume", "dots-rplock-a-data")
+        helper._remove_owned_resource("volume", "nebula-rplock-a-data")
     assert all(command[1] != "rm" for command in docker.commands)
 
 
 def test_cleanup_removes_only_an_exactly_inspected_owned_volume():
     run_id = "a" * 32
-    name = "dots-rplock-a-data"
+    name = "nebula-rplock-a-data"
     record = {"Name": name, "Labels": {
         ROLE_LABEL: "neo4j-revision-lock", RUN_LABEL: run_id,
     }}
@@ -310,8 +310,8 @@ def test_partial_volume_create_failure_tracks_and_exactly_cleans_candidates():
     assert docker.volumes == {}
     assert docker.network is None
     assert [command for command in docker.commands if command[:2] == ("volume", "rm")] == [
-        ("volume", "rm", "dots-rplock-aaaaaaaaaaaaaaaa-data"),
-        ("volume", "rm", "dots-rplock-aaaaaaaaaaaaaaaa-logs"),
+        ("volume", "rm", "nebula-rplock-aaaaaaaaaaaaaaaa-data"),
+        ("volume", "rm", "nebula-rplock-aaaaaaaaaaaaaaaa-logs"),
     ]
     assert sum(command[:2] == ("network", "rm") for command in docker.commands) == 1
     inventories = [command for command in docker.commands if len(command) > 1 and command[1] == "ls"]

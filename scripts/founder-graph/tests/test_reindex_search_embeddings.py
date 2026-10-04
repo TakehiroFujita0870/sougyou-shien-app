@@ -19,8 +19,8 @@ def test_normal_reindex_uses_configured_owner_and_closes_driver(monkeypatch, cap
     calls = []
     driver = SimpleNamespace(close=lambda: calls.append("close"))
     gateway = SimpleNamespace(reindex_search_embeddings=lambda: 3)
-    monkeypatch.setenv("DOTS_LOCAL_OWNER_ID", "test-owner")
-    monkeypatch.setenv("DOTS_NEO4J_DATABASE", "neo4j")
+    monkeypatch.setenv("NEBULA_LOCAL_OWNER_ID", "test-owner")
+    monkeypatch.setenv("NEBULA_NEO4J_DATABASE", "neo4j")
     monkeypatch.setattr(MODULE, "create_neo4j_driver_from_env", lambda: driver)
 
     def compose(actual_driver, owner, *, database):

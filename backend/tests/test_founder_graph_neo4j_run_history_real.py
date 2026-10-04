@@ -13,19 +13,19 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     EgressPolicy, Idea, Provenance, ResearchCampaign, ResearchRun, Status,
 )
-from dots.founder_graph_historical_brief import (
+from nebula.founder_graph_historical_brief import (
     HistoricalResearchValidationError, validate_historical_researched_brief,
 )
-from dots.founder_graph_neo4j import (
+from nebula.founder_graph_neo4j import (
     Neo4jGraphGateway, Neo4jUnavailableError, _node_properties, _node_revision,
 )
-from dots.founder_graph_write import (
+from nebula.founder_graph_write import (
     GraphWriteError, IdempotencyConflictError, InMemoryGraphWriteService,
 )
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 from neo4j_disposable_harness import (
     IMAGE, OPT_IN, DisposableNeo4j, HarnessError, fixed_docker, is_opted_in,
 )
@@ -156,8 +156,8 @@ class _ClosingTaggedSession(TaggedSession):
 class _ClosingTaggedDriver(TaggedDriver):
     def session(self, *, database):
         metadata = {
-            "dots_revision_lock_run": self.run_id,
-            "dots_revision_lock_writer": self.writer,
+            "nebula_revision_lock_run": self.run_id,
+            "nebula_revision_lock_writer": self.writer,
         }
         return _ClosingTaggedSession(self.driver.session(database=database), metadata)
 
@@ -202,7 +202,7 @@ def _campaign_snapshot(driver, owner, campaign_id, run_id, idempotency_key):
 
 def _campaign_registry(gateway, driver, campaign_id, run_id):
     with driver.session(database="neo4j") as session:
-        tx = session.begin_transaction(metadata={"dots_history_read_run": run_id})
+        tx = session.begin_transaction(metadata={"nebula_history_read_run": run_id})
         try:
             result = gateway._campaign_authorization_registry_tx(tx, campaign_id)
             tx.commit()
@@ -259,7 +259,7 @@ def test_real_read_helpers_use_existing_gateway_contract_and_explicit_transactio
     driver, gateway = Driver(), Gateway()
     assert _campaign_registry(gateway, driver, approved.id, "d" * 32) == (pending, approved)
     assert gateway.seen_tx is driver.value.tx and driver.value.tx.committed
-    assert driver.value.metadata == {"dots_history_read_run": "d" * 32}
+    assert driver.value.metadata == {"nebula_history_read_run": "d" * 32}
 
     class Readback:
         def fetch_node_record(self, node_id):
@@ -273,12 +273,12 @@ def _assert_blocked(driver, run_id):
     with driver.session(database="neo4j") as session:
         rows = list(session.run(
             "SHOW TRANSACTIONS YIELD metaData, currentQuery, status, resourceInformation "
-            "WHERE metaData.dots_revision_lock_run=$run_id "
-            "AND metaData.dots_revision_lock_writer='writer-b' "
+            "WHERE metaData.nebula_revision_lock_run=$run_id "
+            "AND metaData.nebula_revision_lock_writer='writer-b' "
             "RETURN status, currentQuery, resourceInformation", run_id=run_id,
         ))
     return any(is_blocked_status(row.get("status"))
-               and "_dots_revision_write_lock" in str(row.get("currentQuery") or "")
+               and "_nebula_revision_write_lock" in str(row.get("currentQuery") or "")
                and bool(row.get("resourceInformation")) for row in rows)
 
 

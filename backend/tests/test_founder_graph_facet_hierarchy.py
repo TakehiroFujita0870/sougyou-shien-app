@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dots.founder_graph_facet_hierarchy import (
+from nebula.founder_graph_facet_hierarchy import (
     FacetClassification,
     FacetHierarchyError,
     FacetNode,

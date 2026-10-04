@@ -12,8 +12,8 @@ import socket
 
 import pytest
 
-import dots.founder_graph_attachments as attachments
-from dots.founder_graph_attachments import (
+import nebula.founder_graph_attachments as attachments
+from nebula.founder_graph_attachments import (
     AttachmentDeletedError,
     AttachmentIntegrityError,
     AttachmentMetadataError,

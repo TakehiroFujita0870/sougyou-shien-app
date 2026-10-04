@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Claim,
     EgressPolicy,
     Facet,
@@ -16,9 +16,9 @@ from dots.founder_graph import (
     SourceRevision,
     Status,
 )
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 def _seed_researched_idea_and_evidence(writes: InMemoryGraphWriteService):

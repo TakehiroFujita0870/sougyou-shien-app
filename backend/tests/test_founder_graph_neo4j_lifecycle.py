@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from dots.founder_graph import Asset, Idea, NodeType, Status
-from dots.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
-from dots.founder_graph_write import (
+from nebula.founder_graph import Asset, Idea, NodeType, Status
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     InMemoryGraphWriteService,
@@ -79,7 +79,7 @@ class LifecycleSession:
             self.audits[str(row["idempotency_key"])] = row
             return FakeResult()
 
-        if "SET i._dots_idea_write_lock" in query or "SET n._dots_revision_write_lock" in query:
+        if "SET i._nebula_idea_write_lock" in query or "SET n._nebula_revision_write_lock" in query:
             node = self.nodes.get(str(params.get("id")))
             if node is None or node.get("owner_id") != params.get("owner_id"):
                 return FakeResult()
@@ -274,7 +274,7 @@ def test_neo4j_lifecycle_rolls_back_successor_when_audit_write_fails(kind: str) 
 
     assert set(driver.session_value.nodes) == {node.id}
     assert not driver.session_value.audits
-    assert any("_dots_idea_write_lock" in query or "_dots_revision_write_lock" in query
+    assert any("_nebula_idea_write_lock" in query or "_nebula_revision_write_lock" in query
                for query, _params in driver.session_value.calls)
 
 

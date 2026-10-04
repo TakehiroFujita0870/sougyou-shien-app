@@ -10,12 +10,12 @@ from collections.abc import Mapping
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.founder_graph import Asset, EgressPolicy, Idea, Status
-from dots.founder_graph_read import NodeView
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.local_control import LocalControl, create_local_control_app
-from dots.local_graph_provenance import (
+from nebula.founder_graph import Asset, EgressPolicy, Idea, Status
+from nebula.founder_graph_read import NodeView
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.local_control import LocalControl, create_local_control_app
+from nebula.local_graph_provenance import (
     GraphProvenanceNotFound,
     Neo4jGraphProvenanceStore,
     read_local_graph_provenance,

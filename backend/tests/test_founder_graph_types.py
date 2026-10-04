@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dots import founder_graph, founder_graph_types
+from nebula import founder_graph, founder_graph_types
 
 
 def test_domain_enums_are_reexported_without_changing_identity() -> None:

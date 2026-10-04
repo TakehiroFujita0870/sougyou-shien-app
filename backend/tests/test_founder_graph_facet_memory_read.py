@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 
-from dots.founder_graph import Asset, EgressPolicy, Facet, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
-from dots.founder_graph_facet_memory_read import facet_region_from_snapshot
-from dots.founder_graph_write import GraphReadSnapshot
+from nebula.founder_graph import Asset, EgressPolicy, Facet, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
+from nebula.founder_graph_facet_memory_read import facet_region_from_snapshot
+from nebula.founder_graph_write import GraphReadSnapshot
 
 
 def _relation(source: str, source_kind: NodeType, target: str, target_kind: NodeType, family: str, evidence: str) -> RelationAssertion:

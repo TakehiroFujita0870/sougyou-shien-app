@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from dots.founder_graph import ContentChunk, Source, SourceRevision, build_content_chunks
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.founder_graph_write import GraphWriteError, payload_fingerprint
+from nebula.founder_graph import ContentChunk, Source, SourceRevision, build_content_chunks
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.founder_graph_write import GraphWriteError, payload_fingerprint
 
 
 class Result:

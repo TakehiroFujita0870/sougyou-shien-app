@@ -4,15 +4,15 @@ from fastapi.testclient import TestClient
 from types import SimpleNamespace
 import pytest
 
-from dots.founder_graph import EgressPolicy, Idea, ResearchMaterial
-from dots.founder_graph_read import (
+from nebula.founder_graph import EgressPolicy, Idea, ResearchMaterial
+from nebula.founder_graph_read import (
     GraphReadUnavailableError,
     NodeView,
     SearchHit,
     SearchPage,
 )
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.main import create_app
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.main import create_app
 
 
 class InjectedReadService:

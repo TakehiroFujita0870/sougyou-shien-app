@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from dots.local_control_runner import (
+from nebula.local_control_runner import (
     SubprocessCommandRunner,
     SubprocessCommandTimeout,
 )

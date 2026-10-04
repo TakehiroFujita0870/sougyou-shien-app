@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.founder_graph_write import GraphWriteError, WriteReceipt
+from nebula.founder_graph import EgressPolicy, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.founder_graph_write import GraphWriteError, WriteReceipt
 
 
 class Result:
@@ -54,7 +54,7 @@ def campaign_states(*, owner_id="owner-history", campaign_id="campaign-history")
 
 
 def record_for(campaign):
-    from dots.founder_graph_neo4j import _node_properties
+    from nebula.founder_graph_neo4j import _node_properties
 
     return {
         "id": campaign.id,
@@ -88,7 +88,7 @@ class CampaignHistorySession:
 
     def run(self, query, **params):
         self.calls.append((query, params))
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             if self.campaign is None or params["id"] != self.campaign["id"] or params["owner_id"] != self.campaign["owner_id"]:
                 return Result()
             return Result(({key: self.campaign[key] for key in ("id", "owner_id", "node_type", "revision")},))
@@ -208,7 +208,7 @@ def test_generic_campaign_create_and_approve_persist_only_full_prior_revision_an
 
 
 def test_create_approve_run_scope_reapprove_and_revoke_form_one_complete_revision_chain():
-    from dots.founder_graph_neo4j_campaign import decode_persisted_research_campaign
+    from nebula.founder_graph_neo4j_campaign import decode_persisted_research_campaign
 
     initial = campaign_states()[0]
     approved = initial.approve(approved_at=datetime.now(timezone.utc) - timedelta(minutes=1))
@@ -361,7 +361,7 @@ def test_failed_history_write_rolls_back_prior_snapshot_and_campaign_update_in_f
     before = (deepcopy(session.campaign), deepcopy(session.history), deepcopy(session.audit))
     session.fail_after_history_write = True
 
-    from dots.founder_graph_neo4j import Neo4jUnavailableError
+    from nebula.founder_graph_neo4j import Neo4jUnavailableError
 
     with pytest.raises(Neo4jUnavailableError, match="Neo4j operation failed"):
         service(session).put_node(next_campaign, idempotency_key="fail-history", expected_revision=0,

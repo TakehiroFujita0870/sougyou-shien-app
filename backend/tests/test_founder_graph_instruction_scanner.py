@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dots.founder_graph_instruction_scanner import InstructionScanSecurityError, InstructionScanner
+from nebula.founder_graph_instruction_scanner import InstructionScanSecurityError, InstructionScanner
 
 
 def test_scanner_accepts_agents_and_skill_under_allowed_root(tmp_path: Path) -> None:

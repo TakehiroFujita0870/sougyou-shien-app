@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from dots.local_graph_proxy import (
+from nebula.local_graph_proxy import (
     GRAPH_SEARCH_TIMEOUT_SECONDS,
     GRAPH_SEARCH_URL,
     LocalGraphSearchProxy,

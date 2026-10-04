@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
-from dots.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError
-from dots.founder_graph_neo4j_write import Neo4jGraphWriteService
-from dots.founder_graph_write import (
+from nebula.founder_graph import EgressPolicy, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError
+from nebula.founder_graph_neo4j_write import Neo4jGraphWriteService
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     RevisionConflictError,
@@ -58,7 +58,7 @@ def fixture_run(campaign, *, run_id="run-test", status=Status.COMPLETED):
 
 class RunSession:
     def __init__(self, campaign):
-        from dots.founder_graph_neo4j import _node_properties
+        from nebula.founder_graph_neo4j import _node_properties
 
         properties = _node_properties(campaign)
         self.campaign_record = {
@@ -108,7 +108,7 @@ class RunSession:
             if self.audit_after_lock:
                 return Result()
             return Result(self.audit)
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             if self.audit_after_lock:
                 self.audit = self.audit_after_lock
                 self.audit_after_lock = None
@@ -170,7 +170,7 @@ def test_terminal_runs_and_campaign_budget_history_edge_and_audit_share_one_tran
     assert session.links == [(campaign.id, run.id)]
     assert session.history_count == 1 and session.audit["target_id"] == run.id
     assert session.calls[0][0].startswith("MATCH (a:FounderGraphAudit")
-    lock = next(i for i, (query, _) in enumerate(session.calls) if "_dots_revision_write_lock" in query)
+    lock = next(i for i, (query, _) in enumerate(session.calls) if "_nebula_revision_write_lock" in query)
     writes = [i for i, (query, _) in enumerate(session.calls) if "CREATE (h:FounderGraphHistory" in query]
     assert writes and lock < writes[0]
 

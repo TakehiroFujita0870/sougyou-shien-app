@@ -7,13 +7,13 @@ import json
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Idea, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
-from dots.founder_graph_job_store import FounderGraphJobStore, JobState
-from dots.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
-from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
-from dots.founder_graph_neo4j_write import Neo4jIdeaBriefStore
-from dots.founder_graph_write import GraphWriteError, IdempotencyConflictError, RevisionConflictError
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph import EgressPolicy, Idea, NodeType, Provenance, ResearchCampaign, ResearchRun, Status
+from nebula.founder_graph_job_store import FounderGraphJobStore, JobState
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, Neo4jUnavailableError, _node_properties
+from nebula.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
+from nebula.founder_graph_neo4j_write import Neo4jIdeaBriefStore
+from nebula.founder_graph_write import GraphWriteError, IdempotencyConflictError, RevisionConflictError
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 class Result:
@@ -70,10 +70,10 @@ class BriefTx:
         if "MATCH (a:FounderGraphAudit" in query:
             key = params.get("idempotency_key", params.get("key"))
             return Result((self.audits[key],) if key in self.audits else ())
-        if "_dots_idea_write_lock" in query:
+        if "_nebula_idea_write_lock" in query:
             node = self.nodes.get(params["id"])
             return Result((self._metadata(node),) if node else ())
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             if self.run_campaign and params.get("id") == self.run_campaign["id"]:
                 return Result((self._metadata(self.run_campaign),))
             return Result()

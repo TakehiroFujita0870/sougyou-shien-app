@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from dots.local_control_adapters import (
+from nebula.local_control_adapters import (
     CommandResult,
     DockerNeo4jAdapter,
     FixedSystemdUserServiceAdapter,
@@ -50,7 +50,7 @@ class FakeRunner:
         self.health_polls_before_ready: int | None = 0
         self.health_polls = 0
         self.database_started = False
-        self.unit_id = "dots-live-mcp-tunnel.service"
+        self.unit_id = "nebula-live-mcp-tunnel.service"
         self.active = "inactive"
         self.ignore_tunnel_start = False
         self.tunnel_health = {
@@ -82,13 +82,13 @@ class FakeRunner:
             return CommandResult(0, CONTAINER, "")
         if args[:4] == ("systemctl", "--user", "show", "--property=Id"):
             return CommandResult(0, self.unit_id, "")
-        if args[:4] == ("systemctl", "--user", "is-active", "dots-live-mcp-tunnel.service"):
+        if args[:4] == ("systemctl", "--user", "is-active", "nebula-live-mcp-tunnel.service"):
             return CommandResult(0 if self.active == "active" else 3, self.active, "")
-        if args[:4] == ("systemctl", "--user", "start", "dots-live-mcp-tunnel.service"):
+        if args[:4] == ("systemctl", "--user", "start", "nebula-live-mcp-tunnel.service"):
             if not self.ignore_tunnel_start:
                 self.active = "active"
             return CommandResult(0, "", "")
-        if args[:4] == ("systemctl", "--user", "stop", "dots-live-mcp-tunnel.service"):
+        if args[:4] == ("systemctl", "--user", "stop", "nebula-live-mcp-tunnel.service"):
             self.active = "inactive"
             return CommandResult(0, "", "")
         if args == (str(Path.home() / ".local/bin/tunnel-client"), "health", "--port", "8082", "--require-control-plane-poll", "--json"):
@@ -202,8 +202,8 @@ def test_tunnel_adapter_uses_only_the_fixed_user_unit():
     adapter.start()
     adapter.stop()
 
-    assert ("systemctl", "--user", "start", "dots-live-mcp-tunnel.service") in runner.calls
-    assert ("systemctl", "--user", "stop", "dots-live-mcp-tunnel.service") in runner.calls
+    assert ("systemctl", "--user", "start", "nebula-live-mcp-tunnel.service") in runner.calls
+    assert ("systemctl", "--user", "stop", "nebula-live-mcp-tunnel.service") in runner.calls
     assert all("shell" not in call for call in runner.calls)
 
 
@@ -220,7 +220,7 @@ def test_tunnel_start_requires_active_postcondition():
     runner.ignore_tunnel_start = True
     with pytest.raises(ServiceAdapterError, match="did not become active"):
         FixedSystemdUserServiceAdapter(runner, health_runner=runner).start()
-    assert ("systemctl", "--user", "start", "dots-live-mcp-tunnel.service") in runner.calls
+    assert ("systemctl", "--user", "start", "nebula-live-mcp-tunnel.service") in runner.calls
 
 
 def test_tunnel_status_requires_health_ready_and_a_successful_control_plane_poll(monkeypatch, tmp_path):

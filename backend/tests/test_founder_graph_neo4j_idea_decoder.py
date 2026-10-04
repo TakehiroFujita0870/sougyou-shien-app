@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from dots.founder_graph import Idea, Provenance, Status
-from dots.founder_graph_neo4j import _node_properties
-from dots.founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
+from nebula.founder_graph import Idea, Provenance, Status
+from nebula.founder_graph_neo4j import _node_properties
+from nebula.founder_graph_neo4j_idea import IdeaDecodeError, decode_persisted_idea
 
 
 def fixture_record():

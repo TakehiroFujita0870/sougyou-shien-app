@@ -5,15 +5,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, Idea, Provenance, ResearchCampaign, ResearchRun, Status
-from dots.founder_graph_write import (
+from nebula.founder_graph import EgressPolicy, Idea, Provenance, ResearchCampaign, ResearchRun, Status
+from nebula.founder_graph_write import (
     GraphWriteError,
     IdempotencyConflictError,
     InMemoryGraphWriteService,
     NodeAlreadyExistsError,
     RevisionConflictError,
 )
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 def _brief(idea: Idea, *, revision: int = 1, supersedes_id: str | None = None, runs: tuple[str, ...] = ()) -> IdeaBriefVersion:

@@ -13,13 +13,13 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
 from neo4j_disposable_harness import DisposableNeo4j, HarnessError, fixed_docker, is_opted_in, IMAGE
 
 
-OPT_IN = "DOTS_NEO4J_RELATIONSHIP_EVIDENCE_RESTART_REAL"
+OPT_IN = "NEBULA_NEO4J_RELATIONSHIP_EVIDENCE_RESTART_REAL"
 ROLE = "neo4j-relationship-restart"
-NAME_PREFIX = "dots-relrestart"
+NAME_PREFIX = "nebula-relrestart"
 
 
 def _poll_until_ready(driver, timeout_seconds: float = 90) -> bool:
@@ -39,7 +39,7 @@ class _StdioClient:
     """A fresh module subprocess speaking newline-delimited JSON-RPC."""
 
     def __init__(self, env: dict[str, str]):
-        self.process = subprocess.Popen([sys.executable, "-m", "dots.founder_graph_mcp_stdio"],
+        self.process = subprocess.Popen([sys.executable, "-m", "nebula.founder_graph_mcp_stdio"],
             cwd=Path(__file__).resolve().parents[1], env=env, stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         self._selector = selectors.DefaultSelector()
@@ -127,7 +127,7 @@ def test_stdio_relationship_evidence_survives_same_neo4j_restart_without_private
         pytest.skip("Docker daemon or preloaded Neo4j image unavailable; no pull attempted")
 
     run_id = uuid4().hex
-    password = f"dots-test-{run_id}"
+    password = f"nebula-test-{run_id}"
     disposable = DisposableNeo4j(docker, run_id, role=ROLE, name_prefix=NAME_PREFIX)
     driver = None
     client = None
@@ -141,11 +141,11 @@ def test_stdio_relationship_evidence_survives_same_neo4j_restart_without_private
         Neo4jGraphGateway(driver, owner).migrate()
         env = os.environ.copy()
         env.update({
-            "DOTS_GRAPH_BACKEND": "neo4j",
-            "DOTS_LOCAL_OWNER_ID": owner,
-            "DOTS_NEO4J_URI": f"bolt://127.0.0.1:{port}",
-            "DOTS_NEO4J_USERNAME": "neo4j",
-            "DOTS_NEO4J_PASSWORD": password,
+            "NEBULA_GRAPH_BACKEND": "neo4j",
+            "NEBULA_LOCAL_OWNER_ID": owner,
+            "NEBULA_NEO4J_URI": f"bolt://127.0.0.1:{port}",
+            "NEBULA_NEO4J_USERNAME": "neo4j",
+            "NEBULA_NEO4J_PASSWORD": password,
         })
         marker = f"PRIVATE-SOURCE-BODY-{run_id[:12]}"
         search_query = f"needle-{run_id[:8]}"
@@ -191,7 +191,7 @@ def test_stdio_relationship_evidence_survives_same_neo4j_restart_without_private
         assert set(disposable.volume_names.values()) == original_volumes
         driver = GraphDatabase.driver(f"bolt://127.0.0.1:{restarted_port}", auth=("neo4j", password))
         assert _poll_until_ready(driver), "same-volume Neo4j did not pass bounded post-restart readiness"
-        env["DOTS_NEO4J_URI"] = f"bolt://127.0.0.1:{restarted_port}"
+        env["NEBULA_NEO4J_URI"] = f"bolt://127.0.0.1:{restarted_port}"
         client = _StdioClient(env)
         searched = client.call("search", {"query": search_query, "limit": 20})
         idea_result = client.call("fetch", {"id": idea["target_id"]})

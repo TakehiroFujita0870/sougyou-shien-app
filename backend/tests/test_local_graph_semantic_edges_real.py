@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import pytest
 
-from dots.local_graph_view import MAX_NODES, Neo4jGraphViewStore, read_local_graph
+from nebula.local_graph_view import MAX_NODES, Neo4jGraphViewStore, read_local_graph
 
 
 @pytest.mark.skipif(

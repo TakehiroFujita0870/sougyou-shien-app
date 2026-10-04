@@ -5,10 +5,10 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.founder_graph_neo4j import Neo4jUnavailableError
-from dots.founder_graph_write import RevisionConflictError, WriteReceipt
-from dots.local_control import LocalControl, create_local_control_app
-from dots.local_record_lifecycle import LocalRecordLifecycleWriter
+from nebula.founder_graph_neo4j import Neo4jUnavailableError
+from nebula.founder_graph_write import RevisionConflictError, WriteReceipt
+from nebula.local_control import LocalControl, create_local_control_app
+from nebula.local_record_lifecycle import LocalRecordLifecycleWriter
 
 
 HOST = "127.0.0.1:8765"

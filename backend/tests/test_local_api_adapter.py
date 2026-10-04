@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from dots.local_api_adapter import FixedSystemdUserApiAdapter, LocalApiServiceError
-from dots.local_control_adapters import CommandResult
+from nebula.local_api_adapter import FixedSystemdUserApiAdapter, LocalApiServiceError
+from nebula.local_control_adapters import CommandResult
 
 
 class FakeRunner:
     def __init__(self):
         self.calls: list[tuple[str, ...]] = []
-        self.unit_id = "dots-live-api.service"
+        self.unit_id = "nebula-live-api.service"
         self.active = "inactive"
         self.ignore_start = False
 
@@ -18,13 +18,13 @@ class FakeRunner:
         self.calls.append(args)
         if args[:4] == ("systemctl", "--user", "show", "--property=Id"):
             return CommandResult(0, self.unit_id)
-        if args == ("systemctl", "--user", "is-active", "dots-live-api.service"):
+        if args == ("systemctl", "--user", "is-active", "nebula-live-api.service"):
             return CommandResult(0 if self.active == "active" else 3, self.active)
-        if args == ("systemctl", "--user", "start", "dots-live-api.service"):
+        if args == ("systemctl", "--user", "start", "nebula-live-api.service"):
             if not self.ignore_start:
                 self.active = "active"
             return CommandResult(0)
-        if args == ("systemctl", "--user", "stop", "dots-live-api.service"):
+        if args == ("systemctl", "--user", "stop", "nebula-live-api.service"):
             self.active = "inactive"
             return CommandResult(0)
         return CommandResult(1)
@@ -38,7 +38,7 @@ def test_controls_only_the_fixed_api_unit():
     assert adapter.status() == "running"
     adapter.stop()
     assert adapter.status() == "stopped"
-    assert all("dots-live-api.service" in call for call in runner.calls)
+    assert all("nebula-live-api.service" in call for call in runner.calls)
 
 
 def test_rejects_a_unit_identity_mismatch_before_start():

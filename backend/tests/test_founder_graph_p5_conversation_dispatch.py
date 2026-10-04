@@ -14,13 +14,13 @@ from uuid import uuid4
 
 import pytest
 
-from dots.founder_graph_conversation_dispatch import ConversationToolDispatcher, ToolCall
-from dots.founder_graph_mcp_stdio import create_neo4j_stdio_server, run_stdio
-from dots.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_conversation_dispatch import ConversationToolDispatcher, ToolCall
+from nebula.founder_graph_mcp_stdio import create_neo4j_stdio_server, run_stdio
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
 from neo4j_disposable_harness import DisposableNeo4j, fixed_docker, is_opted_in
 
 
-DISPATCH_OPT_IN = "DOTS_P5_CONVERSATION_DISPATCH_REAL"
+DISPATCH_OPT_IN = "NEBULA_P5_CONVERSATION_DISPATCH_REAL"
 
 
 class SyntheticConversationFixtures(ConversationToolDispatcher):
@@ -202,7 +202,7 @@ def test_five_synthetic_conversation_dispatches_cross_stdio_and_reopen_persisten
         pytest.skip("the documented Docker Desktop CLI is unavailable")
     run_id = uuid4().hex
     owner_id = f"owner-p5-{run_id[:12]}"
-    disposable = DisposableNeo4j(docker, run_id, role="p5-conversation-dispatch", name_prefix="dots-p5dispatch")
+    disposable = DisposableNeo4j(docker, run_id, role="p5-conversation-dispatch", name_prefix="nebula-p5dispatch")
     driver = None
     trace: list[dict[str, object]] = []
     private_values: list[str] = []

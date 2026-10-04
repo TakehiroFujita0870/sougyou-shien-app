@@ -40,8 +40,8 @@ def test_transaction_metadata_uses_public_begin_transaction_and_commits():
         assert session.execute_write(lambda _tx: "done") == "done"
     assert driver.session_kwargs == {"database": "neo4j"}
     assert driver.session_value.metadata == {
-        "dots_revision_lock_run": "a" * 32,
-        "dots_revision_lock_writer": "writer-a",
+        "nebula_revision_lock_run": "a" * 32,
+        "nebula_revision_lock_writer": "writer-a",
     }
     assert driver.session_value.transaction.committed
     assert not driver.session_value.transaction.rolled_back

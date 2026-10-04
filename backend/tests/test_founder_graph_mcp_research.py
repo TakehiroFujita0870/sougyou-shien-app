@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from dots.founder_graph import Claim, EgressPolicy, Idea, MaterialKind, Source, SourceRevision
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_candidate_job_processor import CandidateManifestConflictError
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_job_store import FounderGraphJobStore
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
-from dots.idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph import Claim, EgressPolicy, Idea, MaterialKind, Source, SourceRevision
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_candidate_job_processor import CandidateManifestConflictError
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_job_store import FounderGraphJobStore
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import GraphWriteError, InMemoryGraphWriteService
+from nebula.idea_brief import SECTION_TITLES, IdeaBriefSection, IdeaBriefVersion
 
 
 class _CandidateProcessorStub:

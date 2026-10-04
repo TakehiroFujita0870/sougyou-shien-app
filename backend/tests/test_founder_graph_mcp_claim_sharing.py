@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from dots.founder_graph import Claim, EgressPolicy
-from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_mcp_stdio import FounderGraphStdioServer
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.main import create_app
+from nebula.founder_graph import Claim, EgressPolicy
+from nebula.founder_graph_mcp import McpReadError, McpReadSurface
+from nebula.founder_graph_mcp_stdio import FounderGraphStdioServer
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.main import create_app
 
 
 def test_append_claim_is_private_by_default_and_only_explicit_shareable_claims_are_readable() -> None:

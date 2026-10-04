@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset,
     AssetHomeCategory,
     Claim,
@@ -33,12 +33,12 @@ from dots.founder_graph import (
     Status,
     project_shareable,
 )
-from dots.founder_graph_mcp_write import McpWriteError, McpWriteSurface
-from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_neo4j_write import PersistedNodeReference
-from dots.founder_graph_write import GraphWriteError, InMemoryGraphWriteService, WriteReceipt
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_mcp_write import McpWriteError, McpWriteSurface
+from nebula.founder_graph_mcp import McpReadError, McpReadSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_neo4j_write import PersistedNodeReference
+from nebula.founder_graph_write import GraphWriteError, InMemoryGraphWriteService, WriteReceipt
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 def _surface() -> tuple[InMemoryGraphWriteService, McpWriteSurface]:

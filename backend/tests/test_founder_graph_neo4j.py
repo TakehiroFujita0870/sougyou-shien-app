@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Idea,
     NodeType,
     PersonAsset,
@@ -16,12 +16,12 @@ from dots.founder_graph import (
     SourceRevision,
     build_content_chunks,
 )
-from dots.founder_graph_neo4j import (
+from nebula.founder_graph_neo4j import (
     Neo4jGraphGateway,
     Neo4jQueryContractError,
     Neo4jUnavailableError,
 )
-from dots.founder_graph_write import (
+from nebula.founder_graph_write import (
     GraphWriteError,
     GraphWriteNotFoundError,
     RevisionConflictError,
@@ -71,7 +71,7 @@ class FakeSession:
             if self.audit_row is not None and self.audit_row.get("idempotency_key") == params.get("idempotency_key"):
                 return FakeResult(self.audit_row)
             return FakeResult()
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             return FakeResult(self.existing_row)
         if "MATCH (n {id: $id})" in query:
             return FakeResult(self.existing_row)

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from dots.founder_graph import Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship
-from dots.founder_graph_schema import (
+from nebula.founder_graph import Evidence, Idea, NodeType, PersonAsset, RelationType, Relationship
+from nebula.founder_graph_schema import (
     migration_queries,
     migration_plan,
     rollback_queries,

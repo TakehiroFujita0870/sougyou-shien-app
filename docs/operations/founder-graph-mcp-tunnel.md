@@ -2,11 +2,11 @@
 
 最終検証日: 2026-09-22
 
-このrunbookは実tunnelを作成せず、実機gateへ進む前の安全な手順を固定する。DotsのDBとprivate MCP serverは公開しない。Secure MCP Tunnelは、private network内の `tunnel-client` がOpenAIへoutbound HTTPSを張り、ローカルのMCP serverへ要求を転送する方式を第一候補とする。
+このrunbookは実tunnelを作成せず、実機gateへ進む前の安全な手順を固定する。NebulaのDBとprivate MCP serverは公開しない。Secure MCP Tunnelは、private network内の `tunnel-client` がOpenAIへoutbound HTTPSを張り、ローカルのMCP serverへ要求を転送する方式を第一候補とする。
 
 ## 現在の実装境界
 
-現行Dotsは `backend/dots/main.py` にowner-scoped read/writeのFastAPI-shaped adapterを持ち、`backend/dots/founder_graph_mcp_stdio.py` にstdio JSON-RPC transportを持つ。`backend/dots/founder_graph_runtime.py` の共有選択規則から、FastAPI通常起動とstdio MCPへ同じNeo4j read/write adapterを接続できる。HTTP/SSE transport、Neo4j実driver接続、実tunnelは未検査である。
+現行Nebulaは `backend/nebula/main.py` にowner-scoped read/writeのFastAPI-shaped adapterを持ち、`backend/nebula/founder_graph_mcp_stdio.py` にstdio JSON-RPC transportを持つ。`backend/nebula/founder_graph_runtime.py` の共有選択規則から、FastAPI通常起動とstdio MCPへ同じNeo4j read/write adapterを接続できる。HTTP/SSE transport、Neo4j実driver接続、実tunnelは未検査である。
 
 - `search` / `fetch` readと用途限定writeをMCP toolへ変換する。
 - 任意Cypher、物理削除、raw payload、private fieldをtoolへ追加しない。
@@ -51,16 +51,16 @@ tunnel-client init \
   --sample sample_mcp_stdio_local \
   --profile '<profile>' \
   --tunnel-id '<tunnel_id>' \
-  --mcp-command 'env PYTHONPATH=/absolute/path/to/dots/backend uv run --project /absolute/path/to/dots python -m dots.founder_graph_mcp_stdio'
+  --mcp-command 'env PYTHONPATH=/absolute/path/to/nebula/backend uv run --project /absolute/path/to/nebula python -m nebula.founder_graph_mcp_stdio'
 tunnel-client doctor --profile '<profile>' --explain
 tunnel-client run --profile '<profile>'
 ```
 
-`tunnel-client` とMCP serverは同じtrust boundaryで動かす。Dots APIやNeo4jの待受けは `127.0.0.1` またはprivate networkに限定し、`0.0.0.0`、LAN公開、public HTTPS proxyを追加しない。
+`tunnel-client` とMCP serverは同じtrust boundaryで動かす。Nebula APIやNeo4jの待受けは `127.0.0.1` またはprivate networkに限定し、`0.0.0.0`、LAN公開、public HTTPS proxyを追加しない。
 
 stdio adapterとNeo4j read/write compositionは合成fixtureで検査済みだが、実機gateでは`tunnel-client`が要求するprotocol versionとtool discovery、Neo4j再起動後のwrite/read一致を再確認する。HTTP MCPを使う場合も、private URLはtunnel-clientからだけ到達可能にし、ChatGPTへprivate URLを直接渡さない。
 
-stdio transportはMCP protocol version `2025-06-18`の `initialize`、`tools/list`、`tools/call` を実装し、10個の用途限定toolを返す。実機でprotocol versionの交渉が合わない場合は、Dots側の定数を更新してfocused testsを先に修正する。
+stdio transportはMCP protocol version `2025-06-18`の `initialize`、`tools/list`、`tools/call` を実装し、10個の用途限定toolを返す。実機でprotocol versionの交渉が合わない場合は、Nebula側の定数を更新してfocused testsを先に修正する。
 
 ## ChatGPT接続
 
@@ -71,14 +71,14 @@ stdio transportはMCP protocol version `2025-06-18`の `initialize`、`tools/lis
 
 Tunnelが表示されない場合、Platform organizationだけでなく対象ChatGPT workspaceにも関連付いているか、operatorにTunnels Read + Useがあるかを確認する。接続確認前にprivate dataを投入しない。
 
-Dots側は追加の承認画面を持たないが、ChatGPT側のdeveloper-mode policyがwrite actionの確認を要求する場合はそれに従う。Dotsからplatform確認を迂回しない。
+Nebula側は追加の承認画面を持たないが、ChatGPT側のdeveloper-mode policyがwrite actionの確認を要求する場合はそれに従う。Nebulaからplatform確認を迂回しない。
 
 ## 停止・再接続・失効
 
 ```bash
-# tunnel-clientを停止し、Dots APIまたはMCP serverも停止
+# tunnel-clientを停止し、Nebula APIまたはMCP serverも停止
 # MCP read/writeを呼び、unavailableまたは503になることを確認
-# Dotsを再起動してからtunnel-client doctorを再実行
+# Nebulaを再起動してからtunnel-client doctorを再実行
 tunnel-client doctor --profile '<profile>' --explain
 tunnel-client run --profile '<profile>'
 ```

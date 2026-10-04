@@ -1,24 +1,24 @@
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset, AssetKind, Claim, Decision, EgressPolicy, Evidence, Idea, MaterialKind, NodeType,
     RelationAssertion, Source, SourceRevision, Status,
 )
-from dots.founder_graph_job_store import (
+from nebula.founder_graph_job_store import (
     CandidatePayloadManifest,
     CandidatePayloadSupport,
     GraphJob,
     JobState,
     RelationCandidatePayload,
 )
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_read import GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.founder_graph_candidate_job_processor import RelationCandidateJobProcessor
-from dots.founder_graph_candidate_job_processor import CandidateManifestConflictError
-from dots.founder_graph_neo4j_write import PersistedNodeReference
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_read import GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_candidate_job_processor import RelationCandidateJobProcessor
+from nebula.founder_graph_candidate_job_processor import CandidateManifestConflictError
+from nebula.founder_graph_neo4j_write import PersistedNodeReference
 
 
 OWNER = "owner-test"
@@ -482,7 +482,7 @@ def test_stale_lineage_evidence_is_rejected_before_assertion_write(monkeypatch):
     jobs = MemoryJobStore(brief)
     writes.save_idea_brief(brief, expected_latest_revision=None, idempotency_key="brief")
     monkeypatch.setattr(
-        "dots.founder_graph_candidate_job_processor.evidence_lineage_is_current",
+        "nebula.founder_graph_candidate_job_processor.evidence_lineage_is_current",
         lambda *_args: False,
     )
     processor = RelationCandidateJobProcessor(

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.founder_graph_mcp import McpReadSurface
-from dots.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
-from dots.local_home import read_local_home
-from dots.source_citations import citation_metadata, researched_evidence_ids
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_mcp import McpReadSurface
+from nebula.founder_graph_neo4j_idea_brief import _serialize_persisted_idea_brief
+from nebula.local_home import read_local_home
+from nebula.source_citations import citation_metadata, researched_evidence_ids
 
 
 def test_citation_metadata_keeps_public_query_and_fragment_but_rejects_credentials_and_secret_params():

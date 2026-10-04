@@ -5,11 +5,11 @@ from typing import Any
 
 import pytest
 
-from dots.founder_graph_campaign_read import (
+from nebula.founder_graph_campaign_read import (
     CampaignComparisonInputError,
     load_campaign_comparison,
 )
-from dots.founder_graph_read import GraphReadNotFoundError, GraphReadTimeoutError, NodeView, SearchHit, SearchPage
+from nebula.founder_graph_read import GraphReadNotFoundError, GraphReadTimeoutError, NodeView, SearchHit, SearchPage
 
 
 @dataclass

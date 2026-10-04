@@ -8,11 +8,11 @@ from collections.abc import Mapping
 
 import pytest
 
-from dots.founder_graph import Asset, AssetKind, EgressPolicy, Idea, NodeType, RelationType, Status
-from dots.founder_graph_read import GraphReadNotFoundError, GraphReadService
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
-from dots.local_home import read_local_home
+from nebula.founder_graph import Asset, AssetKind, EgressPolicy, Idea, NodeType, RelationType, Status
+from nebula.founder_graph_read import GraphReadNotFoundError, GraphReadService
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.local_home import read_local_home
 from test_founder_graph_relation_assertion_write import _setup
 
 

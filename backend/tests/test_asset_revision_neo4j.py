@@ -5,9 +5,9 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, NodeType
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_write import GraphWriteError, payload_fingerprint
+from nebula.founder_graph import Asset, AssetHomeCategory, AssetKind, EgressPolicy, NodeType
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_write import GraphWriteError, payload_fingerprint
 
 
 class _Result:
@@ -49,7 +49,7 @@ class _AssetRevisionSession:
             if row is not None and "AS fingerprint" in query:
                 row = {**row, "fingerprint": row.get("payload_fingerprint")}
             return _Result(row)
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             if params.get("id") == self.original.id and "Asset" in query:
                 return _Result({"id": self.original.id, "owner_id": self.original.owner_id,
                                 "node_type": "asset", "revision": 1})
@@ -102,7 +102,7 @@ class _SerializedSameKeySession(_AssetRevisionSession):
                 return _Result()
             assert self.lock_acquired
             return _Result(self.pending_receipt)
-        if "_dots_revision_write_lock" in query:
+        if "_nebula_revision_write_lock" in query:
             self.lock_acquired = True
         return super().run(query, **params)
 

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     EgressPolicy,
     Evidence,
     Idea,
@@ -15,10 +15,10 @@ from dots.founder_graph import (
     ResearchMaterial,
     SHAREABLE_PROJECTION_ALLOWLIST,
 )
-from dots.founder_graph_mcp import McpReadError, McpReadSurface
-from dots.founder_graph_read import GraphReadService, GraphReadUnavailableError
-from dots.founder_graph_write import InMemoryGraphWriteService
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion
+from nebula.founder_graph_mcp import McpReadError, McpReadSurface
+from nebula.founder_graph_read import GraphReadService, GraphReadUnavailableError
+from nebula.founder_graph_write import InMemoryGraphWriteService
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion
 
 
 _PRIVATE_OR_CONTROL_FIELDS = frozenset(

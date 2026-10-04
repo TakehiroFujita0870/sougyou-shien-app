@@ -6,7 +6,7 @@
 
 ## 作業開始時
 
-0. [`docs/operations/progress-reporting.md`](docs/operations/progress-reporting.md)と[`docs/operations/dots-current-status.json`](docs/operations/dots-current-status.json)を先に読む。古い未完了表だけで残課題を決めない。
+0. [`docs/operations/progress-reporting.md`](docs/operations/progress-reporting.md)と[`docs/operations/nebula-current-status.json`](docs/operations/nebula-current-status.json)を先に読む。古い未完了表だけで残課題を決めない。
 1. `skills/dev/INDEX.md` を読み、現在の工程のスキルを読む。
 2. 機能追加、仕様変更、修正、技術選定では、先に planning を実施して計画文書と受け入れ条件を用意する。
 3. 実装では implementation の再帰ループに従う。テストとセルフレビューの Exit Criteria を満たすまでPRを出さない。3周しても満たせない場合は、実装を止めて planning に差し戻す。
@@ -37,17 +37,17 @@
 
 - 画面変更の実装前と完了判定には[`UI横断監査`](skills/dev/ui-cross-page-audit/SKILL.md)を読み、同じ役割の文字・部品を3画面間で比較する。
 
-- Dots.の現行画面は本人がPCで使うものとして開発する。スマートフォン向けの閲覧専用画面は[全体計画](docs/plans/dots-implementation-master-plan.md)に将来候補として記録済みだが、バックエンドが安定し着手を決めるまでは設計・実装・画面監査を行わない。着手時は閲覧専用画面だけを別に検証し、PC画面の標準監査基準は変えない。既存の小画面用試作や過去の検査結果は履歴として扱い、新しい作業の根拠にしない。
+- Nebulaの現行画面は本人がPCで使うものとして開発する。スマートフォン向けの閲覧専用画面は[全体計画](docs/plans/nebula-implementation-master-plan.md)に将来候補として記録済みだが、バックエンドが安定し着手を決めるまでは設計・実装・画面監査を行わない。着手時は閲覧専用画面だけを別に検証し、PC画面の標準監査基準は変えない。既存の小画面用試作や過去の検査結果は履歴として扱い、新しい作業の根拠にしない。
 - UIの標準監査画面は **1280×720 ピクセル、16:9** に固定する。画面を変更したら、この解像度で実画面を開き、見切れ・重なり・可読性・主要操作の到達性を確認する。別解像度を監査対象に追加するには利用者の新たな指示を要する。
 - 現行3画面の自動検査を維持する。小画面専用の合否や、廃止した旧画面・Storybookの検査を復活させない。
 
 ## プロダクト段階とAIモデル
 
-- 2026-09-20以降の製品要件正本は[`docs/plans/founder-graph-pivot.md`](docs/plans/founder-graph-pivot.md)とする。データモデルは[`docs/plans/founder-graph-data-model.md`](docs/plans/founder-graph-data-model.md)、実行DAGと完了定義は[`docs/plans/dots-implementation-master-plan.md`](docs/plans/dots-implementation-master-plan.md)を正本とする。初期対象は本人一人がローカルで使うFounder Graphであり、Free、Standard、Pro、課金、複数利用者を実装対象にしない。
-- ChatGPTが会話、Deep Research、進捗・完了通知を担い、Dotsは保存、検索、構造化、provenanceへ集中する。Dots独自の調査schedulerと通知基盤を初期実装しない。
+- 2026-09-20以降の製品要件正本は[`docs/plans/founder-graph-pivot.md`](docs/plans/founder-graph-pivot.md)とする。データモデルは[`docs/plans/founder-graph-data-model.md`](docs/plans/founder-graph-data-model.md)、実行DAGと完了定義は[`docs/plans/nebula-implementation-master-plan.md`](docs/plans/nebula-implementation-master-plan.md)を正本とする。初期対象は本人一人がローカルで使うFounder Graphであり、Free、Standard、Pro、課金、複数利用者を実装対象にしない。
+- ChatGPTが会話、Deep Research、進捗・完了通知を担い、Nebulaは保存、検索、構造化、provenanceへ集中する。Nebula独自の調査schedulerと通知基盤を初期実装しない。
 - モデル、API、料金、廃止予定を変更するときは、先に [`docs/operations/model-lifecycle.md`](docs/operations/model-lifecycle.md) を読む。
 - モデルIDを画面、API、プロンプトへ分散してハードコードしない。プロバイダー別アダプターと一元的なモデルカタログを経由する。
-- Dots製品内の抽出、名寄せ、分類、facet・関係候補にはLunaの論理キーを使う。検索embeddingと再順位付けは、利用者指定済みのSentence Transformers対応多言語モデル（E5-base / mMARCO）をローカル実行する。用途・固定版・準備条件は実装内のカタログと[`稼働成果の統合`](docs/operations/dots-live-integration.md)を参照し、外部APIや別モデルへ無断で切り替えない。これは下記のCodex運営モデルとは別の製品runtime設定である。
+- Nebula製品内の抽出、名寄せ、分類、facet・関係候補にはLunaの論理キーを使う。検索embeddingと再順位付けは、利用者指定済みのSentence Transformers対応多言語モデル（E5-base / mMARCO）をローカル実行する。用途・固定版・準備条件は実装内のカタログと[`稼働成果の統合`](docs/operations/nebula-live-integration.md)を参照し、外部APIや別モデルへ無断で切り替えない。これは下記のCodex運営モデルとは別の製品runtime設定である。
 - ピボット前の画面用モデル選択UIは廃止済み。製品runtimeのモデル選択・互換性は現行のbackend契約とモデル運用文書で判断する。
 - モデル更新は公式情報の検知、評価、PR作成までを将来自動化してよい。本番の既定モデル変更、料金境界変更、廃止モデルからの移行を無審査で自動マージしない。
 - APIキー、課金開始、実ユーザーデータを使う最初の外部AI接続は、利用者兼製品責任者の明示決裁まで行わない。egress policy設定後のshareableな通常MCP readは呼出ごとの承認を求めず、フル調査はResearchCampaignごとに目的・範囲・試行予算の許諾を得る。

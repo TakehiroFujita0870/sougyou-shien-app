@@ -45,7 +45,7 @@ class TaggedDriver:
 
     def session(self, *, database: str):
         metadata = {
-            f"dots_{self.purpose}_run": self.run_id,
-            f"dots_{self.purpose}_writer": self.writer,
+            f"nebula_{self.purpose}_run": self.run_id,
+            f"nebula_{self.purpose}_writer": self.writer,
         }
         return TaggedSession(self.driver.session(database=database), metadata)

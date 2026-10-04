@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     CampaignAuthorizationRegistry,
     Idea,
     Provenance,
@@ -11,8 +11,8 @@ from dots.founder_graph import (
     ResearchRun,
     Status,
 )
-from dots.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
-from dots.founder_graph_researched_brief import ResearchedBriefValidationError, validate_researched_brief
+from nebula.idea_brief import IdeaBriefSection, IdeaBriefVersion, SECTION_TITLES
+from nebula.founder_graph_researched_brief import ResearchedBriefValidationError, validate_researched_brief
 
 
 UTC = timezone.utc

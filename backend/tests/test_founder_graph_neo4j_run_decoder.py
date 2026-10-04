@@ -6,7 +6,7 @@ import json
 from neo4j import Record
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     EgressPolicy,
     NodeType,
     Provenance,
@@ -15,8 +15,8 @@ from dots.founder_graph import (
     Status,
     TransportRetry,
 )
-from dots.founder_graph_neo4j import _node_properties
-from dots.founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
+from nebula.founder_graph_neo4j import _node_properties
+from nebula.founder_graph_neo4j_run import ResearchRunDecodeError, decode_persisted_research_run
 
 
 OWNER_ID = "owner-run-decode-synthetic"

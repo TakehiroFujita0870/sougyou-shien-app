@@ -5,11 +5,11 @@ from dataclasses import replace
 
 import pytest
 
-from dots.founder_graph import Asset, EgressPolicy, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
-from dots.founder_graph_neo4j import Neo4jGraphGateway
-from dots.founder_graph_neo4j_codec import node_properties
-from dots.founder_graph_neo4j_read import Neo4jGraphReadService
-from dots.founder_graph_read import GraphReadNotFoundError
+from nebula.founder_graph import Asset, EgressPolicy, Idea, NodeType, Provenance, RelationAssertion, RelationType, RelationshipStatus, Status
+from nebula.founder_graph_neo4j import Neo4jGraphGateway
+from nebula.founder_graph_neo4j_codec import node_properties
+from nebula.founder_graph_neo4j_read import Neo4jGraphReadService
+from nebula.founder_graph_read import GraphReadNotFoundError
 
 
 class _Result:

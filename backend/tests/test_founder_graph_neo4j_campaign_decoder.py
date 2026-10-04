@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from dots.founder_graph import EgressPolicy, NodeType, Provenance, ResearchCampaign
-from dots.founder_graph_neo4j import _node_properties
-from dots.founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
+from nebula.founder_graph import EgressPolicy, NodeType, Provenance, ResearchCampaign
+from nebula.founder_graph_neo4j import _node_properties
+from nebula.founder_graph_neo4j_campaign import CampaignDecodeError, decode_persisted_research_campaign
 
 
 def persisted_campaign_record():

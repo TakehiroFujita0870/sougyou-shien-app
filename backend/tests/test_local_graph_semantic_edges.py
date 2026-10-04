@@ -1,6 +1,6 @@
 import json
 
-from dots.local_graph_view import Neo4jGraphViewStore, read_local_graph
+from nebula.local_graph_view import Neo4jGraphViewStore, read_local_graph
 
 
 OWNER = "synthetic-owner"

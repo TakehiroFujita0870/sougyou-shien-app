@@ -7,7 +7,7 @@ from hashlib import sha256
 
 import pytest
 
-from dots.founder_graph import (
+from nebula.founder_graph import (
     Asset,
     Claim,
     EgressPolicy,
@@ -23,8 +23,8 @@ from dots.founder_graph import (
     SourceRevision,
     Status,
 )
-from dots.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
-from dots.founder_graph_write import (
+from nebula.founder_graph_neo4j import Neo4jGraphGateway, _node_properties
+from nebula.founder_graph_write import (
     GraphWriteError,
     GraphWriteNotFoundError,
     IdempotencyConflictError,
