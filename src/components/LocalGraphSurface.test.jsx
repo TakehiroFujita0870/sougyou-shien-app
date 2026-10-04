@@ -6,72 +6,42 @@ import { LocalGraphSurface, semanticGraphData } from './LocalGraphSurface';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const graphImport = vi.hoisted(() => {
+const graphHarness = vi.hoisted(() => {
   let resolveImport;
   return {
     ready: new Promise((resolve) => { resolveImport = resolve; }),
     release: () => resolveImport(),
+    props: null,
+    instances: [],
+    unmounts: [],
   };
 });
 
-class MockGraph {
-  constructor() {
-    this.pauseAnimation = vi.fn();
-    this.rendererHandle = { dispose: vi.fn() };
-    this._destructor = vi.fn(() => {
-      this.pauseAnimation();
-      this.rendererHandle.dispose();
-    });
-  }
-  width() { return this; }
-  height() { return this; }
-  backgroundColor() { return this; }
-  showNavInfo() { return this; }
-  numDimensions() { return this; }
-  graphData(value) { this.data = value; return this; }
-  nodeId() { return this; }
-  nodeLabel() { return this; }
-  nodeColor() { return this; }
-  nodeVal() { return this; }
-  nodeRelSize() { return this; }
-  nodeOpacity() { return this; }
-  nodeThreeObject() { return this; }
-  nodeThreeObjectExtend() { return this; }
-  nodeVisibility() { return this; }
-  linkLabel() { return this; }
-  linkColor() { return this; }
-  linkOpacity() { return this; }
-  linkWidth() { return this; }
-  linkDirectionalArrowLength() { return this; }
-  linkVisibility() { return this; }
-  enableNodeDrag() { return this; }
-  d3VelocityDecay() { return this; }
-  warmupTicks() { return this; }
-  cooldownTicks() { return this; }
-  onNodeClick(handler) { this.nodeClick = handler; return this; }
-  onLinkClick(handler) { this.linkClick = handler; return this; }
-  onBackgroundClick() { return this; }
-  d3Force() { return { strength() {}, distance() {} }; }
-  cameraPosition() { return this; }
-  renderer() { return this.rendererHandle; }
-}
-
-const mockGraphs = [];
-vi.mock('3d-force-graph', async () => {
-  await graphImport.ready;
-  return { default: class { constructor() {
-  const graph = new MockGraph();
-  mockGraphs.push(graph);
-  return graph;
-} } };
+vi.mock('react-force-graph-2d', async () => {
+  await graphHarness.ready;
+  const React = await import('react');
+  const MockForceGraph2D = React.forwardRef((props, _ref) => {
+    graphHarness.props = props;
+    React.useEffect(() => {
+      const instance = { destroyed: false };
+      graphHarness.instances.push(instance);
+      return () => {
+        instance.destroyed = true;
+        graphHarness.unmounts.push(instance);
+      };
+    }, []);
+    return React.createElement('div', { className: 'mock-force-graph', 'data-node-count': props.graphData.nodes.length });
+  });
+  return { default: MockForceGraph2D };
 });
-vi.mock('three-spritetext', () => ({ default: class {} }));
 
 let mounted = [];
 afterEach(() => {
   for (const item of mounted) act(() => { item.root.unmount(); item.container.remove(); });
   mounted = [];
-  mockGraphs.length = 0;
+  graphHarness.props = null;
+  graphHarness.instances.length = 0;
+  graphHarness.unmounts.length = 0;
   vi.restoreAllMocks();
 });
 
@@ -99,45 +69,39 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(container.querySelector('.local-graph__canvas')).toBeTruthy();
 
     act(() => root.unmount());
-    graphImport.release();
+    graphHarness.release();
     await flushEffects();
 
-    expect(mockGraphs).toHaveLength(0);
+    expect(graphHarness.instances).toHaveLength(0);
   });
 
-  it('keeps depth scrolling without the classification selector', async () => {
-    globalThis.ResizeObserver = class { observe() {} disconnect() {} };
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const hit = {
-      id: 'idea-child', kind: 'idea', title: '具体の創業案', root_facet_id: 'facet-root',
-      matched_facet_id: 'facet-child', depth: 2, classification_status: 'inferred',
-      classification_evidence_ids: ['ev-class'], taxonomy_status_path: ['confirmed', 'inferred'],
-      taxonomy_evidence_path: [['ev-tax-parent'], ['ev-tax-child']], evidence_ids: ['ev-tax-parent', 'ev-tax-child', 'ev-class'],
-      facet_path: [
-        { facet_id: 'facet-root', label: '事業領域', depth: 0 },
-        { facet_id: 'facet-middle', label: '食品関連', depth: 1 },
-        { facet_id: 'facet-child', label: '小規模な食品店', depth: 2 },
-      ],
+  it('renders 500 nodes and realistic links in one plane, supports selection, and tears down on navigation', async () => {
+    const resizeObservers = [];
+    globalThis.ResizeObserver = class {
+      constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); resizeObservers.push(this); }
+      observe() {}
     };
-    const directMembership = {
-      ...hit, matched_facet_id: 'facet-root', depth: 0, classification_status: 'confirmed',
-      classification_evidence_ids: ['ev-class-direct'], taxonomy_status_path: [], taxonomy_evidence_path: [],
-      evidence_ids: ['ev-class-direct'],
-      facet_path: [{ facet_id: 'facet-root', label: '事業領域', depth: 0 }],
-    };
+    const nodes = Array.from({ length: 500 }, (_, index) => ({
+      id: `node-${index}`,
+      kind: index < 3 ? 'facet' : index % 7 === 0 ? 'asset' : 'idea',
+      label: index === 419 ? '食品店の顧客調査' : `記録 ${index}`,
+    }));
+    const edges = Array.from({ length: 1200 }, (_, index) => ({
+      source: `node-${index % 500}`,
+      target: `node-${(index * 17 + 23) % 500}`,
+      label: 'USES',
+    })).filter((edge) => edge.source !== edge.target);
     const client = {
       getGraph: vi.fn().mockResolvedValue({
-        status: 'ready', truncated: false,
-        nodes: [
-          { id: 'facet-root', kind: 'facet', label: '事業領域' },
-          { id: 'facet-middle', kind: 'facet', label: '食品関連' },
-          { id: 'facet-child', kind: 'facet', label: '小規模な食品店' },
-          { id: 'idea-child', kind: 'idea', label: '具体の創業案' },
-        ], edges: [],
+        status: 'ready', truncated: false, nodes, edges,
+        semantic_edges: [
+          { id: 'tax-root-middle', source_id: 'node-0', target_id: 'node-1', predicate: 'CLASSIFIED_AS', status: 'confirmed', evidence_ids: ['ev-root-middle'] },
+          { id: 'tax-middle-leaf', source_id: 'node-1', target_id: 'node-2', predicate: 'CLASSIFIED_AS', status: 'confirmed', evidence_ids: ['ev-middle-leaf'] },
+          { id: 'tax-inferred', source_id: 'node-2', target_id: 'node-8', predicate: 'CLASSIFIED_AS', status: 'inferred', evidence_ids: ['ev-inferred'] },
+          { id: 'idea-classification', source_id: 'node-9', target_id: 'node-2', predicate: 'CLASSIFIED_AS', status: 'confirmed', evidence_ids: ['ev-classification'] },
+        ],
       }),
-      getFacetRegion: vi.fn(async (_facetId, depth) => ({
-        status: depth < 2 ? 'empty' : 'ready', facet_id: 'facet-root', depth, hits: depth < 2 ? [] : [hit, directMembership],
-      })),
+      getFacetRegion: vi.fn(async (_facetId, searchDepth) => ({ status: 'empty', facet_id: 'node-0', depth: searchDepth, hits: [] })),
     };
     const container = document.createElement('div');
     document.body.append(container);
@@ -146,35 +110,33 @@ describe('LocalGraphSurface Facet exploration', () => {
     await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
     await flushEffects();
 
-    expect(container.querySelector('.local-graph__canvas')).toBeTruthy();
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(container.querySelector('select')).toBeNull();
-    expect(container.textContent).not.toContain('分類から探す');
-    expect(container.textContent).not.toContain('全体の意味グラフ');
+    expect(container.querySelector('.local-graph__canvas')?.getAttribute('aria-label')).toContain('平面の知識グラフ。500個の点と1204本のつながり');
+    expect(container.querySelector('.mock-force-graph')?.getAttribute('data-node-count')).toBe('500');
+    expect(graphHarness.props.graphData.links).toHaveLength(1204);
+    expect(graphHarness.props.enableNodeDrag).toBe(true);
+    expect(graphHarness.props.enableZoomInteraction).toBe(true);
+    expect(graphHarness.props.enablePanInteraction).toBe(true);
+    expect(graphHarness.props.graphData.nodes.slice(0, 3).map(({ abstractionDepth }) => abstractionDepth)).toEqual([0, 1, 2]);
+    expect(graphHarness.props.graphData.nodes[8].abstractionDepth).toBeNull();
+    expect(container.textContent).not.toContain('深度');
+    expect(container.querySelector('.local-graph__depth')).toBeNull();
     expect(client.getFacetRegion).not.toHaveBeenCalled();
-    await act(async () => container.querySelector('.local-graph__canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true })));
-    await flushEffects();
-    expect(container.textContent).toContain('深度 2 / 4');
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 270)); });
-    await act(async () => container.querySelector('.local-graph__canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true })));
-    await flushEffects();
-    expect(container.textContent).toContain('深度 3 / 4');
+    act(() => graphHarness.props.onNodeClick(nodes[419]));
+    expect(container.querySelector('.local-graph__selected')?.textContent).toContain('食品店の顧客調査');
+    const incidentLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-419' || link.target === 'node-419');
+    const unrelatedLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-0' && link.target === 'node-23');
+    expect(graphHarness.props.linkColor(incidentLink)).toContain('0.94');
+    expect(graphHarness.props.linkColor(unrelatedLink)).toContain('0.025');
     expect(client.getFacetRegion).not.toHaveBeenCalled();
-    const graphInstance = mockGraphs.at(-1);
-    expect(graphInstance.data.nodes.map(({ id }) => id)).toEqual(['facet-root', 'facet-middle', 'facet-child', 'idea-child']);
-    expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique key/i);
-    const canvas = container.querySelector('.local-graph__canvas');
-    const removeListener = vi.spyOn(canvas, 'removeEventListener');
+    const graphInstance = graphHarness.instances.at(-1);
+    const resizeObserver = resizeObservers.at(-1);
     act(() => root.unmount());
-    expect(graphInstance._destructor).toHaveBeenCalledOnce();
-    expect(graphInstance.pauseAnimation).toHaveBeenCalledOnce();
-    expect(graphInstance.rendererHandle.dispose).toHaveBeenCalledOnce();
-    expect(removeListener).toHaveBeenCalledWith('wheel', expect.any(Function), true);
-    expect(canvas.childElementCount).toBe(0);
-    consoleError.mockRestore();
+    expect(graphInstance.destroyed).toBe(true);
+    expect(graphHarness.unmounts).toContain(graphInstance);
+    expect(resizeObserver.disconnect).toHaveBeenCalledOnce();
   });
 
-  it('keeps the existing 3D graph and exposes no Facet controls when no Facets exist', async () => {
+  it('keeps the existing graph data and exposes no Facet controls when no Facets exist', async () => {
     globalThis.ResizeObserver = class { observe() {} disconnect() {} };
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const client = {
@@ -218,23 +180,21 @@ describe('LocalGraphSurface Facet exploration', () => {
     mounted.push({ root, container });
     await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
     await flushEffects();
-    const graph = mockGraphs.at(-1);
-
-    act(() => graph.nodeClick(nodes[0]));
+    act(() => graphHarness.props.onNodeClick(nodes[0]));
     expect(open).toHaveBeenCalledOnce();
     expect(open).toHaveBeenCalledWith('https://example.test/research', '_blank', 'noopener,noreferrer');
     expect(container.querySelector('.local-graph__canvas')).toBeTruthy();
     expect(container.querySelector('.local-graph__selected')).toBeNull();
 
-    act(() => graph.nodeClick(nodes[1]));
+    act(() => graphHarness.props.onNodeClick(nodes[1]));
     expect(open).toHaveBeenCalledOnce();
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('危険な出典');
 
-    act(() => graph.nodeClick(nodes[2]));
+    act(() => graphHarness.props.onNodeClick(nodes[2]));
     expect(open).toHaveBeenCalledOnce();
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('URLなし');
 
-    act(() => graph.nodeClick(nodes[3]));
+    act(() => graphHarness.props.onNodeClick(nodes[3]));
     expect(open).toHaveBeenCalledOnce();
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('事業案');
   });
@@ -296,6 +256,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(container.textContent).not.toContain('event-1');
     expect(container.textContent).not.toContain('private-evidence');
 
+    const graphAssertion = graphHarness.props.graphData.links.find((edge) => edge.assertionId === 'meaning-1');
+    act(() => graphHarness.props.onLinkClick(graphAssertion));
+    expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).toContain('evidence-shareable-1');
     const relationButtons = container.querySelectorAll('[aria-label="意味関係"] button');
     act(() => relationButtons[0].click());
     expect(container.textContent).toContain('推測');

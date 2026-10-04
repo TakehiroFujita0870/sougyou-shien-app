@@ -1,24 +1,93 @@
-import { useEffect, useRef, useState } from 'react';
-import { graphDepthForKind, nextGraphDepth, visibleAtGraphDepth, visibleGraphLink } from './localGraphDepth';
-import { COLORS, nodeKindLabel, relationStatusLabel, initialPosition, shortLabel } from './localGraphPresentation.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius } from './localGraphPresentation.js';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
-export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, regionHits = [], anchorId = '' }) {
+function endpointId(endpoint) {
+  return typeof endpoint === 'object' ? endpoint?.id : endpoint;
+}
+
+function drawStar(context, x, y, radius) {
+  context.beginPath();
+  for (let point = 0; point < 8; point += 1) {
+    const angle = -Math.PI / 2 + point * Math.PI / 4;
+    const pointRadius = point % 2 === 0 ? radius : radius * 0.3;
+    const pointX = x + Math.cos(angle) * pointRadius;
+    const pointY = y + Math.sin(angle) * pointRadius;
+    if (point === 0) context.moveTo(pointX, pointY);
+    else context.lineTo(pointX, pointY);
+  }
+  context.closePath();
+  context.fill();
+}
+
+export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   const container = useRef(null);
   const graphRef = useRef(null);
-  const currentDepth = useRef(0);
-  const lastWheel = useRef(0);
   const [selected, setSelected] = useState(null);
+  const [hoveredId, setHoveredId] = useState('');
+  const [Graph2D, setGraph2D] = useState(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [provenanceRequest, setProvenanceRequest] = useState({ assertionId: '', attempt: 0 });
   const [provenance, setProvenance] = useState(null);
   const [renderError, setRenderError] = useState(false);
+  const graphData = useMemo(() => ({
+    nodes: nodes.map((node) => ({ ...node })),
+    links: edges.map((edge) => ({ ...edge })),
+  }), [nodes, edges]);
   const labelsById = new Map(nodes.map((node) => [node.id, node.label]));
   const semanticEdges = edges.filter((edge) => edge.assertionId);
   const selectedAssertionId = selected?.type === 'semantic-edge' ? selected.assertionId : '';
-  currentDepth.current = depth;
+  const selectedNodeIds = new Set();
+  if (selected?.type === 'node') selectedNodeIds.add(selected.id);
+  if (selected?.type === 'semantic-edge') {
+    selectedNodeIds.add(endpointId(selected.source));
+    selectedNodeIds.add(endpointId(selected.target));
+  }
+  if (selected?.type === 'node') {
+    for (const edge of edges) {
+      if (endpointId(edge.source) === selected.id) selectedNodeIds.add(endpointId(edge.target));
+      if (endpointId(edge.target) === selected.id) selectedNodeIds.add(endpointId(edge.source));
+    }
+  }
+  useEffect(() => {
+    let active = true;
+    import('react-force-graph-2d').then(({ default: ForceGraph2D }) => {
+      if (active) setGraph2D(() => ForceGraph2D);
+    }).catch((error) => {
+      if (!active) return;
+      console.error('Local graph rendering failed', error);
+      setRenderError(true);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return undefined;
+    const updateSize = () => {
+      const bounds = element.getBoundingClientRect();
+      const width = element.clientWidth || bounds.width || 0;
+      const height = element.clientHeight || bounds.height || 0;
+      setDimensions((previous) => previous.width === width && previous.height === height
+        ? previous : { width, height });
+    };
+    updateSize();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+    graph.d3Force('charge')?.strength(-48);
+    graph.d3Force('link')?.distance(52);
+    graph.d3ReheatSimulation?.();
+  }, [Graph2D, graphData]);
 
   const selectSemanticEdge = (edge) => {
-    setSelected({ type: 'semantic-edge', ...edge });
+    setSelected({ ...edge, source: endpointId(edge.source), target: endpointId(edge.target), type: 'semantic-edge' });
     setProvenance(null);
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
   };
@@ -32,6 +101,12 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
     setProvenance(null);
     setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
     setSelected({ type: 'node', id: node.id, kind: node.kind, label: node.label });
+  };
+
+  const clearSelection = () => {
+    setSelected(null);
+    setProvenance(null);
+    setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 }));
   };
 
   useEffect(() => {
@@ -60,156 +135,79 @@ export function LocalGraphCanvas({ client, nodes, edges, depth, onDepthChange, r
     };
   }, [client, selectedAssertionId, provenanceRequest.assertionId, provenanceRequest.attempt]);
 
-  useEffect(() => {
-    let active = true;
-    let observer;
-    let graph;
-    let wheelHandler;
-    let element;
-    const disposeGraph = () => {
-      observer?.disconnect();
-      observer = undefined;
-      if (wheelHandler && element) element.removeEventListener('wheel', wheelHandler, true);
-      wheelHandler = undefined;
-      let destructorSucceeded = false;
-      try {
-        if (typeof graph?._destructor === 'function') {
-          graph._destructor();
-          destructorSucceeded = true;
-        }
-      } catch (error) {
-        console.error('Local graph teardown failed', error);
-      }
-      if (!destructorSucceeded) {
-        try {
-          graph?.pauseAnimation?.();
-        } catch (error) {
-          console.error('Local graph animation cleanup failed', error);
-        }
-        try {
-          graph?.renderer?.()?.dispose?.();
-        } catch (error) {
-          console.error('Local graph renderer cleanup failed', error);
-        }
-      }
-      graphRef.current = null;
-      element?.replaceChildren();
-      graph = undefined;
-    };
-    Promise.all([import('3d-force-graph'), import('three-spritetext')]).then(([{ default: ForceGraph3D }, { default: SpriteText }]) => {
-      if (!active || !container.current) return;
-      element = container.current;
-      const graphNodes = nodes.map((node, index) => {
-        const nodeDepth = Number.isInteger(node.graphDepth) ? node.graphDepth : graphDepthForKind(node.kind);
-        return { ...node, depth: nodeDepth, fz: -125 * nodeDepth, ...initialPosition(node.id, index) };
-      });
-      const byId = new Map(graphNodes.map((node) => [node.id, node]));
-      const graphLinks = edges.map((edge) => ({ ...edge }));
-      const endpoint = (value) => typeof value === 'object' ? value : byId.get(value);
-      graph = new ForceGraph3D(element, { controlType: 'orbit' });
-      graphRef.current = graph;
-      graph
-        .width(element.clientWidth)
-        .height(element.clientHeight)
-        .backgroundColor('#142134')
-        .showNavInfo(false)
-        .numDimensions(3)
-        .graphData({ nodes: graphNodes, links: graphLinks })
-        .nodeId('id')
-        .nodeLabel((node) => node.label)
-        .nodeColor((node) => COLORS[node.kind] ?? '#a8c0e4')
-        .nodeVal((node) => node.kind === 'idea' ? 7 : 4)
-        .nodeRelSize(4)
-        .nodeOpacity(.94)
-        .nodeThreeObject((node) => {
-          const label = new SpriteText(shortLabel(node.label));
-          label.color = '#dce8fa';
-          label.textHeight = 7;
-          label.position.y = 16;
-          return label;
-        })
-        .nodeThreeObjectExtend(true)
-        .nodeVisibility((node) => anchorId
-          ? node.id === anchorId || node.depth <= currentDepth.current
-          : visibleAtGraphDepth(node.depth, currentDepth.current))
-        .linkLabel((link) => link.label)
-        .linkColor(() => '#9bb7e5')
-        .linkOpacity(.65)
-        .linkWidth(1.2)
-        .linkDirectionalArrowLength(3)
-        .linkVisibility((link) => {
-          const source = endpoint(link.source);
-          const target = endpoint(link.target);
-          return anchorId
-            ? Boolean(source && target && (source.id === anchorId || source.depth <= currentDepth.current)
-              && (target.id === anchorId || target.depth <= currentDepth.current))
-            : visibleGraphLink(source, target, currentDepth.current);
-        })
-        .enableNodeDrag(true)
-        .d3VelocityDecay(.35)
-        .warmupTicks(45)
-        .cooldownTicks(180)
-        .onNodeClick(selectNode)
-        .onLinkClick((link) => { if (link.assertionId) selectSemanticEdge(link); else { setSelected(null); setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); } })
-        .onBackgroundClick(() => { setSelected(null); setProvenance(null); setProvenanceRequest((previous) => ({ assertionId: '', attempt: previous.attempt + 1 })); });
-      graph.d3Force('charge').strength(-22);
-      graph.d3Force('link').distance(65);
-      graph.cameraPosition({ x: 0, y: 0, z: 430 }, { x: 0, y: 0, z: 0 });
-      wheelHandler = (event) => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (Math.abs(event.deltaY) < 2 || Date.now() - lastWheel.current < 260) return;
-        lastWheel.current = Date.now();
-        onDepthChange((value) => nextGraphDepth(value, event.deltaY));
-      };
-      element.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
-      observer = new ResizeObserver(() => {
-        if (!active || !graph) return;
-        try {
-          graph.width(element.clientWidth).height(element.clientHeight);
-        } catch (error) {
-          console.error('Local graph resize failed', error);
-          setRenderError(true);
-          disposeGraph();
-        }
-      });
-      observer.observe(element);
-    }).catch((error) => {
-      if (!active) return;
-      console.error('Local graph rendering failed', error);
-      disposeGraph();
-      setRenderError(true);
-    });
-    return () => {
-      active = false;
-      disposeGraph();
-    };
-  }, [nodes, edges, onDepthChange]);
+  const renderNode = (node, context, globalScale) => {
+    const radius = starRadius(node);
+    const selectedOrRelated = selectedNodeIds.has(node.id);
+    const isSelected = selected?.type === 'node' && selected.id === node.id;
+    const isHighlighted = selectedOrRelated || hoveredId === node.id;
+    const scale = Math.max(globalScale, 0.1);
+    context.save();
+    context.globalAlpha = selected && !selectedOrRelated ? 0.2 : 0.96;
+    context.fillStyle = COLORS[node.kind] ?? '#c4d4ed';
+    context.shadowColor = context.fillStyle;
+    context.shadowBlur = isSelected ? radius * 1.8 : radius > 8 ? radius * 0.8 : 2;
+    drawStar(context, node.x, node.y, radius);
+    context.shadowBlur = 0;
+    if (isSelected) {
+      context.strokeStyle = '#f7fbff';
+      context.lineWidth = 1.5 / scale;
+      context.stroke();
+    }
+    if (isHighlighted) {
+      context.globalAlpha = 1;
+      context.font = `500 ${12 / scale}px system-ui, sans-serif`;
+      context.textBaseline = 'middle';
+      context.fillStyle = '#f4f7ff';
+      context.fillText(shortLabel(node.label), node.x + radius + 5, node.y);
+    }
+    context.restore();
+  };
 
-  useEffect(() => {
-    const graph = graphRef.current;
-    if (!graph) return;
-    graph.nodeVisibility((node) => anchorId
-      ? node.id === anchorId || node.depth <= depth
-      : visibleAtGraphDepth(node.depth, depth));
-    graph.linkVisibility((link) => {
-      const source = typeof link.source === 'object' ? link.source : nodes.find((node) => node.id === link.source);
-      const target = typeof link.target === 'object' ? link.target : nodes.find((node) => node.id === link.target);
-      if (!source || !target) return false;
-      if (anchorId) return (source.id === anchorId || (source.depth ?? 0) <= depth)
-        && (target.id === anchorId || (target.depth ?? 0) <= depth);
-      return visibleGraphLink(
-        { depth: source.depth ?? graphDepthForKind(source.kind) },
-        { depth: target.depth ?? graphDepthForKind(target.kind) }, depth,
-      );
-    });
-    graph.cameraPosition({ x: 0, y: 0, z: 430 - depth * 170 }, { x: 0, y: 0, z: -depth * 170 }, 520);
-  }, [depth, nodes, anchorId]);
-
+  const isHighlightedLink = (link) => {
+    if (!selected) return false;
+    if (selected.type === 'semantic-edge') return link.assertionId === selected.assertionId;
+    return endpointId(link.source) === selected.id || endpointId(link.target) === selected.id;
+  };
+  const paintPointerArea = (node, color, context) => {
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(node.x, node.y, starRadius(node) + 4, 0, Math.PI * 2);
+    context.fill();
+  };
   return <div className="local-graph__frame">
-    <div ref={container} className="local-graph__canvas" role="img" aria-label={`立体の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。スクロールで奥の詳細へ進む`} />
-    <p className="local-graph__depth" role="status">深度 {depth + 1} / 4 · スクロールで抽象から具体へ</p>
-    {renderError && <p role="alert">立体グラフを描画できませんでした。このPCの描画機能を確認してください。</p>}
+    <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}>
+      {Graph2D && <Graph2D
+        ref={graphRef}
+        graphData={graphData}
+        width={dimensions.width || 800}
+        height={dimensions.height || 500}
+        backgroundColor="rgba(0,0,0,0)"
+        nodeId="id"
+        nodeLabel={(node) => node.label}
+        nodeColor={(node) => COLORS[node.kind] ?? '#c4d4ed'}
+        nodeVal={(node) => starRadius(node) ** 2}
+        nodeRelSize={1}
+        nodeCanvasObjectMode="replace"
+        nodeCanvasObject={renderNode}
+        nodePointerAreaPaint={paintPointerArea}
+        linkLabel={(link) => link.label}
+        linkColor={(link) => isHighlightedLink(link) ? 'rgba(222, 236, 255, 0.94)' : selected ? 'rgba(155, 179, 220, 0.025)' : 'rgba(155, 179, 220, 0.22)'}
+        linkWidth={(link) => isHighlightedLink(link) ? 2.2 : selected ? 0.45 : 0.7}
+        enableNodeDrag
+        enableZoomInteraction
+        enablePanInteraction
+        enablePointerInteraction
+        autoPauseRedraw
+        d3VelocityDecay={0.42}
+        warmupTicks={50}
+        cooldownTicks={220}
+        onNodeClick={selectNode}
+        onNodeHover={(node) => setHoveredId(node?.id ?? '')}
+        onLinkClick={(link) => link.assertionId ? selectSemanticEdge(link) : clearSelection()}
+        onBackgroundClick={clearSelection}
+      />}
+    </div>
+    {renderError && <p role="alert">平面グラフを表示できませんでした。画面を再読み込みしてください。</p>}
     {selected?.type === 'node' && <aside className="local-graph__selected"><span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong></aside>}
     {selected?.type === 'semantic-edge' && <aside className="local-graph__selected" aria-label="意味関係と根拠">
       <span>{relationStatusLabel(selected.status)}{typeof selected.confidence === 'number' ? ` · 確信度 ${Math.round(selected.confidence * 100)}%` : ''}</span>
