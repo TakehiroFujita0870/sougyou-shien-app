@@ -3,6 +3,18 @@ import { Window } from 'happy-dom';
 import { describe, expect, it } from 'vitest';
 
 describe('approved Nebula logo', () => {
+  it('uses a compact transparent PNG for the ChatGPT host', () => {
+    const png = readFileSync(new URL('../plugins/nebula/assets/nebula-icon.png', import.meta.url));
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([256, 256]);
+    expect(png.length).toBeLessThan(10000);
+    for (const path of ['../plugins/nebula/plugin.json', '../plugins/nebula/.codex-plugin/plugin.json']) {
+      const manifest = JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
+      const presentation = manifest.extensions?.['com.openai'].interface ?? manifest.interface;
+      expect(presentation.logo).toBe('./assets/nebula-icon.png');
+      expect(presentation.composerIcon).toBe(presentation.logo);
+    }
+  });
   it('preserves the seven stars from concept 03 left without board decorations', () => {
     const svg = readFileSync(new URL('../public/assets/nebula-icon.svg', import.meta.url), 'utf8');
     expect(readFileSync(new URL('../plugins/nebula/assets/nebula-icon.svg', import.meta.url), 'utf8')).toBe(svg);
