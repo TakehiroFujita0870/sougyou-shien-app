@@ -3,9 +3,18 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalDashboardShell } from './LocalDashboardShell';
+import { readFileSync } from 'node:fs';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let mounted;
+
+it('anchors the shared sky to the viewport and reserves a stable scroll gutter', () => {
+  const shellStyles = readFileSync('src/components/LocalDashboardShell.css', 'utf8');
+  const sky = shellStyles.match(/\.local-shell__sky\s*\{([^}]+)\}/)[1];
+  expect(sky).toContain('position: fixed');
+  expect(sky).toContain('left: var(--local-sidebar-width)');
+  expect(shellStyles).toMatch(/html:has\(\.local-shell\)\s*\{\s*scrollbar-gutter:\s*stable/);
+});
 
 afterEach(async () => {
   if (mounted) await act(async () => { mounted.root.unmount(); mounted.container.remove(); });
