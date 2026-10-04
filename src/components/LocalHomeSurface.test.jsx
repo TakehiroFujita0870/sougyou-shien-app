@@ -12,7 +12,7 @@ afterEach(async () => {
   mounted = null;
 });
 
-it('shows ideas, eight named viewpoints, common asset cards, and a people placeholder', async () => {
+it('shows saved idea content, common asset cards, and a people placeholder', async () => {
   const client = { getHome: vi.fn(async () => ({
     status: 'ready',
     ideas: [{ id: 'idea-1', title: '名刺から協業', summary: '協業の候補を見つける', description: '本人のメモ' }],
@@ -36,9 +36,10 @@ it('shows ideas, eight named viewpoints, common asset cards, and a people placeh
   expect(container.querySelectorAll('.local-home__idea-card')).toHaveLength(1);
   expect(container.textContent).toContain('名刺から協業');
   expect(container.textContent).toContain('本人のメモ');
-  expect(container.textContent).toContain('リスクミニマムなロードマップ');
-  expect(container.textContent).not.toContain('7. リスクミニマムなロードマップ');
-  expect(container.textContent).toContain('未整理');
+  expect(container.textContent).toContain('協業の候補を見つける');
+  expect(container.textContent).not.toContain('リスクミニマムなロードマップ');
+  expect(container.textContent).not.toContain('未整理');
+  expect([...container.querySelectorAll('.local-home__idea-reading-section h3')].map((heading) => heading.textContent)).toEqual(['説明', 'エグゼクティブサマリー']);
   await act(async () => container.querySelector('[role="tab"][aria-selected="false"]').click());
   expect(container.querySelectorAll('.local-home__asset-card')).toHaveLength(2);
   expect(container.textContent).toContain('自己紹介');
@@ -252,7 +253,97 @@ it('shows a saved latest idea brief in its matching viewpoint', async () => {
   expect(container.textContent).not.toContain('5. 実現可能性');
   expect(container.textContent).toContain('手持ちの技術で実装可能');
   expect(container.textContent).not.toContain('古い概要');
-  expect(container.textContent).toContain('未整理');
+  expect(container.textContent).not.toContain('未整理');
+  expect(container.querySelectorAll('.local-home__idea-reading-section')).toHaveLength(2);
+});
+
+it('shows only saved legacy chapter bodies and groups their citations at the end by chapter', async () => {
+  const briefSections = Array(8).fill('');
+  briefSections[0] = '保存された概要';
+  briefSections[2] = '保存された顧客情報';
+  const briefCitations = Array.from({ length: 8 }, () => []);
+  briefCitations[2] = [{ title: '保存済み出典', url: 'https://example.test/source' }];
+  const idea = {
+    id: 'legacy-idea', title: '旧章別の案', summary: '旧要約', description: '', research_status: 'researched',
+    brief_sections: briefSections, brief_citations: briefCitations,
+  };
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [idea], assets: [], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  const sections = [...container.querySelectorAll('.local-home__idea-reading-section')];
+  expect(sections.map((section) => section.querySelector('h3')?.textContent)).toEqual([
+    'エグゼクティブサマリー', '顧客とマーケットサイズ',
+  ]);
+  expect(sections.map((section) => section.querySelector('.local-home__idea-reading-body')?.textContent)).toEqual([
+    '保存された概要', '保存された顧客情報',
+  ]);
+  const citations = container.querySelector('.local-home__citation');
+  expect(sections[1].querySelector('.local-home__citation')).toBeNull();
+  expect(citations.querySelector('.local-home__citation-heading')?.textContent).toBe('出典');
+  expect(citations.querySelector('.local-home__citation-group h4')?.textContent).toBe('顧客とマーケットサイズ');
+  expect(citations.querySelector('a')?.getAttribute('href')).toBe('https://example.test/source');
+  expect(sections[1].compareDocumentPosition(citations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(container.textContent).not.toContain('未整理');
+  expect(container.textContent).not.toContain('旧要約');
+  expect(container.querySelector('.local-home__detail-header h2')?.textContent).toBe('旧章別の案');
+  expect(container.querySelector('.local-home__status-badge')?.textContent).toBe('調査済み');
+  expect(container.querySelector('.local-home__detail-header .local-home__card-actions')).not.toBeNull();
+  expect(idea.brief_sections).toEqual(briefSections);
+  expect(idea.brief_citations).toEqual(briefCitations);
+});
+
+it('shows a draft description without generating empty chapter headings', async () => {
+  const briefSections = Array(8).fill('');
+  const idea = {
+    id: 'draft-idea', title: '未調査案', summary: '', description: '保存された説明だけを表示する。',
+    research_status: 'unresearched', brief_sections: briefSections,
+  };
+  const emptyIdea = { id: 'empty-idea', title: '章が空の案', summary: '', description: '', brief_sections: Array(8).fill('') };
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [idea, emptyIdea], assets: [], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  expect(container.querySelectorAll('.local-home__idea-reading-section')).toHaveLength(1);
+  expect(container.querySelector('.local-home__idea-reading-section h3')?.textContent).toBe('説明');
+  expect(container.querySelector('.local-home__idea-reading-body')?.textContent).toBe('保存された説明だけを表示する。');
+  expect(container.querySelector('.local-home__status-badge')?.textContent).toBe('未調査');
+  expect(container.textContent).not.toContain('未整理');
+  expect(container.textContent).not.toContain('ビジネスモデル');
+  expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
+
+  await act(async () => container.querySelector('[data-idea-id="empty-idea"]').click());
+  expect(container.querySelector('.local-home__idea-content')).toBeNull();
+  expect(container.querySelectorAll('.local-home__idea-reading-section')).toHaveLength(0);
+  expect(container.textContent).not.toContain('エグゼクティブサマリー');
+  expect(container.textContent).not.toContain('未整理');
+});
+
+it('renders an identical saved summary and description only once', async () => {
+  const savedText = '本文は同じ一つの保存記録。';
+  const idea = {
+    id: 'same-text', title: '重複しない下書き', summary: savedText, description: savedText,
+    research_status: 'unresearched', brief_sections: Array(8).fill(''),
+  };
+  const client = { getHome: vi.fn(async () => ({ status: 'ready', ideas: [idea], assets: [], profile: null })) };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<LocalHomeSurface client={client} />));
+
+  expect(container.querySelectorAll('.local-home__idea-reading-section')).toHaveLength(1);
+  expect(container.querySelector('.local-home__idea-reading-section h3')?.textContent).toBe('エグゼクティブサマリー');
+  expect(container.querySelector('.local-home__idea-reading-body')?.textContent).toBe(savedText);
+  expect(container.textContent.match(/本文は同じ一つの保存記録。/g)).toHaveLength(1);
+  expect(idea.summary).toBe(savedText);
+  expect(idea.description).toBe(savedText);
 });
 
 it('shows a clear empty state when the unified asset grid has no records', async () => {
@@ -268,11 +359,23 @@ it('shows a clear empty state when the unified asset grid has no records', async
 });
 
 it('prefers the saved Markdown report over duplicate section text and keeps cited sources', async () => {
+  const headings = [
+    'エグゼクティブサマリー', 'ビジネスモデル', '顧客とマーケットサイズ', '収益モデル',
+    '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
+  ];
+  const reportMarkdown = [
+    ...headings.flatMap((heading, index) => [
+      `${index % 2 === 0 ? '#' : '##'} ${heading}`,
+      ...(index === 0 ? ['## 小見出し', '小見出しの本文'] : []),
+      ...(index === 2 ? ['| 層 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |', '[公開資料](https://example.test/source)'] : [`第${index + 1}章の本文`]),
+    ]),
+  ].join('\n\n');
+  const briefCitations = Array.from({ length: 8 }, () => []);
+  briefCitations[2] = [{ url: 'https://example.test/source', title: '公開資料' }];
   const client = { getHome: vi.fn(async () => ({
     status: 'ready', assets: [], profile: null,
     ideas: [{ id: 'idea-1', title: '新事業', summary: '', description: '', research_status: 'researched',
-      brief_sections: Array(8).fill('検索用の章'), report_markdown: '## 顧客\n\n| 層 | 課題 |\n| --- | --- |\n| 店舗 | 発注 |',
-      brief_citations: [[{ url: 'https://example.test/source', title: '公開資料' }], ...Array.from({ length: 7 }, () => [])],
+      brief_sections: Array(8).fill('検索用の章'), report_markdown: reportMarkdown, brief_citations: briefCitations,
     }],
   })) };
   const container = document.createElement('div');
@@ -280,9 +383,22 @@ it('prefers the saved Markdown report over duplicate section text and keeps cite
   const root = createRoot(container);
   mounted = { root, container };
   await act(async () => root.render(<LocalHomeSurface client={client} />));
+  expect(container.querySelector('.local-home__idea-content .markdown-report')).not.toBeNull();
   expect(container.querySelector('.markdown-report table')?.textContent).toContain('店舗');
+  expect([...container.querySelectorAll('.markdown-report__chapter-heading')].map((heading) => [heading.tagName, heading.textContent])).toEqual(
+    headings.map((heading) => ['H3', heading]),
+  );
+  expect(container.querySelector('.markdown-report h4.markdown-report__subheading')?.textContent).toBe('小見出し');
+  expect(container.querySelector('.markdown-report h1, .markdown-report h2')).toBeNull();
   expect(container.textContent).not.toContain('検索用の章');
-  expect(container.querySelector('.local-home__citation a')?.getAttribute('href')).toBe('https://example.test/source');
+  const savedCitations = container.querySelector('.local-home__citation');
+  expect(savedCitations.querySelector('.local-home__citation-heading')?.textContent).toBe('出典');
+  expect(savedCitations.querySelector('.local-home__citation-group h4')?.textContent).toBe('顧客とマーケットサイズ');
+  expect(savedCitations.querySelector('a')?.getAttribute('href')).toBe('https://example.test/source');
+  expect(container.querySelector('.markdown-report').compareDocumentPosition(savedCitations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(container.querySelector('.markdown-report a')?.getAttribute('href')).toBe('https://example.test/source');
+  expect(reportMarkdown).toContain(`# ${headings[0]}`);
+  expect(briefCitations[2][0].url).toBe('https://example.test/source');
   expect(container.querySelector('.local-home__detail-status-row .local-home__status-badge')?.textContent).toBe('調査済み');
 });
 
@@ -785,7 +901,7 @@ it('preserves asset drafts after save conflicts and generic failures', async () 
   }
 });
 
-it('shows only valid HTTP source links beside the matching brief viewpoint', async () => {
+it('groups only valid HTTP source links at the end under their saved chapter', async () => {
   const citations = Array.from({ length: 8 }, () => []);
   citations[1] = [
     { title: '公開統計', url: 'https://example.com/statistics?id=1#section', source_id: 'source-1', evidence_id: 'evidence-1' },
@@ -813,10 +929,10 @@ it('shows only valid HTTP source links beside the matching brief viewpoint', asy
   expect(links[0].getAttribute('rel')).toContain('noopener');
   expect(container.textContent).not.toContain('署名付きURL');
   expect(container.textContent).not.toContain('共有鍵付きURL');
-  const sectionHeadings = [...container.querySelectorAll('.local-home__section-list h3')];
-  const citedSection = sectionHeadings.find((heading) => heading.textContent === 'ビジネスモデル');
-  expect(citedSection.parentElement.querySelector('.local-home__citation')).not.toBeNull();
-  expect(sectionHeadings.find((heading) => heading.textContent === 'エグゼクティブサマリー').parentElement.querySelector('.local-home__citation')).toBeNull();
+  const citationList = container.querySelector('.local-home__citation');
+  expect(citationList.querySelector('.local-home__citation-group h4')?.textContent).toBe('ビジネスモデル');
+  expect(citationList.closest('.local-home__idea-reading-section')).toBeNull();
+  expect(container.querySelector('.local-home__idea-reading-section').compareDocumentPosition(citationList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it('does not invent or render citations when a chapter has none', async () => {
@@ -830,5 +946,5 @@ it('does not invent or render citations when a chapter has none', async () => {
   mounted = { root, container };
   await act(async () => root.render(<LocalHomeSurface client={client} />));
   expect(container.querySelectorAll('.local-home__citation')).toHaveLength(0);
-  expect(container.querySelectorAll('.local-home__section-list a')).toHaveLength(0);
+  expect(container.querySelectorAll('.local-home__idea-content a')).toHaveLength(0);
 });

@@ -31,7 +31,7 @@ it('shows Markdown tables, safe citations and public images without executing HT
     '<script>window.evil = true</script>',
   ].join('\n\n');
   await act(async () => root.render(<MarkdownReport markdown={markdown} />));
-  expect(container.querySelector('h2')?.textContent).toBe('顧客と課題');
+  expect(container.querySelector('h4')?.textContent).toBe('顧客と課題');
   expect(container.querySelector('table')?.textContent).toContain('店舗');
   expect(container.querySelectorAll('a')).toHaveLength(1);
   expect(container.querySelector('a')?.getAttribute('href')).toBe('https://example.test/source');
@@ -56,6 +56,39 @@ it('presents bare source URLs compactly without changing their destinations or a
   expect(links[0].textContent).not.toContain('/en-us/microsoft-365/copilot/extensibility/');
   expect(links[0].getAttribute('title')).toBe(bareUrl);
   expect(links[1].textContent).toContain('Microsoft公式資料');
+});
+
+it('normalizes canonical chapters to H3 and keeps Markdown subheadings below them in source order', async () => {
+  const chapterHeadings = [
+    'エグゼクティブサマリー', 'ビジネスモデル', '顧客とマーケットサイズ', '収益モデル',
+    '競争優位性', '実現可能性', 'リスク・撤退ライン', 'リスクミニマムなロードマップ',
+  ];
+  const markdown = [
+    '# レポートタイトル',
+    ...chapterHeadings.flatMap((heading, index) => [
+      `${index % 2 === 0 ? '#' : '##'} ${heading}`,
+      `第${index + 1}章本文`,
+      ...(index === 0 ? ['## 小見出し', '小見出し本文', '### 詳細見出し', '詳細本文'] : []),
+    ]),
+  ].join('\n\n');
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted = { root, container };
+  await act(async () => root.render(<><h2>案のタイトル</h2><MarkdownReport markdown={markdown} chapterHeadings={chapterHeadings} /></>));
+
+  const report = container.querySelector('.markdown-report');
+  expect(report.querySelector('h3.markdown-report__title-heading')?.textContent).toBe('レポートタイトル');
+  expect([...container.querySelectorAll('.markdown-report__chapter-heading')].map((heading) => [heading.tagName, heading.textContent])).toEqual([
+    ...chapterHeadings.map((heading) => ['H3', heading]),
+  ]);
+  expect(report.querySelector('h4.markdown-report__subheading')?.textContent).toBe('小見出し');
+  expect(report.querySelector('h5.markdown-report__subheading')?.textContent).toBe('詳細見出し');
+  expect(report.querySelector('h1, h2')).toBeNull();
+  expect([...report.querySelectorAll('h3, h4, h5, h6')].map((heading) => heading.textContent)).toEqual([
+    'レポートタイトル', chapterHeadings[0], '小見出し', '詳細見出し', ...chapterHeadings.slice(1),
+  ]);
+  expect(markdown).toContain(`# ${chapterHeadings[1]}`);
 });
 
 it('renders Mermaid diagrams as sanitized SVG', async () => {
