@@ -124,7 +124,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphHarness.instances).toHaveLength(0);
   });
 
-  it('renders 500 nodes and realistic links in one plane, supports keyboard node search, and tears down on navigation', async () => {
+  it('renders 500 nodes without permanent widgets, supports star selection, and tears down on navigation', async () => {
     const resizeObservers = [];
     globalThis.ResizeObserver = class {
       constructor(callback) { this.callback = callback; this.disconnect = vi.fn(); resizeObservers.push(this); }
@@ -169,7 +169,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     const originalNodeRenderer = graphHarness.props.nodeCanvasObject;
     act(() => graphHarness.props.onNodeHover(nodes[5]));
     expect(graphHarness.props.nodeCanvasObject).not.toBe(originalNodeRenderer);
-    expect(graphHarness.props.onEngineStop).toBeUndefined();
+    expect(typeof graphHarness.props.onEngineStop).toBe('function');
     expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
     expect(graphHarness.graph.d3ReheatSimulation).not.toHaveBeenCalled();
     expect(graphHarness.props.graphData.nodes.slice(0, 3).map(({ abstractionDepth }) => abstractionDepth)).toEqual([0, 1, 2]);
@@ -177,23 +177,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(container.textContent).not.toContain('深度');
     expect(container.querySelector('.local-graph__depth')).toBeNull();
     expect(client.getFacetRegion).not.toHaveBeenCalled();
-    const search = container.querySelector('input[type="search"]');
-    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    const searchStartedAt = performance.now();
-    act(() => {
-      valueSetter.call(search, '食品店の顧客調査');
-      search.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(performance.now() - searchStartedAt).toBeLessThan(100);
-    const result = container.querySelector('.local-graph__node-result');
-    expect(result?.tagName).toBe('BUTTON');
-    result.focus();
-    expect(document.activeElement).toBe(result);
-    graphHarness.props.graphData.nodes[419].x = 120;
-    graphHarness.props.graphData.nodes[419].y = -45;
-    act(() => result.click());
-    expect(graphHarness.graph.centerAt).toHaveBeenCalledWith(120, -45, 450);
-    expect(graphHarness.graph.zoom).toHaveBeenLastCalledWith(1.2, 450);
+    expect(container.querySelector('input[type="search"]')).toBeNull();
+    expect(container.querySelector('[aria-label="意味関係"]')).toBeNull();
+    act(() => graphHarness.props.onNodeClick(graphHarness.props.graphData.nodes[419]));
     expect(container.querySelector('.local-graph__selected')?.textContent).toContain('食品店の顧客調査');
     const incidentLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-419' || link.target === 'node-419');
     const unrelatedLink = graphHarness.props.graphData.links.find((link) => link.source === 'node-0' && link.target === 'node-23');
@@ -276,40 +262,32 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(graphHarness.graph.d3Force).not.toHaveBeenCalled();
   });
 
-  it('skips the initial fit after an actual pan', async () => {
-    const client = {
-      getGraph: vi.fn().mockResolvedValue({
-        status: 'ready', truncated: false, nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案' }], edges: [],
-      }),
-      getFacetRegion: vi.fn(),
-    };
+  it('fits only the settled initial layout, then preserves user zoom and dragged positions', async () => {
+    const client = { getGraph: vi.fn().mockResolvedValue({
+      status: 'ready', nodes: [{ id: 'a', kind: 'idea', label: '案' }, { id: 'b', kind: 'asset', label: '経験' }], edges: [],
+    }) };
     const container = await mountGraphSurface(client);
-
-    const canvas = container.querySelector('.local-graph__canvas');
-    await act(async () => {
-      canvas.dispatchEvent(pointerEvent('pointerdown', 20, 20));
-      canvas.dispatchEvent(pointerEvent('pointermove', 26, 22));
-      canvas.dispatchEvent(pointerEvent('pointerup', 26, 22));
-      await Promise.resolve();
-      expect(graphHarness.props.onEngineStop).toBeUndefined();
-    });
-    expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
-  });
-
-  it('skips the initial fit after a wheel interaction', async () => {
-    const client = {
-      getGraph: vi.fn().mockResolvedValue({
-        status: 'ready', truncated: false, nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案' }], edges: [],
-      }),
-      getFacetRegion: vi.fn(),
-    };
-    const container = await mountGraphSurface(client);
-    const canvas = container.querySelector('.local-graph__canvas');
+    expect(graphHarness.props.cooldownTicks).toBe(0);
+    expect(container.querySelector('.mock-force-graph').parentElement.style.visibility).toBe('hidden');
+    act(() => graphHarness.props.onEngineStop());
+    expect(graphHarness.graph.centerAt).not.toHaveBeenCalled();
+    Object.assign(graphHarness.props.graphData.nodes[0], { x: -150, y: -150 });
+    Object.assign(graphHarness.props.graphData.nodes[1], { x: 150, y: 150 });
+    act(() => graphHarness.props.onEngineStop());
+    expect(graphHarness.graph.centerAt).toHaveBeenCalledExactlyOnceWith(0, 0, 0);
+    expect(graphHarness.graph.zoom.mock.calls.at(-1)[0]).toBeGreaterThan(0.9);
+    expect(container.querySelector('.mock-force-graph').parentElement.style.visibility).toBe('visible');
+    graphHarness.graph.zoom(2.5);
+    graphHarness.graph.zoom.mockClear();
+    graphHarness.graph.centerAt.mockClear();
+    graphHarness.props.graphData.nodes[0].x = 99;
     act(() => {
-      canvas.dispatchEvent(new Event('wheel', { bubbles: true }));
-      expect(graphHarness.props.onEngineStop).toBeUndefined();
+      graphHarness.props.onNodeClick(graphHarness.props.graphData.nodes[0]);
+      graphHarness.props.onEngineStop();
     });
-    expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
+    expect(graphHarness.props.graphData.nodes[0].x).toBe(99);
+    expect(graphHarness.graph.zoom).not.toHaveBeenCalled();
+    expect(graphHarness.graph.centerAt).not.toHaveBeenCalled();
   });
 
   it('keeps the existing graph data and exposes no Facet controls when no Facets exist', async () => {
@@ -438,7 +416,7 @@ describe('LocalGraphSurface Facet exploration', () => {
       .toContain('店舗の小規模実験 → 利用する → 顧客ヒアリング記録');
     expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).not.toContain('meaning-1');
     expect(container.querySelector('[aria-label="意味関係と根拠"]')?.textContent).not.toContain('evidence-shareable-1');
-    const relationButtons = container.querySelectorAll('[aria-label="意味関係"] button');
+    const relationButtons = graphHarness.props.graphData.links.map(edge => ({ click: () => graphHarness.props.onLinkClick(edge) }));
     act(() => relationButtons[0].click());
     expect(container.textContent).toContain('推測');
     expect(container.textContent).toContain('82%');
@@ -501,7 +479,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     mounted.push({ root, container });
     await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
     await flushEffects();
-    const relationButtons = container.querySelectorAll('[aria-label="意味関係"] button');
+    const relationButtons = graphHarness.props.graphData.links.map(edge => ({ click: () => graphHarness.props.onLinkClick(edge) }));
     act(() => relationButtons[0].click());
     await flushEffects();
     act(() => container.querySelector('[aria-label="意味関係と根拠"] button').click());
