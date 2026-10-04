@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
-const skill = readFileSync(fileURLToPath(new URL('../../plugins/dots/skills/founder-graph-capture/SKILL.md', import.meta.url)), 'utf8');
+const skill = readFileSync(fileURLToPath(new URL('../../plugins/nebula/skills/founder-graph-capture/SKILL.md', import.meta.url)), 'utf8');
 
 function expectInOrder(...phrases) {
   let cursor = -1;
