@@ -6,7 +6,7 @@
       "id": "rounded_ivory_theme", "title": "丸いロゴ文字とアイボリーの共通意匠", "scope": "main-453-live-desktop-1280",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "ホーム・アセット・グラフ・サービス管理と編集画面で共通意匠を確認。7星ロゴ、星空、状態色、操作と保存データは維持。",
-      "evidence": [{"recorded_at": "2026-10-04T14:19:00Z", "scope": "main-453-live-desktop-1280", "result": "passed", "reference": "PR #453 main 0bb7d21。frontendと文字コントラスト検査、build、必須CI成功。本番PC1280×720の横断監査とローカル配信フォントの読込、3サービス稼働、main再build確認。"}]
+      "evidence": [{"recorded_at": "2026-10-04T14:19:00Z", "scope": "main-453-live-desktop-1280", "result": "passed", "reference": "PR #453 main 0bb7d2181b7b。frontendと文字コントラスト検査、build、必須CI成功。本番PC1280×720の横断監査とローカル配信フォントの読込、3サービス稼働、main再build確認。"}]
     },
     {
       "id": "approved_nebula_logo", "title": "採用された7つの星の正式ロゴ", "scope": "approved-logo-03-left",
