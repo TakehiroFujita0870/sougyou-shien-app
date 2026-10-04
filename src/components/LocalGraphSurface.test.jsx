@@ -13,6 +13,7 @@ const graphHarness = vi.hoisted(() => {
     ready: new Promise((resolve) => { resolveImport = resolve; }),
     release: () => resolveImport(),
     props: null,
+    dataBeforeForces: false,
     graph: {
       zoomToFit: vi.fn(),
       centerAt: vi.fn(),
@@ -21,7 +22,10 @@ const graphHarness = vi.hoisted(() => {
         zoomLevel = scale;
         return zoomLevel;
       }),
-      d3Force: vi.fn(() => ({ strength: vi.fn(), distance: vi.fn() })),
+      d3Force: vi.fn(() => {
+        const force = { strength: vi.fn(() => force), distance: vi.fn(() => force), distanceMax: vi.fn(() => force) };
+        return force;
+      }),
       d3ReheatSimulation: vi.fn(),
     },
     resetZoom: () => { zoomLevel = 0.2; },
@@ -34,8 +38,11 @@ vi.mock('react-force-graph-2d', async () => {
   await graphHarness.ready;
   const React = await import('react');
   const MockForceGraph2D = React.forwardRef((props, ref) => {
+    if (props.graphData.nodes.length && !graphHarness.graph.d3Force.mock.calls.length && !graphHarness.props?.graphData.nodes.length) {
+      graphHarness.dataBeforeForces = true;
+    }
     graphHarness.props = props;
-    React.useImperativeHandle(ref, () => graphHarness.graph);
+    React.useImperativeHandle(ref, () => graphHarness.graph, []);
     React.useEffect(() => {
       const instance = { destroyed: false };
       graphHarness.instances.push(instance);
@@ -54,6 +61,7 @@ afterEach(() => {
   for (const item of mounted) act(() => { item.root.unmount(); item.container.remove(); });
   mounted = [];
   graphHarness.props = null;
+  graphHarness.dataBeforeForces = false;
   graphHarness.graph.zoomToFit.mockClear();
   graphHarness.graph.centerAt.mockClear();
   graphHarness.graph.zoom.mockClear();
@@ -160,11 +168,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     const originalNodeRenderer = graphHarness.props.nodeCanvasObject;
     act(() => graphHarness.props.onNodeHover(nodes[5]));
     expect(graphHarness.props.nodeCanvasObject).not.toBe(originalNodeRenderer);
-    act(() => graphHarness.props.onEngineStop());
-    expect(graphHarness.graph.zoomToFit).toHaveBeenCalledOnce();
-    expect(graphHarness.graph.zoomToFit).toHaveBeenCalledWith(0, 44);
-    expect(graphHarness.graph.zoom).toHaveBeenNthCalledWith(1);
-    expect(graphHarness.graph.zoom).toHaveBeenNthCalledWith(2, 0.7, 450);
+    expect(graphHarness.props.onEngineStop).toBeUndefined();
+    expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
+    expect(graphHarness.graph.d3ReheatSimulation).not.toHaveBeenCalled();
     expect(graphHarness.props.graphData.nodes.slice(0, 3).map(({ abstractionDepth }) => abstractionDepth)).toEqual([0, 1, 2]);
     expect(graphHarness.props.graphData.nodes[8].abstractionDepth).toBeNull();
     expect(container.textContent).not.toContain('深度');
@@ -201,7 +207,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(resizeObserver.disconnect).toHaveBeenCalledOnce();
   });
 
-  it('keeps the initial fit after startup zoom callbacks, a click, and sub-threshold motion', async () => {
+  it('initializes compact forces before data and never resets the camera on selection', async () => {
     const client = {
       getGraph: vi.fn().mockResolvedValue({
         status: 'ready', truncated: false, nodes: [{ id: 'idea-1', kind: 'idea', label: '事業案' }], edges: [],
@@ -215,18 +221,27 @@ describe('LocalGraphSurface Facet exploration', () => {
     await act(async () => root.render(<LocalGraphSurface client={client} onOpenServices={() => {}} />));
     await flushEffects();
 
-    act(() => graphHarness.props.onZoom({ k: 0.5, x: 0, y: 0 }));
+    expect(graphHarness.graph.d3Force.mock.results[0].value.strength).toHaveBeenCalledWith(-18);
+    expect(graphHarness.dataBeforeForces).toBe(false);
+    expect(graphHarness.graph.d3Force.mock.results[0].value.distanceMax).toHaveBeenCalledWith(160);
+    expect(graphHarness.graph.d3Force.mock.results[1].value.distance).toHaveBeenCalledWith(30);
+    expect(graphHarness.graph.zoom).toHaveBeenCalledExactlyOnceWith(0.9, 0);
+    const originalData = graphHarness.props.graphData;
+    graphHarness.graph.zoom.mockClear();
+    graphHarness.graph.d3Force.mockClear();
     const canvas = container.querySelector('.local-graph__canvas');
     act(() => {
       canvas.dispatchEvent(pointerEvent('pointerdown', 20, 20));
       canvas.dispatchEvent(pointerEvent('pointerup', 20, 20));
       canvas.dispatchEvent(pointerEvent('pointerdown', 20, 20));
       canvas.dispatchEvent(pointerEvent('pointermove', 22, 20));
-      graphHarness.props.onZoom({ k: 1, x: 2, y: 0 });
       canvas.dispatchEvent(pointerEvent('pointerup', 20, 20));
-      graphHarness.props.onEngineStop();
+      graphHarness.props.onNodeClick(originalData.nodes[0]);
     });
-    expect(graphHarness.graph.zoomToFit).toHaveBeenCalledOnce();
+    expect(graphHarness.props.graphData).toBe(originalData);
+    expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
+    expect(graphHarness.graph.zoom).not.toHaveBeenCalled();
+    expect(graphHarness.graph.d3Force).not.toHaveBeenCalled();
   });
 
   it('skips the initial fit after an actual pan', async () => {
@@ -242,10 +257,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     await act(async () => {
       canvas.dispatchEvent(pointerEvent('pointerdown', 20, 20));
       canvas.dispatchEvent(pointerEvent('pointermove', 26, 22));
-      canvas.addEventListener('pointerup', () => graphHarness.props.onZoom({ k: 1, x: 6, y: 2 }), { once: true });
       canvas.dispatchEvent(pointerEvent('pointerup', 26, 22));
       await Promise.resolve();
-      graphHarness.props.onEngineStop();
+      expect(graphHarness.props.onEngineStop).toBeUndefined();
     });
     expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
   });
@@ -261,7 +275,7 @@ describe('LocalGraphSurface Facet exploration', () => {
     const canvas = container.querySelector('.local-graph__canvas');
     act(() => {
       canvas.dispatchEvent(new Event('wheel', { bubbles: true }));
-      graphHarness.props.onEngineStop();
+      expect(graphHarness.props.onEngineStop).toBeUndefined();
     });
     expect(graphHarness.graph.zoomToFit).not.toHaveBeenCalled();
   });
