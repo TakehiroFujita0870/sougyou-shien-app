@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-10-04T03:18:20Z",
-  "baseline_main": "c59484108823",
+  "updated_at": "2026-10-04T05:10:32Z",
+  "baseline_main": "c05c20c71ad1",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -87,10 +87,10 @@
       "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-428-live-all-idea-presentation-1280", "result": "passed", "reference": "PR #428の必須CI成功。通常DotsのPC 1280×720で現存する全アイデアを横断確認し、共通章見出し、状態、出典、操作位置と画面遷移を確認。"}]
     },
     {
-      "id": "starfield_graph_ui", "title": "平面の星空グラフ", "scope": "main-426-427-429-430-live-starfield-1280",
+      "id": "starfield_graph_ui", "title": "平面の星空グラフ", "scope": "main-432-live-compact-stable-starfield-1280",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
-      "note": "分類の確定した階層を星の大きさで示し、検索、選択、意味関係と根拠、出典の安全な新規タブを維持。旧3D表示は撤去済み。",
-      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-426-427-429-430-live-starfield-1280", "result": "passed", "reference": "PR #426・#427・#429・#430の必須CI成功、独立レビュー。500点の合成画面と検索・根拠を確認。通常DotsのPC 1280×720で検索から星への視点移動、補助欄の可読性、ホーム・サービス管理への遷移を確認。"}]
+      "note": "点の間隔を詰め、描画前に力を設定する。描画後の再加熱と配置完了時の自動倍率変更を撤去し、検索・手動操作・根拠・安全な出典リンクを維持。",
+      "evidence": [{"recorded_at": "2026-10-04T03:18:20Z", "scope": "main-426-427-429-430-live-starfield-1280", "result": "passed", "reference": "PR #426・#427・#429・#430の必須CI成功、独立レビュー。500点の合成画面と検索・根拠を確認。通常DotsのPC 1280×720で検索から星への視点移動、補助欄の可読性、ホーム・サービス管理への遷移を確認。"}, {"recorded_at": "2026-10-04T05:10:32Z", "scope": "main-432-live-compact-stable-starfield-1280", "result": "passed", "reference": "PR #432、head 2b6c530045b2の全frontend検査・build・必須CI成功と独立レビュー。main c05c20c71ad1を稼働反映し、通常DotsのPC 1280×720で密な配置、配置後の倍率維持、検索から点への移動、ホーム・サービス管理への遷移を確認。ブラウザーエラーなし。保存内容とDBは変更なし。"}]
     }
   ]
 }
