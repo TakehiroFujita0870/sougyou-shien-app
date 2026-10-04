@@ -241,6 +241,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     const shadowBlurs = [];
     Object.defineProperty(drawContext, 'fillStyle', { set: (value) => fillStyles.push(value) });
     Object.defineProperty(drawContext, 'shadowBlur', { set: (value) => shadowBlurs.push(value) });
+    act(() => graphHarness.props.nodeCanvasObject({ ...originalData.nodes[0], x: undefined, y: NaN }, drawContext, 0.9));
+    expect(drawContext.createRadialGradient).not.toHaveBeenCalled();
+    expect(drawContext.save).not.toHaveBeenCalled();
     originalData.nodes[0].x = 100;
     originalData.nodes[0].y = 120;
     act(() => {
