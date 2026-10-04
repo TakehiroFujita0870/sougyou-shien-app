@@ -234,6 +234,7 @@ describe('LocalGraphSurface Facet exploration', () => {
       save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
       closePath: vi.fn(), fill: vi.fn(), arc: vi.fn(), stroke: vi.fn(),
       measureText: vi.fn((label) => ({ width: Array.from(label).length * 8 })),
+      createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
       fillText: vi.fn(),
     };
     const fillStyles = [];
@@ -251,6 +252,9 @@ describe('LocalGraphSurface Facet exploration', () => {
     expect(drawContext.fillText.mock.calls[0][1]).toBeCloseTo(100 + 5 + 5 / 0.9);
     expect(fillStyles).toContain('#fff');
     expect(shadowBlurs.some((blur) => blur > 0)).toBe(true);
+    expect(drawContext.createRadialGradient).toHaveBeenCalledOnce();
+    expect(drawContext.lineTo).not.toHaveBeenCalled();
+    expect(drawContext.arc).toHaveBeenCalledWith(100, 120, 0.8, 0, Math.PI * 2);
     graphHarness.graph.zoom.mockClear();
     graphHarness.graph.d3Force.mockClear();
     const canvas = container.querySelector('.local-graph__canvas');
