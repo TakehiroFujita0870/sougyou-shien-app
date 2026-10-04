@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { semanticGraphData, regionGraphData } from './localGraphData.js';
-import { COLORS, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
+import { COLORS, graphLabelX, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
 
 it('keeps semantic assertions and hides internal research and revision records without changing the input', () => {
   const graph = { nodes: [{ id: 'idea', kind: 'idea' }, { id: 'asset', kind: 'asset' }, { id: 'history', kind: 'entity_revision' },
@@ -80,6 +80,15 @@ it('uses distinct pastel stellar colors for main kinds, without green or violet 
     expect(Math.min(red, green, blue)).toBeGreaterThanOrEqual(160);
     expect((red >= green && green >= blue) || (blue >= green && green >= red)).toBe(true);
   }
+});
+
+it('places right-edge names inward and checks collisions at the same inward position', () => {
+  const node = { id: 'edge', kind: 'idea', label: '右端のアイデア', x: 90, y: 0 };
+  const measure = () => 80;
+  expect(graphLabelX(node, node.label, 1, measure, 100)).toBeLessThan(node.x - 80);
+  expect(visibleGraphLabelIds([node], 1, new Set(), '', measure, 100).has(node.id)).toBe(true);
+  const obstruction = { id: 'other', kind: 'asset', label: '別の点', x: 20, y: 0 };
+  expect(visibleGraphLabelIds([node, obstruction], 1, new Set(), '', measure, 100).has(node.id)).toBe(false);
 });
 
 it('shows idea and Facet labels at rest, avoids collisions deterministically, and reveals other labels on zoom', () => {

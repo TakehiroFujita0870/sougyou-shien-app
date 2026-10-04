@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
+import { COLORS, graphLabelX, nodeKindLabel, relationStatusLabel, shortLabel, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
 import { fitWideGraph } from './localGraphLayout.js';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
@@ -62,6 +62,7 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
   const preparedGraph = useRef(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const visibleLabelIds = useRef(new Set());
+  const labelRightEdge = useRef(Infinity);
   const [provenanceRequest, setProvenanceRequest] = useState({ assertionId: '', attempt: 0 });
   const [provenance, setProvenance] = useState(null);
   const [renderError, setRenderError] = useState(false);
@@ -182,9 +183,10 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
     const scale = Math.max(globalScale, 0.1);
     context.save();
     context.font = `500 ${12 / scale}px system-ui, sans-serif`;
+    labelRightEdge.current = graphRef.current?.screen2GraphCoords?.((dimensions.width || 800) - 12, 0)?.x ?? Infinity;
     visibleLabelIds.current = visibleGraphLabelIds(
       graphData.nodes, scale, selectedNodeIds, hoveredId,
-      (label) => context.measureText(label).width,
+      (label) => context.measureText(label).width, labelRightEdge.current,
     );
     context.restore();
   };
@@ -217,7 +219,8 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
       context.fillStyle = '#f4f7ff';
       context.shadowColor = '#02050a';
       context.shadowBlur = 4 / scale;
-      context.fillText(shortLabel(node.label), node.x + radius + 5 / scale, node.y);
+      const label = shortLabel(node.label);
+      context.fillText(label, graphLabelX(node, label, scale, text => context.measureText(text).width, labelRightEdge.current), node.y);
     }
     context.restore();
   };
