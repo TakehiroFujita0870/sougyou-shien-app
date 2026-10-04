@@ -1,7 +1,13 @@
 {
-  "updated_at": "2026-10-04T14:19:00Z",
+  "updated_at": "2026-10-04T14:41:00Z",
   "baseline_main": "159a2ac1235d",
   "items": [
+    {
+      "id": "criterion_graph_stars", "title": "判断基準の大きな星と根拠付き関係", "scope": "main-455-live-desktop-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "保存済み分類で判断基準を大きく表示。レポートの章に基づく関係を提案として追加。非共有を維持し、関連を裏付けられない孤立点は削除も強制接続もしない。実画面の星クリックは今回の自動操作では未確認。",
+      "evidence": [{"recorded_at": "2026-10-04T14:41:00Z", "scope": "main-455-live-desktop-1280", "result": "passed", "reference": "PR #455 main 60902f8515d4。分類・半径・ラベル検査、frontend148件・backend1423件・build・CI成功。通常保存先の追加関係13件を再取得、再実行対象0件、75点不変、孤立点27から22、判断基準8点。3サービス稼働と本番1280×720の星の大きさ・配置確認。"}]
+    },
     {
       "id": "rounded_ivory_theme", "title": "丸いロゴ文字とアイボリーの共通意匠", "scope": "main-453-live-desktop-1280",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
