@@ -196,7 +196,7 @@ it('distinguishes stopped, empty, and failed reads and lets the user retry', asy
   ]) {
     const client = { getDeletedRecords: vi.fn(async () => result) };
     const view = await renderDeletedRecords(client);
-    expect(view.textContent).toContain(result.status === 'stopped' ? 'Dots.が停止中' : '削除済みの記録はありません');
+    expect(view.textContent).toContain(result.status === 'stopped' ? 'Nebulaが停止中' : '削除済みの記録はありません');
     await act(async () => { mounted.root.unmount(); mounted.container.remove(); });
     mounted = null;
   }

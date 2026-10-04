@@ -75,13 +75,13 @@ describe('LocalControlDashboard', () => {
     const client = { getSnapshot: vi.fn(async () => ({ state: currentState, counts: { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 }, latest: [] })), stop: vi.fn(async () => { currentState = 'stopped'; }) };
     const view = await renderDashboard({ client });
 
-    await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === 'Dots.を停止').click());
+    await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === 'Nebulaを停止').click());
     expect(client.stop).not.toHaveBeenCalled();
     expect(view.querySelector('[role="alertdialog"]')?.textContent).toContain('操作盤と保存データは残ります');
     await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === '停止する').click());
 
     expect(client.stop).toHaveBeenCalledOnce();
-    expect(view.querySelector('[role="status"]')?.textContent).toContain('Dots.を停止しました');
+    expect(view.querySelector('[role="status"]')?.textContent).toContain('Nebulaを停止しました');
     expect(view.querySelector('[data-dashboard-state="stopped"]')?.textContent).toContain('停止中');
   });
 
@@ -91,7 +91,7 @@ describe('LocalControlDashboard', () => {
     const view = await renderDashboard({ client });
     expect(view.textContent).toContain('保存先と接続が稼働すると、件数と最近の記録を表示できます');
     expect(view.querySelector('[aria-labelledby="counts-heading"]')).toBeNull();
-    await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === 'Dots.を起動').click());
+    await act(async () => [...view.querySelectorAll('button')].find((button) => button.textContent === 'Nebulaを起動').click());
 
     expect(view.querySelector('[role="alertdialog"]')?.textContent).toContain('保存データは削除されません');
     expect(client.start).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe('LocalControlDashboard', () => {
 
   it('moves keyboard focus into confirmation and restores it after Escape', async () => {
     const view = await renderDashboard({ client: { getSnapshot: async () => ({ state: 'running', counts: { Idea: 0, Person: 0, Asset: 0, ReportVersion: 0 }, latest: [] }) } });
-    const trigger = [...view.querySelectorAll('button')].find((button) => button.textContent === 'Dots.を停止');
+    const trigger = [...view.querySelectorAll('button')].find((button) => button.textContent === 'Nebulaを停止');
     await act(async () => trigger.click());
     expect(document.activeElement.textContent).toBe('停止する');
 

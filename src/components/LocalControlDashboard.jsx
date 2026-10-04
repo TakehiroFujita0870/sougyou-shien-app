@@ -15,7 +15,7 @@ const GRAPH_PROCESSING_LABELS = {
   superseded: '新しい版に置換済み',
 };
 const STATUS_COPY = {
-  loading: { label: '状態を確認中', detail: 'Dots.の稼働状態を読み込んでいます。' },
+  loading: { label: '状態を確認中', detail: 'Nebulaの稼働状態を読み込んでいます。' },
   running: { label: '稼働中', detail: '保存先と接続が利用できます。' },
   stopped: { label: '停止中', detail: '停止中はChatGPTから保存内容を検索できません。' },
   degraded: { label: '一部利用できません', detail: '下の状態を確認してください。起動操作で再確認できます。' },
@@ -105,7 +105,7 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
       if (typeof client?.[action] !== 'function') throw new Error('Action unavailable');
       await client[action]();
       setConfirmation(null);
-      setNotice(action === 'stop' ? 'Dots.を停止しました。' : 'Dots.を起動しました。');
+      setNotice(action === 'stop' ? 'Nebulaを停止しました。' : 'Nebulaを起動しました。');
       await refresh();
     } catch {
       setNotice('操作を完了できませんでした。状態を確認して、もう一度お試しください。');
@@ -133,7 +133,7 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
             </p>
           </div>
           <button ref={actionButtonRef} type="button" disabled={pending || state === 'loading' || state === 'error'} onClick={() => setConfirmation(action)} className={`min-h-11 rounded-xl border border-[var(--color-border-subtle)] px-4 py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:cursor-not-allowed disabled:opacity-50 ${action === 'stop' ? 'local-control__stop-button' : ''}`}>
-            {pending ? '処理中…' : action === 'stop' ? 'Dots.を停止' : 'Dots.を起動'}
+            {pending ? '処理中…' : action === 'stop' ? 'Nebulaを停止' : 'Nebulaを起動'}
           </button>
         </section>
         {snapshot?.services && <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="サービスごとの状態">
@@ -195,7 +195,7 @@ export function LocalControlDashboard({ client, onOpenGraph, serviceOnly = false
 
       {confirmation && <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !pending) setConfirmation(null); }}>
         <section role="alertdialog" aria-modal="true" aria-labelledby="control-confirm-heading" aria-describedby="control-confirm-description" className="grid w-full max-w-md gap-4 rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-5 shadow-2xl">
-          <h2 id="control-confirm-heading" className="text-lg font-semibold">{confirmation === 'stop' ? 'Dots.を停止しますか？' : 'Dots.を起動しますか？'}</h2>
+          <h2 id="control-confirm-heading" className="text-lg font-semibold">{confirmation === 'stop' ? 'Nebulaを停止しますか？' : 'Nebulaを起動しますか？'}</h2>
           <p id="control-confirm-description" className="text-sm leading-6 text-[var(--color-text-muted)]">{confirmation === 'stop' ? 'ChatGPT接続、通常API、保存先の順に停止します。操作盤と保存データは残ります。停止中はChatGPTから検索できません。' : '既存の保存先を起動し、準備できた後に通常APIと承認済み接続を起動します。保存データは削除されません。'}</p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button type="button" disabled={pending} onClick={() => setConfirmation(null)} className="min-h-11 rounded-xl border border-[var(--color-border-subtle)] px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)] disabled:opacity-50">キャンセル</button>

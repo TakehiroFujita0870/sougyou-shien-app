@@ -637,7 +637,7 @@ def test_backend_resolution_prefers_explicit_memory_for_isolated_tests(monkeypat
     monkeypatch.setenv("DOTS_GRAPH_BACKEND", "memory")
 
     assert resolve_graph_backend() == "memory"
-    assert create_configured_app().title == "Dots. API"
+    assert create_configured_app().title == "Nebula API"
 
 
 def test_backend_resolution_uses_configured_neo4j_without_backend_flag(monkeypatch) -> None:
@@ -726,7 +726,7 @@ def test_configured_app_wires_neo4j_when_selected(monkeypatch) -> None:
 
     app = create_configured_app()
 
-    assert app.title == "Dots. API"
+    assert app.title == "Nebula API"
     assert session.calls == []
 
 
@@ -834,7 +834,7 @@ def test_neo4j_app_factory_wires_matching_ports_and_processor_without_connecting
 
     app = create_neo4j_app(driver, "owner-1")
 
-    assert app.title == "Dots. API"
+    assert app.title == "Nebula API"
     processor = captured["surface"].candidate_processor
     assert processor.jobs.driver is driver and processor.jobs.owner_id == "owner-1"
     assert processor.writes.owner_id == "owner-1"

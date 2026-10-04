@@ -338,7 +338,7 @@ export function LocalGraphCanvas({ client, nodes, edges }) {
       {provenance?.assertion_id === selected.assertionId && provenance.status === 'loading'
         && <small role="status">根拠を確認中です。</small>}
       {provenance?.assertion_id === selected.assertionId && provenance.status === 'stopped'
-        && <small role="status">Dots.は停止中のため根拠を確認できません。</small>}
+        && <small role="status">Nebulaは停止中のため根拠を確認できません。</small>}
       {provenance?.assertion_id === selected.assertionId && provenance.status === 'failed'
         && <small role="alert">根拠を確認できませんでした。関係が更新された可能性があります。</small>}
       {provenance?.assertion_id === selected.assertionId && provenance.status === 'ready' && <section aria-label="確認済みの根拠">

@@ -180,7 +180,7 @@ def create_local_control_app(
             raise
         raise ValueError("bind_host must be a loopback IP address") from error
 
-    app = FastAPI(title="Dots. Local Control", docs_url=None, redoc_url=None)
+    app = FastAPI(title="Nebula Local Control", docs_url=None, redoc_url=None)
 
     @app.middleware("http")
     async def prevent_sensitive_response_caching(request: Request, call_next):
