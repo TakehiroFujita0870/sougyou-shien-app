@@ -37,6 +37,7 @@ export function semanticGraphData(graph) {
     edges.push({
       source: assertion.source_id,
       target: assertion.target_id,
+      predicate: assertion.predicate,
       label: displayRelation(assertion.predicate),
       assertionId: assertion.id,
       status: assertion.status,
@@ -46,7 +47,43 @@ export function semanticGraphData(graph) {
       basedOnBriefSectionIndex: assertion.based_on_brief_section_index,
     });
   }
-  return { nodes, edges };
+  const facetIds = new Set(nodes.filter((node) => node.kind === 'facet').map((node) => node.id));
+  const facetParents = new Map([...facetIds].map((id) => [id, []]));
+  const facetChildren = new Map([...facetIds].map((id) => [id, []]));
+  for (const edge of edges) {
+    if (edge.predicate !== 'CLASSIFIED_AS' || edge.status !== 'confirmed'
+      || !facetIds.has(edge.source) || !facetIds.has(edge.target)) continue;
+    facetParents.get(edge.target).push(edge.source);
+    facetChildren.get(edge.source).push(edge.target);
+  }
+  const resolvedFacetDepths = new Map();
+  const resolvingFacetIds = new Set();
+  const resolveFacetDepth = (id) => {
+    if (resolvedFacetDepths.has(id)) return resolvedFacetDepths.get(id);
+    if (resolvingFacetIds.has(id)) return null;
+    resolvingFacetIds.add(id);
+    const parents = facetParents.get(id);
+    let depth = null;
+    if (parents.length === 0) {
+      if (facetChildren.get(id).length > 0) depth = 0;
+    } else {
+      const parentDepths = parents.map(resolveFacetDepth);
+      if (parentDepths.every(Number.isInteger)) {
+        const candidates = new Set(parentDepths.map((parentDepth) => parentDepth + 1));
+        if (candidates.size === 1) depth = candidates.values().next().value;
+      }
+    }
+    resolvingFacetIds.delete(id);
+    resolvedFacetDepths.set(id, depth);
+    return depth;
+  };
+  return {
+    nodes: nodes.map((node) => ({
+      ...node,
+      abstractionDepth: node.kind === 'facet' ? resolveFacetDepth(node.id) : null,
+    })),
+    edges,
+  };
 }
 
 

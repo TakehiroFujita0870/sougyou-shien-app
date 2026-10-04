@@ -8,7 +8,6 @@ export { semanticGraphData } from './localGraphData.js';
 
 export function LocalGraphSurface({ client, onOpenServices }) {
   const [graph, setGraph] = useState({ status: 'loading', nodes: [], edges: [], truncated: false });
-  const [depth, setDepth] = useState(0);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
@@ -25,7 +24,7 @@ export function LocalGraphSurface({ client, onOpenServices }) {
     {graph.status === 'stopped' && <p role="status">Dots.は停止中です。<button type="button" onClick={onOpenServices}>サービス管理を開く</button></p>}
     {graph.status === 'empty' && <p role="status">まだ表示できる記録はありません。</p>}
     {graph.status === 'ready' && <>
-      <GraphCanvas client={client} nodes={semanticGraph.nodes} edges={semanticGraph.edges} depth={depth} onDepthChange={setDepth} />
+      <GraphCanvas client={client} nodes={semanticGraph.nodes} edges={semanticGraph.edges} />
       {graph.truncated && <p className="local-graph__limit">表示件数の上限に達しました。全体ではなく一部を表示しています。</p>}
     </>}
   </main>;

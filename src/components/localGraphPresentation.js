@@ -29,3 +29,8 @@ export function shortLabel(label) {
   const characters = Array.from(label);
   return characters.length > 16 ? `${characters.slice(0, 16).join('')}…` : label;
 }
+
+export function starRadius(node) {
+  if (node.kind !== 'facet' || !Number.isInteger(node.abstractionDepth) || node.abstractionDepth < 0) return 5;
+  return Math.max(5.5, 13 / Math.sqrt(1 + node.abstractionDepth * 0.8));
+}
