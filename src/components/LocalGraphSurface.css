@@ -28,4 +28,5 @@
 .local-graph__evidence article button + button { border-top: 1px solid #344760; border-radius: 0; }
 .local-graph__evidence article button:hover { border-radius: 5px; color: #f1f6ff; background: #263c5c; }
 .local-graph__evidence article button:focus-visible, .local-graph__node-result:focus-visible, .local-graph__selected button:focus-visible { outline: 2px solid #9bc7ff; outline-offset: 2px; }
-.local-graph__selected button:focus-visible { outline: 2px solid #9bc7ff; outline-offset: 2px; }
+.local-graph__selected button { color: #b8d3ff; text-decoration: underline; text-underline-offset: 2px; }
+.local-graph__selected button:hover { color: #f1f6ff; }
