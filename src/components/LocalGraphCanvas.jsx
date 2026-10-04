@@ -246,7 +246,7 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         nodeColor={(node) => COLORS[node.kind] ?? '#c4d4ed'}
         nodeVal={(node) => starRadius(node) ** 2}
         nodeRelSize={1}
-        nodeCanvasObjectMode="replace"
+        nodeCanvasObjectMode={() => 'replace'}
         nodeCanvasObject={renderNode}
         nodePointerAreaPaint={paintPointerArea}
         onRenderFramePre={prepareFrame}
