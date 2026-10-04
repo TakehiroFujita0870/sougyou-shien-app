@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-10-04T08:14:40Z",
-  "baseline_main": "efb3fbaecefa",
+  "updated_at": "2026-10-04T10:09:13Z",
+  "baseline_main": "4d29c0e4f786",
   "items": [
     {
       "id": "graph_navigation", "title": "グラフから離れると画面が白くなる故障", "scope": "live-graph-navigation-rp02",
@@ -97,6 +97,12 @@
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
       "note": "押下位置を直接照合し、5px以内の手ぶれは一回選択、微小な星・視点移動だけ復元。名称は画面内の8方向から空き位置を使い、有効な位置を維持。実ドラッグは選択を変えない。描画と名称の操作範囲を共有し、出典は安全な新タブを単発起動。保存内容とDBは変更していない。",
       "evidence": [{"recorded_at": "2026-10-04T08:14:40Z", "scope": "main-443-live-graph-picking-and-labels", "result": "passed", "reference": "PR #443、main efb3fbaecefa、frontend142件・build・必須CI・独立レビュー成功。利用中のPCタブで現場業務の生産性向上の2px手ぶれ選択と線強調、別の名称の一回選択、20pxドラッグによる非選択を確認。1280×720で空き位置の名称、BYAKU公式への単一新タブ、関係と根拠章、ホーム各タブ・サービス管理との遷移と全サービス稼働を確認。既定寸法に戻し、ブラウザーエラーなし。通常配信元は同一build・清潔なmain、HTTP200。"}]
+    },
+    {
+      "id": "shared_home_background", "title": "全アイデアの共通背景と表示幅", "scope": "main-445-live-stable-home-background-1280",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "共通の星空を画面に固定し、本文の長さやスクロールバーの有無で位置・大きさ・表示幅が変わらない。本文の縦スクロールと保存内容は変更なし。",
+      "evidence": [{"recorded_at": "2026-10-04T10:09:13Z", "scope": "main-445-live-stable-home-background-1280", "result": "passed", "reference": "PR #445、main 4d29c0e4f786。frontend143件・build・必須CI・独立レビュー成功。通常DotsのPC 1280×720で全アイデアの背景寸法・位置・本文幅が一致し、長文スクロールでも背景不変。ホーム各タブ・グラフの星選択・サービス管理への遷移、全サービス稼働とブラウザーエラーなしを確認。既定寸法へ戻し、通常配信元は清潔なmain、同一build、HTTP200。DB変更なし。"}]
     },
     {
       "id": "existing_graph_semantic_enrichment", "title": "既存案と経験の意味関係整理", "scope": "live-existing-brief-grounded-enrichment-20261004",
