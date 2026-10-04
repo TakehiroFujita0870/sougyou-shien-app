@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, nodeKindLabel, relationStatusLabel, shortLabel, starRadius, visibleGraphLabelIds } from './localGraphPresentation.js';
-import { LocalGraphNodeSearch } from './LocalGraphNodeSearch.jsx';
+import { fitWideGraph } from './localGraphLayout.js';
 import { safePublicCitationUrl } from '../runtime/publicCitationUrl.js';
 
 const INITIAL_ZOOM = 0.9;
-const SEARCH_FOCUS_ZOOM = 1.2;
 const EMPTY_GRAPH = { nodes: [], links: [] };
 
 function endpointId(endpoint) {
@@ -42,7 +41,7 @@ function drawStarlight(context, x, y, radius, color) {
   context.fill();
 }
 
-export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
+export function LocalGraphCanvas({ client, nodes, edges }) {
   const container = useRef(null);
   const graphRef = useRef(null);
   const [graphReady, setGraphReady] = useState(false);
@@ -60,6 +59,8 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   const [hoveredId, setHoveredId] = useState('');
   const [Graph2D, setGraph2D] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const preparedGraph = useRef(null);
+  const [layoutReady, setLayoutReady] = useState(false);
   const visibleLabelIds = useRef(new Set());
   const [provenanceRequest, setProvenanceRequest] = useState({ assertionId: '', attempt: 0 });
   const [provenance, setProvenance] = useState(null);
@@ -132,15 +133,17 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
     setSelected({ type: 'node', id: node.id, kind: node.kind, label: node.label });
   };
 
-  const focusNode = (node) => {
-    const graphNode = graphData.nodes.find((candidate) => candidate.id === node.id);
-    const graph = graphRef.current;
-    if (graph && Number.isFinite(graphNode?.x) && Number.isFinite(graphNode?.y)) {
-      graph.centerAt(graphNode.x, graphNode.y, 450);
-      const zoom = graph.zoom();
-      if (Number.isFinite(zoom) && zoom < SEARCH_FOCUS_ZOOM) graph.zoom(SEARCH_FOCUS_ZOOM, 450);
-    }
-    selectNode(node);
+  const prepareLayout = () => {
+    if (!graphReady || preparedGraph.current === graphData) return;
+    const layout = fitWideGraph(graphData.nodes, dimensions.width || 800, dimensions.height || 500);
+    if (!layout) return;
+    preparedGraph.current = graphData;
+    graphData.nodes.forEach((node, index) => {
+      Object.assign(node, layout.positions[index], { vx: 0, vy: 0 });
+    });
+    graphRef.current.centerAt(0, 0, 0);
+    graphRef.current.zoom(layout.zoom, 0);
+    setLayoutReady(true);
   };
 
   const clearSelection = () => {
@@ -232,7 +235,7 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
   };
   return <div className="local-graph__frame">
     <div ref={container} className="local-graph__canvas" role="img" aria-label={`平面の知識グラフ。${nodes.length}個の点と${edges.length}本のつながり。ドラッグで移動し、スクロールで拡大縮小できます。`}>
-      {Graph2D && <Graph2D
+      {Graph2D && <div style={{ visibility: layoutReady ? 'visible' : 'hidden' }}><Graph2D
         ref={attachGraph}
         graphData={graphReady ? graphData : EMPTY_GRAPH}
         width={dimensions.width || 800}
@@ -257,14 +260,14 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
         autoPauseRedraw
         d3VelocityDecay={0.42}
         warmupTicks={120}
-        cooldownTicks={100}
+        cooldownTicks={0}
+        onEngineStop={prepareLayout}
         onNodeClick={selectNode}
         onNodeHover={(node) => setHoveredId(node?.id ?? '')}
         onLinkClick={(link) => link.assertionId ? selectSemanticEdge(link) : clearSelection()}
         onBackgroundClick={clearSelection}
-      />}
+      /></div>}
     </div>
-    <LocalGraphNodeSearch nodes={nodes} onSelect={focusNode} />
     {renderError && <p role="alert">平面グラフを表示できませんでした。画面を再読み込みしてください。</p>}
     {selected?.type === 'node' && <aside className="local-graph__selected" aria-label="選択した記録">
       <span>{nodeKindLabel(selected.kind)}</span><strong>{selected.label}</strong>
@@ -300,21 +303,6 @@ export function LocalGraphCanvas({ client, nodes, edges, regionHits = [] }) {
           {evidencePolarityLabel(evidence.polarity)} · 確信度 {Math.round(evidence.confidence * 100)}% · {evidenceStatusLabel(evidence.status)}
         </small>) : <small>共有可能な根拠の詳細はありません。</small>}
       </section>}
-    </aside>}
-    {semanticEdges.length > 0 && <aside className="local-graph__evidence" aria-label="意味関係">
-      <article>{semanticEdges.slice(0, 8).map((edge) => <button key={edge.assertionId} type="button"
-        onClick={() => selectSemanticEdge(edge)}>
-        {labelsById.get(edge.source)} → {edge.label} → {labelsById.get(edge.target)}
-      </button>)}</article>
-    </aside>}
-    {regionHits.length > 0 && <aside className="local-graph__evidence" aria-label="分類領域の記録と根拠">
-      {regionHits.map((hit) => <article key={JSON.stringify([hit.id, hit.matched_facet_id])}>
-        <strong>{hit.title}</strong>
-        <span>{hit.classification_status === 'confirmed' ? '確定' : '推測'} · {hit.kind === 'idea' ? '案' : '資産'} · 深度 {hit.depth}</span>
-        <span>{hit.facet_path.map((item) => item.label).join(' → ')}</span>
-        {hit.taxonomy_status_path.length > 0 && <span>親子関係: {hit.taxonomy_status_path.map((status) => status === 'confirmed' ? '確定' : '推測').join(' · ')}</span>}
-        <small>根拠 {hit.evidence_ids.length}件</small>
-      </article>)}
     </aside>}
   </div>;
 }

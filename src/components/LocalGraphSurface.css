@@ -11,22 +11,6 @@
 .local-graph__selected-relations strong { color: #b9c8df; font-size: 11px; }
 .local-graph__selected-relations button { width: 100%; min-height: 32px; padding: 5px 4px; border: 0; border-radius: 5px; color: #d8e5f7; background: transparent; font: inherit; font-size: 12px; line-height: 1.45; text-align: left; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer; }
 .local-graph__selected-relations button:hover { color: #fff; background: #1a2b43; }
-.local-graph__node-search { position: absolute; z-index: 2; top: 12px; left: 12px; display: grid; gap: 5px; width: min(270px, calc(50% - 24px)); max-height: 42%; overflow: auto; padding: 9px; border: 1px solid #435974; border-radius: 10px; color: #c9d9f1; background: #101c2ddd; font-size: 12px; }
-.local-graph__node-search label { display: grid; gap: 5px; }
-.local-graph__node-search input { min-width: 0; padding: 7px 9px; border: 1px solid #536987; border-radius: 7px; color: #eef4ff; background: #17243a; }
-.local-graph__node-search p { margin: 0; color: #bdcce2; font-size: 11px; }
-.local-graph__node-results { display: grid; gap: 4px; max-height: 180px; overflow: auto; }
-.local-graph__node-result { display: grid; gap: 2px; width: 100%; padding: 7px 8px; border: 1px solid #394e6b; border-radius: 6px; color: #d8e5f7; background: #17243a; font: inherit; font-size: 13px; line-height: 1.4; cursor: pointer; text-align: left; text-decoration: none; overflow-wrap: anywhere; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
-.local-graph__node-result:hover { border-color: #7896bd; color: #f1f6ff; background: #263c5c; }
-.local-graph__node-result span { color: #9fb4d2; font-size: 10px; }
-.local-graph__evidence { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; gap: 6px; width: min(250px, calc(50% - 24px)); max-height: 34%; overflow: auto; padding: 8px; border: 1px solid #435974; border-radius: 10px; background: #101c2ddd; }
-.local-graph__evidence article { display: grid; gap: 3px; padding: 5px 4px; border-bottom: 1px solid #344760; font-size: 11px; }
-.local-graph__evidence strong { overflow-wrap: anywhere; font-size: 12px; }
-.local-graph__evidence span { color: #c2d3ec; }
-.local-graph__evidence small { color: #9fb4d2; overflow-wrap: anywhere; }
-.local-graph__evidence article button { display: block; width: 100%; min-height: 34px; padding: 7px 8px; border: 0; border-radius: 5px; color: #d8e5f7; background: transparent; font-size: 12px; font-weight: 500; line-height: 1.5; text-align: left; text-decoration: none; cursor: pointer; overflow-wrap: anywhere; transition: background-color .15s ease, color .15s ease; }
-.local-graph__evidence article button + button { border-top: 1px solid #344760; border-radius: 0; }
-.local-graph__evidence article button:hover { border-radius: 5px; color: #f1f6ff; background: #263c5c; }
-.local-graph__evidence article button:focus-visible, .local-graph__node-result:focus-visible, .local-graph__selected button:focus-visible { outline: 2px solid #9bc7ff; outline-offset: 2px; }
 .local-graph__selected button { color: #b8d3ff; text-decoration: underline; text-underline-offset: 2px; }
 .local-graph__selected button:hover { color: #f1f6ff; }
+.local-graph__selected button:focus-visible { outline: 2px solid #9bc7ff; outline-offset: 2px; }
