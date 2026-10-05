@@ -1,7 +1,13 @@
 {
-  "updated_at": "2026-10-04T14:41:00Z",
+  "updated_at": "2026-10-05T13:51:00Z",
   "baseline_main": "159a2ac1235d",
   "items": [
+    {
+      "id": "graph_job_coverage", "title": "現行レポートと整理ジョブの対応監査", "scope": "owner-current-brief-coverage",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "待ち0件と全体整理完了を区別。旧手動経路で関係保存済みのレポートは、ジョブ未作成でも意味関係未保存と断言せず重複登録しない。期限切れ処理中は読取報告だけ。資産更新後の関連案検索をプラグインへ指示したが、実会話の遵守は未検証。",
+      "evidence": [{"recorded_at": "2026-10-05T13:51:00Z", "scope": "owner-current-brief-coverage", "result": "partial", "reference": "US-29の分類拒否・期限切れ非再開・旧版と手動関係の区別・CLI無書込を検査。既存2レポートの手動関係を確認し、重複の恐れがある補完は書込前に停止。通常データは変更なし。実会話での資産更新後の関係点検は今後の確認対象。"}]
+    },
     {
       "id": "criterion_graph_stars", "title": "判断基準の大きな星と根拠付き関係", "scope": "main-455-live-desktop-1280",
       "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",

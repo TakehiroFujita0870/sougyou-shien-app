@@ -321,6 +321,39 @@ def test_explicit_empty_manifest_completes_review_without_creating_relations():
     assert not any(isinstance(node, RelationAssertion) for node in writes.nodes())
 
 
+def test_barrier_cannot_be_reused_as_a_capability_in_processor():
+    writes, brief = _context()
+    original = writes.get_node
+    def get_node(identifier):
+        node = original(identifier)
+        return replace(node, kind=AssetKind.BARRIER) if identifier == ASSET else node
+
+    writes.get_node = get_node
+    processor = RelationCandidateJobProcessor(
+        jobs=MemoryJobStore(brief), writes=writes, brief_store=writes, worker_id="inline-worker",
+    )
+    result = processor.process_specific(processor.jobs.job.id, raw_manifest=_manifest())
+    assert result.last_error_code == "candidate_manifest_invalid"
+    assert not any(isinstance(node, RelationAssertion) for node in writes.nodes())
+
+
+def test_persisted_asset_category_is_available_to_candidate_validation():
+    class Writes:
+        owner_id = OWNER
+
+        def get_node(self, identifier):
+            return PersistedNodeReference(
+                id=identifier, owner_id=OWNER, node_type=NodeType.ASSET, revision=1,
+                fields={"home_category": "barrier"},
+            )
+
+    processor = RelationCandidateJobProcessor(
+        jobs=object(), writes=Writes(), brief_store=None, worker_id="inline-worker",
+    )
+    refs, _ = processor._resolve_refs({ASSET})
+    assert refs[ASSET].home_category == "barrier"
+
+
 def test_saved_assertion_is_not_duplicated_when_completion_needs_retry():
     writes, brief = _context()
     jobs = MemoryJobStore(brief)

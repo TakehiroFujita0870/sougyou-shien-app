@@ -65,6 +65,7 @@ class CandidateEntityRef:
     owner_id: str
     kind: NodeType
     egress_policy: EgressPolicy = EgressPolicy.LOCAL_ONLY
+    home_category: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id.strip() or len(self.id) > 200:
@@ -289,6 +290,13 @@ def validate_relation_candidate_manifest(
             _fail("current Idea endpoint must resolve to an Idea")
 
         predicate = _resolve_predicate(raw["predicate"])
+        for ref in (source_ref, target_ref):
+            if ref.kind is NodeType.ASSET and (
+                ref.home_category == "barrier" and predicate in {
+                    RelationType.REUSES, RelationType.REQUIRES_CAPABILITY,
+                } or ref.home_category == "criterion" and predicate is RelationType.REQUIRES_CAPABILITY
+            ):
+                _fail("asset category cannot be used as a capability")
         basis_value = raw["basis"]
         try:
             basis = RelationAssertionBasis(basis_value)

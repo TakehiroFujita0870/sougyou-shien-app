@@ -131,6 +131,7 @@ MATCH (job:FounderGraphJob {owner_id: $owner_id, id: $job_id}) RETURN properties
 _INSPECTION = """// graph_job:inspection
 MATCH (job:FounderGraphJob {owner_id: $owner_id})
 WHERE job.state = 'failed' OR (job.state = 'pending' AND job.available_at <= $now)
+   OR (job.state = 'leased' AND job.lease_expires_at <= $now)
 WITH job
 ORDER BY CASE WHEN job.state = 'pending' THEN 0 ELSE 1 END,
          job.available_at ASC, job.updated_at ASC, job.id ASC
@@ -613,7 +614,7 @@ class FounderGraphJobStore:
 
     def list_inspection_jobs(self, *, limit: int = 20,
                              now: datetime | None = None) -> tuple[GraphJob, ...]:
-        """Read at most 20 due pending and terminal failed jobs for this owner."""
+        """Read due pending, expired leased, and failed jobs without claiming them."""
         if type(limit) is not int or not 1 <= limit <= 20:
             raise JobStoreError("inspection limit must be between 1 and 20")
         instant = _time(now)
@@ -630,7 +631,9 @@ class FounderGraphJobStore:
         if len(jobs) > limit or any(
             job is None or job.owner_id != self.owner_id
             or not (job.state is JobState.FAILED or
-                    job.state is JobState.PENDING and job.available_at <= instant)
+                    job.state is JobState.PENDING and job.available_at <= instant or
+                    job.state is JobState.LEASED and job.lease_expires_at is not None
+                    and job.lease_expires_at <= instant)
             for job in jobs
         ):
             raise JobStoreError("inspection query returned invalid job records")

@@ -204,6 +204,23 @@ def test_empty_manifest_means_reviewed_with_no_relation_candidates():
     assert validated.candidates == ()
 
 
+@pytest.mark.parametrize("category,predicate,allowed", [
+    ("barrier", "REUSES", False), ("barrier", "REQUIRES_CAPABILITY", False),
+    ("criterion", "REQUIRES_CAPABILITY", False), ("criterion", "REUSES", True),
+    ("strength", "REQUIRES_CAPABILITY", True),
+])
+def test_asset_category_constrains_capability_and_reuse(category, predicate, allowed):
+    b = brief()
+    refs = {IDEA: CandidateEntityRef(IDEA, OWNER, NodeType.IDEA),
+            "asset-test": CandidateEntityRef("asset-test", OWNER, NodeType.ASSET,
+                                              home_category=category)}
+    raw = manifest(b, candidate(predicate=predicate))
+    if allowed:
+        assert validate(raw, b, refs=refs).candidates
+    else:
+        reject(raw, b, "asset category", refs=refs)
+
+
 def test_support_must_be_exact_visible_quote_or_resolvable_nonempty_section():
     b = brief()
     for quote in ("not in Brief", "", "x" * 1201):

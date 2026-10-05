@@ -2,6 +2,17 @@
 
 ## 位置づけと現在地
 
+### US-29 整理対象の見落としと誤った資産関係を防ぐ
+
+要望: 「Proceed your recommendation」。ゴールは、待ちジョブ0件を全体整理完了と誤認せず、資産更新後にも既存案を検討すること。
+As a 本人利用者, I want 保存した案と資産の関係を漏れなく点検する, so that 同じ問答を繰り返さず保存内容を使える。
+Given: 現行レポート、明示的空候補、期限切れ処理中ジョブ、弱みまたは判断基準がある。
+When: 本人限定CLIで最大20件を点検し、ChatGPTで資産を保存する。
+Then: 未登録ジョブと空候補を別状態で報告し、期限切れ処理中は自動再開せず要確認とする。弱みを再利用能力として登録する候補、判断基準を必要能力とする候補を拒否する。資産保存後は関連案を検索し、本文の根拠がある候補だけ保存する。
+タスク: 既知—検証器の分類制約、期限切れleaseの読取点検。類推可能—現行レポートのジョブ対応と空候補の読取監査。旧経路で現行本文の根拠付き関係が保存済みなら、ジョブ欠落と意味関係未保存を混同せず、再登録しない。検査: owner・上限・旧版除外・本文非出力・手動関係済みの区別・分類拒否のテスト。
+スコープ外: 無関係な線の追加、外部調査、テスト記録の削除、秘密や本文の出力、Codexや他アプリの設定変更。cmd.exeは実行元と登録済み起動設定の読取調査だけ行う。
+ADR: 定期点検は未評価候補を推測生成せず、現在版との対応欠落を可視化する。空候補の成功を失敗へ書換えず、検索で関連なしと判断した場合と未点検を区別する。旧手動経路は関係family識別が異なるため、ジョブ補完を目的に同じ関係を新経路へ再登録しない。既存関係の件数を併記するだけで全体整理完了とは断言しない。期限切れleaseは既存許諾範囲を広げず要確認に留める。全孤立点への強制接続と無制限の全件再保存は却下する。
+
 ### US-28 孤立点を消さず関係を育て、判断基準を大きな星にする
 
 要望: 「エッジつないでほしい」「判断基準のアセットだけは特に大きなノード」。
@@ -249,7 +260,7 @@ Then: 当該初版だけを現行の強みとして解釈し、元の本文を�
 | T-5 | T-4の契約に従い、IdeaBriefと書込receiptの保存と同じNeo4jトランザクションで版ごとの整理待ちを記録する。owner+Brief IDで冪等化し、新しい版の保存時に同じowner・Idea系譜の旧pending/leased jobをsupersedeする。`append_research_finding`と正式調査の保存は共通gatewayを通す。検証済み候補はBriefのID・revision・hashに結び付く上限付きの不変payloadとしてjobへ原子的に保存し、レポート本文・引用文を複製せずworkerが再読込できるようにする。後続のNebula処理器は外部事実の根拠と本人の仮説を区別し、`REUSES`はIdeaからAssetまたは過去Ideaへの再利用を表す。`DERIVED_FROM`はIdeaの由来・派生を表し、再利用と混同しない。関係assertionは両endpoint、最新Brief、現行Ideaの共有許可がすべて成立するときだけshareableとし、それ以外はlocal-onlyにする。 | 検査: 原子rollback、再送時のjob重複なし、owner・系譜分離、旧pending/leasedのsupersede、候補payloadの同一再送・異なる内容拒否、再起動後の部分再試行、古いlease拒否、Idea→Ideaの`REUSES`と`DERIVED_FROM`の区別、endpoint/Brief/Ideaの共有条件を満たすMCP検索・fetchでの関係表示とprivate条件のfail-closed、下書き・過去調査・正式調査経路の共通保存契約、Neo4j `properties(job)`で欠落するnullable fieldの復元 | 類推可能 |
 | T-6a | T-5のjob状態をowner必須のread-only集計APIで読み、サービス管理に状態別件数を表示する。Neo4j停止・読取失敗はゼロ件にせず確認不能と示す。job store・processor・MCP保存経路は変更しない。 | 検査: owner条件付きの単一行集計query、停止・失敗時の確認不能表示、pending/leased/succeeded/failed/supersededの誤訳なし、PC 1280×720の表示 | 既知 |
 | T-6b | T-5に依存し、現行の非削除アイデアだけを限定的に再整理し、実行前後の差と対象外記録の維持を確認する。 | 検査: 対象IDの事前読取、実行前後の差、対象外記録の維持 | 類推可能 |
-| T-7a | owner必須・最大20件のローカル点検CLIを追加する。現行のdue pendingとterminal failedだけを識別し、明示実行時は永続化済みcandidate payloadを持つpendingだけ同じ処理器へ渡す。payload未提出は要調査として表示しpendingを保ち、terminal failedも要調査表示だけで自動再開しない。list出力はjob ID・状態・試行数・payload有無・行動だけに限定し、本文・引用・秘密を出さない。 | 検査: owner限定read query、limit 1–20、dry-runの無書込、due pending+payloadだけの再処理、manifest欠落の非成功、terminal failedの非再開、本文・秘密非出力 | 類推可能 |
+| T-7a | owner必須・最大20件のローカル点検CLI。due pendingとterminal failedに加え、期限切れleasedは要確認として読取だけ行う。明示実行時は永続化済みcandidate payloadを持つpendingだけ同じ処理器へ渡す。payload未提出とterminal failedは自動成功・再開しない。`--audit-coverage`で現行レポートのジョブ欠落と明示空候補を区別する。出力はID・状態・試行数・payload有無・行動・件数だけに限定し、本文・引用・秘密を出さない。 | 検査: owner限定read query、limit 1–20、dry-runの無書込、due pending+payloadだけの再処理、manifest欠落の非成功、terminal failedと期限切れleasedの非再開、旧版除外、本文・秘密非出力 | 類推可能 |
 | T-7b | T-7aとT-5の安定後、Codex Luna定期タスクを1日1回・最大20件の補助点検として設定する。実タスク作成はデプロイ後に管理担当が行い、このリポジトリ変更には含めない。 | 検査: 対象0件では処理器呼出なし、対象がある場合だけCLI経由で同じ処理器を再実行し、PC停止後も次回起動時に処理待ちが残る | 類推可能 |
 | T-8 | 出典URLを安全なグラフ投影へ加え、出典ノードの一クリックで新タブを開く。 | 検査: 公開URL・危険URL・URLなし・他種ノードの操作試験とPC実画面 | 既知 |
 | T-9 | 通常のNebulaと本人用ChatGPT接続で、発見の追記からレポート・関係・別会話検索まで通す。 | 検査: 本人が許可した範囲の実データ、別会話、再起動、出典リンク、失敗時復帰を観測し現況へ記録 | 類推可能 |
