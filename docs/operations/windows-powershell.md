@@ -10,6 +10,12 @@ Windows版Codexで、パス、文字コード、外部CLI、ファイル操作�
 
 ## 基本ルール
 
+### Nebulaの定期確認で端末が出る場合
+
+`-WindowStyle Hidden`だけでは、Windows Terminalが表示されてから隠れる場合がある。既存の本人限定coordinatorタスクは、`scripts/powershell/Set-NebulaWindowlessTask.ps1`でコンソールを持たない`NebulaStartupLauncher.cs`の入口へ一度移行する。新規登録後も同じ移行を行う。Windows標準C# compilerでGUI executableとして構築し、子PowerShellは`UseShellExecute=false / CreateNoWindow=true`を使う。5分間隔、本人権限、停止意図、起動順、終了コードは変更しない。
+
+移行スクリプトは既存actionの一致を確認し、本人専用の復旧先へ元XMLを保存してからactionだけ更新する。設定の読戻しが違えば元XMLへ戻す。既に別actionへ変更されたタスクは上書きしない。復元は保存したXMLを同じタスク名へ`Register-ScheduledTask -Xml ... -Force`で登録する。`Hidden`はタスク一覧の表示設定であり、端末非生成の代替ではない。他アプリの端末を一括非表示・停止しない。
+
 - コマンドはPowerShellで実行し、`workdir`にはOneDrive配下、日本語、空白を含む可能性がある絶対パスを指定する。
 - ファイル名検索には`rg --files`、本文検索には`rg -n`を使う。PowerShellでパスを渡すときはワイルドカード解釈を避けるため`-LiteralPath`を使う。
 - UTF-8の文書を読むときは`Get-Content -Raw -Encoding UTF8 -LiteralPath`を使う。既存ファイルの編集は`apply_patch`で行い、`echo`、`cat`、`>`、`>>`、here-stringによる書込みは使わない。
