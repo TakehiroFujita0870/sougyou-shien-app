@@ -78,6 +78,7 @@ def test_apply_retries_only_due_pending_jobs_with_persisted_payload(monkeypatch,
     assert payload["mode"] == "apply"
     assert payload["summary"] == {
         "processed": 1, "would_retry": 0, "manifest_missing": 1, "terminal_failed": 1,
+        "expired_leases": 0,
     }
     assert [item["action"] for item in payload["jobs"]] == [
         "processed", "manifest_missing", "needs_review",
@@ -112,6 +113,14 @@ def test_default_mode_is_read_only_and_limit_is_capped_at_twenty(monkeypatch, ca
     assert error.value.code == 2
 
 
+def test_expired_lease_is_reported_but_never_retried(monkeypatch, capsys):
+    processor = FakeProcessor(FakeJobs([_job("expired", JobState.LEASED, payload=True)]))
+    _configure_runtime(monkeypatch, processor)
+    assert MODULE.main(["--apply"]) == 0
+    assert processor.calls == []
+    assert json.loads(capsys.readouterr().out)["summary"]["expired_leases"] == 1
+
+
 def test_applying_an_empty_inspection_set_does_not_invoke_the_processor(monkeypatch, capsys):
     jobs = FakeJobs([])
     processor = FakeProcessor(jobs)
@@ -139,6 +148,20 @@ def test_cli_requires_explicit_owner_and_persistent_backend(monkeypatch, capsys)
     monkeypatch.setenv("NEBULA_GRAPH_BACKEND", "memory")
     assert MODULE.main([]) == 2
     assert driver_opened == []
+
+
+def test_coverage_flag_reads_current_reports_without_processing(monkeypatch, capsys):
+    processor = FakeProcessor(FakeJobs([]))
+    _configure_runtime(monkeypatch, processor)
+    calls = []
+    def coverage(driver, *, owner_id, database, limit):
+        calls.append((owner_id, database, limit))
+        return {"reports_checked": 1, "issues": [], "truncated": False}
+    monkeypatch.setattr(MODULE, "read_coverage", coverage)
+    assert MODULE.main(["--audit-coverage", "--limit", "20"]) == 0
+    assert calls == [("private-owner", "neo4j", 20)]
+    assert processor.calls == []
+    assert json.loads(capsys.readouterr().out)["coverage"]["reports_checked"] == 1
 
 
 def test_database_errors_do_not_leak_exception_text(monkeypatch, capsys):

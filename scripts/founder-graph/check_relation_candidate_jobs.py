@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from nebula.founder_graph_job_store import GraphJob, JobState  # noqa: E402
+from nebula.graph_job_coverage import read_coverage  # noqa: E402
 from nebula.founder_graph_runtime import (  # noqa: E402
     close_neo4j_driver,
     create_neo4j_driver_from_env,
@@ -50,7 +51,9 @@ def inspect_jobs(processor: Any, *, limit: int = 20, apply: bool = False) -> dic
     jobs = processor.jobs.list_inspection_jobs(limit=limit)
     summaries: list[dict[str, Any]] = []
     for job in jobs:
-        if job.state is JobState.FAILED:
+        if job.state is JobState.LEASED:
+            result, action = job, "expired_lease_needs_review"
+        elif job.state is JobState.FAILED:
             result, action = job, "needs_review"
         elif not job.candidate_payload_persisted:
             result, action = job, "manifest_missing"
@@ -78,6 +81,7 @@ def inspect_jobs(processor: Any, *, limit: int = 20, apply: bool = False) -> dic
             "would_retry": actions.count("would_retry"),
             "manifest_missing": actions.count("manifest_missing"),
             "terminal_failed": actions.count("needs_review"),
+            "expired_leases": actions.count("expired_lease_needs_review"),
         },
         "jobs": summaries,
     }
@@ -87,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--limit", type=_limit, default=20, help="maximum jobs to inspect (1-20)")
     parser.add_argument("--apply", action="store_true", help="retry eligible persisted jobs")
+    parser.add_argument("--audit-coverage", action="store_true", help="read current Brief coverage without writing")
     args = parser.parse_args(argv)
 
     owner_id = os.environ.get("NEBULA_LOCAL_OWNER_ID", "").strip()
@@ -103,6 +108,10 @@ def main(argv: list[str] | None = None) -> int:
             composition = create_neo4j_graph_composition(driver, owner_id, database=database)
             processor = create_relation_candidate_job_processor(composition)
             report = inspect_jobs(processor, limit=args.limit, apply=args.apply)
+            if args.audit_coverage:
+                report["coverage"] = read_coverage(
+                    driver, owner_id=owner_id, database=database, limit=args.limit,
+                )
         finally:
             close_neo4j_driver(driver)
     except Exception:

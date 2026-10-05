@@ -54,7 +54,8 @@ class Session:
         if kind == "inspection":
             selected = [job for job in jobs.values() if job["owner_id"] == params["owner_id"]
                         and (job["state"] == "failed" or
-                             job["state"] == "pending" and job["available_at"] <= params["now"])]
+                             job["state"] == "pending" and job["available_at"] <= params["now"] or
+                             job["state"] == "leased" and job["lease_expires_at"] <= params["now"])]
             selected.sort(key=lambda job: (job["state"] != "pending", job["available_at"],
                                            job["updated_at"], job["id"]))
             return RowsResult([{"job": dict(job)} for job in selected[:params["limit"]]])
@@ -573,6 +574,19 @@ def test_inspection_list_is_owner_scoped_and_returns_only_due_pending_or_failed_
     assert future.id not in {job.id for job in listed}
     assert "PRIVATE REPORT TEXT" not in repr(listed)
     assert "PRIVATE QUOTE TEXT" not in repr(listed)
+
+
+def test_inspection_reads_expired_leases_without_mutating_or_including_live_leases():
+    driver = Driver()
+    store = _store(driver)
+    expired = store.enqueue(_brief(brief_id="expired"), now=_time())
+    lease = store.claim_specific(expired.id, worker_id="test-worker", now=_time())
+    now = lease.lease_expires_at + timedelta(seconds=1)
+    live = store.enqueue(_brief(brief_id="live-lease"), now=now)
+    store.claim_specific(live.id, worker_id="test-worker", now=now)
+    before = repr(driver.jobs)
+    assert [job.id for job in store.list_inspection_jobs(now=now)] == [expired.id]
+    assert repr(driver.jobs) == before
 
 
 def test_inspection_list_rejects_limits_outside_one_to_twenty():

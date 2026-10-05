@@ -215,10 +215,13 @@ class RelationCandidateJobProcessor:
             node_id = getattr(node, "id", None)
             raw_kind = getattr(node, "node_type", None)
             raw_egress_policy = getattr(node, "egress_policy", None)
+            category = getattr(node, "category", None)
             if isinstance(node, PersistedNodeReference):
                 raw_kind = node.node_type
                 fields = node.fields
                 raw_egress_policy = fields.get("egress_policy") if isinstance(fields, Mapping) else None
+                category = (fields.get("home_category") or
+                            ("barrier" if fields.get("kind") == "barrier" else "strength")) if isinstance(fields, Mapping) else None
             if owner_id != self.owner_id or node_id != identifier:
                 continue
             try:
@@ -226,7 +229,7 @@ class RelationCandidateJobProcessor:
             except (TypeError, ValueError):
                 continue
             entity_refs[identifier] = CandidateEntityRef(
-                identifier, owner_id, kind, raw_egress_policy,
+                identifier, owner_id, kind, raw_egress_policy, home_category=category,
             )
             if kind is NodeType.EVIDENCE:
                 hydrated = self._hydrate_evidence(node)
