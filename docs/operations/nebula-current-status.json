@@ -1,7 +1,13 @@
 {
-  "updated_at": "2026-10-05T13:51:00Z",
+  "updated_at": "2026-10-05T15:07:00Z",
   "baseline_main": "159a2ac1235d",
   "items": [
+    {
+      "id": "windowless_coordinator", "title": "定期確認の端末フラッシュを防ぐ入口", "scope": "windows-live-windowless-scheduler",
+      "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
+      "note": "旧タスクの手動実行で可視Terminalの追加を再現。本人限定GUI executableへ入口だけ変更し、実Schedulerの終了0と端末追加なし、3サービス稼働を確認。間隔・権限・停止意図・起動順を維持。次回PCログインとPC全体の別実行元による窓は未検証。元XMLを本人専用復旧先へ保存。",
+      "evidence": [{"recorded_at": "2026-10-05T15:07:00Z", "scope": "windows-live-windowless-scheduler", "result": "partial", "reference": "US-30。Windows launcher実コンパイル・GUI subsystem・引数拒否・空白経路・終了コード伝播のPesterと既存起動検査38件成功。UNC working directoryは指定せず、出力はpackaged-app LocalAppData外へ置く。実タスク読戻しで5分・本人Limited・Hiddenを保持、手動実行の結果0。可視端末は本文・タイトルを読まずwindow classとprocessだけで観測。"}]
+    },
     {
       "id": "graph_job_coverage", "title": "現行レポートと整理ジョブの対応監査", "scope": "owner-current-brief-coverage",
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",
