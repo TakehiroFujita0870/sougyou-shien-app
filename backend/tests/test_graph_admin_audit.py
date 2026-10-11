@@ -65,10 +65,11 @@ def test_only_provenance_not_test_name_is_synthetic():
 def test_management_edges_count_separately_and_private_edges_are_absent():
     writes, reads = fixture()
     writes._structural_edges.extend([("idea-0000", "SUPERSEDES", "idea-0001"),
+                                    ("idea-0000", "HAS_SOURCE_REVISION", "idea-0001"),
                                     ("idea-0001", "CITES", "idea-0002"),
                                     ("private", "REUSES", "idea-0000")])
     graph, _, _ = safe_graph(writes, reads)
-    assert graph["summary"]["edge_count"] == 2
-    assert graph["summary"]["edge_categories"] == {"grounding": 1, "management": 1}
+    assert graph["summary"]["edge_count"] == 3
+    assert graph["summary"]["edge_categories"] == {"grounding": 1, "management": 2}
     assert graph["collections"]["isolated"] == []
     assert sorted(c["size"] for c in graph["collections"]["components"]) == [3]
