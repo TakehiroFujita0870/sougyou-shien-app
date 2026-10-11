@@ -8,6 +8,7 @@ from nebula.main import create_app
 
 
 EXPECTED_DESTRUCTIVE_HINTS = {
+    "apply_graph_cleanup": True,
     "record_correction": True,
     "confirm_person_merge": True,
     "approve_research_campaign": True,
@@ -17,8 +18,9 @@ EXPECTED_DESTRUCTIVE_HINTS = {
     "save_idea_brief": True,
     "save_researched_idea_brief": True,
 }
-EXPECTED_READ_TOOLS = {"search", "fetch", "fetch_idea_brief", "search_facets", "facet_region"}
+EXPECTED_READ_TOOLS = {"search", "fetch", "fetch_idea_brief", "search_facets", "facet_region", "audit_graph", "propose_graph_cleanup"}
 EXPECTED_WRITE_TOOLS = {
+    "apply_graph_cleanup",
     "capture_idea",
     "capture_source",
     "capture_person",
