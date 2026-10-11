@@ -474,6 +474,8 @@ class InMemoryGraphWriteService:
         "restore_idea",
         "archive_asset",
         "restore_asset",
+        "archive_synthetic",
+        "restore_synthetic",
         "append_claim",
         "link_entities",
         "save_relation_assertion",
