@@ -8,6 +8,7 @@ from .founder_graph_read import GraphReadPort, GraphReadService
 from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, create_relation_candidate_job_processor, resolve_graph_backend
 from .founder_graph_write import GraphWritePort, InMemoryGraphWriteService
 from .founder_graph_neo4j_write import Neo4jGraphWriteService, Neo4jIdeaBriefStore
+from .graph_admin_mcp import GraphAdminSurface
 
 
 def local_owner_context(local_owner_id: Annotated[str | None, Header(alias="X-Local-Owner-Id")] = None) -> str:
@@ -44,6 +45,7 @@ def create_app(
     if founder_graph_candidate_processor is not None:
         write_surface_options["candidate_processor"] = founder_graph_candidate_processor
     graph_write_mcp = McpWriteSurface(graph_writes, **write_surface_options)
+    graph_admin = GraphAdminSurface(graph_writes, graph_reads, founder_graph_candidate_processor)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -53,6 +55,7 @@ def create_app(
         status_by_code = {
             "not_found": status.HTTP_404_NOT_FOUND,
             "owner_mismatch": status.HTTP_403_FORBIDDEN,
+            "permission_denied": status.HTTP_403_FORBIDDEN,
             "idempotency_conflict": status.HTTP_409_CONFLICT,
             "revision_conflict": status.HTTP_409_CONFLICT,
             "read_timeout": status.HTTP_504_GATEWAY_TIMEOUT,
@@ -68,7 +71,8 @@ def create_app(
     def founder_graph_mcp_tools(owner_id: Annotated[str, Depends(local_owner_context)]) -> dict[str, object]:
         if owner_id != graph_writes.owner_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "owner_mismatch"})
-        return {"read": graph_read_mcp.tool_definitions(), "write": graph_write_mcp.tool_definitions()}
+        return {"read": graph_read_mcp.tool_definitions() + graph_admin.tool_definitions()[:2],
+                "write": graph_write_mcp.tool_definitions() + graph_admin.tool_definitions()[2:]}
 
     @app.post("/v1/founder-graph/mcp/read/{tool_name}")
     def founder_graph_mcp_read(
@@ -77,6 +81,8 @@ def create_app(
         owner_id: Annotated[str, Depends(local_owner_context)],
     ) -> dict[str, Any]:
         try:
+            if tool_name in {"audit_graph", "propose_graph_cleanup"}:
+                return graph_admin.call(tool_name, request, owner_id=owner_id)
             return graph_read_mcp.call(tool_name, request, owner_id=owner_id)
         except McpReadError as error:
             raise mcp_error(error) from error
@@ -88,6 +94,8 @@ def create_app(
         owner_id: Annotated[str, Depends(local_owner_context)],
     ) -> dict[str, Any]:
         try:
+            if tool_name == "apply_graph_cleanup":
+                return graph_admin.call(tool_name, request, owner_id=owner_id)
             receipt = graph_write_mcp.call(tool_name, request, owner_id=owner_id)
             response = {
                 "operation": receipt.operation,
@@ -115,7 +123,7 @@ def create_app(
                     "error_code": candidate_processing.get("error_code"),
                 }
             return response
-        except McpWriteError as error:
+        except (McpWriteError, McpReadError) as error:
             raise mcp_error(error) from error
 
     return app

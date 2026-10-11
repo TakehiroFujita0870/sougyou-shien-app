@@ -20,6 +20,7 @@ from .founder_graph_read import GraphReadService
 from .founder_graph_write import InMemoryGraphWriteService
 from .founder_graph_runtime import close_neo4j_driver, create_neo4j_driver_from_env, create_neo4j_graph_composition, create_relation_candidate_job_processor, resolve_graph_backend
 from .founder_graph_neo4j_write import Neo4jIdeaBriefStore
+from .graph_admin_mcp import GraphAdminSurface
 
 
 JSONRPC_VERSION = "2.0"
@@ -69,6 +70,7 @@ class FounderGraphStdioServer:
     writes: McpWriteSurface
     owner_id: str
     _owned_driver: Any | None = None
+    admin: GraphAdminSurface | None = None
 
     def handle(self, request: object) -> dict[str, Any] | None:
         if not isinstance(request, Mapping) or request.get("jsonrpc") != JSONRPC_VERSION or not isinstance(request.get("method"), str):
@@ -99,6 +101,8 @@ class FounderGraphStdioServer:
             if params is not None and not isinstance(params, Mapping):
                 return _error(request_id, -32602, "Tool list parameters must be an object.")
             definitions = tuple(self.reads.tool_definitions()) + tuple(self.writes.tool_definitions())
+            if self.admin is not None:
+                definitions += self.admin.tool_definitions()
             return _response(request_id, {"tools": [_tool_definition(item) for item in definitions]})
         if method == "tools/call":
             return self._call_tool(request_id, params)
@@ -112,7 +116,9 @@ class FounderGraphStdioServer:
         if not isinstance(name, str) or not name.strip() or not isinstance(arguments, Mapping):
             return _error(request_id, -32602, "Tool name and object arguments are required.")
         try:
-            if name in {item["name"] for item in self.reads.tool_definitions()}:
+            if self.admin is not None and name in {item["name"] for item in self.admin.tool_definitions()}:
+                result = self.admin.call(name, arguments, owner_id=self.owner_id)
+            elif name in {item["name"] for item in self.reads.tool_definitions()}:
                 result = self.reads.call(name, arguments, owner_id=self.owner_id)
             else:
                 receipt = self.writes.call(name, arguments, owner_id=self.owner_id)
@@ -144,7 +150,8 @@ def create_stdio_server(owner_id: str | None = None) -> FounderGraphStdioServer:
         return server
     writes = InMemoryGraphWriteService(resolved_owner)
     reads = GraphReadService(writes)
-    return FounderGraphStdioServer(McpReadSurface(reads), McpWriteSurface(writes), resolved_owner)
+    return FounderGraphStdioServer(McpReadSurface(reads), McpWriteSurface(writes), resolved_owner,
+                                  admin=GraphAdminSurface(writes, reads))
 
 
 def create_neo4j_stdio_server(
@@ -163,11 +170,13 @@ def create_neo4j_stdio_server(
         candidate_processor if candidate_processor is not None
         else create_relation_candidate_job_processor(composition)
     )
-    return FounderGraphStdioServer(
+    server = FounderGraphStdioServer(
         McpReadSurface(composition.reads),
         McpWriteSurface(composition.writes, brief_store=brief_store, candidate_processor=processor),
         composition.gateway.owner_id,
     )
+    server.admin = GraphAdminSurface(composition.writes, composition.reads, processor)
+    return server
 
 
 def _neo4j_stdio_read_only_preflight(driver: Any, *, database: str) -> None:

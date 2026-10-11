@@ -858,8 +858,9 @@ def test_neo4j_stdio_factory_uses_same_composition_without_connecting() -> None:
         "create_research_campaign", "approve_research_campaign", "revoke_research_campaign",
         "record_research_run", "save_researched_idea_brief", "append_research_finding",
         "capture_facet", "classify_entity", "relate_facets", "search_facets", "facet_region",
+        "audit_graph", "propose_graph_cleanup", "apply_graph_cleanup",
     }
-    assert len(tools) == 27
+    assert len(tools) == 30
     tool_by_name = {tool["name"]: tool for tool in tools}
     assert "capture_evidence" in tool_by_name
     assert tool_by_name["capture_source"]["annotations"] == {
