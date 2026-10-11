@@ -1,7 +1,13 @@
 {
-  "updated_at": "2026-10-05T15:07:00Z",
-  "baseline_main": "159a2ac1235d",
+  "updated_at": "2026-10-11T05:21:00Z",
+  "baseline_main": "08972620a68c",
   "items": [
+    {
+      "id": "graph_admin", "title": "本人用の全件監査と根拠付き整理", "scope": "owner-shareable-current-graph-admin",
+      "implementation": "implemented", "verification": "passed", "delivery": "main", "runtime": "active", "next_action": "none",
+      "note": "監査・候補検証・明示整理の3機能を公開。外部応答は共有可能な現行部分に限定し、非公開の存在・本文・件数を返さない。根拠不足は未解決、削除は既定無効の独立権限と確定生成来歴・参照確認を必須にする。通常データの整理・削除は未実行。実ChatGPTの一覧更新と整理実行は今回の検査対象外。",
+      "evidence": [{"recorded_at": "2026-10-11T05:21:00Z", "scope": "owner-shareable-current-graph-admin", "result": "passed", "reference": "PR #459/#460/#461、main 08972620a68c。backend全体・新規監査/整理/HTTP/stdio・使い捨て実Neo4jの根拠提案/重複防止/論理削除復元/永続履歴再読取が成功。main smokeと通常保存先HTTP/stdio読取で3ツールと同一監査集計を確認、3サービス稼働。追加のHAS_SOURCE_REVISION集計回帰試験も成功。"}]
+    },
     {
       "id": "windowless_coordinator", "title": "定期確認の端末フラッシュを防ぐ入口", "scope": "windows-live-windowless-scheduler",
       "implementation": "implemented", "verification": "partial", "delivery": "main", "runtime": "active", "next_action": "verify",

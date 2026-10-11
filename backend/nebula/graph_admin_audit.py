@@ -10,7 +10,7 @@ from .founder_graph_neo4j_codec import json_value
 from .founder_graph_read import GraphReadNotFoundError
 
 EXCLUDED = {"archived", "deleted", "superseded", "retracted", "expired", "cancelled", "revoked"}
-MANAGEMENT = {"SUPERSEDES", "HAS_REVISION", "CURRENT_SOURCE_REVISION", "HAS_RUN", "PRODUCED",
+MANAGEMENT = {"SUPERSEDES", "HAS_REVISION", "HAS_SOURCE_REVISION", "CURRENT_SOURCE_REVISION", "HAS_RUN", "PRODUCED",
               "ASSERTION_SOURCE", "ASSERTION_TARGET", "BASED_ON_BRIEF", "BASED_ON_IDEA"}
 MANAGEMENT.update({"ASSERTS_FROM", "ASSERTS_TO"})
 GROUNDING = {"CITES", "SUPPORTED_BY", "CONTRADICTED_BY", "BASED_ON", "HAS_CHUNK", "EVIDENCED_BY", "EVIDENCE_FROM"}
